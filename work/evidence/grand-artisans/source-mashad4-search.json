@@ -1,0 +1,67 @@
+{
+  "channel": "mashad4",
+  "size": 1536,
+  "treeCount": 2492,
+  "stats": {
+    "size": 1536,
+    "solidVoxels": 113318223,
+    "trees": 2492,
+    "treesBySpecies": {
+      "hero-gold": 1,
+      "birch": 394,
+      "oak": 533,
+      "lime": 288,
+      "spruce": 507,
+      "autumn-gold": 233,
+      "willow": 341,
+      "shrub": 39,
+      "cherry": 30,
+      "teal": 15,
+      "autumn-red": 64,
+      "pine": 47
+    },
+    "riverCells": 6314,
+    "lakeCells": 41871,
+    "waterfalls": 185,
+    "fieldPlots": 19,
+    "seaStacks": 5,
+    "landCells": 920480,
+    "millis": 0
+  },
+  "structureCount": 1608,
+  "structureColours": 13,
+  "placements": [
+    {
+      "id": "windmill",
+      "at": [
+        890,
+        65,
+        490
+      ],
+      "turns": 0,
+      "boxes": 669
+    },
+    {
+      "id": "harbour-quay-modular",
+      "at": [
+        531,
+        48,
+        546
+      ],
+      "turns": 3,
+      "boxes": 391
+    },
+    {
+      "id": "harbour-ship",
+      "at": [
+        406,
+        48,
+        516
+      ],
+      "turns": 3,
+      "boxes": 548
+    }
+  ],
+  "millis": 19186.210504000002,
+  "meaning": "SIMULATED independent source generation and render-only kit fit; no physical adoption or GPU evidence"
+}

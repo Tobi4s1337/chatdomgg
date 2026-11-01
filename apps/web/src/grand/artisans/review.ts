@@ -119,6 +119,9 @@ const names: Record<string, readonly [string, string, string[]]> = {
   fields: ['fields', 'createFields', [seed]], windmill: ['fields', 'createWindmill', [seed]],
   harbour: ['harbour', 'createHarbour', [seed]], ship: ['harbour', 'createShip', [seed]],
   lighthouse: ['harbour', 'createLighthouse', [seed]], citadel: ['citadel', 'createCitadel', [seed]],
+  quay: ['harbour', 'createQuaySection', [seed, 'frontage']],
+  pier: ['harbour', 'createQuaySection', [seed, 'pier']],
+  landing: ['harbour', 'createQuaySection', [seed, 'landing']],
   walls: ['citadel', 'createTownWalls', [seed]], composition: ['composition', 'createComposition', [channel]],
 };
 
@@ -148,7 +151,7 @@ async function loadKit(): Promise<ArtisanKit> {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.setSize(width(), height());
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.AgXToneMapping;
   renderer.toneMappingExposure = dusk ? 1.25 : 1.22;
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.enabled = params.get('shadows') !== 'off'; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   const scene = new THREE.Scene();
   const lifecycle: { resize?: () => void; review?: object } = {};
   cleanup = () => {
@@ -200,16 +203,17 @@ async function loadKit(): Promise<ArtisanKit> {
   const hemi = new THREE.HemisphereLight(dusk ? 0xc4c4e6 : 0xd9e6f4, dusk ? 0x473e59 : 0x766d68, dusk ? 1.8 : 2.05); scene.add(hemi);
   const sun = new THREE.DirectionalLight(dusk ? 0xffc994 : 0xffe0af, dusk ? 2 : 2.7);
   sun.position.copy(centre).add(new THREE.Vector3(-radius, radius * 1.4, radius)); sun.target.position.copy(centre); scene.add(sun, sun.target);
-  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.left = -radius; sun.shadow.camera.right = radius; sun.shadow.camera.top = radius; sun.shadow.camera.bottom = -radius; sun.shadow.camera.near = .1; sun.shadow.camera.far = radius * 5; sun.shadow.bias = -.0001;
-  const water = ['composition', 'water', 'harbour', 'ship', 'lighthouse'].includes(kitName);
+  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.left = -radius; sun.shadow.camera.right = radius; sun.shadow.camera.top = radius; sun.shadow.camera.bottom = -radius; sun.shadow.camera.near = .1; sun.shadow.camera.far = radius * 5; sun.shadow.bias = -.00005; sun.shadow.normalBias = .04;
+  const harbourStudy = ['harbour', 'ship', 'lighthouse', 'quay', 'pier', 'landing'].includes(kitName);
+  const water = ['composition', 'water'].includes(kitName) || harbourStudy;
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(radius * 14, radius * 14), new THREE.MeshStandardMaterial({ color: water ? '#6c9da5' : '#879564', roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
   // The composition's sea surface is at y = 0; a matching plane hides the review box edge.
   // Separate isolated harbour and ship studies place their waterline at world y = 0.
-  const groundY = kitName === 'composition' ? .01 : ['harbour', 'ship', 'lighthouse'].includes(kitName) ? -.01 : ['tree', 'forest', 'windmill', 'citadel', 'walls', 'fields'].includes(kitName) ? -.01 : bounds.min[1] * .5 - .06;
+  const groundY = kitName === 'composition' ? .01 : harbourStudy ? -.01 : ['tree', 'forest', 'windmill', 'citadel', 'walls', 'fields'].includes(kitName) ? -.01 : bounds.min[1] * .5 - .06;
   ground.position.set(centre.x, groundY, centre.z); ground.receiveShadow = true; scene.add(ground);
   if (dusk) root.querySelector<HTMLElement>('.artisan-sky')!.style.background = 'linear-gradient(180deg,#353855 0%,#66617a 49%,#c98f83 100%)';
-  const facesSouth = ['composition', 'harbour', 'lighthouse', 'citadel', 'walls'].includes(kitName);
+  const facesSouth = ['composition', 'citadel', 'walls'].includes(kitName) || harbourStudy;
   let angle = (facesSouth ? Math.PI : 0) + (view === 'coast' ? -.5 : view === 'street' ? .12 : .56);
   const elevation = view === 'street' ? .16 : view === 'coast' ? .25 : .42;
   const target = centre.clone(); target.y = bounds.min[1] * .5 + size[1]! * .43;

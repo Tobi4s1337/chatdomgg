@@ -99,7 +99,9 @@ export interface WindmillParts { readonly body: ArtisanKit; readonly sails: Arti
 /** The returned groups share local coordinates. Sails rotate around their shared sailHub. */
 export function createWindmillParts(seedKey: string): WindmillParts {
   const b = new KitBuilder(), sails = new KitBuilder(), r = random(`${seedKey}:windmill`);
-  const roof = r() < 0.5 ? CLAY.roof : '#8d665b';
+  const warmRoof = r() >= 0.5;
+  const roof = warmRoof ? '#8d665b' : CLAY.roof;
+  const roofEave = warmRoof ? '#694a45' : CLAY.roofDark;
   // Footing and staggered plaster body: concentric bands form a gentle taper.
   b.box(-10, 0, -9, 20, 3, 18, CLAY.stoneDark);
   b.box(-9, 3, -8, 18, 2, 16, CLAY.stone);
@@ -127,21 +129,24 @@ export function createWindmillParts(seedKey: string): WindmillParts {
   // Storybook cap: layered hipped roof with a generous eave.
   for (let y = 0; y < 7; y++) {
     const inset = Math.floor(y * 0.75);
-    b.box(-8 + inset, 28 + y, -7 + inset, 16 - inset * 2, 1, 14 - inset * 2, y < 2 ? CLAY.roofDark : roof);
+    b.box(-8 + inset, 28 + y, -7 + inset, 16 - inset * 2, 1, 14 - inset * 2, y < 2 ? roofEave : roof);
   }
   b.box(-1, 35, -1, 2, 2, 2, CLAY.brass);
-  // Four diagonal sails in the front (XZ depth is one cell). Frames and slats
-  // sit over the pale cloth. Stepped positions make deliberate, readable silhouettes.
+  // Four long, narrow cloth panels, offset to one side of their spar: they
+  // read as a working mill rather than four radial paddles. Exposed spar near
+  // the hub leaves a gap; end rails and a single mid rail hold each sail.
+  // The farthest corner stays less than 19 cells from the hub, so the whole
+  // rotating group clears the 5-cell-high stone stoop through a full turn.
   const hubY = 24, hubZ = 10;
   const sailCells = new Map<string, { x: number; y: number; edge: boolean }>();
   for (let blade = 0; blade < 4; blade++) {
     const angle = Math.PI / 4 + blade * Math.PI / 2;
     const ux = Math.cos(angle), uy = Math.sin(angle), vx = -uy, vy = ux;
-    for (let d = 3; d <= 17; d++) {
-      const width = d < 6 ? 1 : d < 10 ? 2 : 3;
-      for (let w = -width; w <= width; w++) {
+    for (let d = 2; d <= 17; d++) {
+      const last = d >= 5 ? 4 : 0;
+      for (let w = 0; w <= last; w++) {
         const x = Math.round(ux * d + vx * w), y = Math.round(hubY + uy * d + vy * w);
-        const edge = Math.abs(w) === width || d === 17 || d % 4 === 0;
+        const edge = w === 0 || w === 4 || d === 5 || d === 11 || d === 17;
         const key = `${x},${y}`, previous = sailCells.get(key);
         sailCells.set(key, { x, y, edge: edge || (previous?.edge ?? false) });
       }

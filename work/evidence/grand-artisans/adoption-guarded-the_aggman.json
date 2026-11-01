@@ -1,0 +1,99 @@
+{
+  "channel": "the_aggman",
+  "diagnostics": {
+    "orientations": [
+      {
+        "turns": 1,
+        "work": 10000,
+        "exhausted": true,
+        "truncatedCandidates": 14
+      },
+      {
+        "turns": 2,
+        "work": 10000,
+        "exhausted": true,
+        "truncatedCandidates": 5
+      },
+      {
+        "turns": 0,
+        "work": 4319,
+        "exhausted": true,
+        "truncatedCandidates": 14
+      },
+      {
+        "turns": 1,
+        "work": 10000,
+        "exhausted": true,
+        "truncatedCandidates": 5
+      },
+      {
+        "turns": 2,
+        "work": 10000,
+        "exhausted": true,
+        "truncatedCandidates": 4
+      },
+      {
+        "turns": 0,
+        "work": 2689,
+        "exhausted": true,
+        "truncatedCandidates": 5
+      }
+    ],
+    "accessAttempts": 8
+  },
+  "treeCount": 1677,
+  "placements": [
+    {
+      "id": "windmill",
+      "at": [
+        397,
+        66,
+        526
+      ],
+      "turns": 0,
+      "boxes": 685
+    },
+    {
+      "id": "harbour-quay-modular",
+      "at": [
+        829,
+        48,
+        412
+      ],
+      "turns": 0,
+      "boxes": 492
+    },
+    {
+      "id": "harbour-lighthouse",
+      "at": [
+        1070,
+        55,
+        560
+      ],
+      "turns": 0,
+      "boxes": 1341
+    },
+    {
+      "id": "harbour-ship",
+      "at": [
+        799,
+        48,
+        267
+      ],
+      "turns": 0,
+      "boxes": 548
+    },
+    {
+      "id": "harbour-ship",
+      "at": [
+        859,
+        48,
+        367
+      ],
+      "turns": 0,
+      "boxes": 548
+    }
+  ],
+  "millis": 55590.383698,
+  "note": "CPU source generation and render-only fit with boundary-connected sea, berth and supported access; default guard and pre-flora reservation. Not visual evidence."
+}
