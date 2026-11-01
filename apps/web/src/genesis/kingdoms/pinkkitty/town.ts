@@ -49,9 +49,84 @@ export interface HallSite {
   readonly bank: number;
 }
 
+/**
+ * The tavern's measured ground, in metres: width across its front, depth from back wall to porch, the jetty's run out
+ * from the back wall, and the jetty's span across the front, from the footprint's middle along the tavern's local x.
+ */
+export interface TavernShape {
+  readonly width: number;
+  readonly depth: number;
+  readonly jetty: number;
+  readonly jettyAcross: readonly [number, number];
+  /** The inn-frame point (cells, X and Z) that stands on the site's `back`, and the inn frame's floor (cells). */
+  readonly anchor: readonly [number, number];
+  readonly floor: number;
+  /** The levee steps the inn can raise: rise limits (cells) and, per rise and direction, their ground and foot. */
+  readonly steps: {
+    readonly rise: { readonly min: number; readonly max: number };
+    plan(rise: number, toward: -1 | 1): { readonly footprint: readonly [number, number, number, number]; readonly foot: Vec3 };
+  };
+}
+
+/** The steps down from the inn's terrace to the meadow, as the town chose them. */
+export interface TavernStepsSite {
+  readonly rise: number;
+  readonly toward: -1 | 1;
+  /** World metres: the middle of the foot's outer edge on its ground, where the approach starts. */
+  readonly foot: Vec3;
+  /** World ground the steps and terrace cover. */
+  readonly bounds: Bounds;
+}
+
+/** Where The Lantern and Oar stands: its back wall on the levee crest, its front facing +X down to the town's lanes. */
+export interface TavernSite {
+  /** World metres: the middle of the back wall, on the pad. */
+  readonly back: XZ;
+  /** The pad its street front stands on. */
+  readonly ground: number;
+  /** Turn 1 carries the tavern's local +Z (its door) to world +X and its local -Z (the river side) to world -X. */
+  readonly turn: CardinalTurn;
+  /** Occupied ground of the building and porch, and of the jetty over the bank and water. */
+  readonly bounds: Bounds;
+  readonly jetty: Bounds;
+  /** The point on the ground in front of the door, and where its path meets the lane. */
+  readonly door: Vec3;
+  /** The steps the town chose, when the meadow lies more than a step below the floor. */
+  readonly steps?: TavernStepsSite;
+}
+
+const CELL_TURN1 = (site: Pick<TavernSite, 'back' | 'ground'>, shape: TavernShape) => (local: Vec3): Vec3 => [
+  site.back[0] + (local[2] - shape.anchor[1]) * CELL, site.ground + (local[1] - shape.floor) * CELL, site.back[1] - (local[0] - shape.anchor[0]) * CELL];
+
+/**
+ * The levee steps for each direction along the inn's front: the rise is the floor above the ground at the foot,
+ * found by walking the foot out as the flight lengthens. A direction whose foot is wet or too deep has none.
+ */
+export function tavernStepOptions(landscape: DeepReadonly<GenesisLandscape>, site: Pick<TavernSite, 'back' | 'ground'>, shape: TavernShape): TavernStepsSite[] {
+  const world = CELL_TURN1(site, shape), options: TavernStepsSite[] = [];
+  for (const toward of [-1, 1] as const) {
+    let rise = shape.steps.rise.min, ok = true;
+    for (let pass = 0; pass < 6; pass++) {
+      const foot = world(shape.steps.plan(rise, toward).foot), s = sampleGenesisSurface(landscape, foot[0], foot[2]);
+      if ((s.waterLevel !== null && s.ground <= s.waterLevel + .25) || s.shoreDistance < 1) { ok = false; break; }
+      const next = 2 * Math.round((site.ground - s.ground) / CELL / 2);
+      if (next > shape.steps.rise.max) { ok = false; break; }
+      if (next === rise || next < shape.steps.rise.min) { rise = Math.max(next, shape.steps.rise.min); break; }
+      rise = next;
+    }
+    if (!ok) continue;
+    const plan = shape.steps.plan(rise, toward), [x0, z0, x1, z1] = plan.footprint;
+    const corners = [world([x0, 0, z0]), world([x1, 0, z1])];
+    options.push({ rise, toward, foot: world(plan.foot),
+      bounds: { minX: Math.min(corners[0]![0], corners[1]![0]), maxX: Math.max(corners[0]![0], corners[1]![0]), minZ: Math.min(corners[0]![2], corners[1]![2]), maxZ: Math.max(corners[0]![2], corners[1]![2]) } });
+  }
+  return options;
+}
+
 export interface RiverTown {
   readonly plan: SettlementPlan;
   readonly hall: HallSite;
+  readonly tavern?: TavernSite;
   /** The market's centre at its paved level. */
   readonly market: Vec3;
   /** Ordered centre lines of the named lanes, for dressing them (lamps, roses, planters) after the homes. */
@@ -98,6 +173,73 @@ export function chooseHallSite(landscape: DeepReadonly<GenesisLandscape>): HallS
   const corners = [[0, 0], [RIVER_HALL_SIZE[0], 0], [0, RIVER_HALL_SIZE[2]], [RIVER_HALL_SIZE[0], RIVER_HALL_SIZE[2]]] as const;
   const bounds = boundsOf(corners.map(([x, z]) => { const p = transformCardinalPoint(origin, turn, [x * CELL, 0, z * CELL]); return [p[0], p[2]] as XZ; }));
   return { centre, turn, base, waterLevel: river.level, origin, bounds, bank: base + RIVER_HALL.bank * CELL };
+}
+
+/**
+ * Choose the tavern's reach. This river runs on its own levee: both banks fall away from the water, the crest a few
+ * metres above the meadow the town stands on. So the inn is set as a levee house: its floor flush with the crest at
+ * its back wall (no ground stands above the floor anywhere under it), its stone plinth carried down the slope to the
+ * meadow at its front, its jetty deck a hand above the water and reaching over it, and its approach graded from the
+ * door down to the lane. Among the reaches up and down stream of the hall that fit, the lowest plinth near the hall wins.
+ * Deterministic and bounded; a river with no such reach gets no tavern rather than a floating one.
+ */
+export function chooseTavernSite(landscape: DeepReadonly<GenesisLandscape>, hall: HallSite, shape: TavernShape,
+  corridors: readonly { readonly p: Vec3; readonly r: number }[] = []): TavernSite | undefined {
+  const clear = (b: Bounds) => corridors.every(c => rectDistance(b, c.p[0], c.p[2]) >= c.r);
+  /** How far a point is from the nearest lane's edge (its corridor less the clearance kept beside it). */
+  const toLane = (p: Vec3) => Math.min(Infinity, ...corridors.map(c => Math.hypot(c.p[0] - p[0], c.p[2] - p[2]) - c.r + 1.5));
+  const ground = (x: number, z: number) => sampleGenesisSurface(landscape, x, z);
+  const wet = (s: ReturnType<typeof ground>, margin: number) => (s.waterLevel !== null && s.ground <= s.waterLevel + .25) || s.shoreDistance < margin;
+  /** The waterline of the town bank at z, east of the river's centre line: the quay is founded on it. */
+  const bankAt = (z: number): number => {
+    const river = riverAt(landscape, z);
+    let x = river.x;
+    while (x < river.x + 30 && wet(ground(x, z), 0)) x += .25;
+    return x;
+  };
+  const near = hall.bounds.minZ - 6 - shape.width / 2, reaches: number[] = [];
+  for (let z = hall.bounds.minZ - 4 - shape.width / 2; z >= hall.bounds.minZ - 70; z -= .5) reaches.push(z);
+  for (let z = hall.bounds.maxZ + 4 + shape.width / 2; z <= hall.bounds.maxZ + 70; z += .5) reaches.push(z);
+  let best: { score: number; site: TavernSite } | undefined;
+  for (const z of reaches) {
+    // The river runs a little askew of the inn's square plan: its back wall stands on the line that is dry along
+    // its whole length.
+    let back = -Infinity;
+    for (let pz = z - shape.width / 2; pz <= z + shape.width / 2; pz += 1) back = Math.max(back, bankAt(pz));
+    if (back >= riverAt(landscape, z).x + 30) continue;
+    const backX = Math.ceil(back * 2) / 2, bounds: Bounds = { minX: backX, maxX: backX + shape.depth, minZ: z - shape.width / 2, maxZ: z + shape.width / 2 };
+    let high = -Infinity, low = Infinity, dry = true;
+    for (let px = bounds.minX; px <= bounds.maxX && dry; px += 1) for (let pz = bounds.minZ; pz <= bounds.maxZ && dry; pz += 1) {
+      const s = ground(px, pz);
+      if (wet(s, 0)) dry = false; else { high = Math.max(high, s.ground); low = Math.min(low, s.ground); }
+    }
+    if (!dry) continue;
+    const pad = Math.ceil(high * 4) / 4, plinth = pad - low;
+    if (plinth > 5) continue;
+    // The jetty runs back from the wall; its deck is the floor, a little above the river, and its far edge stands
+    // over water along its whole width.
+    const jetty: Bounds = { minX: backX - shape.jetty, maxX: backX, minZ: z - shape.jettyAcross[1], maxZ: z - shape.jettyAcross[0] };
+    const ends = [jetty.minZ + .5, (jetty.minZ + jetty.maxZ) / 2, jetty.maxZ - .5].map(pz => ground(jetty.minX + .5, pz));
+    if (ends.some(end => end.waterLevel === null || end.ground > end.waterLevel - .25)) continue;
+    const water = ends[1]!.waterLevel!;
+    if (pad < water + .15 || pad > water + 2.5) continue;
+    if (!clear(grow(bounds, 1))) continue;
+    const site: TavernSite = { back: [backX, half(z)], ground: pad, turn: 1, bounds, jetty, door: [backX + shape.depth + 1, pad, half(z)] };
+    // Where the meadow lies more than a step below the floor, the steps run down the front toward the nearer lane,
+    // clear of every lane; the path then starts at their foot.
+    let steps: TavernStepsSite | undefined, start = site.door;
+    if (pad - ground(site.door[0], site.door[2]).ground >= shape.steps.rise.min * CELL) {
+      steps = tavernStepOptions(landscape, site, shape).filter(option => clear(grow(option.bounds, 1)))
+        .sort((p, q) => toLane(p.foot) - toLane(q.foot))[0];
+      if (!steps) continue;
+      start = steps.foot;
+    }
+    const path = toLane(start);
+    if (path > 40) continue;
+    const score = plinth + Math.abs(z - near) * .04 + path * .1;
+    if (!best || score < best.score - 1e-9) best = { score, site: steps ? { ...site, steps } : site };
+  }
+  return best?.site;
 }
 
 /** A smooth lane through control points: centripetal Catmull-Rom, resampled every metre. */
@@ -163,7 +305,7 @@ const WARDS = ['Old Row', 'Millwater', 'Rosewalk'] as const;
 export const LANDING_DEPTH = 9;
 
 /** Compose the town on the recipe's selected river valley. Pure and deterministic. */
-export function composeRiverTown(recipe: DeepReadonly<ChannelKingdomRecipe>, landscape: DeepReadonly<GenesisLandscape>, base: SettlementPlan, draft = false): RiverTown {
+export function composeRiverTown(recipe: DeepReadonly<ChannelKingdomRecipe>, landscape: DeepReadonly<GenesisLandscape>, base: SettlementPlan, draft = false, tavernShape?: TavernShape): RiverTown {
   if (landscape.character !== 'river-valley') throw new Error('The river town needs its river valley.');
   const capacity = recipe.size.homeCapacity, wards = recipe.size.wards;
   if (wards !== WARDS.length) throw new Error(`The river town is drawn for ${WARDS.length} wards, not ${wards}.`);
@@ -173,7 +315,7 @@ export function composeRiverTown(recipe: DeepReadonly<ChannelKingdomRecipe>, lan
     return (s.waterLevel !== null && s.ground <= s.waterLevel + .5) || s.shoreDistance < margin;
   };
   const hall = chooseHallSite(landscape);
-  const [hx, hz] = hall.centre;
+  const hz = hall.centre[1];
   const castle = base.castle;
   const gate = base.nodes.find(node => node.id === castle.gateNodeId)!;
   const config = { ...base.config, seed: `${recipe.seedKey}/${landscape.id}/river-town-1` };
@@ -285,6 +427,10 @@ export function composeRiverTown(recipe: DeepReadonly<ChannelKingdomRecipe>, lan
     laneLines.push({ name: spec.name, width: spec.width, points: drawn });
     for (const p of drawn) corridors.push({ p, r: spec.width / 2 + 1.5 });
   }
+  // The tavern takes its reach of the bank once the lanes are drawn, clear of all of them, and keeps a yard round
+  // it: room at its ends for barrels and a bench, and its steps.
+  const tavern = tavernShape ? chooseTavernSite(landscape, hall, tavernShape, corridors) : undefined;
+  if (tavern) keepOut.push(grow(tavern.bounds, 2.5), tavern.jetty, ...(tavern.steps ? [grow(tavern.steps.bounds, 1.5)] : []));
   // Pass 2: junctions. A branch joins its parent at a node on the parent's own centre line.
   const stops = new Map<string, { index: number; node: Node }[]>();
   for (const spec of lanes) {
@@ -308,6 +454,22 @@ export function composeRiverTown(recipe: DeepReadonly<ChannelKingdomRecipe>, lan
       courts.push({ id: `pk:ward:${spec.ward}:green`, nodeId: wardRoots[spec.ward]!.id, elevation: root[1],
         boundary: [[root[0] - 3, root[2] - 3], [root[0] + 3, root[2] - 3], [root[0] + 3, root[2] + 3], [root[0] - 3, root[2] + 3]] });
     }
+  }
+  // The tavern's path: from the foot of its steps (or the ground before its door) to the nearest lane, joined at a
+  // node on that lane.
+  if (tavern) {
+    const start = tavern.steps?.foot ?? tavern.door;
+    let at = { id: '', index: -1, d: Infinity };
+    for (const [id, drawn] of drawnLanes) for (let i = 3; i < drawn.length - 3; i++) {
+      const d = Math.hypot(drawn[i]![0] - start[0], drawn[i]![2] - start[2]);
+      if (d < at.d - 1e-9) at = { id, index: i, d };
+    }
+    const lane = drawnLanes.get(at.id)![at.index]!, list = stops.get(at.id)!;
+    let junction = list.find(stop => stop.index === at.index)?.node;
+    if (!junction) { junction = addNode({ id: `pk:${at.id}:tavern`, kind: 'junction', position: lane }); list.push({ index: at.index, node: junction }); }
+    const front = addNode({ id: 'pk:tavern:front', kind: 'frontage', position: start });
+    streets.push({ id: 'pk:tavern:approach', from: front.id, to: junction.id, points: [start, lane], kind: 'approach', name: 'The Lantern and Oar', width: 2.5, verge: 0 });
+    for (let t = 0; t <= 1; t += 1 / Math.max(1, Math.ceil(at.d))) corridors.push({ p: [lerp(start[0], lane[0], t), 0, lerp(start[2], lane[2], t)], r: 2.5 });
   }
   const tally: Record<string, number> = {};
   // Pass 3: lots along each lane, on its permitted sides, every `spacing` metres, nearest wards first.
@@ -411,6 +573,8 @@ export function composeRiverTown(recipe: DeepReadonly<ChannelKingdomRecipe>, lan
   const quarters = WARDS.map((name, ward) => ({ year: slotYear, name, rootNodeId: wardRoots[ward]?.id ?? 'market', courtIds: [`pk:ward:${ward}:green`],
     growthNodeIds: nodes.filter(node => node.id.endsWith(':end') && lanes.find(l => node.id === `pk:${l.id}:end`)?.ward === ward).map(node => node.id) }));
   const extent: XZ[] = [[castle.bounds.minX, castle.bounds.minZ], [castle.bounds.maxX, castle.bounds.maxZ], ...market.boundary,
+    ...(tavern ? [[tavern.jetty.minX, tavern.jetty.minZ], [tavern.bounds.maxX, tavern.bounds.maxZ]] as XZ[] : []),
+    ...(tavern?.steps ? [[tavern.steps.bounds.minX, tavern.steps.bounds.minZ], [tavern.steps.bounds.maxX, tavern.steps.bounds.maxZ]] as XZ[] : []),
     [hall.bounds.minX, hall.bounds.minZ], [hall.bounds.maxX, hall.bounds.maxZ]];
   for (const lot of lots) extent.push([lot.minX, lot.minZ], [lot.maxX, lot.maxZ]);
   for (const street of streets) for (const p of street.points) extent.push([p[0], p[2]]);
@@ -418,11 +582,16 @@ export function composeRiverTown(recipe: DeepReadonly<ChannelKingdomRecipe>, lan
   // only widens them where its lanes and gardens reach past them.
   extent.push([base.bounds.minX, base.bounds.minZ], [base.bounds.maxX, base.bounds.maxZ]);
   const town = grow(boundsOf(extent.slice(0, -2)), 8), bounds = boundsOf([...extent.slice(-2), [town.minX, town.minZ], [town.maxX, town.maxZ]]);
-  const reservations = homes.map(({ slot: _s, tier: _t, allowedDepth: _a, style: _y, variant: _v, ...plot }) => plot);
+  // A reservation is the plot alone: what it holds (slot, tier, depth, style, variant) is the home's.
+  const reservations = homes.map(home => {
+    const plot: Partial<SettlementHome> = { ...home };
+    for (const key of ['slot', 'tier', 'allowedDepth', 'style', 'variant'] as const) delete plot[key];
+    return plot as SettlementPlan['reservations'][number];
+  });
   const body = { version: 2 as const, config, landform: base.landform, ...(base.genesisSurface ? { genesisSurface: base.genesisSurface } : {}), homes, reservations, quarters, nodes, streets,
     activeStreetIds: streets.map(street => street.id), market, courts, castle, bounds, lake: base.lake };
   const plan: SettlementPlan = { ...body, revision: `genesis-river-town:1:${seedHash(JSON.stringify(body)).toString(16)}` };
-  return { plan, hall, market: [mx, marketLevel, mz], lanes: laneLines,
+  return { plan, hall, ...(tavern ? { tavern } : {}), market: [mx, marketLevel, mz], lanes: laneLines,
     landing: { from: [hall.bounds.maxX, hall.bank, hz], depth: LANDING_DEPTH, width: 12, drop: hall.bank - marketLevel },
     ...(draft ? { rejections: { reasons: tally, wards: wardCounts } } : {}) };
 }

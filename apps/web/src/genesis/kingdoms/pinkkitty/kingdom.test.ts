@@ -5,6 +5,7 @@ import { createGenesisWaterContent } from '../../water-content';
 import { GENESIS_CHANNELS, PROFILE_CAPTURED_AT } from '../../channels';
 import { GENESIS_KINGDOMS, type GenesisKingdomComposition } from '../../kingdoms';
 import { loadPinkKittyEmoteDerivatives, PINKKITTY_EMOTE_CHECKS } from '../../../../../../packages/content/src/genesis-kingdoms/pinkkitty/emotes/index';
+import { LANTERN_AND_OAR } from '../../../../../../packages/content/src/genesis-kingdoms/pinkkitty/tavern/index';
 import { composeGenesisKingdom } from './index';
 
 const channel = GENESIS_CHANNELS.find(item => item.id === '4363967')!;
@@ -90,6 +91,69 @@ describe('PinkKittyRose, a river town of its own', () => {
     expect(landing.position[1]).toBeCloseTo(k.plan.market.elevation - 1, 5);
     expect(terrainHeight(k.plan, market.position[0], market.position[2])).toBeCloseTo(k.plan.market.elevation, 5);
     expect(createGenesisWaterContent(k.plan, { crossing: true }).some(prop => /bridge/.test(prop.blueprint.id))).toBe(false);
+  });
+
+  it('gives the recipe’s keepers the places the town built, with work at dusk and never a presence', async () => {
+    const k = await kingdom(), keepers = k.keepers!;
+    expect(keepers.map(item => item.proposal.keeper)).toEqual(k.recipe.soul.keepers.filter(keeper => keepers.some(item => item.proposal.keeper.placeId === keeper.placeId)));
+    expect(keepers.map(item => item.proposal.keeper.placeId).sort()).toEqual(['plaza', 'tavern']);
+    for (const { proposal, site, round } of keepers) {
+      expect(proposal.presence).toEqual({ carriesPresenceLight: false, counted: false, twitchChat: 'never', citizen: false });
+      expect(site.provenance).toBe('host');
+      expect(round.label).toBeNull();
+      expect(round.missing, `${proposal.keeper.role} lacks fixtures`).toEqual([]);
+      expect(round.outOfBounds).toEqual([]);
+      expect(round.visits.length, `${proposal.keeper.role} has no work at ${k.hour}`).toBeGreaterThan(0);
+      // Every visit stands on the town's own ground, or at the inn on its own floor on the levee, clear of the water.
+      const inn = kinds(k, /^genesis-pinkkitty-tavern-lantern-and-oar$/)[0]!, floor = inn.position[1] + LANTERN_AND_OAR.ground * .125;
+      for (const visit of round.visits) {
+        const ground = terrainHeight(k.plan, visit.position[0], visit.position[2]);
+        if (proposal.place.id === 'tavern') {
+          expect(visit.position[1], visit.fixtureId).toBeCloseTo(floor, 3);
+          expect(visit.position[1], visit.fixtureId).toBeGreaterThan(ground - .05);
+        } else expect(Math.abs(visit.position[1] - ground), visit.fixtureId).toBeLessThan(1.1);
+        const water = sampleLandWater(k.plan.genesisSurface!.terrainCore as never, visit.position[0], visit.position[2]);
+        expect(!water || water.shoreDistance >= 0, `${visit.fixtureId} stands in water`).toBe(true);
+      }
+    }
+    // The court's lamps are dark glass: a lamp in an unfounded town never burns for a person who is not there.
+    const lamps = kinds(k, /^keeper-lamp-post/);
+    expect(lamps.length).toBeGreaterThanOrEqual(4);
+    for (const lamp of lamps) for (const brazier of k.seat!.braziers) expect(Math.hypot(brazier.position[0] - lamp.position[0], brazier.position[2] - lamp.position[2])).toBeGreaterThan(1.5);
+  });
+
+  it('stands The Lantern and Oar on the levee, its steps down to the meadow and its path to a lane, clear of every street and lot', async () => {
+    const k = await kingdom(), inn = kinds(k, /^genesis-pinkkitty-tavern-lantern-and-oar$/), steps = kinds(k, /^genesis-pinkkitty-tavern-steps-\d+-[we]$/);
+    expect(inn).toHaveLength(1);
+    expect(steps).toHaveLength(1);
+    const approach = k.plan.streets.find(street => street.id === 'pk:tavern:approach')!;
+    expect(approach).toBeDefined();
+    // The path starts at the steps' foot on the meadow, not in the air before a door four metres up, and the foot's
+    // paving meets the graded ground there within a riser.
+    const [start] = approach.points, inn0 = inn[0]!, floor = inn0.position[1] + LANTERN_AND_OAR.ground * .125;
+    expect(floor - start![1]).toBeGreaterThan(1);
+    const rise = Number(/steps-(\d+)-/.exec(steps[0]!.blueprint.id)![1]), foot = floor - rise * .125;
+    const end = k.seat!.props.find(prop => prop.blueprint.id === steps[0]!.blueprint.id)!;
+    const reach = (10 + rise / 2 * 4 + 8) * .125, toward = /-w$/.test(end.blueprint.id) ? -1 : 1;
+    // The inn is turned a quarter: its −X end lies at world +Z.
+    const door = [inn0.position[0], inn0.position[2] - 70 * .125] as const;
+    const [fx, fz] = [start![0], door[1] - toward * reach];
+    expect(Math.abs(foot - terrainHeight(k.plan, fx, fz)), 'foot paving to ground').toBeLessThan(.3);
+    // No other street runs through the inn or its steps, and no home lot touches them.
+    const rect = (prop: (typeof inn)[number]) => {
+      const turn = Math.round(prop.yaw / (Math.PI / 2)) & 3, [sx, , sz] = prop.blueprint.size, w = sx * .125, d = sz * .125;
+      const [x, , z] = prop.position;
+      // A quarter turn carries local (x, z) to world (z, -x).
+      return turn === 1 ? { minX: x, maxX: x + d, minZ: z - w, maxZ: z } : { minX: x, maxX: x + w, minZ: z, maxZ: z + d };
+    };
+    for (const piece of [...inn, ...steps]) {
+      const r = rect(piece);
+      for (const street of k.plan.streets) {
+        if (street.id === 'pk:tavern:approach') continue;
+        for (const p of street.points) expect(p[0] > r.minX - street.width / 2 && p[0] < r.maxX + street.width / 2 && p[2] > r.minZ - street.width / 2 && p[2] < r.maxZ + street.width / 2, `${street.id} crosses ${piece.blueprint.id}`).toBe(false);
+      }
+      for (const home of k.plan.homes) expect(home.lot.minX < r.maxX && r.minX < home.lot.maxX && home.lot.minZ < r.maxZ && r.minZ < home.lot.maxZ, `${home.id} on ${piece.blueprint.id}`).toBe(false);
+    }
   });
 
   it('carves only the three checked emote derivatives, each for its one use', async () => {
