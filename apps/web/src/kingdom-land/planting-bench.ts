@@ -56,7 +56,7 @@ async function main(): Promise<void> {
     const entry = counts.get(kind as TreeZoneKind);
     return `<li><i style="background:${style.fill};border-color:${style.edge}"></i><span>${style.label}<br><small>${entry ? `${entry.zones} · ${Math.round(entry.area).toLocaleString('en')} m²` : 'none on this land'}</small></span></li>`;
   }).join('') + '<li><i style="background:#3d5a2b;border-radius:50%"></i><span>Elder oak · summit pine<br><small>landmarks, crowns drawn to size</small></span></li>';
-  document.querySelector('#fixture')!.textContent = `Seed ${seed}. SIMULATED: today's installed homes re-seated on the new land (${kept} full lots) stand in for the street generator's complete reservations.`;
+  document.querySelector('#fixture')!.textContent = `Seed ${seed}. Today's installed homes re-seated on the new land (${kept} full lots) stand in for the street generator's complete reservations.`;
   document.querySelector('#status')!.textContent = '';
   requestAnimationFrame(() => requestAnimationFrame(() => { (window as Window & { __chatdomReady?: boolean }).__chatdomReady = true; }));
 }

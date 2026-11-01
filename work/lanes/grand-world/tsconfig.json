@@ -2,6 +2,8 @@
   "extends": "../../../tsconfig.json",
   "include": [
     "../../../apps/web/src/kingdom/scene.ts",
+    "../../../apps/web/src/grand/**/*.ts",
+    "../../../apps/web/src/grand/**/*.tsx",
     "../../../apps/web/src/kingdom/grand-land/**/*.ts",
     "../../../apps/web/src/stream/**/*.ts",
     "../../../apps/web/src/stream/**/*.tsx",

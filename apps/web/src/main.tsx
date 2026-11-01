@@ -17,6 +17,7 @@ const laneViews = import.meta.glob<{ default: Component }>(['../../panel/src/Pan
 const lanePaths: Record<string, string> = {
   '/-/soul': (laneViews['./soul/index.tsx'] = () => import('./soul/index'), './soul/index.tsx'),
   '/-/passport':'./passport/index.tsx', '/-/grand':'./grand/index.tsx',
+  '/-/grand-bench':'./grand/index.tsx',
   '/-/citizen-card':'./citizen-card/index.tsx', '/-/twitch-moments':'./twitch-moments-bench/index.tsx', '/-/campfire':'./campfire/index.tsx',
   '/-/tavern':'./tavern/index.tsx', '/-/raid-gate':'./raid-gate/index.tsx', '/-/emotes':'./emotes/index.tsx',
   '/panel': '../../panel/src/Panel.tsx', '/stream': './stream/index.tsx',

@@ -32,7 +32,7 @@ const seed = query.get('seed') ?? 'willowmere', tier = (query.get('tier') === 'h
 const treesMode = query.get('trees') ?? 'picture', style = (query.get('style') ?? 'hearth') as StyleFamily;
 let hour = Number(query.get('hour') ?? 19.5), time = Number(query.get('time') ?? 30);
 const canvas = document.querySelector('canvas')!;
-document.querySelector('[data-seal]')!.textContent = `${SIMULATED_LAND} · SIMULATED evening presence · trees: ${treesMode === 'picture' ? `picture grove (${style})` : treesMode}`;
+document.querySelector('[data-seal]')!.textContent = `${SIMULATED_LAND} · evening presence · trees: ${treesMode === 'picture' ? `picture grove (${style})` : treesMode}`;
 const fail = (error: unknown) => { console.error('Tree kingdom bench failed', error); document.body.dataset.error = String(error); };
 
 try {

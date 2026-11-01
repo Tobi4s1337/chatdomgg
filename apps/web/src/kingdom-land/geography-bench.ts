@@ -48,7 +48,7 @@ async function main(): Promise<void> {
   const { plan, land, kept, dropped } = geographyFixture(seed);
   const view = views[viewName]!(land);
   document.querySelector('#caption')!.textContent = view.caption;
-  document.querySelector('#fixture')!.textContent = `SIMULATED town fixture · ${kept} installed homes kept on the new land, ${dropped} set aside until the street generator lands`;
+  document.querySelector('#fixture')!.textContent = `Town fixture · ${kept} installed homes kept on the new land, ${dropped} set aside until the street generator lands`;
 
   const canvas = document.querySelector<HTMLCanvasElement>('#land')!;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });

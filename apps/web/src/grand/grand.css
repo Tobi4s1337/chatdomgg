@@ -23,8 +23,6 @@
 .grand-plaque h1 { margin: 0; font: 400 38px/1.02 'IM Fell English', Georgia, serif; letter-spacing: -.01em; color: #fbefd6; overflow-wrap: anywhere; }
 .grand-facts { margin: 7px 0 0; font: 400 16px/1.3 Alegreya, Georgia, serif; color: var(--cream-soft); }
 .grand-count { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid #c69a5c40; font: 500 14px/1.2 Alegreya, Georgia, serif; color: #e7d4ad; font-variant-numeric: tabular-nums; }
-.grand-simulated { margin: 9px 0 0; font: 400 13px/1.35 Alegreya, Georgia, serif; color: #e0cda8; }
-.grand-simulated b { margin-right: 6px; padding: 1px 6px; border-radius: 2px; font: 700 11px/1.4 Alegreya, Georgia, serif; letter-spacing: .18em; color: #2b1e17; background: var(--ember); }
 
 .grand-realms { position: absolute; top: 28px; right: 32px; display: flex; gap: 4px; padding: 4px; border-radius: 3px;
   background: #241912d9; box-shadow: 0 0 0 1px #c69a5c80, 0 8px 22px #120c0840; }

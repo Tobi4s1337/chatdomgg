@@ -19,6 +19,8 @@ import { CitizenChatCueSchema, PRESENCE_LEASE_MS } from '@chatdom/shared';
 import { createSimulatedPresence, createHeraldPresence } from './presence-feed';
 import { loadTerrain } from './terrain-client';
 import { grandRecipeFor } from './grand-land/recipes';
+import { createGrandOverview } from './grand-land/overview';
+import { overviewFrame } from './grand-land/overview-pose';
 import { prepareHostedGrandLand, createHostedGrandMaterial, type HostedGrandLand } from './grand-land';
 import { TERRAIN_SURFACE_BOUNDS_PADDING } from './terrain-worker';
 import { createLightField } from './light-field';
@@ -92,7 +94,7 @@ export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number;arrivalAgeSeconds?:number}
 export interface PotentialKingdomView {seat?:GenesisSeatContent;plan:SettlementPlan;size:string;style:'hearth'|'tide'|'grove';camera:{eye:Vec3;target:Vec3;fov:number};/** Local SIMULATED lighting only; never crowd presence or a deed. */windowPreview?:KingdomPresenceFrame}
 export interface SceneView {eye:Vec3;target:Vec3;fov:number}
-export interface SceneOptions {readonly mode?:'stream';readonly places?:readonly PlaceMounter[];/** Read-only isolated history; never hands citizens to the live scene. */replay?:boolean;dockFeed?:DockPresentationConnection;/** Hidden warming scenes must explicitly activate before presenting or witnessing. */dockActive?:boolean;/** Explicit SIMULATED capture fixtures only. */simulatedDockSites?:boolean;initialView?:SceneView;growthFeed?:GrowthSceneFeed;growthCeremonies?:GrowthCeremonyFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
+export interface SceneOptions {readonly mode?:'stream'|'watching';readonly overview?:boolean;readonly places?:readonly PlaceMounter[];/** Read-only isolated history; never hands citizens to the live scene. */replay?:boolean;dockFeed?:DockPresentationConnection;/** Hidden warming scenes must explicitly activate before presenting or witnessing. */dockActive?:boolean;/** Explicit SIMULATED capture fixtures only. */simulatedDockSites?:boolean;initialView?:SceneView;growthFeed?:GrowthSceneFeed;growthCeremonies?:GrowthCeremonyFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {post?:ReturnType<ReturnType<typeof createPostStack>['diagnostics']>;citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
@@ -119,6 +121,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const grandRecipe=options.founded?grandRecipeFor(String(options.founded.kingdomId)):undefined;
   const useGrandLand=!!grandRecipe;
   let grandLand:HostedGrandLand|undefined;
+  let overview:ReturnType<typeof createGrandOverview>|undefined,overviewView=options.initialView;
+  const overviewOwnsLens=()=>!!overview&&!walkSelected&&!capturePose;
+  const dockLens=new THREE.PerspectiveCamera(),dockTarget=new THREE.Vector3();
   const renderer=own(new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'}));
   renderer.debug.onShaderError=(gl,program,vertex,fragment)=>{console.error('Kingdom shader failed',{vertex:gl.getShaderInfoLog(vertex),fragment:gl.getShaderInfoLog(fragment),link:gl.getProgramInfoLog(program)});throw new Error('A kingdom shader could not compile');};
   renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.5));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
@@ -127,6 +132,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   function startHandoff(view:SceneView){
     if(![...view.eye,...view.target,view.fov].every(Number.isFinite)||view.fov<10||view.fov>100||Math.hypot(...view.eye.map((v,i)=>v-view.target[i]!))<.01)throw new Error('Scene handoff needs a finite camera view');
     const copy:SceneView={eye:[...view.eye],target:[...view.target],fov:view.fov};
+    if(options.overview&&useGrandLand){overviewView=copy;overview?.restore(copy);handoffPose=undefined;poseRevision++;return;}
     const matrix=new THREE.Matrix4().lookAt(new THREE.Vector3(...copy.eye),new THREE.Vector3(...copy.target),camera.up);
     handoffPose={view:copy,rotation:new THREE.Quaternion().setFromRotationMatrix(matrix),elapsed:0};poseRevision++;
   }
@@ -280,7 +286,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       }
     }
   }
-  const dockVisuals=options.dockFeed?own(createDockVisuals({scene,camera,target,gate:dockGate,gateBraziers:lifeSites.braziers.map(site=>site.position),plaza:dockPlaza,
+  const dockVisuals=options.dockFeed?own(createDockVisuals({scene,get camera(){return overviewOwnsLens()?dockLens:camera;},get target(){return overviewOwnsLens()?dockTarget:target;},gate:dockGate,gateBraziers:lifeSites.braziers.map(site=>site.position),plaza:dockPlaza,
     citizen:(slot,approvedName)=>{const subject=crowd.subject(slot);return subject&&subject.opacity>.05&&frame?.windows.some(window=>window.slot===slot&&window.present&&(approvedName===undefined||window.publicName===approvedName))?subject.position:undefined;},
     welcomeRaid:(act,elapsed)=>moments?.welcomeRaid(act,elapsed)??false,
     setHour:value=>{targetHour=value;},hour:()=>hour,cue:kind=>sound.cue(kind==='fire-light'?'beacon':'light'),gateFlame:value=>{dockGateFlame=value;},
@@ -565,6 +571,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(soul&&soulEpoch!==null){camera.getWorldDirection(listenerRight);listenerRight.cross(camera.up).normalize();soul.update({epochMs:soulEpoch,seconds:time,population:frame?.windows.filter(window=>window.present).length??0,listener:{position:camera.position.toArray() as Vec3,right:listenerRight.toArray() as Vec3}});}
     growth?.update(now,loaded);
     const walking=walk?.frame(now,walkSelected&&!capturePose&&!build.session&&!build.housewarming&&!forge.status().open)??false;
+    const overviewActive=overviewOwnsLens();
+    overview?.setActive(overviewActive);
     observed?.frame(now);
     const feet=walkerSlots(walk ? walk.poses : observed?.poses??[]);
     crowd.watchForge(!!realmForge?.active()||forge.status().busy,presentationMs,[0,layout.market.elevation,8]);
@@ -604,9 +612,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const wantedFov=autoCamera?THREE.MathUtils.lerp(48,heroFov,(1-THREE.MathUtils.smootherstep(time,8,12)+THREE.MathUtils.smootherstep(time,24,36))):camName==='citizen'?48:camName==='window'?homeFov:heroFov;
     if(!walking&&Math.abs(camera.fov-wantedFov)>.001){camera.fov=wantedFov;camera.updateProjectionMatrix();}
     if(!installed){build.update(now,dt,hour,target);forge.update(now,target,!!build.session);}
-    const forgeDirected=forgeCameraDirected=realmForge?.update(now,!walking&&!build.session&&!capturePose)??false;
+    const forgeDirected=forgeCameraDirected=realmForge?.update(now,!overviewActive&&!walking&&!build.session&&!capturePose)??false;
     // A witnessed arrival owns only the stream lens. Walking, a chosen capture and the Forge always win.
-    if(walking||build.session||capturePose||forgeDirected)arrivalDirector?.cancel();
+    if(overviewActive||walking||build.session||capturePose||forgeDirected)arrivalDirector?.cancel();
     arrivalShot=loaded?arrivalDirector?.sample(presentationMs,slot=>crowd.subject(slot)):undefined;
     if(arrivalShot){
       focusHome(arrivalShot.slot);
@@ -622,7 +630,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       arrivalEye.lerp(arrivalWantedEye,follow);arrivalTarget.lerp(arrivalWantedTarget,follow);
       arrivalFov+=( (arrivalShot.phase==='window'?homeFov:48)-arrivalFov)*follow;
     }
-    const permitted=!walking&&!build.session&&!capturePose&&!forgeDirected;
+    const permitted=!overviewActive&&!walking&&!build.session&&!capturePose&&!forgeDirected;
     arrivalBlend=permitted?THREE.MathUtils.clamp(arrivalBlend+(arrivalShot?1:-1)*dt/1.2,0,1):0;
     arrivalCameraDirected=arrivalBlend>0;
     if(arrivalCameraDirected){
@@ -633,14 +641,14 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const nextArrival=arrivalShot?`${arrivalShot.slot}:${arrivalShot.phase}`:'';
     if(nextArrival!==arrivalKey){arrivalKey=nextArrival;options.onArrival?.(arrivalShot?{slot:arrivalShot.slot,phase:arrivalShot.phase}:null);}
     if(capturePose){camera.position.set(...capturePose.eye);target.set(...capturePose.target);if(camera.fov!==capturePose.fov){camera.fov=capturePose.fov;camera.updateProjectionMatrix();}}
-    momentCameraDirected=loaded&&!!moments?.update(presentationMs,frame,!walking&&!build.session&&!capturePose&&!forgeDirected&&!arrivalCameraDirected&&!growth?.active());
-    growthCameraDirected=growth?.direct(camera,target,!walking&&!build.session&&!capturePose&&!forgeDirected&&!momentCameraDirected)??false;
+    momentCameraDirected=loaded&&!!moments?.update(presentationMs,frame,!overviewActive&&!walking&&!build.session&&!capturePose&&!forgeDirected&&!arrivalCameraDirected&&!growth?.active());
+    growthCameraDirected=growth?.direct(camera,target,!overviewActive&&!walking&&!build.session&&!capturePose&&!forgeDirected&&!momentCameraDirected)??false;
     // Dock acts share this director and render loop. Only the visible promoted
     // scene may spend an act; interactive and already-owned lenses keep priority.
     const dockVisible=dockActive&&document.visibilityState!=='hidden'&&canvas.clientWidth>0&&canvas.clientHeight>0&&canvas.getClientRects().length>0;
     dockActs?.update(Date.now(),loaded&&dockVisible&&!walking&&!walkSelected&&!build.session&&!build.housewarming&&!capturePose&&!forgeDirected&&!forge.status().open&&!forge.status().busy&&!momentCameraDirected&&!growthCameraDirected&&!growth?.active()&&!handoffPose);
-    dockCameraDirected=dockVisuals?.active()??false;
-    placeShot.apply(camera,target,{walking:walking||walkSelected,capture:!!capturePose,build:!!build.session||!!build.housewarming,
+    dockCameraDirected=!overviewActive&&(dockVisuals?.active()??false);
+    placeShot.apply(camera,target,{walking:walking||walkSelected,capture:!!capturePose||overviewActive,build:!!build.session||!!build.housewarming,
       forge:forgeDirected||forge.status().open||forge.status().busy,arrival:arrivalCameraDirected||!!arrivalShot,
       moment:momentCameraDirected,growth:growthCameraDirected||!!growth?.active(),dock:dockCameraDirected,handoff:!!handoffPose});
     if(!walking&&!forgeDirected&&!momentCameraDirected&&!growthCameraDirected&&!dockCameraDirected)camera.lookAt(target);
@@ -653,6 +661,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       camera.fov=THREE.MathUtils.lerp(handoffPose.view.fov,camera.fov,blend);camera.updateProjectionMatrix();
       if(blend===1)handoffPose=undefined;
     }
+    overview?.apply(camera,target);
     camera.updateMatrixWorld();forgeFlight.update();walk?.interact(now);walk?.draw(now);observed?.draw(now,!walk);crowd.drawLanterns(time,night,camera,walk?.grips??observed?.grips);updateInstances(fixedTime&&autoCamera?time*1000:now);
     placeMounts.tick(dt,now);kingdomLayers?.tick(dt,now);
     canopy.sync();canopy.setWind(time,[0.8,0.6],0.8);
@@ -689,7 +698,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     // Fixed evidence frames have no animation between seeks. Keep the public
     // feed/watchdog alive, but don't burn SwiftShader CPU redrawing identical
     // pixels while a capture waits on fonts, a field worker or the filesystem.
-    const renderKey=[dockCameraDirected?now:0,poseRevision,placeShot.revision,placeMounts.revision,kingdomLayers?.revision??0,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,grandLand?.revision??0,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
+    const renderKey=[dockCameraDirected?now:0,poseRevision,overview?.revision??0,placeShot.revision,placeMounts.revision,kingdomLayers?.revision??0,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,grandLand?.revision??0,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
     // The stream curtain covers preparation. Keep the bounded land install/update pump running,
     // but do not redraw a hidden high-quality reflection/post stack for every installed region.
     // The first loaded frame below still draws the full native view before announcing ready.
@@ -733,7 +742,14 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }).then(async land=>{
       if(disposed){land.dispose();return;}
       grandLand=land;
-      camera.far=Math.max(camera.far,land.bounds.getSize(new THREE.Vector3()).length()+camera.position.length());camera.updateProjectionMatrix();
+      if(options.overview){
+        const physical=new THREE.Box3(new THREE.Vector3(layout.bounds.minX,layout.castle.centre[1],layout.bounds.minZ),new THREE.Vector3(layout.bounds.maxX,layout.castle.centre[1],layout.bounds.maxZ));
+        // Ordered installed blueprints determine the town's true vertical extent; no guessed city layout.
+        for(const asset of [...houses,...props])for(const x of [0,asset.blueprint.size[0]/8])for(const y of [0,asset.blueprint.size[1]/8])for(const z of [0,asset.blueprint.size[2]/8])physical.expandByPoint(new THREE.Vector3(x,y,z).applyAxisAngle(new THREE.Vector3(0,1,0),asset.yaw).add(new THREE.Vector3(...asset.position)));
+        overview=own(createGrandOverview(canvas,overviewFrame(land.bounds,physical,camera.aspect),overviewView));
+        overview.setActive(overviewOwnsLens());overview.apply(camera,target);camera.updateMatrixWorld();
+      }
+      camera.far=Math.max(camera.far,land.bounds.getSize(new THREE.Vector3()).length()+(overview?overview.inspect().limits.maxDistance:camera.position.length()));camera.updateProjectionMatrix();
       const replacement=own(createWaterSurface({bodies:[],reaches:[],ground:land.water.ground,raster:{levels:land.water.levels,seaLevel:land.water.seaLevel},quality:waterQuality}));
       water.root.removeFromParent();water.dispose();water=replacement;scene.add(water.root);
       poseRevision++;
@@ -746,7 +762,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
     }
   }));
-  function dispose(){if(disposed)return;const checkpoint=options.founded&&!options.replay&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);kingdomLayers?.dispose();placeMounts.dispose();walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();grandLand?.dispose();clearInterval(soulClockTimer);soul?.dispose();civicLife?.dispose();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;const checkpoint=options.founded&&!options.replay&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);overview?.dispose();kingdomLayers?.dispose();placeMounts.dispose();walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();grandLand?.dispose();clearInterval(soulClockTimer);soul?.dispose();civicLife?.dispose();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
@@ -782,11 +798,12 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }catch(error){dispose();throw error;}
   loaded=true;lastFrame=performance.now();options.onProgress('The gate is opening',1);
   function detachWalk(){walkGeneration++;walkSelected=false;walk?.dispose();walk=undefined;options.onWalkers?.([]);camera.clearViewOffset();camera.filmOffset=0;camera.updateProjectionMatrix();instancesDirty=true;}
-  return {layout,debug,sound,build,forge,forgeDirecting:()=>forgeCameraDirected,momentDirecting:()=>forgeCameraDirected||arrivalCameraDirected||momentCameraDirected||growthCameraDirected||dockCameraDirected,
+  const overviewControls=overview?{orbit:overview.orbit,reset:overview.reset,inspect:overview.inspect}:undefined;
+  return {layout,debug,sound,build,forge,get overview(){return overviewControls;},forgeDirecting:()=>forgeCameraDirected,momentDirecting:()=>forgeCameraDirected||arrivalCameraDirected||momentCameraDirected||growthCameraDirected||dockCameraDirected,
     /** A full-screen native replay owns the renderer budget; live subscriptions and authority remain connected. */
     suspendRendering(){
-      renderHolds++;cancelAnimationFrame(raf);let released=false;
-      return ()=>{if(released)return;released=true;renderHolds--;if(!disposed&&renderHolds===0){lastFrame=performance.now();raf=requestAnimationFrame(render);}};
+      renderHolds++;cancelAnimationFrame(raf);overview?.setActive(false);let released=false;
+      return ()=>{if(released)return;released=true;renderHolds--;if(!disposed&&renderHolds===0){lastFrame=performance.now();overview?.setActive(overviewOwnsLens());raf=requestAnimationFrame(render);}};
     },
     activateDock,
     async attachWalk(binding:KingdomWalkBinding){
@@ -796,15 +813,15 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const next=await createKingdomWalk(scene,camera,canvas,pool,crowd.material,binding,options.founded!,sound);
       if(disposed||generation!==walkGeneration){next.dispose();return;}
       try{checkWalkBinding(options.founded,binding);}catch(error){next.dispose();throw error;}
-      walk=next;walkSelected=true;capturePose=null;autoCamera=false;poseRevision++;instancesDirty=true;
+      walk=next;walkSelected=true;overview?.setActive(false);capturePose=null;autoCamera=false;poseRevision++;instancesDirty=true;
     },
     detachWalk,
     walkDebug:()=>walk?.controller.debug??null,
     interactionDebug:()=>walk?.interactionDebug??null,
     walkSelected:()=>walkSelected,
-    selectWalk(selected:boolean){walkSelected=selected&&!!walk;if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
+    selectWalk(selected:boolean){walkSelected=selected&&!!walk;overview?.setActive(overviewOwnsLens());if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
     seekGrowthCeremony(seconds:number|null){growth?.seek(seconds);},
-    inspect:()=>({placeShot:placeShot.inspect(),land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
+    inspect:()=>({overview:overview?.inspect()??null,placeShot:placeShot.inspect(),land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
       if(!crowd.receiveChat(input))return false;
       const cue=CitizenChatCueSchema.parse(input),at=Date.now();
       if(cue.asOf<=at&&at-cue.asOf<=5000&&cue.expiresAt>at)arrivalDirector?.chat(cue.slot,at);
@@ -813,12 +830,15 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     captureCitizens:()=>crowd.checkpoint(),
     restoreCitizens(checkpoint:CitizenSceneCheckpoint|undefined){citizenHandoff=undefined;crowd.restoreCheckpoint(checkpoint);instancesDirty=true;},
     captureView():SceneView{
+      if(overviewOwnsLens())return overview!.capture();
       const direction=camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(16).add(camera.position);
       return {eye:camera.position.toArray() as Vec3,target:direction.toArray() as Vec3,fov:camera.fov};
     },
     handoffView(view:SceneView){
       startHandoff(view);
-      camera.position.set(...view.eye);camera.lookAt(new THREE.Vector3(...view.target));camera.fov=view.fov;camera.updateProjectionMatrix();camera.updateMatrixWorld();
+      if(overviewOwnsLens())overview!.apply(camera,target);
+      else {camera.position.set(...view.eye);camera.lookAt(new THREE.Vector3(...view.target));camera.fov=view.fov;}
+      camera.updateProjectionMatrix();camera.updateMatrixWorld();
       // Promotion must show this lens immediately, rather than the candidate's last warm-up frame.
       if(loaded){post.render(0);lastField=-Infinity;instancesDirty=true;}
     },
@@ -830,7 +850,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     pose(eye:Vec3|null,lookAt?:Vec3,fov=43){
       if(eye===null){capturePose=null;poseRevision++;lastField=-Infinity;instancesDirty=true;return;}
       if(eye.length!==3||!lookAt||lookAt.length!==3||![...eye,...lookAt,fov].every(Number.isFinite)||fov<10||fov>100||Math.hypot(...eye.map((value,index)=>value-lookAt[index]!))<.01)throw new Error('Capture pose needs finite distinct eye/target and a 10–100 degree FOV');
-      capturePose={eye:[...eye],target:[...lookAt],fov};poseRevision++;autoCamera=false;lastField=-Infinity;instancesDirty=true;
+      overview?.setActive(false);capturePose={eye:[...eye],target:[...lookAt],fov};poseRevision++;autoCamera=false;lastField=-Infinity;instancesDirty=true;
     },
     play(){if(!ownSimulation)return;walkSelected=false;walk?.controller.release();capturePose=null;poseRevision++;sound.unlock();sound.cue('wood');windows.clear();crowd.clear();lastLightFrameKey='';simulation.reset();time=0;fixedTime=false;autoCamera=true;camName='hero';beaconCue=false;lastActive=0;},
     seek(value:number,view?:CameraName){if(view){walkSelected=false;walk?.controller.release();}lastField=-Infinity;if(view){capturePose=null;poseRevision++;camName=view;}if(!ownSimulation)return;time=value;fixedTime=true;autoCamera=false;simulation.advance(value);windows.update(1,hour);},

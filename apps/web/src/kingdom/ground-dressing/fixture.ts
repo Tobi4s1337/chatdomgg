@@ -6,7 +6,7 @@ import { generateSettlementPlan, type KingdomLand, type KingdomTier, type Settle
  * has. It invents no woods, sites or trails: those zones stay empty, which plants no landscape trees. Production
  * never imports this module; the integrator supplies the actual land.
  */
-export const SIMULATED_LAND = 'SIMULATED land · bench fixture · not the kingdom-land generator';
+export const SIMULATED_LAND = 'Bench fixture · not the kingdom-land generator';
 
 export function simulatedLand(options: { seed: string; tier: KingdomTier; firstYear?: number; year?: number }): KingdomLand {
   const plan: SettlementPlan = generateSettlementPlan({ seed: options.seed, tier: options.tier,

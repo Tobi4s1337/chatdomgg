@@ -172,7 +172,7 @@ export function createSceneMount(hooks: {
       const prior = replacement ? current?.scene : undefined;
       return createKingdomScene(canvas, {
         ...settings,
-        mode: 'stream',
+        mode: settings.mode ?? 'stream',
         ...(prior ? { initialView: prior.captureView(), camera: prior.debug.camera, hour: prior.debug.hour, time: settings.time === null ? null : prior.debug.time } : {}),
         // These labels also originate in SceneOptions; a warming scene cannot
         // move live plates or captions belonging to the visible kingdom.

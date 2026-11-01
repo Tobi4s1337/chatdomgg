@@ -148,3 +148,11 @@ it('supersedes warming revisions, bounds failed refreshes and releases hidden or
   expect(h.hooks.onScene.mock.calls.filter(([scene]) => !!scene)).toEqual([[h.scenes[0]]]);
   expect(h.hooks.onPhase).toHaveBeenLastCalledWith('hidden');
 });
+
+it('preserves an explicitly watching host mode while stream remains the default', async () => {
+  const h = harness(), original = h.hooks.settings;
+  h.hooks.settings = () => ({ ...original(), mode: 'watching' });
+  h.mount.mount(); await settle();
+  expect(h.options[0]?.mode).toBe('watching');
+  h.mount.unmount('hidden');
+});
