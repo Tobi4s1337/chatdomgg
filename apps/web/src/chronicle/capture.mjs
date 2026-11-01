@@ -22,7 +22,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.goto(`${base}src/chronicle/bench.html`);
+  await page.goto(`${base}src/chronicle/bench.html`, { waitUntil: 'commit', timeout: 120_000 });
   await page.waitForFunction(() => window.__chatdomReady === true || window.__chronicleError === true, null, { timeout: 240000 });
   if (await page.evaluate(() => window.__chronicleError === true)) throw new Error(`Chronicle failed to open: ${errors.join('\n')}`);
   await page.waitForFunction(() => window.__chronicleLightingReady(), null, { timeout: 120000 });
@@ -57,7 +57,7 @@ try {
   if (await page.evaluate(() => document.documentElement.scrollWidth > document.defaultView.innerWidth)) throw new Error('Horizontal overflow');
   if (errors.length) throw new Error(errors.join('\n'));
   const path = resolve(evidence, `chronicle-${view}@${width}x${height}.png`);
-  await page.screenshot({ path });
+  await page.screenshot({ path, timeout: 120_000 });
   console.log(`Captured ${path}; forward and backward seeking changed and restored the accessible night and world image`);
 } catch (error) {
   failure = error;

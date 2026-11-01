@@ -16,7 +16,7 @@ const stills = [
   ['dawn@1440x900.png', '06:00 · Bread round and chimney smoke'],
   ['noon@1440x900.png', '12:00 · The working day'],
   ['rain@1440x900.png', '14:00 · Rain on tile and puddles'],
-  ['lamplighter@1440x900.png', '17:00 · The lamplighter’s round'],
+  ['lamplighter@1440x900.png', '18:45 · The lamplighter’s round'],
   ['dusk@1440x900.png', '19:30 · Civic lamps at dusk'],
   ['night@1440x900.png', '23:00 · A clear quiet night'],
   ['snow@1440x900.png', 'Winter · Snow on roofs and peaks'],
