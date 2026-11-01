@@ -1,3 +1,4 @@
 next: GM10 lane scope and task recorded; kingdom implementation and before/after captures remain.
 follow-up: GM10 place the Copper Kettle, connect available sound and keepers through main seams, and capture the hero and Atlas door before/after.
 next: GM10 mountain land, 512-home city, seat, roof selection and Copper Kettle asset landed; integration and visual evidence remain.
+integration: GM10 checkpoint merged on main; continue the whole PRD. Next visible outcome: place the Copper Kettle and its keeper in the market view.
