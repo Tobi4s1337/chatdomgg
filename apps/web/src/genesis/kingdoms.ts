@@ -34,5 +34,6 @@ export interface GenesisKingdomComposition {
  * opens the shared potential composition.
  */
 export const GENESIS_KINGDOMS: Readonly<Record<string, () => Promise<{ composeGenesisKingdom(input: GenesisKingdomInput): Promise<GenesisKingdomComposition> }>>> = {
+  '63920635': () => import('./kingdoms/aggman/index'),
   '4363967': () => import('./kingdoms/pinkkitty/index'),
 };

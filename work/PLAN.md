@@ -335,20 +335,28 @@ Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo street fill and warm p
 sparse grey-violet chimney smoke, sculpted land/groves and AS10 citizens. No new systems or rework
 of accepted pictures. Merge good runtime checkpoints promptly; one visible change per turn.
 
-**Latest working slice: sky-to-town lighting and stream credits.** Applied the sky lane’s existing
-seam: the kingdom retains the moment view’s `SkyGlow`, `scene.ts` grades its materials through
-`skyLitEnvironment`, and the production stream mounts `SkyCaptions` via `onMomentCaptions`.
-No active glow leaves the ordinary dusk grade unchanged. The existing realm spectator already
-passes `createRoomMomentFeed` into `SceneOptions.momentFeed`; no new feed contract was needed.
-Root viewed native1920×1080 `shots/magic/sky-stream-wiring-{before,after,pair}.png` (before LEFT):
-the town and castle now take the moment’s light beneath the same aurora. These are the stream
-bench’s real kingdom scene/mount, SIMULATED Herald ingest, frozen at3.6s, preparation ready,
-no page errors. They demonstrate the lighting seam, not production caption delivery or a real
-channel event. Typecheck, scoped lint, nine focused tests and web build pass. Capture resources
-are closed/released. The aurora’s evenly spaced streaks remain a visual weakness for the sky lane.
+**Latest merge: Aggman GA10 (3a6916a).** Harbour composition, inn, Last Lantern lighthouse,
+working quay, boats/geese and checked channel emote statue/glass/vane are on main. Added its
+`GENESIS_KINGDOMS` registry entry so `/kingdom/63920635` uses the authored19.6 opening hour and
+lore without a query override. Root viewed the lane’s committed native1920×1080 hero and quay
+stills and `work/evidence/genesis-aggman/before-after-hero.png`: the hamlet now gathers at a
+recognisable working harbour in its own colours. Typecheck, scoped lint, eighteen focused tests
+and web build pass. These are producer route captures, not a fresh post-merge capture. Keepers
+and sound are composed data but still unmounted. The current Atlas survey lacks this holding,
+so the Atlas door is NOT demonstrated; do not invent a mark. The quay’s drawn-up boats still
+need a shingle margin rather than grass beneath them; next visual detail for the lane.
 
-**Team handoff:** raid-road and sky-moments have uncommitted runtime work, no new runtime commits
-ahead of main at this check. Sky SM10 is already merged; its missing lighting/credit mount is now
+**Previous seam (4ab8d36):** the kingdom retains `SkyGlow`, grades materials through
+`skyLitEnvironment`, and the stream mounts `SkyCaptions`. The realm spectator already passes
+`createRoomMomentFeed` into `SceneOptions.momentFeed`; no new feed contract. Viewed native
+`shots/magic/sky-stream-wiring-pair.png` (before LEFT): the town takes the aurora’s light.
+SIMULATED Herald ingest through the real scene/mount at3.6s, preparation ready, no errors;
+lighting proof, not production caption delivery or a real cheer. Nine focused tests passed.
+Idle dusk stays unchanged. Aurora streaks remain too regular; sky lane has that follow-up.
+
+**Team handoff:** raid-road and sky-moments still have uncommitted runtime work; no new runtime
+checkpoint on either branch. Other requested picture/card/Genesis branches had no new runtime commit
+beyond Aggman GA10 at this check. Sky SM10 is already merged; its missing lighting/credit mount is now
 installed. Raid-road’s RR10 stages the gate, Atlas road and arrival, but still needs its visual
 checkpoint; its WIP uses SIMULATED presence, not a live raid feed. The new dragon also remains
 on the sky worktree. Both lanes received a request to checkpoint green slices and send exact
