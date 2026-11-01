@@ -1,0 +1,46 @@
+[
+  {
+    "kit": "source-fields",
+    "crop": "wheat",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "source-fields",
+    "crop": "lavender",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "source-fields",
+    "crop": "cabbage",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "source-fields",
+    "crop": "wheat",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "source-water",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "source-water",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "source-water",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "source-water",
+    "view": "street",
+    "size": "390x844"
+  }
+]

@@ -1,0 +1,13 @@
+[capture] queued still: shots/grand-artisans/dressing-review-06/source-fields-tobi4s_-street-lod0@1440x900.png
+[capture] waiting for the shared host lock (lane)
+[capture] queued for a lane slot
+[capture] acquired the shared host lock
+[capture] owned Vite ready on 5171
+file:///root/chatdomgg-harness/worktrees/grand-artisans/work/lanes/grand-artisans/capture.mjs:84
+    if(errors.length) throw new Error(errors.join('\n'));
+                            ^
+
+Error: Failed to load resource: the server responded with a status of 404 (Not Found)
+    at file:///root/chatdomgg-harness/worktrees/grand-artisans/work/lanes/grand-artisans/capture.mjs:84:29
+
+Node.js v22.23.4

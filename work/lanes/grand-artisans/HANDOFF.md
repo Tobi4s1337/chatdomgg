@@ -1,3 +1,19 @@
+# PAUSED — 2026-11-01, working checkpoint review06
+
+User asked to finish this step, commit a clean building checkpoint, write next: GA10, and stop. Do not resume autonomously. GA10 remains UNCHECKED; no LANE COMPLETE.
+
+Current source: looked birch strap removal; unused actual-column crop sampler and restrained water GLSL/observer candidates; bounded dressing diagnostic view. Exact producer/renderer and whole-piece reservation patches are proposed only in lane evidence. Native producer/renderer/host sources were never edited. Main merged normally in adac9ac. REVIEW-06.md is the authoritative new judgement and validation record; older entries below are history.
+
+104 lane tests, 19 patched candidate mesh tests, final repo TypeScript/scoped lint, repo build, candidate web build and three ownership/artifact regressions pass. Full verify still has recorded main-owned failures, including two public/look lint globals. Do not say whole repo verify is green.
+
+All capture queues are STOPPED:45448,53245,31064 intentionally exit130; actual2323 exit143 before GPU fence/image. All subagents completed. There is no live handle to wait on. Published fixed713 images50, new birch2, source-wheat1 were personally looked at and archived. One still per normal canonical lease throughout. No service remains owned/running.
+
+Resume only when the user asks. next: GA10 finish new birch street/coast/dusk and crop lavender/cabbage/mobile/water views, then remaining fixed views and actual moving LOD/shadows; work with builder/main on native host/physical identity, complete-piece reservation and retained hydrology. Do not repeat the unchanged full-land readback failure or accept studies as native landscapes. Check the source-world half-cell convention in the diagnostic shader before treating its noise phase as production parity.
+
+Resumable immutable sources: /tmp/grand-artisans-review-713a05b (50/208 fixed), /tmp/grand-artisans-review-birch-06 (2/4 requested), /tmp/grand-artisans-review-dressing-06 (1/8). Each runner records task/source/PNG hashes. New dressing snapshot is based on patched candidate06 plus diagnostic view, unlike the unpatched production checkout. /tmp/grand-artisans-candidate-review-06 is fingerprinted by candidate-review-06.json; no capture uses it now. Do not remove older snapshots/stashes without accounting for their evidence.
+
+---
+
 # Current handoff — looked checkpoint713a05b
 
 All current world/app kit source is committed and checked. Latest source713a05b retains

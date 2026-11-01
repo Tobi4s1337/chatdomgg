@@ -7,6 +7,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 const list = (key, fallback) => (process.env[key] ?? fallback).split(',');
 const directory = process.env.ARTISAN_OUTPUT ?? 'shots/grand-artisans';
+const reviewPath = process.env.ARTISAN_REVIEW_PATH ?? '/src/grand/artisans/review.html';
+if (!/^\/src\/grand\/artisans\/[a-z0-9/-]+\.html$/.test(reviewPath)) throw new Error('Review path must name an artisan HTML view');
 await mkdir(directory, { recursive: true });
 const tasks = [];
 if (process.env.ARTISAN_TASKS) tasks.push(...JSON.parse(await readFile(process.env.ARTISAN_TASKS, 'utf8')));
@@ -37,6 +39,12 @@ async function fingerprint(cwd, kit) {
   hash.update(await readFile(resolve(cwd,'packages/world/src/grand/artisans/kit.ts')));
   await visit('apps/web/src/grand/artisans');
   if (kit === 'composition') await visit('packages/content/src');
+  if (kit === 'source-fields' || kit === 'source-water') {
+    await visit('packages/world/src/grand');
+    await visit('packages/render/src/grand');
+    await visit('packages/voxel/src/grand');
+    hash.update(await readFile(resolve(cwd,'apps/web/src/grand/channels.ts')));
+  }
   for (const relative of ['pnpm-lock.yaml','package.json','apps/web/package.json','apps/web/vite.config.ts']) {
     hash.update(relative);
     try { hash.update(await readFile(resolve(cwd,relative))); }
@@ -50,7 +58,7 @@ for (const input of tasks) {
   const task = {channel:'tobi4s_',view:'hero',lod:'0',size:'1440x900',species:'gold',shadows:'on',...input};
   const {kit,channel,view,lod,size,species,shadows,orbit} = task;
   const cwd = resolve(task.cwd ?? process.env.ARTISAN_REVIEW_CWD ?? '.');
-  const key = JSON.stringify({...task,cwd});
+  const key = JSON.stringify({...task,cwd,...(reviewPath === '/src/grand/artisans/review.html' ? {} : {reviewPath})});
   const sourceHash = await fingerprint(cwd,kit);
   const basename = `${directory}/${kit}-${channel}-${['forest','tree'].includes(kit)?species+'-':''}${view}-lod${lod}${shadows==='off'?'-shadow-off':''}${orbit===undefined?'':`-orbit-${String(orbit).padStart(2,'0')}`}@${size}.png`;
   const prior=previous.findLast(record=>record.key===key && record.sourceHash===sourceHash);
@@ -66,9 +74,14 @@ for (const input of tasks) {
     browser = await chromium.launch({channel:'chrome',headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--no-sandbox']});
     const [width,height] = size.split('x').map(Number);
     const page = await browser.newPage({viewport:{width,height},deviceScaleFactor:1});
+    // Standalone review HTML has no favicon. Handle only that browser request;
+    // real missing modules/assets and shader diagnostics remain fatal.
+    await page.route('**/favicon.ico',route=>route.fulfill({status:204,body:''}));
     const errors=[]; page.on('pageerror',error=>errors.push(error.message));
+    page.on('console',message=>{ if(message.type()==='error')errors.push(message.text()); });
     const params = new URLSearchParams({kit,channel,species,view,lod:String(lod),shadows,hour:view==='dusk'?'19':'17'});
-    await page.goto(`http://127.0.0.1:${server.port}/src/grand/artisans/review.html?${params}`,{waitUntil:'networkidle'});
+    if (task.crop) params.set('crop', task.crop);
+    await page.goto(`http://127.0.0.1:${server.port}${reviewPath}?${params}`,{waitUntil:'networkidle'});
     await page.waitForFunction(()=>window.__chatdomReady===true,undefined,{timeout:90000});
     if (orbit !== undefined) await page.evaluate(({frame})=>window.__artisanReview.setOrbit(frame*Math.PI*2/12,.8+frame/12*.7),{frame:orbit});
     if(errors.length) throw new Error(errors.join('\n'));

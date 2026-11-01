@@ -1,0 +1,22 @@
+--- a/packages/render/src/grand/terrain-material.ts
++++ b/packages/render/src/grand/terrain-material.ts
+@@ -2,0 +3 @@
++import { GRAND_WATER_DRESS_GLSL } from '../../../world/src/grand/artisans/geology/water';
+@@ -56,0 +58 @@
++  ${GRAND_WATER_DRESS_GLSL}
+@@ -122,14 +124 @@
+-      if (abs(n.y) < .5) {
+-        // A waterfall: white water running down the face.
+-        float column = hash12(floor(vWorld.xz / cellSize));
+-        float run = fract(vWorld.y * .55 + uTime * 1.6 + column * 3.1);
+-        float foam = smoothstep(.2, .85, run) * (.6 + .4 * column);
+-        colour = mix(base * light * .8, vec3(.92, .96, 1.) * (light + .25), .45 + .5 * foam);
+-      } else {
+-        vec2 wave = vec2(vnoise(vWorld.xz * .8 + uTime * .6) - .5, vnoise(vWorld.zx * .8 - uTime * .5) - .5);
+-        vec3 wn = normalize(vec3(wave.x * .35, 1., wave.y * .35));
+-        vec3 r = reflect(view, wn);
+-        float fresnel = .04 + .96 * pow(1. - max(dot(-view, wn), 0.), 5.);
+-        vec3 body = base * (cool * .7 + uSunColor * .18 * shadow);
+-        colour = mix(body, skyColour(r, false), fresnel * .85) + uSunColor * pow(max(dot(r, uSunDir), 0.), 220.) * 3. * shadow;
+-      }
++      colour = grandDressWater(base, light, cool, shadow, view, n, vWorld);

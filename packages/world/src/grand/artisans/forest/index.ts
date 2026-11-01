@@ -36,6 +36,19 @@ class TreeCanvas {
       this.cells.set(this.key(x, y, z), colours[level > 0.35 ? 2 : level < -0.3 ? 0 : 1]);
     }
   }
+  /** Recolour an existing pale wood voxel only when another wood voxel shares
+   * its cross-section; a mark must never add a projecting block or a collar. */
+  birchScar(y: number, lean: number, height: number, side: number, pale: string, bark: string): void {
+    const cx = Math.round(lean * y / height), candidates: [number, number][] = [];
+    for (let z = -1; z <= 1; z++) for (let x = cx - 2; x <= cx + 2; x++) {
+      const material = this.cells.get(this.key(x, y, z));
+      if (material === pale || material === bark) candidates.push([x, z]);
+    }
+    if (candidates.length < 2) return;
+    candidates.sort((a, b) => side * (b[0] - a[0]) || side * (b[1] - a[1]));
+    const [x, z] = candidates[0]!;
+    this.cells.set(this.key(x, y, z), bark);
+  }
   limb(a: Point, b: Point, radius: number, colour: string): void {
     const length = Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
     let previous: Point | undefined;
@@ -187,9 +200,11 @@ export function createTree(species: ForestSpecies, seedKey: string, scale = 1): 
   // Bark wins over overlapping leaves, giving visible connected branches.
   for (const b of branches) c.limb(b.a, b.b, b.radius, p.bark);
   if (species === 'birch') {
-    // Pale birch trunk and a few dark horizontal knots.
+    // Pale birch trunk with occasional subtle, one-sided scars. They replace
+    // existing bark instead of adding the protruding, dark horizontal straps.
     c.limb([0, 0, 0], [lean, top - 2, 0], 0, p.barkLight);
-    for (let y = 3; y < top - 5; y += 6) c.limb([-1, y, 1], [0, y, 1], 0, '#796c60');
+    const offset = Math.floor(rng() * 3);
+    for (let y = 4 + offset, i = 0; y < top - 5; y += 5, i++) c.birchScar(y, lean, top - 2, i % 2 ? -1 : 1, p.barkLight, p.bark);
   }
   return c.toKit(`tree-${species}-${seedKey}`, scale, top);
 }

@@ -1,0 +1,69 @@
+--- a/packages/world/src/grand/kingdom/sites.ts
++++ b/packages/world/src/grand/kingdom/sites.ts
+@@ -2,0 +3 @@
++import type { GrandKitPlacement } from '../types';
+@@ -74,0 +76,28 @@
++}
++
++/**
++ * Before packing: discard a whole placement if any one of its authored boxes touches a protected
++ * half-open XZ region. This operates on render proposals only and grants no physical authority.
++ * Already-packed structures do not retain the provenance required by this function.
++ */
++export function retainUnreservedPlacements(
++  placements: readonly GrandKitPlacement[], reserve: KingdomReserve,
++): { placements: GrandKitPlacement[]; removed: number } {
++  if (![reserve.x0, reserve.z0, reserve.x1, reserve.z1].every(Number.isSafeInteger)
++    || reserve.x0 >= reserve.x1 || reserve.z0 >= reserve.z1) throw new RangeError('Invalid protected land rectangle');
++  const kept: GrandKitPlacement[] = [];
++  for (const placement of placements) {
++    let reject = !Number.isSafeInteger(placement.turns) || placement.at.length !== 3
++      || !placement.at.every(Number.isSafeInteger) || !placement.piece.boxes.length;
++    if (!reject) for (const box of placement.piece.boxes) {
++      if (box.min.length !== 3 || box.size.length !== 3 || !box.min.every(Number.isSafeInteger)
++        || !box.size.every(n => Number.isSafeInteger(n) && n > 0)) { reject = true; break; }
++      let [x, , z] = box.min, [sx, , sz] = box.size;
++      for (let n = 0; n < ((placement.turns % 4) + 4) % 4; n++) [x, z, sx, sz] = [-z - sz, x, sz, sx];
++      x += placement.at[0]; z += placement.at[2];
++      if (![x, z, x + sx, z + sz, box.min[1] + placement.at[1], box.min[1] + placement.at[1] + box.size[1]].every(Number.isSafeInteger)
++        || (x < reserve.x1 && x + sx > reserve.x0 && z < reserve.z1 && z + sz > reserve.z0)) { reject = true; break; }
++    }
++    if (!reject) kept.push(placement);
++  }
++  return { placements: kept, removed: placements.length - kept.length };
+--- a/packages/world/src/grand/kingdom/index.ts
++++ b/packages/world/src/grand/kingdom/index.ts
+@@ -13 +13 @@
+-export { kingdomSites, clearKingdomStructures, STRUCTURE_STRIDE, type KingdomSites, type KingdomReserve } from './sites';
++export { kingdomSites, clearKingdomStructures, retainUnreservedPlacements, STRUCTURE_STRIDE, type KingdomSites, type KingdomReserve } from './sites';
+--- /dev/null
++++ b/packages/world/src/grand/kingdom/placement-reserve.test.ts
+@@ -0,0 +1,28 @@
++import { describe, expect, it } from 'vitest';
++import { createWindmill } from '../artisans/fields';
++import { placeBox } from '../artisans/adoption';
++import { retainUnreservedPlacements } from './sites';
++import type { GrandKitPlacement } from '../types';
++
++describe('whole-placement reserve', () => {
++  it.each([0,1,2,3])('rejects a whole authored windmill at turn %s', turns => {
++    const kit=createWindmill('reserve'), occupied:GrandKitPlacement={piece:kit,at:[-40,20,40],turns};
++    const other:GrandKitPlacement={piece:kit,at:[150,20,150],turns};
++    const box=placeBox(kit.boxes[0]!,occupied.at,turns);
++    const reserve={x0:box.min[0],z0:box.min[2],x1:box.min[0]+1,z1:box.min[2]+1};
++    const result=retainUnreservedPlacements([occupied,other],reserve);
++    expect(result.removed).toBe(1);expect(result.placements).toEqual([other]);expect(result.placements[0]).toBe(other);
++  });
++  it('retains exact half-open boundary contact and removes an actual overlap', () => {
++    const piece={id:'two-box',anchors:{},boxes:[{min:[0,0,0] as const,size:[2,1,2] as const,colour:'#000000'},
++      {min:[8,0,0] as const,size:[2,1,2] as const,colour:'#ffffff'}]};
++    const p:GrandKitPlacement={piece,at:[0,0,0],turns:0};
++    expect(retainUnreservedPlacements([p],{x0:2,z0:0,x1:8,z1:2}).placements).toEqual([p]);
++    expect(retainUnreservedPlacements([p],{x0:8,z0:0,x1:9,z1:1}).placements).toEqual([]);
++  });
++  it('fails closed for invalid placement or reserve coordinates', () => {
++    const p:GrandKitPlacement={piece:createWindmill('reserve'),at:[Number.MAX_SAFE_INTEGER,0,0],turns:0};
++    expect(retainUnreservedPlacements([p],{x0:0,z0:0,x1:1,z1:1}).placements).toEqual([]);
++    expect(()=>retainUnreservedPlacements([],{x0:1,z0:0,x1:1,z1:1})).toThrow(RangeError);
++  });
++});

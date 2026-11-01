@@ -1,0 +1,14 @@
+[
+  {
+    "path": "work/evidence/grand-artisans/dressing-review-06/contact-01.png",
+    "complete": false,
+    "images": [
+      {
+        "path": "shots/grand-artisans/dressing-review-06/source-fields-tobi4s_-street-lod0@1440x900-64966c339e-facf7dd66912-eb4e428e.png",
+        "imageHash": "ec24eb868ea7c95faefd907e357b89d1b4ae7da4061ed87a6bf1ef5eab580e7f",
+        "key": "{\"channel\":\"tobi4s_\",\"view\":\"street\",\"lod\":\"0\",\"size\":\"1440x900\",\"species\":\"gold\",\"shadows\":\"on\",\"kit\":\"source-fields\",\"crop\":\"wheat\",\"cwd\":\"/tmp/grand-artisans-review-dressing-06\",\"reviewPath\":\"/src/grand/artisans/dressing/index.html\"}",
+        "sourceHash": "facf7dd66912f75b6512188248d06f04138b61f8a2049e52d52b40f7b9fcfb4e"
+      }
+    ]
+  }
+]

@@ -2,7 +2,8 @@
 import { cp, mkdir, symlink, access, writeFile, readdir, rm } from 'node:fs/promises';
 import { resolve, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
-const source = resolve('../grand-kingdom');
+const source = resolve(process.env.ARTISAN_SOURCE ?? '../grand-kingdom');
+if (![resolve('.'), resolve('../grand-kingdom')].includes(source)) throw new Error('Candidate source must be this lane or the read-only builder checkout');
 const destination = resolve(process.env.ARTISAN_CANDIDATE ?? '/tmp/grand-artisans-candidate');
 if (!/^\/tmp\/grand-artisans-candidate(?:-[a-z0-9-]+)?$/.test(destination)) throw new Error('Candidate destination must be a dedicated /tmp/grand-artisans-candidate[-name] folder');
 await rm(destination,{recursive:true,force:true});
