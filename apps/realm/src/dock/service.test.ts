@@ -23,6 +23,27 @@ it('refuses unknown services and forged royal claims before opening authority', 
   expect((await dock.status(`Bearer ${'s'.repeat(32)}`, { version: 1, origin: 'simulated', principal: actor, kingdomId: '2' })).http).toBe(400);
 });
 
+it('reserves authenticated presenter admission when the public observer pool is full', async () => {
+  const kingdomId = KingdomIdSchema.parse('900008401');
+  const actor = { personId: PersonIdSchema.parse(kingdomId), sessionId: randomUUID() };
+  const secret = 's'.repeat(32), authorization = `Bearer ${secret}`;
+  const db = { query: async (sql: string) => ({ rows: sql.includes('realm_sessions') ? [{ public_name: null, name_approval: null }] : [] }) } as unknown as RealmDatabase;
+  const kingdom = { kingdomId, current: true, databaseNow: () => Date.now(), privateState: { homes: {}, rights: {} },
+    loadIngress: async () => null, onClosed: () => () => {}, subscribe: () => () => {},
+    writeMoments: async (work: () => unknown) => work() };
+  const dock = new RealmDockService(db, 'simulated', secret);
+  dock.use({ retain: async () => ({ kingdom, release: async () => {} }) } as unknown as Parameters<RealmDockService['use']>[0]);
+  try {
+    const publicRequest = { version: 1, origin: 'simulated', kingdomId };
+    for (let i = 0; i < 32; i++) await dock.connect(authorization, publicRequest, () => true, () => {}, false);
+    await expect(dock.connect(authorization, publicRequest, () => true, () => {}, false)).rejects.toThrow('Unavailable');
+    const presenter = await dock.connect(authorization, { ...publicRequest, principal: actor }, () => true, () => {}, true);
+    expect(presenter.presenterToken).toHaveLength(43);
+    const forged = { ...publicRequest, principal: { ...actor, personId: PersonIdSchema.parse('42') } };
+    await expect(dock.connect(authorization, forged, () => true, () => {}, true)).rejects.toThrow('Forbidden');
+  } finally { dock.stop(); }
+});
+
 // SIMULATED identity and transport; actual retained writer, fenced SQL transactions and receipt storage.
 describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('durable royal act and presentation witness (SIMULATED)', () => {
   it('persists one command, remains unknown without a presenter, witnesses its exact event and deduplicates retries', async () => {
@@ -81,6 +102,19 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('durable royal act and 
       const restored = new RealmDockService(db, 'simulated', secret, 0, names); restored.use(services);
       expect(DockStateSchema.parse((await restored.status(authorization, statusRequest)).body).town.gate).toBe('closed');
       expect((await restored.action(authorization, request)).body).toMatchObject({ status: 'accepted' });
+      await db.query(`UPDATE realm_dock_heads SET state = jsonb_set(state::jsonb, '{lastAt}', '0')::text WHERE kingdom_id = $1`, [kingdomId]);
+      const beforeUndo = DockStateSchema.parse((await restored.status(authorization, statusRequest)).body);
+      const reversals: RealmDockPresentation[] = [];
+      const undoPresenter = await restored.connect(authorization, statusRequest, value => { reversals.push(value); return true; }, () => {}, true);
+      connections.push(undoPresenter);
+      const undoRequest = { ...request, action: { ...request.action, id: 'SIMULATED-undo', kind: 'undo',
+        targetId: `receipt:${event.id}`, expectedRevision: beforeUndo.revision } };
+      expect((await restored.action(authorization, undoRequest)).body).toMatchObject({ status: 'unknown' });
+      expect(reversals).toHaveLength(1);
+      expect(reversals[0]).toMatchObject({ kind: 'undo', undoOf: event.id, undoSubject: { kind: 'gate-close' }, gate: 'open' });
+      expect((await restored.witness(authorization, { ...witness, streamEventId: reversals[0]!.id,
+        presenterToken: undoPresenter.presenterToken })).body).toEqual({ status: 'witnessed' });
+      expect((await restored.action(authorization, undoRequest)).body).toMatchObject({ status: 'accepted' });
       await db.query("UPDATE realm_sessions SET revoked_at = now(), revoked_reason = 'revoked' WHERE session_id = $1", [sessionId]);
       expect((await restored.status(authorization, statusRequest)).body).toBeNull();
       expect((await restored.action(authorization, request)).body).toMatchObject({ status: 'refused' });

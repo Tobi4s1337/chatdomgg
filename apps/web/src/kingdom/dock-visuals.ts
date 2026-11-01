@@ -12,12 +12,14 @@ export interface DockVisualSites {
   readonly gate: Vec3 | null;
   readonly gateBraziers: readonly Vec3[];
   readonly plaza: Vec3 | null;
-  citizen(slot: number): Vec3 | undefined;
+  citizen(slot: number, approvedName?: string): Vec3 | undefined;
   setHour(hour: number): void;
   hour(): number;
   cue?(kind: DockAct['kind']): void;
   /** Overrides the installed gate flames while the scene plays; null restores ordinary life. */
   gateFlame(strength: number | null): void;
+  /** Installed incoming-raid renderer, bound to the exact witnessed raid key. */
+  welcomeRaid?(act: DockAct, elapsedMs: number): boolean;
 }
 
 const DURATION = 8500;
@@ -72,17 +74,18 @@ export function createDockVisuals(host: DockVisualSites): DockActScene & {
     if (disposed || !Number.isFinite(now)) return;
     if (state) {
       lit = state.fire === 'lit' && now < state.fireUntil && !!host.plaza;
-      fire.visible = lit;
+      fire.visible = lit || (current?.kind === 'undo' && current.undoSubject?.kind === 'fire-light' && elapsed < 2500);
       if (lit && host.plaza) fire.position.set(...host.plaza);
       const live = new Set<string>();
       for (const item of state.honours) {
         if (item.expiresAt <= now) continue;
-        const position = host.citizen(item.slot);
+        const position = host.citizen(item.slot, item.name);
         if (!position || live.size >= 64) continue;
         live.add(item.id);
         let group = honours.get(item.id);
         if (!group) { group = makeHonor(); honours.set(item.id, group); }
-        group.visible = !(current?.targetSlot === item.slot && (current.kind === 'citizen-crown' || current.kind === 'citizen-knight'));
+        group.visible = !((current?.kind === 'undo' ? current.undoSubject?.targetSlot : current?.targetSlot) === item.slot
+          && (current?.kind === 'undo' || current?.kind === 'citizen-crown' || current?.kind === 'citizen-knight'));
         group.position.set(position[0], position[1] + 2.25 + .08 * Math.sin(now / 700), position[2]);
         group.rotation.y = now / 3000;
       }
@@ -94,17 +97,20 @@ export function createDockVisuals(host: DockVisualSites): DockActScene & {
   return {
     begin(act) {
       if (disposed) return false;
+      const kind = act.kind === 'undo' ? act.undoSubject?.kind : act.kind;
+      const slot = act.kind === 'undo' ? act.undoSubject?.targetSlot : act.targetSlot;
       let point: Vec3 | undefined;
-      if (act.kind === 'gate-open' || act.kind === 'gate-close' || act.kind === 'raid-welcome') {
+      if (kind === 'gate-open' || kind === 'gate-close' || kind === 'raid-welcome') {
         if (!host.gate || !host.gateBraziers.length || (act.kind === 'raid-welcome' && !act.targetId)) return false;
+        if (kind === 'raid-welcome' && !host.welcomeRaid?.(act, 0)) return false;
         point = host.gate;
-      } else if (act.kind === 'fire-light') {
+      } else if (kind === 'fire-light') {
         if (!host.plaza) return false;
-        point = host.plaza; fire.position.set(...point); lit = true; fire.visible = true;
-      } else if (act.kind === 'citizen-crown' || act.kind === 'citizen-knight') {
-        if (act.targetSlot === undefined || !act.targetId) return false;
-        point = host.citizen(act.targetSlot); if (!point) return false;
-        honor.visible = true;
+        point = host.plaza; fire.position.set(...point); lit = act.fire === 'lit'; fire.visible = lit;
+      } else if (kind === 'citizen-crown' || kind === 'citizen-knight') {
+        if (slot === undefined || !(act.kind === 'undo' ? act.undoSubject?.targetId : act.targetId)) return false;
+        point = host.citizen(slot, act.kind === 'undo' ? act.undoSubject?.targetName : act.targetName); if (!point) return false;
+        honor.visible = true; honor.scale.setScalar(1);
       } else if (act.kind === 'moment-play' && act.moment === 'sky-dusk') {
         if (!host.plaza) return false;
         point = host.plaza; host.setHour(19);
@@ -112,19 +118,27 @@ export function createDockVisuals(host: DockVisualSites): DockActScene & {
       host.cue?.(act.kind);
       current = act; focus = point; elapsed = 0; finished = false;
       sparks.visible = act.kind !== 'gate-close' && act.kind !== 'moment-play';
-      gateFlare.visible = act.kind === 'gate-open' || act.kind === 'raid-welcome';
+      gateFlare.visible = (kind === 'gate-open' || kind === 'gate-close') && act.gate === 'open';
       return true;
     },
     frame(act, elapsedMs) {
       if (disposed || current !== act || !focus) return false;
       elapsed = elapsedMs; finished = elapsed >= DURATION;
-      if (act.targetSlot !== undefined && (act.kind === 'citizen-crown' || act.kind === 'citizen-knight')) {
-        const position = host.citizen(act.targetSlot); if (!position) { honor.visible = false; crowd = null; return false; }
+      const kind = act.kind === 'undo' ? act.undoSubject?.kind : act.kind;
+      const slot = act.kind === 'undo' ? act.undoSubject?.targetSlot : act.targetSlot;
+      if (slot !== undefined && (kind === 'citizen-crown' || kind === 'citizen-knight')) {
+        const position = host.citizen(slot, act.kind === 'undo' ? act.undoSubject?.targetName : act.targetName); if (!position) { honor.visible = false; crowd = null; return false; }
         focus = position; honor.position.set(position[0], position[1] + 2.25 + .12 * Math.sin(elapsed / 400), position[2]); honor.rotation.y = elapsed / 1800;
+        const scale = act.kind === 'undo' ? 1 - smooth(elapsed / 2500) : 1;
+        honor.scale.setScalar(Math.max(.001, scale));
       }
       if (lit) { flames.scale.y = .92 + .12 * Math.sin(elapsed / 140); fireLight.intensity = 14 + 3 * Math.sin(elapsed / 175); }
-      if (act.kind === 'gate-open') host.gateFlame(.4 + .6 * smooth(elapsed / 1200));
-      if (act.kind === 'gate-close') host.gateFlame(1 - smooth(elapsed / 2500));
+      if (act.kind === 'undo' && kind === 'fire-light' && act.fire === 'unlit') {
+        const remaining = 1 - smooth(elapsed / 2500);
+        fire.visible = remaining > 0; flames.scale.y = remaining; fireLight.intensity = 15 * remaining;
+      }
+      if (kind === 'gate-open' || kind === 'gate-close') host.gateFlame(act.gate === 'open' ? smooth(elapsed / 1200) : 1 - smooth(elapsed / 2500));
+      if (kind === 'raid-welcome' && !host.welcomeRaid?.(act, elapsed)) return false;
       for (let i = 0; i < sparks.children.length; i++) { const age = ((elapsed / 1500 + i / sparks.children.length) % 1), angle = i * 2.4; sparks.children[i]!.position.set(focus[0] + Math.cos(angle) * (1 + age), focus[1] + .5 + age * 3, focus[2] + Math.sin(angle) * (1 + age)); }
       const look = new THREE.Vector3(...focus).add(new THREE.Vector3(0, act.targetSlot === undefined ? 1.2 : 1.4, 0));
       const eye = look.clone().add(new THREE.Vector3(8, 5, 11));

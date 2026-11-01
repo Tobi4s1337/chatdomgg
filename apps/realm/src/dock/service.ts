@@ -5,6 +5,7 @@ import { ACTIONS, DockOutcomeSchema, DockStateSchema, RealmDockActionRequestSche
   RealmDockStatusRequestSchema, RealmDockWitnessRequestSchema, type DockOutcome, type DockState, type RealmDockActor,
   type RealmDockActionRequest, type RealmDockPresentation, type RealmDockStageState, type RealmWriterLease } from '@chatdom/shared/realm';
 import { TwitchMomentFactSchema } from '@chatdom/shared/twitch-moments';
+import { projectPresence } from '@chatdom/world';
 import type pg from 'pg';
 import { approvedPublicName, DISPLAY_NAME_APPROVAL } from '../../../api/src/realm-auth/presentation';
 import { decodeIngressCheckpoint, type IngressCheckpointState } from '../ingress/codec';
@@ -23,9 +24,9 @@ const blank = (): Head => ({ gate: 'open', fireUntil: 0, honours: {}, lastAt: 0,
 type Tx = Pick<pg.PoolClient, 'query'>;
 type Session = { public_name: string | null; name_approval: string | null };
 interface Candidate { id: string; name: string; slot: number }
-interface Snapshot { state: DockState; head: Head; revision: number; now: number; citizens: Candidate[] }
+interface Snapshot { state: DockState; head: Head; revision: number; now: number; citizens: Candidate[]; raidBodies: Map<string, NonNullable<RealmDockPresentation['raid']>> }
 interface Grant { kingdomId: KingdomId; principal: RealmDockActor; seen: Set<string>; expires: number }
-interface Listener { receive: (event: RealmDockPresentation) => boolean; state: (state: RealmDockStageState) => boolean; close: () => void }
+interface Listener { presenter: boolean; receive: (event: RealmDockPresentation) => boolean; state: (state: RealmDockStageState) => boolean; close: () => void }
 export interface DockHttpReply { readonly http: 200 | 400 | 401 | 403 | 503; readonly body: unknown }
 export interface DockPresentationConnection { readonly presenterToken?: string; readonly close: () => void }
 
@@ -97,12 +98,18 @@ export class RealmDockService {
     if (!this.authenticate(authorization)) throw new Error('Unauthenticated stream service');
     const authenticated = presenter ? RealmDockStatusRequestSchema.parse(raw) : undefined;
     const parsed = authenticated ?? RealmDockStatusRequestSchema.omit({ principal: true }).parse(raw);
-    const connectionCount = () => [...this.listeners.values()].reduce((count, listeners) => count + listeners.size, 0);
-    if (parsed.origin !== this.origin || !this.services || connectionCount() >= 32) throw new Error('Unavailable stream');
+    // Anonymous viewers cannot exhaust the broadcaster's independently reserved draw capacity.
+    const full = () => {
+      const all = [...this.listeners.values()].flatMap(set => [...set]);
+      return presenter ? all.filter(listener => listener.presenter).length >= 8
+        || [...this.listeners.get(parsed.kingdomId) ?? []].filter(listener => listener.presenter).length >= 2
+        : all.filter(listener => !listener.presenter).length >= 32;
+    };
+    if (parsed.origin !== this.origin || !this.services || full()) throw new Error('Unavailable stream');
     const principal = authenticated?.principal;
     if (presenter && (!principal || String(principal.personId) !== String(parsed.kingdomId) || !await this.session(this.db, principal))) throw new Error('Forbidden presenter');
     const hold = await this.services.retain(parsed.kingdomId);
-    if (connectionCount() >= 32) { await hold.release(); throw new Error('The stream feed is full'); }
+    if (full()) { await hold.release(); throw new Error('The stream feed is full'); }
     let ended = false;
     const token = presenter ? randomBytes(32).toString('base64url') : undefined;
     const grant: Grant | undefined = token && principal ? { kingdomId: parsed.kingdomId, principal, seen: new Set(), expires: Date.now() + 15 * 60_000 } : undefined;
@@ -116,7 +123,7 @@ export class RealmDockService {
       if (token) this.grants.delete(token); detach(); clearTimeout(expiry);
       void hold.release().catch(() => {}); closed();
     };
-    const listener: Listener = { close, state: receiveState, receive: event => {
+    const listener: Listener = { presenter, close, state: receiveState, receive: event => {
       if (ended || !hold.kingdom.current) return false;
       if (!receive(event)) { close(); return false; }
       grant?.seen.add(event.id); return true;
@@ -203,18 +210,26 @@ export class RealmDockService {
   }
 
   private publicCitizens(kingdom: DurableKingdom, presence: IngressCheckpointState['presence'] | null, now: number): Candidate[] {
-    const people = new Map(presence?.people.flatMap(bucket => [...bucket.entries()]) ?? []);
+    const windows = this.publicWindows(kingdom, presence, now);
     const citizens: Candidate[] = [];
     for (const home of Object.values(kingdom.privateState.homes).sort((a, b) => a.slot - b.slot)) {
       if (citizens.length >= 1000) break;
       if (home.layoutRevision !== kingdom.layoutRevision || kingdom.privateState.rights[home.ownerId]?.blocked) continue;
-      const person = people.get(home.ownerId);
-      if (!person || person.publicName === null || (person.restriction && (person.restriction.until === null || person.restriction.until > now))) continue;
+      const person = windows.get(home.slot);
+      if (!person?.present || person.publicName === null) continue;
       const name = approvedPublicName(person.publicName);
       if (!name || name !== person.publicName) continue;
       citizens.push({ id: `citizen:${digestOf({ kingdomId: kingdom.kingdomId, ownerId: home.ownerId, slot: home.slot, layout: kingdom.layoutRevision })}`, name, slot: home.slot });
     }
     return citizens;
+  }
+
+  private publicWindows(kingdom: DurableKingdom, presence: IngressCheckpointState['presence'] | null, now: number) {
+    if (!presence) return new Map<number, { present: boolean; publicName: string | null }>();
+    const bindings = Object.values(kingdom.privateState.homes)
+      .filter(home => home.layoutRevision === kingdom.layoutRevision && !kingdom.privateState.rights[home.ownerId]?.blocked)
+      .map(home => ({ personId: home.ownerId, slot: home.slot }));
+    return new Map(projectPresence(presence, bindings, now, 0).windows.map(window => [window.slot, window]));
   }
 
   private async snapshot(tx: Tx, kingdom: DurableKingdom, session: Session, now: number): Promise<Snapshot> {
@@ -230,6 +245,7 @@ export class RealmDockService {
       data: new Uint8Array(checkpoint.data) }, kingdom.kingdomId, this.origin).presence : null;
     const citizens = this.publicCitizens(kingdom, presence, now);
     const raids: { id: string; name: string }[] = [];
+    const raidBodies = new Map<string, NonNullable<RealmDockPresentation['raid']>>();
     const facts = await tx.query<{ fact: string }>(`SELECT fact FROM realm_moment_facts WHERE kingdom_id = $1 AND committed_ms > $2
       AND (fact::jsonb->'body'->>'kind') = 'raid' ORDER BY seq DESC LIMIT 100`, [kingdom.kingdomId, now - 60_000]);
     for (const row of facts.rows) {
@@ -237,6 +253,7 @@ export class RealmDockService {
       if (fact.origin !== this.origin || fact.kingdomId !== kingdom.kingdomId || fact.body.kind !== 'raid'
         || fact.body.displayUntil <= now || head.consumedRaids.includes(fact.body.raidKey)) continue;
       raids.push({ id: fact.body.raidKey, name: fact.body.from.displayName });
+      raidBodies.set(fact.body.raidKey, { raidKey: fact.body.raidKey, from: fact.body.from, viewers: fact.body.viewers, founded: fact.body.founded });
     }
     const ready = now - head.lastAt >= CADENCE;
     const undoRow = head.undo ? (await tx.query<{ presentation: string }>('SELECT presentation FROM realm_dock_presentations WHERE event_id = $1 AND witnessed_ms IS NOT NULL', [head.undo.eventId])).rows[0] : undefined;
@@ -254,12 +271,15 @@ export class RealmDockService {
     const name = session.name_approval === DISPLAY_NAME_APPROVAL ? approvedPublicName(session.public_name) : null;
     const stream = presence?.stream;
     const observedLive = !!stream?.live && stream.expiresAt > now;
+    const attendance = [...this.publicWindows(kingdom, presence, now).values()].filter(window => window.present).length;
+    const presenceLabel = !presence || !stream || stream.expiresAt <= now ? 'Attendance is not currently observed.'
+      : `${attendance} settled citizen${attendance === 1 ? '' : 's'} observed here · ${observedLive ? 'stream awake' : 'stream resting'} · coverage incomplete`;
     const kingdomName = this.names.get(kingdom.kingdomId);
     if (!kingdomName) throw new Error('This kingdom has no approved entry name.');
     const state = DockStateSchema.parse({ kingdom: { id: kingdom.kingdomId, name: kingdomName },
       principal: { role: 'broadcaster', displayName: name ?? 'Monarch' },
       town: { gate: head.gate, fire: head.fireUntil > now ? 'lit' : 'unlit',
-        presenceLabel: observedLive ? 'The stream is awake.' : 'Stream presence is not currently observed.',
+        presenceLabel,
         growthLabel: `${Object.keys(kingdom.privateState.homes).length} settled homes`,
         comingLabel: raids.length ? `${raids.length} witnessed arrival${raids.length === 1 ? '' : 's'} at the gate` : 'No pending witnessed arrivals' },
       raids, citizens: citizens.map(({ id, name }) => ({ id, name })),
@@ -267,7 +287,7 @@ export class RealmDockService {
       capabilities, undoable,
       revision: `dock:${digestOf({ revision, domain: kingdom.sequence, layout: kingdom.layoutRevision, raids, citizens,
         capabilities, fire: head.fireUntil > now, undo: !!head.undo && head.undo.until > now && undoWitnessed })}` });
-    return { state, head, revision, now, citizens };
+    return { state, head, revision, now, citizens, raidBodies };
   }
 
   private async commit(tx: Tx, kingdom: DurableKingdom, request: RealmDockActionRequest, now: number): Promise<{ outcome: DockOutcome; event?: RealmDockPresentation }> {
@@ -292,10 +312,20 @@ export class RealmDockService {
     const target = action.targetId;
     const citizen = snap.citizens.find(candidate => candidate.id === target);
     const raid = snap.state.raids.find(candidate => candidate.id === target);
+    let original: RealmDockPresentation | undefined;
+    if (action.kind === 'undo' && snap.head.undo) {
+      const row = (await tx.query<{ presentation: string }>(`SELECT presentation FROM realm_dock_presentations
+        WHERE event_id = $1 AND kingdom_id = $2 AND origin = $3 AND witnessed_ms IS NOT NULL`,
+      [snap.head.undo.eventId, kingdom.kingdomId, this.origin])).rows[0];
+      original = row ? RealmDockPresentationSchema.parse(JSON.parse(row.presentation)) : undefined;
+    }
     if ((action.kind === 'citizen-crown' || action.kind === 'citizen-knight') && !citizen) rejection = 'That citizen is not an eligible public target.';
     if (action.kind === 'raid-welcome' && !raid) rejection = 'That witnessed raid is no longer waiting.';
     if (action.kind === 'moment-play' && target !== 'sky-dusk') rejection = 'That moment has not been offered by the realm.';
     if (action.kind === 'undo' && (!snap.head.undo || target !== `receipt:${snap.head.undo.eventId}`)) rejection = 'That receipt is not the last eligible witnessed act.';
+    if (action.kind === 'undo' && (!original || !['gate-open', 'gate-close', 'fire-light', 'citizen-crown', 'citizen-knight'].includes(original.kind))) rejection = 'That witnessed act has no reversible presentation.';
+    if (original?.kind.startsWith('citizen-') && !snap.citizens.some(candidate => candidate.id === original!.targetId
+      && candidate.name === original!.targetName && candidate.slot === original!.targetSlot)) rejection = 'That citizen is no longer a public presentation target.';
     if (['gate-open', 'gate-close', 'fire-light'].includes(action.kind) && target !== undefined) rejection = 'That royal act has no named target.';
     if (rejection) {
       const outcome = refused(rejection);
@@ -305,6 +335,11 @@ export class RealmDockService {
     const head = snap.head;
     const before = { gate: head.gate, fireUntil: head.fireUntil, honours: structuredClone(head.honours) };
     const undoOf = action.kind === 'undo' ? head.undo?.eventId : undefined;
+    const restored = original?.targetId ? head.undo?.before.honours[original.targetId] : undefined;
+    const undoSubject = original ? { kind: original.kind,
+      ...(original.targetId ? { targetId: original.targetId } : {}), ...(original.targetName ? { targetName: original.targetName } : {}),
+      ...(original.targetSlot !== undefined ? { targetSlot: original.targetSlot } : {}),
+      ...(restored && restored.until > now ? { restoredHonour: { kind: restored.kind, expiresAt: restored.until } } : {}) } : undefined;
     if (action.kind === 'gate-open') head.gate = 'open';
     if (action.kind === 'gate-close') head.gate = 'closed';
     if (action.kind === 'fire-light') head.fireUntil = now + 10 * 60_000;
@@ -316,7 +351,7 @@ export class RealmDockService {
     const event = RealmDockPresentationSchema.parse({ version: 1, id: `dock:${randomBytes(24).toString('hex')}`, actionId: action.id,
       kingdomId: kingdom.kingdomId, origin: this.origin, kind: action.kind,
       ...(target ? { targetId: target } : {}), ...(citizen ? { targetName: citizen.name, targetSlot: citizen.slot } : {}),
-      ...(raid ? { targetName: raid.name } : {}), ...(undoOf ? { undoOf } : {}),
+      ...(raid ? { targetName: raid.name, raid: snap.raidBodies.get(raid.id) } : {}), ...(undoOf ? { undoOf, undoSubject } : {}),
       ...(action.kind === 'moment-play' ? { moment: 'sky-dusk' } : {}),
       occurredAt: now, expiresAt: now + 60_000, gate: head.gate, fire: head.fireUntil > now ? 'lit' : 'unlit' });
     head.lastAt = now;

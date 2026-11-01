@@ -7,11 +7,46 @@ import { generateSettlementPlan } from '@chatdom/world';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import { createKingdomCitizens } from './citizen-scene';
 
-it('keeps the citizen name once when their home tag and speech are both visible', () => {
+it('keeps real present neighbours seated at the royal fire until its authoritative state ends', () => {
+  const scene = new THREE.Scene(), clay = createVoxelMaterial(MATERIALS, 'build');
+  const layout = generateSettlementPlan({ seed: 'fire-gathering', tier: 'hamlet', firstYear: 2025, year: 2026 });
+  const citizens = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
+  const kingdomId = KingdomIdSchema.parse('129634568'), now = 1_000_000;
+  const windows = layout.homes.slice(0, 8).map(home => ({ slot: home.slot, present: true, publicName: `SIMULATED ${home.slot}`, since: now - 600_000 }));
+  const frame = { version: 1 as const, kingdomId, epoch: 'SIMULATED-fire', sequence: 1, asOf: now,
+    origin: 'simulated' as const, streamLive: true, connection: 'fresh' as const, windows };
+  try {
+    citizens.applyFrame(frame);
+    const destination = citizens.motion.destinationsForSlot(windows[0]!.slot).find(item => item.nodeId === 'forge:watch:3')!;
+    expect(destination).toBeDefined();
+    const anchor = [destination.position[0] - 3, destination.position[1], destination.position[2]] as const;
+    citizens.gatherFire(true, now, anchor);
+    citizens.update(now, 0);
+    let seated = citizens.update(now + 180_000, 180).filter(sample => sample.posture === 'seated');
+    expect(seated.length).toBeGreaterThan(0);
+    expect(seated.length).toBeLessThanOrEqual(8);
+    for (const sample of seated) {
+      expect(windows.some(window => window.slot === sample.slot && window.present)).toBe(true);
+      expect(sample.goalReached).toBe(true);
+      expect(sample.speed).toBe(0);
+      expect(sample.heading).toBeCloseTo(Math.atan2(anchor[0] - sample.position[0], anchor[2] - sample.position[2]), 9);
+    }
+    seated = citizens.update(now + 240_000, 240).filter(sample => sample.posture === 'seated');
+    expect(seated.length).toBeGreaterThan(0);
+    citizens.gatherFire(false, now + 240_001, anchor);
+    expect(citizens.update(now + 240_001, 240).some(sample => sample.posture === 'seated')).toBe(false);
+    citizens.applyFrame({ ...frame, sequence: 2, asOf: now + 240_002, windows: windows.map(window => ({ ...window, present: false, publicName: null })) });
+    citizens.gatherFire(true, now + 240_002, anchor);
+    expect(citizens.update(now + 240_002, 240).some(sample => sample.posture === 'seated')).toBe(false);
+  } finally { citizens.dispose(); clay.dispose(); }
+});
+
+it('keeps the citizen name once when their home tag and speech are both visible', async () => {
   const scene = new THREE.Scene(), clay = createVoxelMaterial(MATERIALS, 'build');
   const layout = generateSettlementPlan({ seed: 'speech-name', tier: 'hamlet', firstYear: 2025, year: 2026 });
-  const citizens = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
+  const citizens = createKingdomCitizens(scene, layout, { submit: async () => ({ kind: 'asset', chunks: [] }) } as unknown as VoxelWorkerPool, clay);
   try {
+    await citizens.prepare();
     const kingdomId = KingdomIdSchema.parse('129634568'), slot = layout.homes[0]!.slot, now = 200_000;
     citizens.applyFrame({ version: 1, kingdomId, epoch: 'SIMULATED-name-test', sequence: 1, asOf: now,
       origin: 'simulated', streamLive: false, connection: 'offline',

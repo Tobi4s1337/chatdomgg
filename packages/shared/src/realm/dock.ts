@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { EpochMsSchema, KingdomIdSchema, PersonIdSchema, TokenSchema } from '../identity';
+import { ChannelSchema } from '../twitch-moments';
 
 export const ACTIONS = ['gate-open', 'gate-close', 'fire-light', 'raid-welcome', 'citizen-crown', 'citizen-knight', 'moment-play', 'undo'] as const;
 const id = TokenSchema;
@@ -38,13 +39,26 @@ export const RealmDockActorSchema = z.strictObject({ personId: PersonIdSchema, s
 export const RealmDockStatusRequestSchema = z.strictObject({ version: z.literal(1), origin: z.enum(['live', 'simulated']), principal: RealmDockActorSchema, kingdomId: KingdomIdSchema });
 export const RealmDockActionRequestSchema = z.strictObject({ version: z.literal(1), origin: z.enum(['live', 'simulated']), principal: RealmDockActorSchema, action: DockActionSchema });
 /** Committed public stage direction; no actor session, submitted words or authority token. */
+const UndoSubjectSchema = z.strictObject({
+  kind: z.enum(['gate-open', 'gate-close', 'fire-light', 'citizen-crown', 'citizen-knight']),
+  targetId: id.optional(), targetName: label.optional(), targetSlot: z.number().int().min(0).max(65535).optional(),
+  restoredHonour: z.strictObject({ kind: z.enum(['citizen-crown', 'citizen-knight']), expiresAt: EpochMsSchema }).optional(),
+}).refine(value => value.kind.startsWith('citizen-') ||
+  (value.targetId === undefined && value.targetName === undefined && value.targetSlot === undefined && value.restoredHonour === undefined),
+'Only a citizen undo may carry a citizen subject');
 export const RealmDockPresentationSchema = z.strictObject({
   version: z.literal(1), id, actionId: id, kingdomId: KingdomIdSchema, origin: z.enum(['live', 'simulated']),
   kind: z.enum(ACTIONS), targetId: id.optional(), targetName: label.optional(), targetSlot: z.number().int().min(0).max(65535).optional(),
   occurredAt: EpochMsSchema, expiresAt: EpochMsSchema,
   gate: z.enum(['open', 'closed']), fire: z.enum(['lit', 'unlit']),
-  undoOf: id.optional(), moment: z.literal('sky-dusk').optional(),
-}).refine(value => value.expiresAt > value.occurredAt && value.expiresAt - value.occurredAt <= 60_000, 'A stage direction has a bounded future lifetime');
+  undoOf: id.optional(), undoSubject: UndoSubjectSchema.optional(), moment: z.literal('sky-dusk').optional(),
+  /** The already witnessed incoming raid, not permission to create another raid. */
+  raid: z.strictObject({ raidKey: id, from: ChannelSchema, viewers: z.number().int().min(1).max(10_000_000), founded: z.boolean() }).optional(),
+}).refine(value => value.expiresAt > value.occurredAt && value.expiresAt - value.occurredAt <= 60_000, 'A stage direction has a bounded future lifetime')
+  .refine(value => value.kind === 'undo' ? !!value.undoOf && !!value.undoSubject : value.undoOf === undefined && value.undoSubject === undefined,
+    'Undo identifies the committed act and its subject')
+  .refine(value => value.kind === 'raid-welcome' ? !!value.raid : value.raid === undefined,
+    'A raid welcome identifies its witnessed incoming raid');
 /** Proof capability is issued only to a session-verified presenter connection; never a public event field. */
 export const RealmDockWitnessRequestSchema = z.strictObject({
   version: z.literal(1), principal: RealmDockActorSchema, kingdomId: KingdomIdSchema,
