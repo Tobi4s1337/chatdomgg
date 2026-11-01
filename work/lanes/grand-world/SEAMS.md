@@ -158,25 +158,103 @@ needs: signed-in walk check `http://localhost:5192/?walk=1&kingdom=129634568` du
 authenticated isolated realm and Tobias's actual deed mapping. The private public scene proves the floor,
 representative doorway/wall and Forge/moment/raid support but cannot identify the broadcaster's owned plot.
 
-## Gather and pier requests — received 2026-11-01
+## Gather: exterior portal, campfire and camera — 2026-11-01
 
-Read gather's `work/lanes/gather/SEAMS.md` section 2 in its worktree. This is a pending additive GW10 seam,
-not yet implemented or frozen:
+The latest portal decision supersedes the earlier tavern interior footprint request. The founded tavern asset,
+placement and footprint remain unchanged. No tavern interior mounts into the kingdom scene.
 
-- Add `PlaceSite { origin: Vec3; turn: CardinalTurn; footprint: readonly [number, number] }` and optional
-  `KingdomLandInterface.places: { tavern?: PlaceSite; campfire?: PlaceSite }` on both land producers.
-  Expose a site only after proving physical support across its footprint and excluding reserved home lots,
-  roads and solids. The tavern footprint comes from gather's content export; the campfire needs its 9 m
-  clearing radius. Existing founded layout and placements must not move to make room.
-- Add gather's typed `PlaceMount`/`PlaceMounter` and optional `SceneOptions.places`, with host-owned tick,
-  resize and disposal, the shared hour, quality and local feet. Transfer `gather:` visual ownership only
-  when a registered mounter owns those placements; never leave existing geometry invisible without an owner.
-  Collision remains installed and authoritative.
-- Add stream director game cues below raid and major-moment priority. Reuse `PlaceShot` from
-  `apps/web/src/interactions/places/framing.ts`; `DirectorCueSource` still needs its concrete subscription,
-  expiry-clock and cancellation contract before both seam files can freeze it.
+Implemented additive API in `packages/world/src/land-interface.ts`:
 
-Current `land-interface.ts` has no place sites, and the old bench's forest clearing is not a proven site in
-the real founded coordinate system. Do not substitute that bench coordinate or an unchecked centre point.
-Pier's seam file was not yet present at `/srv/chatdom/pier/work/lanes/pier/SEAMS.md`;
-read its water-anchor contract when available and add it to the same physical-land interface.
+- `places.tavern?: TavernDoorAnchor` contains `position: Vec3` (supported feet outside the porch),
+  `facing: number` (world radians, zero +Z, facing **into** the doorway), `placementId` and `assetHash`.
+  Both old/common and grand land facades use the same installed growth-civic door adapter. It verifies the
+  authored aperture after ordered voxel writes, then checks full-body clearance and physical support.
+  Unknown, closed or unsupported geometry yields no anchor and a diagnostic. Gather derives the return
+  facing by reversing this yaw and checks its return feet against the current collision world.
+- `PlaceSite { origin: Vec3; turn: CardinalTurn; footprint: readonly [number, number] }` uses a blueprint's
+  local corner as origin, with local +Z as the open side. `places.campfire` is optional. Planning an empty
+  18 × 18 m footprint is explicit installation-time work through `placeSites` options / `planPlaceSites`;
+  it is not a per-frame search. All reserved lots, roads, civic spaces and installed solids are excluded.
+  Every intersecting terrain column must agree, and real collision tops must cover the entire footprint.
+  Pass a previously accepted clearing as `pinned`; failure never silently relocates it. This planner reserves
+  or grades nothing itself. The founded installer must persist the choice before adding campfire content.
+
+Real Willowmere receipt revision 11 provides tavern feet `[6,9,-5.625]`, inward yaw π. The bounded campfire
+search examined 512 candidates and found none: 247 reserved-lot, 44 uneven-ground, 74 placement-overlap,
+92 civic-overlap, 55 road-overlap. This is not proof that no possible clearing exists. No campfire anchor is
+claimed for this revision; gather/integration need an authored, validated candidate or an explicit ground
+migration. No lot, home, road, asset or placement was moved.
+
+Implemented scene hooks, exported from `apps/web/src/kingdom/scene.ts`:
+
+```ts
+interface PlaceMount {
+  readonly scene: Scene;
+  readonly camera: PerspectiveCamera;
+  readonly placements: readonly { id: string; position: Vec3; rotation: CardinalTurn; assetHash: string }[];
+  localFeet(): Vec3 | null;
+  hour(): number;
+  quality(): 'high' | 'balanced' | 'low';
+  claimPlacement(id: string): void;
+  onTick(fn: (dt: number, now: number) => void): () => void;
+  onResize(fn: (w: number, h: number) => void): () => void;
+}
+type PlaceMounter = (mount: PlaceMount) => () => void;
+// SceneOptions.places?: readonly PlaceMounter[]
+```
+
+`claimPlacement` is a necessary additive refinement of gather's original proposal. After mounting its visual,
+a provider explicitly claims an exact installed `gather:campfire:*` ID during synchronous initialization.
+Only successful claims remove host drawing; no mounter/no claim leaves normal geometry visible. Missing,
+duplicate, late, tavern and home claims fail initialization and roll back owners. Original collision and light
+blockers remain. The host owns tick, resize and teardown; a mounter must release partial GPU allocations if
+it throws before returning a disposer. The callbacks use frame `dt` in seconds and `now` in monotonic ms;
+`hour()` reads the actual shared scene hour. `capture` post quality maps to `high` for this interface.
+
+Implemented kingdom-scene game cues in `apps/web/src/stream/director.ts`:
+
+```ts
+interface DirectorCue {
+  readonly id: string;
+  readonly priority: 'game';
+  readonly shot: PlaceShot; // existing { eye: Vec3; at: Vec3 }
+  readonly until: number | null; // epoch ms; null until withdrawn
+}
+interface DirectorCueSource {
+  subscribe(receive: (cue: DirectorCue | null) => void): () => void;
+}
+```
+
+A source publishes its current cue on subscription and null on withdrawal/connection loss. Sources passed to
+`StreamView` via optional `directorCues` props must belong to that verified kingdom; optional `places` props
+forward the same mounters into each scene revision. Subscriptions are replaced with the visible scene and
+released on hiding/disposal. `director.connect(source)` also supports explicit composition. Equal game
+priorities use stable subscription order. Snapshots detach mutable producer arrays; invalid/expired updates
+withdraw the previous cue. The temporary shot cancels pending tour shutters and resumes the underlying tour
+when withdrawn. Walking, capture, Forge, build, arrival, major moments, growth, dock and handoff retain priority.
+
+The host API is `scene.setPlaceShot(PlaceShot | null)`; it never cancels raids or changes the camera mode.
+`inspect().placeShot` reports requested/active. **These cues frame the kingdom only.** Selecting and mounting
+an independent tavern-room scene for the stream is still pending; it cannot be implemented by pointing this
+kingdom camera at tavern-local coordinates. needs: gather a public tavern spectator/mount contract (source
+scene, readiness, disposal and room identity) for the stream's source-scene switch. Campfire cue composition
+can use the implemented hook now. needs: gather mirror these accepted hook details in its SEAMS before
+calling the seam frozen. Package-root reexports of the new land types are an integration-owned additive line;
+the owned land-interface module already exports them directly.
+
+Exact additive root export requested for `packages/world/src/index.ts`:
+
+```ts
+export { planPlaceSites, validatePlaceSite, findTavernDoor, type PlaceSite, type TavernDoorAnchor, type PlaceSitePlanningOptions, type KingdomPlaceSites } from './land-interface';
+```
+
+## Pier request — read 2026-11-01
+
+Pier's `work/lanes/pier/SEAMS.md` section 3 is now available and was read. Pending additive GW10 work:
+`KingdomLandInterface.piers?: readonly PierAnchor[]`, with stable `id`, dry supported `root`, cardinal `turn`
+(local +Z over water), matching `waterY`, centreline `depth` at 1 m steps, water kind and Genesis biome.
+The root and complete deck must fit the installed physical region and exclusions without moving existing
+placements. Drawn-water equality on the old and grand lands must be proved before an anchor is exposed.
+Pier already owns a deterministic candidate planner under `apps/realm/src/fishing/site.ts`; inspect its current
+implementation before adding another search. Its world-layer mount, first/rare attention, shared clock and
+water-mood requests are also recorded there. None is claimed implemented by the campfire-only hook above.

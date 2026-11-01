@@ -3,6 +3,20 @@ import type { CollisionWorld } from '@chatdom/shared/realm';
 import type { RealmFoundedScene } from './founded-world/types';
 import { foundedAnvilPosition } from './interactions/founded';
 import { finiteVec3, standingClear, SUPPORT_GAP } from './interactions/geometry';
+import type { CardinalTurn } from './settlement/types';
+import { planPlaceSites, type KingdomPlaceSites, type PlaceSiteDiagnostic, type PlaceSitePlanningOptions } from './grand-adoption/place-sites';
+import { findTavernDoor } from './grand-adoption/place-sites-tavern';
+
+export { planPlaceSites, validatePlaceSite, placeSiteBounds, PLACE_SITE_BUDGET, CAMPFIRE_SITE_FOOTPRINT } from './grand-adoption/place-sites';
+export { findTavernDoor, type TavernDoorAnchor, type TavernDoorSite, type TavernDoorResult } from './grand-adoption/place-sites-tavern';
+export type { KingdomPlaceSites, PlaceKind, PlaceSiteContext, PlaceSiteFailure, PlaceSiteDiagnostic, PlaceSitePlan, PlaceSitePlanningOptions } from './grand-adoption/place-sites';
+
+/** Shared local blueprint origin, world metres on physical ground. Local +Z is the open/front side. */
+export interface PlaceSite {
+  readonly origin: Vec3;
+  readonly turn: CardinalTurn;
+  readonly footprint: readonly [width: number, depth: number];
+}
 
 /** Actual solid top in world metres, independent of scenery, water sheets and render LOD.
  * null means unknown/unsupported. Implementations must not extrapolate into unloaded land. */
@@ -37,12 +51,18 @@ export interface KingdomLandInterface {
    * Slot linkage comes only from scene.plan.homes[].id ↔ placement.plotId; attachments
    * retain their hashes but supply no additional citizen window. Strength comes from presence. */
   readonly light: Pick<RealmFoundedScene, 'plan' | 'assets' | 'placements'>;
+  /** Existing tavern portal; the empty campfire site is opt-in installation-time planning. */
+  readonly places?: KingdomPlaceSites;
+  /** No site is a real outcome: callers must arrange an explicit migration, never invent ground. */
+  readonly placeSiteDiagnostics?: readonly PlaceSiteDiagnostic[];
 }
 
 /** Preserve public identity; larger landscape support is supplied by its producer, never
  * the old bounded founded terrain compiler. A supplied collision revision must match. */
 export function createKingdomLandInterface(input: {
   readonly scene: RealmFoundedScene; readonly ground: LandGroundSource; readonly collision?: CollisionWorld;
+  /** Opt-in, bounded installation-time work; keep the resulting facade instead of rebuilding it per frame. */
+  readonly placeSites?: PlaceSitePlanningOptions;
 }): KingdomLandInterface {
   const { scene, ground, collision } = input, plan = scene.plan;
   if (scene.layoutRevision !== plan.revision || ground.layoutRevision !== scene.layoutRevision
@@ -64,11 +84,15 @@ export function createKingdomLandInterface(input: {
     const point = plan.nodes.find(item => item.id === id)?.position;
     return point && supported(point) ? point : null;
   };
+  const placePlan = input.placeSites ? planPlaceSites({ scene, groundAt, ...(collision ? { collision } : {}) }, input.placeSites) : undefined;
+  const tavern = findTavernDoor({ scene, groundAt, ...(collision ? { collision } : {}) });
   return Object.freeze({ scene, groundAt, collision,
     paths: Object.freeze({ nodes: plan.nodes, streets: plan.streets, activeStreetIds: plan.activeStreetIds }),
     forge: Object.freeze({ square: plan.market, anvil,
       approach: supported(candidate) && collision && standingClear(collision, candidate) ? candidate : null }),
     moments: Object.freeze({ plaza: node(plan.market.nodeId), castleGate: node(plan.castle.gateNodeId) }),
     light: Object.freeze({ plan, assets: scene.assets, placements: scene.placements }),
+    places: Object.freeze({ ...placePlan?.places, ...(tavern.anchor ? { tavern: tavern.anchor } : {}) }),
+    placeSiteDiagnostics: Object.freeze([...(tavern.diagnostic ? [tavern.diagnostic] : []), ...placePlan?.diagnostics ?? []]),
   });
 }

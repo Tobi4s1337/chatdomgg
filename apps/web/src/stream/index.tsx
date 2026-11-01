@@ -2,10 +2,10 @@ import { createDockFixture } from './dock-fixture';
 import { openDurableChronicle } from '../chronicle/native-overlay';
 import { createDockConnection } from './dock-connection';
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
-import type { NameLabel } from '../kingdom/scene';
+import type { NameLabel, PlaceMounter } from '../kingdom/scene';
 import { createSceneMount, type KingdomScene, type StreamPhase } from './mount';
 import { browserSourcePath, parseStreamParams, safeAreaName, SAFE_PRESETS, type SafeArea, type StreamLayout, type StreamMood, type StreamSeam } from './params';
-import { createDirector, planNight, type DirectorState, type Shot } from './director';
+import { createDirector, planNight, type DirectorCueSource, type DirectorState, type Shot } from './director';
 import { Corner, Crest, Flame, StreamDefs } from './fittings';
 import { SkyCaptions, type ScreenCaption } from '../twitch-moments';
 import { createRealmSpectatorSource } from '../kingdom-entry/spectator';
@@ -52,7 +52,13 @@ function seamWords(seam: StreamSeam, kingdom: string, named: boolean): { eyebrow
   return { eyebrow: 'Until next time', title: named ? `Goodnight from ${kingdom}` : 'Goodnight', line: 'Every window keeps its place' };
 }
 
-export default function StreamView() {
+export interface StreamViewProps {
+  readonly places?: readonly PlaceMounter[];
+  /** Sources must belong to this stream's verified kingdom. Each scene revision gets fresh subscriptions. */
+  readonly directorCues?: readonly DirectorCueSource[];
+}
+
+export default function StreamView(props: StreamViewProps = {}) {
   const params = parseStreamParams(location.search, location.pathname);
   const [layout, setLayout] = createSignal<StreamLayout>(params.layout);
   const [mood, setMood] = createSignal<StreamMood>(params.mood);
@@ -91,6 +97,7 @@ export default function StreamView() {
       return view === 'window' ? !!subject?.homeLit : !!subject;
     },
     apply: view => mount.scene?.setCamera(view),
+    applyPlace: view => mount.scene?.setPlaceShot(view),
     drawn: view => !!mount.scene && mount.scene.debug.camera === view && mount.scene.debug.fieldSettled,
     setHour: value => { hour = value; mount.scene?.setHour(value); },
     reducedMotion: () => !!reduced?.matches,
@@ -103,13 +110,14 @@ export default function StreamView() {
   onCleanup(() => dockConnection?.dispose());
   const spectator = params.source === 'realm' && params.kingdomId ? createRealmSpectatorSource({ kingdomId: params.kingdomId }) : undefined;
   let chronicle:ReturnType<typeof openDurableChronicle>|undefined,chronicleOpened=false;
+  let offCues: (() => void)[] = [];
   onCleanup(()=>chronicle?.close());
 
   const mount = createSceneMount({
     host: () => lens,
     // Build the opening's light fields with nobody home yet. Rewinding a fully
     // inhabited town after loading leaves its warm ground light behind for a beat.
-    settings: () => ({ ...(dockFixture ? { dockFeed: dockFixture, simulatedDockSites: true, kingdomId: dockFixture.kingdomId } : {}), directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: dockFixture ? 'simulated' : params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
+    settings: () => ({ ...(props.places ? { places: props.places } : {}), ...(dockFixture ? { dockFeed: dockFixture, simulatedDockSites: true, kingdomId: dockFixture.kingdomId } : {}), directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: dockFixture ? 'simulated' : params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
     ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
       if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
@@ -142,7 +150,10 @@ export default function StreamView() {
   });
 
   function publishDebug(scene: KingdomScene | undefined): void {
+    for (const unsubscribe of offCues) unsubscribe();
+    offCues = [];
     if (!scene) { chronicle?.close();setArrival(null); delete window.__chatdomKingdom; return; }
+    for (const source of props.directorCues ?? []) offCues.push(director.connect(source));
     if(!chronicleOpened&&params.source==='realm'&&params.kingdomId&&new URLSearchParams(location.search).get('chronicle')==='1'){
       chronicleOpened=true;chronicle=openDurableChronicle({kingdomId:params.kingdomId,liveEngine:scene,onOpen:()=>director.stop(),onClose:()=>{chronicle=undefined;if(phase()==='ready')director.start();}});
     }
@@ -256,7 +267,7 @@ export default function StreamView() {
 
   const area = () => stageSafe();
   const output = <div class={`stream-output layout-${layout()}`} data-chatdom-kingdom data-chatdom-stream
-    classList={{ drifting: director.plan.drift && phase() === 'ready' && shot().curtain === 'open', framed: !!area() }}
+    classList={{ drifting: director.plan.drift && !shot().placeCue && phase() === 'ready' && shot().curtain === 'open', framed: !!area() }}
     data-layout={layout()} data-phase={phase()} data-source={mark().kind} data-mood={mood()} data-seam={(layout() === 'stage' && seam()) || 'none'}
     data-shot={shot().shot} data-curtain={shot().curtain} data-climax={climaxName() ? 'name' : 'none'} data-safe={safeAreaName(area()) ?? (area() ? 'custom' : 'none')}
     style={area() ? { left: `${area()![0]}%`, top: `${area()![1]}%`, width: `${area()![2]}%`, height: `${area()![3]}%` } : undefined}>
