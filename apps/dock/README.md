@@ -3,6 +3,8 @@
 Solid/Vite app, built at `/dock/`. It uses the existing Chatdom Twitch sign-in cookie and the
 same-origin `/api/dock/status` and `/api/dock/actions` routes. The API resolves the person and
 verifies authority. Current royal acts are broadcaster-only; verified moderators can observe.
+The app checks `/api/realm/session` before reading the dock, independently of bridge
+availability. Sign-out uses `/api/realm/signout` with the canonical session CSRF token.
 
 For development, set `CHATDOM_DOCK_API` to an API you own and run
 `pnpm --filter @chatdom/dock dev` (strict port 5176). Build with
@@ -23,6 +25,15 @@ The realm bridge is a required integration dependency, detailed in
 cannot produce stream ceremonies. An accepted action requires a realm delivery receipt.
 Lost/uncertain replies lock further actions across a reload until the streamer explicitly
 checks the stream. The client never automatically resends an action.
+Recovery is partitioned by the authenticated session's opaque `resumeScope` and kingdom.
+Session replacement or confirmed sign-out clears prior recovery; storage failure leaves the
+page readable and disables acts that cannot be recovered. After a command, the client
+rechecks the session before applying its reply, so a replaced identity cannot inherit it.
+
+Undo prefers the realm's optional `undoable` receipt list when supplied. An empty list means
+none; an absent list falls back to the last accepted receipt saved in this session, subject
+to the authority's undo capability and final realm validation. A refused cached undo is
+cleared. No receipt or browser storage value grants authority by itself.
 
 The app reuses the shared UI typefaces and quiet audio kit. The sound toggle controls only
 this dock's cues. It does not mute the kingdom's stream audio.
