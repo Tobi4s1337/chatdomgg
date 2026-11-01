@@ -1,0 +1,16 @@
+{
+  "name": "woodland-23-walk",
+  "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+  "peak": 0.036711957305669785,
+  "rms": 0.00694450839982174,
+  "middleRms": 0.007488187541137247,
+  "voices": 0,
+  "sources": 0,
+  "peakVoices": 1,
+  "peakSources": 1,
+  "played": {
+    "drip": 1
+  },
+  "muted": false,
+  "profile": "walk"
+}

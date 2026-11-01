@@ -1,4 +1,5 @@
-// Typecheck the exact main-owned consumer patch in memory. No source outside lane scope is written.
+// Typecheck the main-owned consumers, with any unlanded patch hunks overlaid in memory.
+// Already-landed hunks must match exactly too. No source outside lane scope is written.
 import ts from 'typescript';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -21,10 +22,13 @@ for (const line of patch.split(/(?<=\n)/)) {
 }
 assert.ok(hunks.length, 'No integration hunks');
 const overlay = new Map();
+let installed = 0;
 for (const hunk of hunks) {
   const filename = resolve(hunk.path);
   const source = overlay.get(filename) ?? await readFile(filename, 'utf8');
-  assert.equal(source.split(hunk.old).length - 1, 1, `Patch context changed: ${hunk.path}`);
+  const pending = source.split(hunk.old).length - 1, landed = source.split(hunk.next).length - 1;
+  assert.ok((pending === 1 && landed === 0) || (pending === 0 && landed === 1), `Patch context changed or ambiguous: ${hunk.path}`);
+  if (landed) { installed++; continue; }
   overlay.set(filename, source.replace(hunk.old, hunk.next));
 }
 const config = ts.readConfigFile('tsconfig.json', ts.sys.readFile);
@@ -43,4 +47,4 @@ if (diagnostics.length) {
     getCanonicalFileName: file => file, getCurrentDirectory: () => process.cwd(), getNewLine: () => '\n',
   }));
   process.exitCode = 1;
-} else console.log(`Integration patch typecheck passed across ${overlay.size} in-memory source files. No main-owned file was modified.`);
+} else console.log(`Integration typecheck passed: ${installed}/${hunks.length} hunks already landed, ${overlay.size} source files overlaid in memory. No main-owned file was modified.`);

@@ -14,6 +14,57 @@ vi.mock('../../../../packages/audio/src/soul', () => ({
 }));
 
 describe('kingdom soul host', () => {
+  it('accepts witnessed arrivals after mounting and rings once for each latest overlapping arrival', () => {
+    vi.clearAllMocks();
+    const at = Date.UTC(2026, 5, 20, 13);
+    const audio = { context: {} as AudioContext, destination: {} as AudioNode };
+    const host = createSoulSceneHost({} as Scene, {
+      config: { seed: 42, biome: 'coastal', topology: DEFAULT_SOUL_TOPOLOGY },
+    }, () => audio);
+    const tick = (epochMs: number, shipArrivals: readonly number[]) => host.update({
+      epochMs, shipArrivals, population: 0, seconds: epochMs / 1000,
+      listener: { position: [0, 1, 0], right: [1, 0, 0] },
+    });
+    tick(at - 100, []);
+    const sound = vi.mocked(createSoulAudio).mock.results.at(-1)!.value;
+    expect(tick(at, [at])!.shipBell).toBe(true);
+    tick(at + 50, []);
+    tick(at + 100, [at]); // a temporarily missing snapshot does not replay
+    tick(at + 200, [at + 200, at]);
+    tick(at + 300, [at + 200, at]);
+    tick(at + 400, [at]); // dropping the newer arrival does not replay the older one
+    expect(sound.cue).toHaveBeenCalledTimes(2);
+    tick(at + 60_000, [at + 60_000]); // seek consumes the arrival
+    tick(at + 60_100, [at + 60_000]);
+    expect(sound.cue).toHaveBeenCalledTimes(2);
+    host.dispose();
+  });
+
+  it('does not ring inland or replay an arrival heard while muted', () => {
+    vi.clearAllMocks();
+    const at = Date.UTC(2026, 5, 20, 13);
+    let audio: SoulAudioHost | null = null;
+    const inland = { ...DEFAULT_SOUL_TOPOLOGY, harbour: false };
+    const makeHost = (topology: typeof DEFAULT_SOUL_TOPOLOGY) => createSoulSceneHost({} as Scene, {
+      config: { seed: 42, biome: 'coastal', topology },
+    }, () => audio);
+    const host = makeHost(DEFAULT_SOUL_TOPOLOGY);
+    const tick = (target: typeof host, epochMs: number) => target.update({
+      epochMs, shipArrivals: [at], population: 0, seconds: epochMs / 1000,
+      listener: { position: [0, 1, 0], right: [1, 0, 0] },
+    });
+    tick(host, at - 100); tick(host, at);
+    audio = { context: {} as AudioContext, destination: {} as AudioNode };
+    tick(host, at + 100);
+    const sound = vi.mocked(createSoulAudio).mock.results.at(-1)!.value;
+    expect(sound.cue).not.toHaveBeenCalled();
+    const inlandHost = makeHost(inland);
+    tick(inlandHost, at - 100);
+    expect(tick(inlandHost, at)!.shipBell).toBe(false);
+    expect(vi.mocked(createSoulAudio).mock.results.at(-1)!.value.cue).not.toHaveBeenCalled();
+    host.dispose(); inlandHost.dispose();
+  });
+
   it('shares the existing audio context, consumes missed arrivals and releases only its own resources', () => {
     vi.clearAllMocks();
     const at = Date.UTC(2026, 5, 20, 13);

@@ -1,0 +1,18 @@
+{
+  "name": "coastal-18-stream",
+  "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+  "peak": 0.027683893218636513,
+  "rms": 0.005797652307631091,
+  "middleRms": 0.006266571042021078,
+  "voices": 3,
+  "sources": 3,
+  "peakVoices": 5,
+  "peakSources": 5,
+  "played": {
+    "lute": 6,
+    "strings": 3,
+    "woodwind": 3
+  },
+  "muted": false,
+  "profile": "stream"
+}

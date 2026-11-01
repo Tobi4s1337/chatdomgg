@@ -16,6 +16,8 @@ export interface SoulHostFrame {
   seconds: number;
   population: number;
   listener: SoulListener;
+  /** Bounded recent witnessed arrivals; omitted uses the binding's rehearsal snapshot. */
+  shipArrivals?: readonly number[];
 }
 export interface SoulAudioHost { context: AudioContext; destination: AudioNode }
 
@@ -28,20 +30,24 @@ export function createSoulSceneHost(
 ) {
   const picture = createSoulPresentation(scene, { topology: binding.config.topology, chimney: binding.chimney });
   const surfaces = binding.surfaces && createSoulWeatherSurfaces(binding.surfaces);
-  let sample = createSoulSampler({ ...binding.config, population: 0 });
+  let arrivals = [...(binding.config.shipArrivals ?? [])];
+  let sample = createSoulSampler({ ...binding.config, population: 0, shipArrivals: arrivals });
   let population = 0;
   let sound: ReturnType<typeof createSoulAudio> | undefined;
   let context: AudioContext | undefined;
   let frame: SoulFrame | undefined;
   let disposed = false;
-  let lastArrival: number | undefined;
+  const consumedArrivals = new Set<number>();
   let lastEpoch: number | undefined;
   return {
     update(input: SoulHostFrame): SoulFrame | undefined {
       if (disposed) return undefined;
-      if (input.population !== population) {
+      const nextArrivals = input.shipArrivals ?? binding.config.shipArrivals ?? [];
+      const arrivalsChanged = nextArrivals.length !== arrivals.length || nextArrivals.some((at, i) => at !== arrivals[i]);
+      if (input.population !== population || arrivalsChanged) {
         population = input.population;
-        sample = createSoulSampler({ ...binding.config, population });
+        if (arrivalsChanged) arrivals = [...nextArrivals];
+        sample = createSoulSampler({ ...binding.config, population, shipArrivals: arrivals });
       }
       frame = sample(input.epochMs);
       picture.update(frame, input.seconds);
@@ -54,9 +60,14 @@ export function createSoulSceneHost(
       sound?.update({ frame, biome: binding.config.biome, presence: population, listener: input.listener, profile: binding.profile ?? 'walk' });
       // A new mount or a seek consumes a current arrival without replaying its attack.
       const fresh = lastEpoch !== undefined && input.epochMs >= lastEpoch && input.epochMs - lastEpoch < 1000;
-      const arrival = binding.config.shipArrivals?.find(at => input.epochMs >= at && input.epochMs < at + 12_000);
-      if (frame.shipBell && arrival !== undefined && arrival !== lastArrival && fresh) sound?.cue('arrival');
-      lastArrival = arrival;
+      for (const at of consumedArrivals) {
+        if (input.epochMs < at || input.epochMs >= at + 12_000) consumedArrivals.delete(at);
+      }
+      const eligible = arrivals.filter(at => input.epochMs >= at && input.epochMs < at + 12_000);
+      const arrival = eligible.reduce<number | undefined>((latest, at) =>
+        latest === undefined || at > latest ? at : latest, undefined);
+      if (frame.shipBell && arrival !== undefined && !consumedArrivals.has(arrival) && fresh) sound?.cue('arrival');
+      for (const at of eligible) consumedArrivals.add(at);
       lastEpoch = input.epochMs;
       return frame;
     },
