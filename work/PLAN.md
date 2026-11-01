@@ -346,14 +346,18 @@ starting seam begins at0 and keeps dusk. Windows use witnessed presence (1a10d43
 arrival still drives door lanterns and smoke. `shots/magic/arrival-wide-first-pair.png` is viewed:
 old close TOP, town-wide AFTER below;1920×1080/time6/hour19.5/high,121 walkers/windows.
 
-**Latest change:** retimed the existing SIMULATED greeting from3–9s to6–16s, within the
-frozen ten-second speech limit. The wave-first camera had arrived after the greeting expired.
-Now Juniper says “Evening, everyone!” while we enter the lantern street; the later actual
-arrival cue replaces it with “Home, at last.” No live speech lifetime or identity remapping.
-Root viewed `shots/magic/arrival-street-greeting-{before,after,pair}.png`, native1920×1080,
-world12.5s/high/calm,208 walkers/windows, settled/open; after has one Juniper greeting over the
-walking person. Typecheck, scoped lint, three director/arrival tests and production build pass.
-No browser errors, and all captures/servers/leases released. Main source stayed frozen for pair.
+**Latest change:** Showcase now leads with the LIVE stream, then “The evening begins”
+(SIMULATED), then the walk. The opening’s link is
+`/stream?source=simulated&tier=town&hour=19.5&seam=starting`, with NO fixed time so it plays.
+Other entries remain available. Root viewed `shots/magic/showcase-evening-pair.png`
+(1440×900 before LEFT) and `showcase-evening-mobile.png` (390×844): clear source labels,
+readable actions, no horizontal overflow. Typecheck, scoped lint, web builds and DOM link smoke
+pass. Actual realm stream href remains correct. All capture resources released; no active job.
+
+**Arrival dialogue:** aadb529 retimed the SIMULATED greeting to6–16s (ten-second limit), so
+Juniper greets the camera on its approach before the doorway’s “Home, at last.” Root viewed
+native `arrival-street-greeting-pair.png`, world12.5/high/calm,208 walkers/windows, settled/open,
+one Juniper greeting above the walking person. Three focused tests, typecheck/lint/build pass.
 
 **Full staging rehearsal completed:** `shots/magic/arrival-continuous-rehearsal-320.mp4` runs
 0–24s (last sample23.8), actual running scene/director,120 sampled frames, no capture/seek
@@ -365,9 +369,11 @@ this demonstrates staging, NOT1080p colour or real-GPU smoothness. Do not shrink
 bubbles based on their footprint at320px. No further long SwiftShader film is needed for timing.
 GPU request remains1920×1080 first25s of
 `/stream?source=simulated&tier=town&hour=19.5&seam=starting` (default calm).
-**Next useful visible integration:** keep Showcase current: add a clearly SIMULATED door to
-this evening opening beside its existing live stream entry (Tobias’s standing Showcase brief).
-No new systems; do not keep polishing accepted light/Forge while awaiting the GPU taste check.
+The first evening is now reachable from Showcase for the GPU recording. Do not repeat the
+software film or keep polishing accepted light/Forge while awaiting that taste check.
+**Next available picture:** judge the existing coastal Genesis holding from the Atlas and
+integrate its producer’s already-authored visible pieces if a mount is missing; team owns the
+content. Keep the full three-kingdom/card/passport/raid picture objective; no new systems.
 
 **Earlier fixes to preserve:** d29f742 lets the opening scene own its continuous wave/street
 lens instead of an independent Show shutter/Calm dip; viewed native pair
@@ -377,7 +383,7 @@ a851636 gives one newly lit visible window its public name (`arrival-named-wave-
 Queue targeted captures once up to20min; never unlink locks or kill other holders. No active
 capture job or observer waiting for real chat. Real-GPU taste is pending, not a gate regression.
 
-**Team:** prior maind29f742; prior merges7b56cb3 card sharing and f62bc9f aurora. Fresh narrow
+**Team:** prior mainaadb529; prior merges7b56cb3 card sharing and f62bc9f aurora. Fresh narrow
 scan found no runtime checkpoint on picture-land/trees, effects, avatar, card/passport, Genesis,
 raid-road or sky, including all Genesis content and passport branches. Raid-road8543a25 only registers scope; code already on main. Sky’s wiring
 patch is not proof of live cheer hookup. Genesis, card/passport, raid journey and sky stay with
