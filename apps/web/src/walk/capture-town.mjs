@@ -194,9 +194,22 @@ try {
 } catch (error) {
   const pageState = await Promise.race([
     page?.evaluate(() => ({ ready: window.__chatdomReady, stats: window.__chatdomKingdom?.stats,
+      walk: window.__chatdomWalk,
+      initialPeers: window.__walkingTogetherTown?.initial,
+      players: window.__walkingTogetherTown?.clients.map(client => ({ id: client.selfId, predicting: client.predicting,
+        predicted: { x: client.predicted.x, y: client.predicted.y, z: client.predicted.z, distance: client.predicted.distance },
+        authority: { x: client.room.state.walkers.get(client.selfId)?.x, y: client.room.state.walkers.get(client.selfId)?.y,
+          z: client.room.state.walkers.get(client.selfId)?.z, distance: client.room.state.walkers.get(client.selfId)?.distance } })),
       text: document.body.innerText.slice(0, 4000) })).catch(() => undefined),
     new Promise(resolve => setTimeout(resolve, 3000)),
   ]);
+  // A failed still attempt may retain exactly one diagnostic image, clearly separated from acceptance.
+  // Never add a second image after a normal still, and never turn a clip failure into another capture.
+  if (!values.clip && !report.output && page && pageState?.ready) {
+    await page.screenshot({ path: `${output}.failed.png`, timeout: 10_000 }).then(() => {
+      report.output = `${output}.failed.png`;
+    }).catch(() => {});
+  }
   await writeFile(`${output}.failure.json`, JSON.stringify({ ...report, stage, pageState, failure: error.message }, null, 2)).catch(() => {});
   complete = true; // The caught failure is recorded above; preserve it rather than overwriting it on exit.
   process.exitCode = 1; // Colyseus installs an uncaught-exception handler; do not let it swallow failure status.
