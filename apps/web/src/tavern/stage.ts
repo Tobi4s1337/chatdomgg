@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import { mountTavern } from './mount';
 import { createFire } from '../campfire/fire';
+import type { Vec3 } from '@chatdom/shared';
 
 export type TavernFraming = 'bar' | 'room' | 'table';
-/** Owned development stage. The place mount itself is also usable in the kingdom's scene. */
+/** Owned destination stage. The same room mount is composed into the portal surface. */
 export function createTavernStage(host: HTMLElement, options: { framing: TavernFraming; style: 'hearth' | 'tide'; hour: number; still: boolean }) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio));
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
-  renderer.domElement.setAttribute('role', 'img'); renderer.domElement.setAttribute('aria-label', 'The tavern, its hearth and empty game tables');
+  renderer.domElement.setAttribute('role', 'img'); renderer.domElement.setAttribute('aria-label', 'The tavern, its hearth and game tables');
   renderer.debug.onShaderError = () => { throw new Error('The tavern shader could not be prepared.'); };
   host.append(renderer.domElement);
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(42, 1, .05, 250);
@@ -17,6 +18,8 @@ export function createTavernStage(host: HTMLElement, options: { framing: TavernF
   const tavern = mountTavern(scene, { style: options.style, phone });
   scene.add(new THREE.HemisphereLight('#e0c19a', '#5e382a', 2));
   const fire = createFire(); fire.group.position.set(...tavern.kit.hearth); fire.group.scale.setScalar(.75); scene.add(fire.group);
+  const frames = new Set<(dt: number, now: number) => void>(), resizes = new Set<(width: number, height: number) => void>();
+  let feet: (() => Vec3 | null) | undefined;
   let framing = options.framing, width = 1, height = 1, frame = 0, previous = 0, disposed = false;
   function placeCamera() {
     const portrait = width < height;
@@ -40,16 +43,21 @@ export function createTavernStage(host: HTMLElement, options: { framing: TavernF
     if (disposed) return;
     const dt = previous ? Math.min(.1, (at - previous) / 1000) : .016; previous = at;
     const time = options.still ? 3.5 : at / 1000;
-    tavern.update(options.still ? .1 : dt, [7, .125, 5], camera, options.hour);
+    for (const listener of frames) listener(dt, at);
+    tavern.update(options.still ? .1 : dt, feet ? feet() : [7, .125, 5], camera, options.hour);
     fire.update(time, { strength: 1, wind: .02 });
     renderer.render(scene, camera);
     (window as Window & { __chatdomTavern?: unknown }).__chatdomTavern = {
       draws: renderer.info.render.calls, triangles: renderer.info.render.triangles, dynamicLights: 1,
-      bakedWarmSources: phone ? 1 : 4, people: 0, games: 0,
+      bakedWarmSources: phone ? 1 : 4,
     };
     frame = requestAnimationFrame(draw);
   }
-  const resize = () => { width = host.clientWidth; height = host.clientHeight; renderer.setSize(width, height); placeCamera(); };
+  const resize = () => {
+    width = host.clientWidth; height = host.clientHeight; renderer.setSize(width, height);
+    if (feet) { camera.aspect = width / height; camera.updateProjectionMatrix(); } else placeCamera();
+    for (const listener of resizes) listener(width, height);
+  };
   const observer = new ResizeObserver(resize); observer.observe(host); resize();
   const ready = tavern.ready.then(() => {
     if (disposed) return;
@@ -57,10 +65,13 @@ export function createTavernStage(host: HTMLElement, options: { framing: TavernF
     for (let i = 0; i < 12; i++) tavern.update(.1, [7, .125, 5], camera, options.hour);
     draw(0);
   });
-  return { ready, tavern, renderer,
+  return { ready, tavern, renderer, scene, camera, canvas: renderer.domElement,
+    onFrame(listener: (dt: number, now: number) => void) { frames.add(listener); return () => frames.delete(listener); },
+    onResize(listener: (w: number, h: number) => void) { resizes.add(listener); listener(width, height); return () => resizes.delete(listener); },
+    localFeet(source: () => Vec3 | null) { feet = source; return () => { if (feet === source) feet = undefined; }; },
     framing(next: TavernFraming) { framing = next; placeCamera(); },
     dispose() {
-      disposed = true; cancelAnimationFrame(frame); observer.disconnect(); tavern.dispose(); fire.dispose();
+      disposed = true; cancelAnimationFrame(frame); observer.disconnect(); frames.clear(); resizes.clear(); tavern.dispose(); fire.dispose();
       renderer.dispose(); renderer.domElement.remove();
     },
   };

@@ -57,6 +57,7 @@ export function createTavernRoom(services: RealmRoomServices) {
       this.authority.bindDelivery({ transient: message => this.broadcast('transient', message), owner: (person, message) => {
         const id = this.owner.get(person); if (id) this.clients.getById(id)?.send('private', message);
       } });
+      this.onMessage('bootstrap', client => { if (this.current(client)) this.bootstrap(client); });
       this.onMessage('start', (client, raw) => {
         const request = GatherStartSchema.safeParse(raw);
         if (!request.success || !this.current(client)) return;
@@ -100,7 +101,8 @@ export function createTavernRoom(services: RealmRoomServices) {
         && this.owner.get(client.auth.personId) === client.sessionId;
     }
     private bootstrap(client: Client<{ auth: RealmPrincipal }>) {
-      client.send('interior', { revision: this.interior.world.revision, boxes: this.interior.boxes, targets: this.interior.registry.targets(), entry: TAVERN_ENTRY });
+      client.send('interior', { revision: this.interior.world.revision, layoutRevision: this.interior.registry.layoutRevision,
+        boxes: this.interior.boxes, targets: this.interior.registry.targets(), entry: TAVERN_ENTRY });
       client.send('tables', this.tables.view(Date.now())); client.send('self', this.tables.self(client.auth!.personId));
       client.send('transient', this.authority.seats());
       client.send('private', { type: 'interaction', requestId: null, writerEpoch: this.state.writerEpoch, state: this.authority.selfState(client.auth!.sessionId) });

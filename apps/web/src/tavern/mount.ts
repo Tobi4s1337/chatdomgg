@@ -36,15 +36,47 @@ export function mountTavern(scene: THREE.Scene, options: { style?: 'hearth' | 't
     mesh.name = `tavern:${key}`; root.add(mesh); layers.set(key, { mesh, fade, material });
   })).then(() => undefined);
   // Live miniatures use the same public coordinates as the seated board. Empty table: paddles, no invented ball.
-  const table = kit.tables.find(t => t.id === 'west')!;
-  const miniature = new THREE.Group(); miniature.position.set(...table.centre); miniature.position.y += .025; root.add(miniature);
   const wood = new THREE.MeshStandardMaterial({ color: '#e6bd7c', roughness: .92 });
   const ballMaterial = new THREE.MeshBasicMaterial({ color: '#ffe7b8' });
-  const paddleGeometry = new THREE.BoxGeometry(.28, .06, .07), ballGeometry = new THREE.BoxGeometry(.065, .065, .065);
-  const paddles = [0, 1].map(seat => {
-    const mesh = new THREE.Mesh(paddleGeometry, wood); mesh.position.set(0, .06, seat === 0 ? .38 : -.38); miniature.add(mesh); return mesh;
-  });
-  const ball = new THREE.Mesh(ballGeometry, ballMaterial); ball.visible = false; miniature.add(ball);
+  const paddleGeometry = new THREE.BoxGeometry(.2604, .06, .07), ballGeometry = new THREE.BoxGeometry(.0558, .0558, .0252);
+  const paddles = new THREE.InstancedMesh(paddleGeometry, wood, kit.tables.length * 2);
+  const balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, kit.tables.length);
+  const markGeometry = new THREE.BoxGeometry(1, 1, 1), markMaterial = new THREE.MeshBasicMaterial({ color: '#bd955e' });
+  const marks = new THREE.InstancedMesh(markGeometry, markMaterial, kit.tables.length * 11);
+  const boardGeometry = new THREE.BoxGeometry(1.25, .016, .9), boardMaterial = new THREE.MeshStandardMaterial({ color: '#29473f', roughness: 1 });
+  const boards = new THREE.InstancedMesh(boardGeometry, boardMaterial, kit.tables.length);
+  root.add(paddles, balls, marks, boards); const matrix = new THREE.Matrix4();
+  let mark = 0;
+  for (const [index, table] of kit.tables.entries()) {
+    matrix.makeTranslation(table.centre[0], table.centre[1] + .008, table.centre[2]); boards.setMatrixAt(index, matrix);
+    const line = (x: number, z: number, w: number, d: number) => {
+      matrix.makeScale(w, .005, d); matrix.setPosition(table.centre[0] + x, table.centre[1] + .019, table.centre[2] + z);
+      marks.setMatrixAt(mark++, matrix);
+    };
+    line(-.62, 0, .012, .9); line(.62, 0, .012, .9); line(0, -.45, 1.25, .012); line(0, .45, 1.25, .012);
+    for (let x = -3; x <= 3; x++) line(x * .17, 0, .07, .012);
+  }
+  boards.instanceMatrix.needsUpdate = true; boards.computeBoundingSphere();
+  marks.instanceMatrix.needsUpdate = true; marks.computeBoundingSphere();
+  const projectGames = (frame: GatherFrame) => {
+    let ballCount = 0;
+    kit.tables.forEach((table, index) => {
+      const pong = frame.tables.find(t => t.table === table.id)?.pong;
+      for (const seat of [0, 1] as const) {
+        // Seat 1 is on the -Z side of the authored table; logical +Y is that player's end.
+        matrix.makeTranslation(table.centre[0] + (pong?.paddles[seat] ?? 0) * .62,
+          table.centre[1] + .046, table.centre[2] + (seat === 0 ? -.413 : .413));
+        paddles.setMatrixAt(index * 2 + seat, matrix);
+      }
+      if (pong && pong.phase === 'rally') {
+        matrix.makeTranslation(table.centre[0] + pong.ball.x * .62, table.centre[1] + .044, table.centre[2] - pong.ball.y * .28);
+        balls.setMatrixAt(ballCount++, matrix);
+      }
+    });
+    balls.count = ballCount; balls.instanceMatrix.needsUpdate = true; paddles.instanceMatrix.needsUpdate = true;
+    paddles.computeBoundingSphere(); balls.computeBoundingSphere();
+  };
+  projectGames({ at: 0, tables: [] });
   return {
     kit, ready,
     update(dt, feet, camera, wantedHour) {
@@ -64,17 +96,11 @@ export function mountTavern(scene: THREE.Scene, options: { style?: 'hearth' | 't
         layer.mesh.visible = layer.fade.value > .005;
       }
     },
-    games(frame) {
-      const pong = frame.tables.find(t => t.table === 'west')?.pong;
-      ball.visible = !!pong && pong.phase !== 'interrupted';
-      if (!pong) return;
-      paddles.forEach((paddle, i) => { paddle.position.x = pong.paddles[i]! * .62; });
-      ball.position.set(pong.ball.x * .62, .07, pong.ball.y * .28);
-    },
+    games: projectGames,
     dispose() {
       disposed = true; pool.dispose(); scene.remove(root);
       for (const layer of layers.values()) { layer.mesh.geometry.dispose(); layer.material.dispose(); }
-      layers.clear(); wood.dispose(); ballMaterial.dispose(); paddleGeometry.dispose(); ballGeometry.dispose();
+      layers.clear(); paddles.dispose(); balls.dispose(); marks.dispose(); boards.dispose(); boardGeometry.dispose(); boardMaterial.dispose(); wood.dispose(); ballMaterial.dispose(); markMaterial.dispose(); markGeometry.dispose(); paddleGeometry.dispose(); ballGeometry.dispose();
     },
   };
 }

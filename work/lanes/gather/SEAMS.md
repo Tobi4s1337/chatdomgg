@@ -35,15 +35,36 @@ gather does not edit play's files or implement a second generic transfer control
   entryAnchor, returnAnchor }`. Anchors carry feet in metres and yaw in radians. The entry anchor is just inside
   the interior exit door, facing the room; the return anchor is just outside the existing exterior door facing
   out. Exterior orientation comes from the existing placement, never from the interior dimensions.
-- Table openers through the existing `createTablePlace(stage, TableViewPort)`, game input through play's
-  `requestInput(reason)` lease, own-body hiding through `hideSelf(reason)`, and HUD pieces from
-  `apps/web/src/tavern/play-slot.ts`. These integrate only when play supplies its confirmed adapter.
+- The working destination adapter is `connectTavern(endpoint, entry, storage?)`, exported by
+  `apps/web/src/tavern/index.tsx`. `entry` has the existing `RealmEntry` shape and must issue a fresh ticket for
+  this destination. It returns the tavern's authenticated room, authoritative collision, movement adapter,
+  public table frames and private owned-chair state. It never leaves a source room or reports a portal transfer.
+- `TavernRoomSurface({ open, requestInput })` composes the existing walk controller, citizen renderer and
+  interaction/camera owner with that destination. The caller installs only one active room surface after leaving
+  the source. Table framing uses the same actual board as the miniatures and hides only the local seated body.
+  `open(): Promise<TavernClient>` is supplied by the transfer owner; `requestInput(canvas, reason)` returns
+  `GameInputLease` from `apps/web/src/games/input.ts` (`active`, `onKey`, `onPointer`, `release`). Integrated play
+  must keep its pointer locked when handing that lease to the game. The loopback inspection adapter currently
+  requires a canvas click to acquire pointer lock after the existing walk-camera release.
+- The surface restores a retained chair's framing only after a fresh authoritative bootstrap. It does not
+  recreate an abandoned local interaction. E/Esc and the HUD's stand action go through the existing interaction
+  owner and server seat release. The carved game HUD is within the surface; moving it to play's HUD slot remains
+  pending play's confirmed adapter. No `play-slot.ts` implementation is claimed.
 
 The existing action/target contract has no generic portal action. Gather will add portal contracts only to its new
 `packages/shared/src/games.ts`; it will not widen `RealmIntentSchema` or existing target kinds silently.
 **needs: play** confirm the descriptor and implement generic portal transfer/return; agree the additive portal
 interaction before installing the door anchor. Until then `/-/tavern` is the same destination scene, with no fake
 transfer success. No tavern chairs are installed in the kingdom registry.
+
+**needs: integrator/session owner** provide a supported test entry/session issuer for the lane's isolated
+database-backed founded kingdom. The existing `/reference/session` route is memory-only and admits synthetic
+reference visitors; it cannot prove tobi4s_'s identity or durable session continuity. No credential values or live
+session files are read by this lane's capture harness.
+
+**needs: play** provide the approved look registry/resolver with destination composition. The current independent
+surface supports the six shared starter looks and refuses an unknown look rather than inventing clothes. Full
+wardrobe/look continuity must use the same approved look source as play before portal acceptance.
 
 ## 2. Exterior door and the campfire (grand-world; integrator for founded hooks)
 

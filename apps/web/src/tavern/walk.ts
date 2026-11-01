@@ -1,0 +1,169 @@
+import * as THREE from 'three';
+import { createVoxelMaterial, getEnvironment } from '@chatdom/render';
+import { MATERIALS } from '@chatdom/content/materials';
+import { createInteractionRegistry } from '@chatdom/world/interactions';
+import { tavernPlacement, tavernSeatOf } from '../../../../packages/world/src/interactions/places';
+import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
+import { createWalkController } from '../walk';
+import { mountInteractionController } from '../interactions';
+import { bindWalkInteractions } from '../kingdom/walk-interactions';
+import { presentWalkers } from '../kingdom/walker-presentation';
+import { createShotEase, clearShot } from '../interactions/places/framing';
+import type { InteractionPlaces } from '../interactions/ports';
+import type { InteractionAccepted, InteractionSession } from '../interactions/session';
+import type { RealmPrivateMessage } from '@chatdom/shared/realm';
+import type { GameInputLease } from '../games/input';
+import { bindPongHand } from '../games/input';
+import type { TavernClient } from './client';
+import type { createTavernStage } from './stage';
+import { tavernLight } from './light';
+import { seatApproachDriver } from '../games/walker';
+import { TAVERN_ROOM_BOUNDS } from '../../../../packages/content/src/tavern';
+
+export interface TavernWalkState {
+  readonly ready: boolean;
+  readonly connected: boolean;
+  readonly seated: string | null;
+  readonly names: readonly { readonly id: string; readonly name: string; readonly x: number; readonly y: number }[];
+}
+/** Compose existing movement, citizen and interaction owners around the tavern's room and tabletop. */
+export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage>, client: TavernClient, options: {
+  readonly host: HTMLElement;
+  readonly requestInput: (reason: string) => GameInputLease;
+  readonly onState: (state: TavernWalkState) => void;
+  /** Loopback test-session route only; never a spawn or a seat grant. */
+  readonly benchSeat?: string;
+}) {
+  const kit = stage.tavern.kit;
+  const registry = createInteractionRegistry({ layoutRevision: client.interior.layoutRevision, world: client.world,
+    placements: [tavernPlacement({ tavern: 'main', origin: [0, 0, 0], turn: 0, seats: kit.tables.flatMap(t => t.seats), source: 'tavern:interior-v1' })] });
+  if (registry.disabled.length || JSON.stringify(registry.targets()) !== JSON.stringify(client.interior.targets)) throw new Error('The tavern chairs have changed. Enter again.');
+  const avatar = createVoxelMaterial(MATERIALS, 'avatar');
+  const light = tavernLight([kit.hearth]); avatar.setLight(light);
+  const sky = getEnvironment(19); avatar.setEnvironment({ ...sky, sunIntensity: .12, ambientIntensity: .72, ambient: '#b3a0bd', shadow: '#45364f', night: .85 });
+  const looks = createDefaultCitizenLooks(), people = await createCitizenRenderer(stage.scene, { registry: MATERIALS, material: avatar, looks, capacity: 128 });
+  if ([...client.room.state.walkers.values()].some(walker => !looks.some(look => look.id === walker.look))) {
+    people.dispose(); avatar.dispose(); throw new Error('A citizen’s clothes could not be opened. Enter again shortly.');
+  }
+  const destination = options.benchSeat && client.room.state.origin === 'simulated' ? registry.get(options.benchSeat) : undefined;
+  const drive = destination ? seatApproachDriver(client.world, [client.predicted.x, client.predicted.y, client.predicted.z], destination.target.approach, TAVERN_ROOM_BOUNDS) : null;
+  let asked = false;
+  const realm = { selfId: client.selfId, room: client.room, predicted: client.predicted, clearInput: () => client.clearInput?.(),
+    tick(now: number, input: Parameters<TavernClient['tick']>[1]) {
+      const sample = drive && !asked ? drive.input(client.predicted) : input;
+      const poses = client.tick(now, sample);
+      if (drive?.done && !asked && destination) { asked = true; connection.session.request(destination.target.id, 'tavern'); }
+      return poses;
+    } };
+  const controller = createWalkController({ camera: stage.camera, surface: stage.canvas, realm, collision: client.world,
+    hud: options.host, heading: client.interior.entry.yaw * Math.PI / 128 });
+  const connection = bindWalkInteractions(client.room);
+  // Restore a retained seat only from a fresh room bootstrap, through the existing camera/interaction owner.
+  // A late answer to an abandoned local request never passes through this restoration path.
+  const restored = new Set<(accepted: InteractionAccepted) => void>();
+  let restoreSeat = false;
+  const offRestore = client.room.onMessage('private', (message: RealmPrivateMessage) => {
+    if (message.type === 'interaction' && message.requestId === null && message.writerEpoch === client.room.state.writerEpoch) restoreSeat = true;
+  });
+  const session: InteractionSession = { ...connection.session, onAccepted(listener) {
+    restored.add(listener); const off = connection.session.onAccepted(listener);
+    return () => { restored.delete(listener); off(); };
+  } };
+  let tableView: { frame(dt: number, now: number): void; close(): void } | null = null;
+  let selected: string | null = null, disposed = false;
+  const places: InteractionPlaces = {
+    open({ action, record }) {
+      const chair = tavernSeatOf(record.target.id), table = kit.tables.find(t => t.id === chair?.table);
+      if (action !== 'tavern' || !chair || !table) return null;
+      const seat = chair.seat === '1' ? 0 : 1, direction = seat === 0 ? -1 : 1;
+      let portrait = stage.camera.aspect < 1;
+      // Same board as the miniature. Frame over this end, above the actual seat; hide only the local body.
+      const framing = () => clearShot(client.world, { eye: [table.centre[0], table.centre[1] + (portrait ? 2.6 : 1.15), table.centre[2] + direction * (portrait ? 1.75 : 1.15)],
+        at: [table.centre[0], table.centre[1] + .03, table.centre[2] + (portrait ? direction * .35 : 0)] });
+      const shot = framing();
+      if (!shot) return null;
+      const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      stage.camera.fov = portrait ? 56 : 43; stage.camera.filmOffset = 0; stage.camera.updateProjectionMatrix();
+      let ease = createShotEase(stage.camera, shot, { reducedMotion });
+      const lease = options.requestInput(`pong:${table.id}`);
+      const hand = bindPongHand(lease, seat, { target: () => client.presentations.get(table.id)?.aimPosition ?? 0,
+        aim: (value, now) => client.aim(value, now), start: () => client.start(table.id) }, () => performance.now());
+      selected = table.id;
+      const view = { frame(dt: number, now: number) {
+        if (portrait !== (stage.camera.aspect < 1)) {
+          portrait = stage.camera.aspect < 1;
+          const next = framing(); if (next) ease = createShotEase(stage.camera, next, { reducedMotion });
+          stage.camera.fov = portrait ? 56 : 43; stage.camera.updateProjectionMatrix();
+        }
+        ease.frame(now); hand.frame(dt, now);
+      },
+        close() { hand.dispose(); if (tableView === view) { tableView = null; selected = null; } } };
+      tableView = view;
+      return { close: () => view.close() };
+    },
+  };
+  const interactions = mountInteractionController({ host: options.host, surface: stage.canvas, session, camera: controller, places });
+  const direction = new THREE.Vector3(), projected = new THREE.Vector3(), raycaster = new THREE.Raycaster();
+  const offResize = stage.onResize((width, height) => controller.resize(width, height));
+  const offFeet = stage.localFeet(() => [client.predicted.x, client.predicted.y, client.predicted.z]);
+  let lastNames = -Infinity, ready = false, wasConnected = client.connected;
+  const offFrame = stage.onFrame((dt, now) => {
+    if (disposed) return;
+    if (!client.connected) { controller.release(); tableView?.close(); restoreSeat = false; }
+    else if (!wasConnected) controller.resume();
+    wasConnected = client.connected;
+    tableView?.frame(dt, now);
+    const poses = presentWalkers(controller.frame(now), connection.session.snapshot().seats, registry);
+    const gameFrame = client.gameFrame(now); stage.tavern.games(gameFrame);
+    const self = controller.debug.self;
+    if (self) {
+      stage.camera.getWorldDirection(direction);
+      interactions.frame({ now, look: { feet: [self.x, self.y, self.z], forward: [direction.x, direction.y, direction.z] },
+        records: registry.records, world: client.connected ? client.world : null, actor: { walkerId: client.selfId, zone: 'tavern:main', ownedPlotId: null },
+        project(point) {
+          projected.set(...point).project(stage.camera); if (projected.z < -1 || projected.z > 1) return null;
+          return { x: (projected.x + 1) * stage.canvas.clientWidth / 2, y: (1 - projected.y) * stage.canvas.clientHeight / 2 };
+        },
+        ray(x, y) {
+          raycaster.setFromCamera(new THREE.Vector2(x / stage.canvas.clientWidth * 2 - 1, 1 - y / stage.canvas.clientHeight * 2), stage.camera);
+          return { origin: raycaster.ray.origin.toArray() as [number, number, number], direction: raycaster.ray.direction.toArray() as [number, number, number] };
+        },
+      });
+      if (destination && !asked) {
+        if (session.snapshot().self.mode === 'seated') asked = true;
+        else if (interactions.debug.focus === destination.target.id && interactions.debug.action === 'tavern') asked = interactions.use();
+      }
+      if (restoreSeat && client.connected) {
+        restoreSeat = false;
+        const snapshot = session.snapshot();
+        if (snapshot.connected && snapshot.phase.kind === 'idle' && snapshot.self.mode === 'seated' && snapshot.self.targetId && controller.owner === 'walking') {
+          const accepted: InteractionAccepted = { requestId: 'restored-seat', targetId: snapshot.self.targetId, action: 'tavern', state: snapshot.self };
+          for (const listener of restored) listener(accepted);
+        }
+      }
+    }
+    people.update(poses.map(pose => ({ id: pose.id, look: pose.look, position: [pose.x, pose.y, pose.z], heading: pose.yaw * Math.PI / 128,
+      distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, time: now / 1000,
+      ...(pose.posture ? { posture: pose.posture } : {}), opacity: pose.self ? selected ? 0 : controller.selfOpacity : 1 })), stage.camera);
+    const names: TavernWalkState['names'][number][] = [];
+    if (now - lastNames > 200 || !ready) {
+      for (const pose of poses) {
+        if (pose.self && selected) continue;
+        const head = people.heads.get(pose.id); if (!head || head.distanceTo(stage.camera.position) > 20) continue;
+        projected.copy(head).project(stage.camera); if (projected.z < -1 || projected.z > 1 || Math.abs(projected.x) > 1 || Math.abs(projected.y) > 1) continue;
+        names.push({ id: pose.id, name: pose.name, x: (projected.x + 1) * stage.canvas.clientWidth / 2, y: (1 - projected.y) * stage.canvas.clientHeight / 2 });
+      }
+      ready ||= controller.debug.ready && poses.length > 0; lastNames = now;
+      options.onState({ ready, connected: client.connected, seated: selected, names });
+    }
+    (window as Window & { __chatdomTavernLive?: unknown }).__chatdomTavernLive = {
+      ready, connected: client.connected, self: controller.debug.self, input: controller.debug.input,
+      ...(drive ? { approach: { done: drive.done, requested: asked, predicted: { x: client.predicted.x, y: client.predicted.y, z: client.predicted.z } } } : {}),
+      walkers: poses.map(pose => ({ id: pose.id, name: pose.name, x: pose.x, y: pose.y, z: pose.z, posture: pose.posture ?? 'standing' })),
+      seated: selected, interaction: interactions.debug, tables: gameFrame.tables,
+    };
+  });
+  return { registry, controller, interactions,
+    dispose() { if (disposed) return; disposed = true; offFrame(); offResize(); offFeet(); offRestore(); restored.clear(); tableView?.close(); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); avatar.dispose(); },
+  };
+}

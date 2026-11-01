@@ -2,12 +2,19 @@ import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { createTavernStage, type TavernFraming } from './stage';
 import '@chatdom/ui/kit.css';
 import './tavern.css';
+import { TavernRoomSurface } from './Surface';
+import { requestBenchGameInput } from './bench-input';
+import { openLocalTestTavern } from './test-entry';
 
 export { mountTavern, type TavernMount } from './mount';
+export { TavernRoomSurface } from './Surface';
+export { connectTavern, type TavernClient } from './client';
 
 /** A room inspection route. No staged people or pretend games enter this surface. */
 export default function TavernBench() {
   const params = new URLSearchParams(location.search);
+  if (params.get('testWalker') === '1') return <TavernRoomSurface open={() => openLocalTestTavern(params)} requestInput={surface => requestBenchGameInput(surface)}
+    {...(params.get('seat') ? { benchSeat: params.get('seat')! } : {})} />;
   const initial = params.get('view');
   const [framing, setFraming] = createSignal<TavernFraming>(initial === 'bar' || initial === 'table' ? initial : 'room');
   const [ready, setReady] = createSignal(false), [error, setError] = createSignal(false);

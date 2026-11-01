@@ -1,8 +1,7 @@
-import { GATHER_HZ, type PongView } from '@chatdom/shared';
+import { GATHER_HZ, PONG_RULES, type PongView } from '@chatdom/shared';
 
 /** Logical tabletop metres; paddle zero is on the near (+Y) end. */
-export const PONG = Object.freeze({ halfWidth: 1, paddleY: 1.35, paddleHalf: .21, radius: .045,
-  paddleSpeed: 5, startSpeed: 1.8, maxSpeed: 4.8, step: 1 / GATHER_HZ, serveMs: 900, winningScore: 7 });
+export const PONG = PONG_RULES;
 export type PongSeat = 0 | 1;
 export interface PongState {
   match: string; phase: PongView['phase']; tick: number; at: number; serveAt: number;
@@ -91,7 +90,7 @@ export function tickPong(state: PongState): void {
 }
 /** Explicit public projection: never spread the authoritative state into a message or log. */
 export function pongView(state: PongState): PongView {
-  return { match: state.match, phase: state.phase, tick: state.tick, at: state.at, serveAt: state.serveAt,
+  return { match: state.match, phase: state.phase, tick: state.tick, at: Math.round(state.at), serveAt: Math.round(state.serveAt),
     ball: { ...state.ball }, paddles: [...state.paddles], acknowledged: [...state.acknowledged],
     score: [...state.score], winner: state.winner, reason: state.reason };
 }
