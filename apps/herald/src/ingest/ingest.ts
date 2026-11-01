@@ -108,7 +108,7 @@ export interface IngestOptions {
   /** A `user.authorization.revoke` for a configured account. */
   readonly onAuthorizationRevoked: (userId: string) => void;
   /** Twitch disabled one of our subscriptions; `status` is its short code. */
-  readonly onSubscriptionRevoked: (type: HeraldEventType, status: string) => void;
+  readonly onSubscriptionRevoked: (plan: SubscriptionPlan, status: string) => void;
   /**
    * Where pushed stream changes go. The live source passes its stream tracker, which also holds the polled
    * Get Streams state; without one they go straight to the source.
@@ -186,7 +186,7 @@ export class ChatIngest {
     this.#deliveries.set(frame.meta.messageId, true, receivedAt);
     if (frame.kind === 'revocation') {
       this.#counters.revocations++;
-      this.#options.onSubscriptionRevoked(plan.type, /^[a-z_]{1,64}$/.test(frame.subscription.status) ? frame.subscription.status : 'disabled');
+      this.#options.onSubscriptionRevoked(plan, /^[a-z_]{1,64}$/.test(frame.subscription.status) ? frame.subscription.status : 'disabled');
       return;
     }
     const at = this.#observedAt(frame.meta.at, receivedAt);

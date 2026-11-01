@@ -26,11 +26,11 @@ export interface LiveSourceHandle {
 /** The capabilities a live source cannot publish without: chat and its cleanup are one delivery family. */
 const REQUIRED: readonly Capability[] = ['chat'];
 /** Grants a running source waits for. While one is missing it is reread each minute, not only hourly. */
-const AWAITED: readonly Capability[] = ['chat', 'chatters', 'bits', 'hype', 'follows', 'rewards', 'polls'];
+const AWAITED: readonly Capability[] = ['chat', 'chatters', 'bits', 'hype', 'follows', 'rewards', 'polls', 'raids', 'shield'];
 const GRANT_READY: Partial<Record<Capability, string>> = { chat: 'attaching chat delivery', chatters: 'sweeping Chatters', bits: 'enabling cheers and Power-ups', hype: 'enabling hype trains',
-  follows: 'enabling follows', rewards: 'enabling kingdom rewards', polls: 'enabling polls and decrees' };
+  follows: 'enabling follows', rewards: 'enabling kingdom rewards', polls: 'enabling polls and decrees', raids: 'raid grant verified', shield: 'Shield Mode grant verified' };
 const GRANT_MISSING: Partial<Record<Capability, string>> = { chat: 'not publishing', chatters: 'not sweeping Chatters', bits: 'cheers and Power-ups unavailable', hype: 'hype trains unavailable',
-  follows: 'follows unavailable', rewards: 'kingdom rewards unavailable', polls: 'polls and decrees unavailable' };
+  follows: 'follows unavailable', rewards: 'kingdom rewards unavailable', polls: 'polls and decrees unavailable', raids: 'raid grant missing; reconnect the broadcaster', shield: 'Shield Mode grant missing; reconnect the broadcaster' };
 const GRANT_RECHECK_MS = 60_000;
 
 /**
@@ -115,7 +115,8 @@ export async function startLiveSource(options: {
     ...(options.realm ? { realm: options.realm } : {}),
   });
   const live = source;
-  const health = () => ({ ...live.health(), ...(options.realm ? { realm: options.realm.health() } : {}) });
+  const health = () => ({ ...live.health(), ...(options.realm ? { realm: options.realm.health() } : {}),
+    authorization: authority?.report?.capabilities.filter(entry => entry.capability === 'raids' || entry.capability === 'shield') ?? null });
   host = { get current() { return live.current; }, subscribe: listener => live.subscribe(listener), health };
   try {
     await live.open();

@@ -86,6 +86,11 @@ describe('SIMULATED EventSub door', () => {
     expect(toFrame({ subscription: { type: 'channel.cheer', version: '1' }, event: CLI_CHEER }, 'd', 5, plans)?.subscription.type).toBe('channel.bits.use');
     expect(toFrame({ subscription: { type: 'channel.prediction.begin', version: '1' }, event: {} }, 'd', 5, plans)).toBeNull();
     expect(toFrame({ subscription: { type: 'channel.raid', version: '2' }, event: raid }, 'd', 5, plans)).toBeNull();
+    const outgoing = { ...raid, to_broadcaster_user_id: '41245072', from_broadcaster_user_id: KINGDOM };
+    expect(toFrame({ subscription: { type: 'channel.raid', version: '1' }, event: outgoing }, 'out', 5, plans)?.subscription.condition)
+      .toEqual({ from_broadcaster_user_id: KINGDOM });
+    expect(toFrame({ subscription: { type: 'channel.raid', version: '1' }, event: { ...raid, to_broadcaster_user_id: '55' } }, 'wrong', 5, plans)).toBeNull();
+    expect(toFrame({ subscription: { type: 'channel.raid', version: '1' }, event: outgoing }, 'wrong-side', 5, plans.filter(plan => plan.type !== 'channel.raid' || 'to_broadcaster_user_id' in plan.condition))).toBeNull();
     expect(toFrame('nonsense', 'd', 5, plans)).toBeNull();
   });
 });

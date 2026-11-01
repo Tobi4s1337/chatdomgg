@@ -140,6 +140,7 @@ function get(port: number, path: string): Promise<{ status: number; body: string
 interface Health {
   readonly source: {
     readonly available: boolean; readonly condition: string; readonly reason: string | null;
+    readonly authorization: readonly { readonly capability: string; readonly available: boolean; readonly blockers: readonly { readonly kind: string; readonly scopes: readonly string[] }[] }[];
     readonly frame: null | { readonly epoch: string; readonly present: number; readonly named: number; readonly streamLive: boolean; readonly connection: string };
     readonly capacity: { readonly slots: number; readonly bound: number; readonly unplaced: number };
     readonly counters: { readonly overflowed: number; readonly canceled: number; readonly capacityHits: number; readonly bindingsSaved: number };
@@ -263,6 +264,18 @@ describe('the dev composition under SIMULATED Twitch', { timeout: 60_000 }, () =
     await until(() => optional.every(type => r.eventsub.subscriptions.some(subscription => subscription.type === type)), 5_000, 100);
   });
 
+  it('reports missing raid and shield grants while old grants keep chat publishing', async () => {
+    const r = await rig();
+    await boot(r);
+    await publishing(r);
+    const authorization = (await health(r)).source.authorization;
+    expect(authorization).toEqual(expect.arrayContaining([
+      expect.objectContaining({ capability: 'raids', available: false, blockers: [expect.objectContaining({ kind: 'missing_scopes', scopes: ['channel:manage:raids'] })] }),
+      expect.objectContaining({ capability: 'shield', available: false, blockers: [expect.objectContaining({ kind: 'missing_scopes', scopes: ['moderator:read:shield_mode'] })] }),
+    ]));
+    expect((await health(r)).source.available).toBe(true);
+  });
+
   it('without the chat grants it observes the broadcast but never publishes or asks Twitch for chat', async () => {
     const r = await rig({ grants: {} });
     await boot(r);
@@ -271,7 +284,7 @@ describe('the dev composition under SIMULATED Twitch', { timeout: 60_000 }, () =
     expect(h.source).toMatchObject({ available: false, reason: 'unauthorized' });
     expect((await get(r.handle!.server.port, STREAM_PATH)).status).toBe(503);
     const requested = r.eventsub.subscriptions.map(subscription => subscription.type).sort();
-    expect(requested).toEqual(['channel.raid', 'stream.offline', 'stream.online', 'user.authorization.revoke']);
+    expect(requested).toEqual(['channel.raid', 'channel.raid', 'stream.offline', 'stream.online', 'user.authorization.revoke']);
     expect(r.fake.count('GET', 'api.twitch.tv/helix/chat/chatters')).toBe(0);
     await expectNothingPrivateEscaped(r);
   });

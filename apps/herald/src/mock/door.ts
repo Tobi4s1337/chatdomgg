@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { KingdomIdSchema, type KingdomId } from '@chatdom/shared';
 import { parseTwitchTime, type DeliveryFrame } from '@chatdom/twitch';
 import { ChatIngest } from '../ingest/ingest';
-import { planSubscriptions, type SubscriptionPlan } from '../ingest/subscriptions';
+import { planSubscriptions, subscriptionIdentity, type SubscriptionPlan } from '../ingest/subscriptions';
 import { MemoryBindingStore } from '../source/bindings';
 import { presentKingdom } from '../source/kingdom';
 import { toPresenceInput, type Observation } from '../source/observations';
@@ -143,11 +143,13 @@ export function toFrame(payload: unknown, messageId: string, at: number, plans: 
   const { subscription, event } = payload as { subscription?: { type?: unknown; version?: unknown }; event?: unknown };
   if (!subscription || typeof subscription.type !== 'string' || typeof subscription.version !== 'string' || !event || typeof event !== 'object') return null;
   const adapted = adaptCliEvent(subscription.type, subscription.version, event as Record<string, unknown>);
-  const plan = plans.find(candidate => candidate.type === adapted.type && candidate.version === adapted.version);
+  const plan = plans.find(candidate => candidate.type === adapted.type && candidate.version === adapted.version
+    && (candidate.type !== 'channel.raid' || Object.entries(candidate.condition).every(([key, value]) =>
+      (adapted.event as Record<string, unknown>)[key] === value)));
   if (!plan) return null;
   return {
     kind: 'notification', meta: { messageId, at },
-    subscription: { id: `simulated-door-${plan.type}`, status: 'enabled', type: plan.type, version: plan.version, condition: { ...plan.condition }, conduitId: MOCK_CONDUIT_ID },
+    subscription: { id: `simulated-door-${subscriptionIdentity(plan).key}`, status: 'enabled', type: plan.type, version: plan.version, condition: { ...plan.condition }, conduitId: MOCK_CONDUIT_ID },
     event: adapted.event,
   };
 }
