@@ -11,7 +11,7 @@ import { createNativeTown } from '../../../apps/realm/src/founded/native';
 export async function fixture() {
   const kingdomId = KingdomIdSchema.parse('999000001'), owner = PersonIdSchema.parse('999000002');
   const plan = generateSettlementPlan({ seed:'willowmere', tier:'hamlet', firstYear:2025, year:2026 });
-  const plot = plan.homes.find(p => p.tier === 'hut' && p.style === 'hearth')!;
+  const plot = plan.homes.find(p => p.tier === 'hut' && p.style === 'hearth' && p.variant === 0)!;
   if (!plot) throw new Error('Missing suitable hut');
   let growth = createGrowthState(kingdomId, 'simulated'), seq = 0;
   growth = reduceGrowth(growth, { type:'home-bound', kingdomId, origin:'simulated', seq:++seq, at:1, personId:owner, plotId:plot.id, installedTier:'hut' }).state;
