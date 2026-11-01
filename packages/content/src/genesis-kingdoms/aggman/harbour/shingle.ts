@@ -21,6 +21,11 @@ export interface ShingleSite {
   readonly reach: number;
   /** Cells left bare, in plan: where the quay, a slip or a building already stands. */
   readonly clear?: (x: number, z: number) => boolean;
+  /**
+   * Cells outside the nearest berth at local cell point (x, z), ≤ 0 inside: where a boat lies drawn up. A berth is
+   * stones however far up the bank it lies, with a margin of stones round it, so no hull ever rests on turf.
+   */
+  readonly berth?: (x: number, z: number) => number;
 }
 
 export interface ShingleStrand extends AggmanPiece {
@@ -44,38 +49,72 @@ function drift(x: number, z: number, scale: number, seed: number): number {
   return a + (b - a) * s(fu) + (c - a) * s(fv) + (a - b - c + d) * s(fu) * s(fv);
 }
 
+/** Pebble spacing in cells: one stone seeded in every 3×3 cell square, about 37 cm across. */
+const SPACING = 3;
+/** Cells nearer than this to the crack between two stones are its shadowed line. */
+const CRACK = .35;
+/** Cells round a berth that are stones too, before the margin thins into the turf like the strand's own edge. */
+const BERTH_MARGIN = 9;
+
+/** A stone of the strand: its seed point in cells and its key. Nearer points to a cell are cut by a weight, so stones differ in size. */
+interface Pebble { readonly key: number; readonly cx: number; readonly cz: number; readonly size: number }
+
 /**
- * A strand of harbour shingle following the ground the host sampled: rounded stones about 37 cm across laid as a
- * skin one cell proud of the bank, so the turf gives way to a pale stony beach between the grass and the sea.
+ * The stones round a cell, Worley fashion: each 3×3 square of the strand seeds one stone at a jittered point with
+ * its own size, and a cell belongs to the stone nearest it (less its size). The gap to the second nearest tells how
+ * close the cell is to a crack between two stones.
+ */
+function pebbleAt(x: number, z: number, seed: number): { readonly stone: Pebble; readonly crack: number; readonly middle: number } {
+  const gi = Math.floor(x / SPACING), gj = Math.floor(z / SPACING);
+  let first: Pebble | undefined, d1 = Infinity, d2 = Infinity;
+  for (let j = gj - 1; j <= gj + 1; j++) for (let i = gi - 1; i <= gi + 1; i++) {
+    const cx = (i + .2 + .6 * noise(i, j, seed, 31)) * SPACING, cz = (j + .2 + .6 * noise(i, j, seed, 32)) * SPACING;
+    const size = noise(i, j, seed, 33) * 1.1 - .35;
+    const d = Math.hypot(x - cx, z - cz) - size;
+    if (d < d1) { d2 = d1; d1 = d; first = { key: (i & 0xffff) | ((j & 0xffff) << 16), cx, cz, size }; }
+    else if (d < d2) d2 = d;
+  }
+  return { stone: first!, crack: d2 - d1, middle: d1 + first!.size };
+}
+
+/**
+ * A strand of harbour shingle following the ground the host sampled: rounded stones of uneven size, about 37 cm
+ * across, laid as a skin one cell proud of the bank, so the turf gives way to a pale stony beach between the grass
+ * and the sea.
  *
- * - Dry stones up the bank are warm grey and sandy grey, with some pale limestone and the odd cream quartz; a few
- *   stand a cell proud, and at the inland edge they thin out into the turf rather than stopping on a line.
+ * - Each stone is its own shape: cells belong to the nearest of a jittered field of stones of uneven size, the
+ *   cracks between them are shadowed a tone darker and the bigger stones crown a cell higher at their middles, so
+ *   close in the beach reads as rounded pebbles bedded in each other, never as courses of paving.
+ * - Dry stones up the bank are warm grey and sandy grey, with some pale limestone and the odd cream quartz; at the
+ *   inland edge they thin out into the turf rather than stopping on a line.
  * - Below the wrack line the stones are wet and dark, and they run on under the water as a weedy bed, so the
  *   shallows show stones and not a seam.
  * - Along the wrack line lie weed and the odd bleached stick of driftwood, the last tide's mark.
+ * - Wherever a boat lies drawn up, the stones run on round her berth, so no hull rests on turf.
  */
 export function createShingleStrand(site: ShingleSite): ShingleStrand {
   const { length: L, depth: D, water, reach } = site;
   if (!Number.isInteger(L) || !Number.isInteger(D) || L < 8 || L > 256 || D < 8 || D > 256) throw new Error('A shingle strand is 8–256 cells each way.');
   if (!(reach > 8)) throw new Error('A shingle strand reaches more than eight cells up its bank.');
   const seed = [...site.id].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 0x01000193), 0x811c9dc5);
-  // Stones are laid in rows of three-cell pebbles, each row shifted, so the courses never read as a grid.
-  const stoneOf = (x: number, z: number): readonly [number, number, number, number] => {
-    const row = Math.floor(z / 3), shift = Math.floor(noise(row, seed, 11) * 3), column = Math.floor((x + shift) / 3);
-    return [column, row, column * 3 - shift + 1.5, row * 3 + 1.5];
-  };
-  type Column = { top: number; material: number; proud: boolean };
+  type Column = { top: number; floor: number; material: number };
   const columns: (Column | undefined)[] = new Array(L * D);
   let low = Infinity, high = -Infinity;
   for (let z = 0; z < D; z++) for (let x = 0; x < L; x++) {
     if (site.clear?.(x + .5, z + .5)) continue;
     const inland = site.shore(x + .5, z + .5);
-    const edge = reach * (.75 + .5 * drift(x, z, 40, seed));
-    if (inland < -UNDERWATER || inland > edge) continue;
-    const [sx, sz, cx, cz] = stoneOf(x, z), pick = noise(sx, sz, seed);
+    if (inland < -UNDERWATER) continue;
+    const { stone, crack, middle } = pebbleAt(x + .5, z + .5, seed);
+    const pick = noise(stone.key, seed, 1);
     // The inland fringe: whole stones drop out as the turf takes over, the nearer the edge the fewer.
+    const edge = reach * (.75 + .5 * drift(x, z, 40, seed));
     const fringe = (edge - inland) / (reach * .3);
-    if (fringe < 1 && pick > fringe) continue;
+    const onStrand = inland <= edge && (fringe >= 1 || pick <= fringe);
+    // A berth's margin thins the same way, so the stones round a boat meet the turf as the strand does.
+    const out = site.berth?.(x + .5, z + .5) ?? Infinity;
+    const margin = BERTH_MARGIN * (.7 + .6 * drift(x, z, 12, seed + 3));
+    const inBerth = out <= 0 || (out < margin && pick <= (margin - out) / (margin * .5));
+    if (!onStrand && !inBerth) continue;
     const ground = site.ground(x + .5, z + .5);
     const wet = inland < WRACK[0];
     const wrack = inland >= WRACK[0] && inland < WRACK[1] && drift(x, z, 9, seed + 7) > .58;
@@ -85,12 +124,17 @@ export function createShingleStrand(site: ShingleSite): ShingleStrand {
     else if (inland < 0) material = pick < .55 ? MAT.darkStone : pick < .85 ? MAT.waterbed : MAT.stone;
     else if (wet) material = pick < .5 ? MAT.darkStone : pick < .9 ? MAT.stone : MAT.paving;
     else material = pick < .55 ? MAT.stone : pick < .85 ? MAT.paving : pick < .98 ? MAT.limestone : MAT.cream;
-    // A stone's cells share one height, so it sits as one rounded stone and not a stair of cells.
-    const seat = site.ground(Math.min(L - .5, Math.max(.5, cx)), Math.min(D - .5, Math.max(.5, cz)));
-    const top = Math.floor(Math.max(ground, seat - .5));
-    const proud = !wet && !wrack && noise(sx, sz, seed, 5) < .06;
-    columns[x + L * z] = { top, material, proud };
-    low = Math.min(low, Math.floor(ground) - 1);
+    // A stone sits as one: its cells take the height of the bank at its middle, a cell proud of the turf.
+    const seat = site.ground(Math.min(L - .5, Math.max(.5, stone.cx)), Math.min(D - .5, Math.max(.5, stone.cz)));
+    const bed = Math.floor(ground);
+    let top = Math.max(bed, Math.floor(seat - .5)) + 1;
+    // The crack between two stones is shadowed: a darker tone, wet or dry. A big dry stone crowns a cell higher at
+    // its middle, so close in each stone shows a lit top and a shaded rim. (Cracks a cell lower read better still,
+    // but cost three times the triangles of a plain skin; tone and crown cost half again.)
+    if (!wrack && crack < CRACK) material = wet ? (material === MAT.darkStone ? MAT.waterbed : MAT.darkStone) : material === MAT.stone ? MAT.darkStone : MAT.stone;
+    else if (!wet && !wrack && stone.size > .25 && middle < .9) top += 1;
+    columns[x + L * z] = { top, floor: Math.min(top - 2, bed - 1), material };
+    low = Math.min(low, bed - 1);
     high = Math.max(high, top + 2);
   }
   if (!Number.isFinite(low)) throw new Error(`shingle strand ${site.id}: no shore within the strand.`);
@@ -101,11 +145,9 @@ export function createShingleStrand(site: ShingleSite): ShingleStrand {
   for (let z = 0; z < D; z++) for (let x = 0; x < L; x++) {
     const column = columns[x + L * z];
     if (!column) continue;
-    const top = column.top - base;
-    // A skin two cells deep under the top stone, of the same stone, so the step between neighbours on the bank shows
-    // the stone's own side and not a dark riser striping the beach.
-    for (let y = Math.max(0, top - 2); y <= top; y++) g.set(x, y, z, column.material);
-    if (column.proud && top + 1 < height) g.set(x, top + 1, z, column.material);
+    // A skin down to under the bank, of the same stone, so the step between neighbours on the bank shows the
+    // stone's own side and not a dark riser striping the beach.
+    for (let y = Math.max(0, column.floor - base); y <= column.top - base; y++) g.set(x, y, z, column.material);
   }
   // Driftwood: a few bleached sticks along the wrack line, never more than one in ten metres of strand.
   for (let i = 0; i < Math.floor(L / 80) + 1; i++) {
@@ -116,8 +158,8 @@ export function createShingleStrand(site: ShingleSite): ShingleStrand {
       const span = 10 + Math.floor(noise(i, seed, 22) * 8), slant = noise(i, seed, 23) < .5 ? 1 : -1;
       for (let s = 0; s < span; s++) {
         const x = x0 + s, z = z0 + Math.floor(s / 5) * slant;
-        const column = columns[x + L * z];
-        if (x >= L || z < 0 || z >= D || !column) break;
+        const column = x < L && z >= 0 && z < D ? columns[x + L * z] : undefined;
+        if (!column) break;
         g.set(x, column.top - base + 1, z, s === 0 || s === span - 1 ? MAT.bark : MAT.timber);
       }
       break;

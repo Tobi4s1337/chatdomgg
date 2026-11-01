@@ -26,6 +26,17 @@ watchtower keep on the rise, and a working harbour on the shore below. These are
 - **Boats are hauled up from where the water actually is.** The waterline curves about 5 m seaward west of the
   lane, so the drawn-up boats are placed four to six metres above the local waterline (`waterlineAt`), not from the
   lane's shore. A test holds that each one lies on stones.
+- **Drawn-up boats lie along the bank, on a berth of stones.** Laid bow to the sea, a 4.9 m hull on the 22 % bank
+  had its stern a metre into the ground: close in only the gunwales showed. Each now lies along the contour, turned
+  so the bilge she heels onto is the seaward one (a boat on a sloping beach settles that way, and the 9–13° heel
+  nearly matches the bank), with her keel seated a cell into the stones at her own middle. Her whole piece and
+  0.6 m round it is a berth (`ShingleSite.berth`): stones however far up the bank it lies, with a margin that thins
+  into the turf like the strand's own edge. A test holds 97 % of every berth and its margin is stones.
+- **Shingle is pebbles, not courses.** Rows of three-cell stones read as laid paving close in. Each stone is now
+  its own shape (cells belong to the nearest of a jittered field of stones of uneven size), the crack between two
+  stones is shadowed a tone darker, and bigger dry stones crown a cell higher at their middles. Lowering the cracks
+  a cell read best but tripled the strand's triangles (~100k a piece, near 400k for the beach against the phone's
+  whole 600k world budget); tone and crown cost about half again a plain skin: 186k for all four pieces as composed.
 - **A ground skin packs in one sweep.** The strand is a thin 196 × 124 cell skin; the harbour grid's six-order box
   search cost ~0.9 s each at load. The packer now indexes by strides, and the strand packs in one order (x, z, y):
   ~60 ms warm, ~4,000 boxes and ~46,000 triangles per piece. The mesh comes from the voxels, so the look is unchanged.
