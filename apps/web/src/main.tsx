@@ -13,9 +13,9 @@ const root = document.getElementById('root');
 if (!root) throw new Error('Missing application root');
 const atlas = import.meta.glob<{ default: Component }>('./atlas/index.tsx');
 const loadAtlas = atlas['./atlas/index.tsx'];
-const laneViews = import.meta.glob<{ default: Component }>(['../../panel/src/Panel.tsx', './stream/index.tsx', './avatar-bench/index.tsx', './forge-bench/index.tsx', './audio-bench/index.tsx', './template-bench/index.tsx', './citizen-behaviour-bench/index.tsx', './forge-ritual-bench/index.tsx', './forge-refusal-bench/index.tsx', './citizen-card/index.tsx', './twitch-moments-bench/index.tsx', './campfire/index.tsx', './tavern/index.tsx', './raid-gate/index.tsx', './emotes/index.tsx', './passport/index.tsx']);
+const laneViews = import.meta.glob<{ default: Component }>(['../../panel/src/Panel.tsx', './stream/index.tsx', './avatar-bench/index.tsx', './forge-bench/index.tsx', './audio-bench/index.tsx', './template-bench/index.tsx', './citizen-behaviour-bench/index.tsx', './forge-ritual-bench/index.tsx', './forge-refusal-bench/index.tsx', './citizen-card/index.tsx', './twitch-moments-bench/index.tsx', './campfire/index.tsx', './tavern/index.tsx', './raid-gate/index.tsx', './emotes/index.tsx', './passport/index.tsx', './grand/index.tsx']);
 const lanePaths: Record<string, string> = {
-  '/-/passport':'./passport/index.tsx',
+  '/-/passport':'./passport/index.tsx', '/-/grand':'./grand/index.tsx',
   '/-/citizen-card':'./citizen-card/index.tsx', '/-/twitch-moments':'./twitch-moments-bench/index.tsx', '/-/campfire':'./campfire/index.tsx',
   '/-/tavern':'./tavern/index.tsx', '/-/raid-gate':'./raid-gate/index.tsx', '/-/emotes':'./emotes/index.tsx',
   '/panel': '../../panel/src/Panel.tsx', '/stream': './stream/index.tsx',
