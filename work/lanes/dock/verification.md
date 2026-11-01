@@ -20,6 +20,13 @@ pending an external change. This is not a verified wait on a running job.
 
 ## Current checkpoint — 2026-11-01
 
+Second unchanged-blocker audit: the previous audit was no progress, not a verified wait.
+Main remains `76ed4a5`, with zero new commits to merge. Direct inspection again finds the
+same broadcaster-only status guard, no undo branch in the scene presenter, and the two
+unchanged public-script lint references. No job is running and no new scope or capture
+was started. There is no later PRD task. This is audit 2; the goal remains active pending
+the main-owned corrections and integration, with DK10 unchecked.
+
 Dock UI/API implementation and nine individually captured, inspected SIMULATED UI stills
 are committed. See `visual-review.md` for exact paths and `completion.md` for the remaining
 end-state evidence. Every capture held the shared lock for one still and released it.
