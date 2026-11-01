@@ -1,10 +1,13 @@
 // The Chatdom panel: the kingdom under the video. A warm picture, your own window,
 // a little of tonight, and one drawer at a time. It is a window into belonging,
 // never a second game client.
-import { createEffect, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js';
+import { createPassportReading, type PassportReadState } from '@chatdom/ui/passport';
 import { Dynamic } from 'solid-js/web';
 import { selectAdapter } from './adapters/select';
-import type { Connection, Earned, Home, Light, LightChoice, PanelAdapter, PanelSnapshot, Picture } from './model';
+import { CardSheet, PassportCorner } from './card/CardSheet';
+import type { CardPortrait, CitizenCard, Connection, Earned, Home, Light, LightChoice, PanelAdapter, PanelSnapshot, PassportSource, Picture } from './model';
+import { PanelPassport } from './passport/PanelPassport';
 import { createPanelSound, type PanelCue } from './sound';
 import { ActSlip } from './ui/act';
 import { BackGlyph, BellGlyph, ForgeGlyph, HomeGlyph, PanelDefs, Seal, Shutters, TavernGlyph, TonightGlyph, WindowGlyph } from './ui/art';
@@ -20,6 +23,19 @@ type ReadyWindow = Window & { __chatdomReady?: boolean };
 
 /** How long the confirmed window takes to kindle: panes one by one, then the glow settles. */
 const KINDLE_MS = 2600;
+/** How long the card page takes to lift away from the passport, and to be laid back over it. */
+const TURN_MS = 560, RETURN_MS = 520;
+/** A finger drawn this far to the left across the card turns the page. */
+const SWIPE_PX = 44;
+
+/** Turning to the passport: the card page lifts away, the book lies open, and the page is laid back. */
+type Book = 'shut' | 'opening' | 'open' | 'closing';
+type Readable = Extract<PassportSource, { kind: 'readable' }>;
+
+/** The viewer's card and passport, when the home card authority supplied a card. */
+function cardOf(home: Home): { card: CitizenCard; passport: PassportSource } | null {
+  return (home.kind === 'citizen' || home.kind === 'guest') && home.card ? { card: home.card, passport: home.passport } : null;
+}
 
 const DRAWERS: readonly { id: Exclude<Drawer, 'light' | 'shelf'>; label: string; glyph: () => JSX.Element }[] = [
   { id: 'home', label: 'Home', glyph: HomeGlyph },
@@ -78,7 +94,53 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   // Who opened each drawer, so Back returns focus there. A nested drawer keeps its parent's opener.
   const openers = new Map<Drawer, HTMLElement | null>();
 
+  // The passport under the card. It is read once the card has been opened (the card shows the keepsakes it carries),
+  // through one reading for as long as the same source stands, shared by the card and the turned-to book.
+  const [book, setBook] = createSignal<Book>('shut');
+  const [cardSeen, setCardSeen] = createSignal(false);
+  let bookTimer: ReturnType<typeof setTimeout> | undefined, cornerEl: HTMLButtonElement | undefined;
+  const readable = createMemo<Readable | null>(() => {
+    const passport = cardOf(snap().home)?.passport;
+    return passport?.kind === 'readable' ? passport : null;
+  }, null, { equals: (a, b) => a?.transport === b?.transport });
+  const reading = createMemo(() => {
+    const source = readable();
+    if (!source || !cardSeen()) return null;
+    return createPassportReading(source.transport, source.disclosure ? { disclosure: () => readable()?.disclosure ?? undefined } : {});
+  });
+  const reduced = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  const focusBook = () => queueMicrotask(() => frameEl?.querySelector<HTMLElement>('.cp-book-layer [data-autofocus]')?.focus());
+  const openBook = () => {
+    if (book() !== 'shut' || !reading()) return;
+    clearTimeout(bookTimer);
+    sound.play('leaf');
+    if (reduced()) { setBook('open'); focusBook(); return; }
+    setBook('opening');
+    bookTimer = setTimeout(() => { setBook('open'); focusBook(); }, TURN_MS);
+  };
+  const closeBook = () => {
+    if (book() !== 'open') return;
+    clearTimeout(bookTimer);
+    sound.play('leaf');
+    const back = () => { setBook('shut'); queueMicrotask(() => cornerEl?.focus()); };
+    if (reduced()) { back(); return; }
+    setBook('closing');
+    bookTimer = setTimeout(back, RETURN_MS);
+  };
+  // The book's own turns: the cover opening or shutting sounds like hide and board, every other leaf like paper.
+  const onBookTurn = (turn: { dir: 'next' | 'prev'; view: number }) => sound.play(turn.view === 0 || (turn.view === 1 && turn.dir === 'next') ? 'cover' : 'leaf');
+  // A finger drawn to the left across the card turns to the passport, as a leaf would turn.
+  let swipe: { x: number; y: number; id: number } | null = null;
+  const onCardDown = (event: PointerEvent) => { if (event.pointerType !== 'mouse') swipe = { x: event.clientX, y: event.clientY, id: event.pointerId }; };
+  const onCardUp = (event: PointerEvent) => {
+    if (!swipe || swipe.id !== event.pointerId) return;
+    const dx = event.clientX - swipe.x, dy = event.clientY - swipe.y;
+    swipe = null;
+    if (dx < -SWIPE_PX && Math.abs(dy) < Math.abs(dx) * 0.6) openBook();
+  };
+
   const open = (next: Drawer, from: EventTarget | null) => {
+    if (next === 'home') setCardSeen(true);
     if (drawer() !== PARENT[next]) openers.clear();
     openers.set(next, from instanceof HTMLElement ? from : null);
     sound.play('page');
@@ -113,7 +175,13 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
     // Turning sound on is itself a gesture: answer it with the press, so the choice is heard.
     if (!next) { sound.gesture(); sound.play('tap'); }
   };
-  const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && drawer()) { event.preventDefault(); close(); } };
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return;
+    // The open book lays the card back over itself, wherever focus sits (a leaf that turned away takes focus with it);
+    // while a page is turning, Escape waits for it to land.
+    if (book() !== 'shut') { event.preventDefault(); if (book() === 'open') closeBook(); return; }
+    if (drawer()) { event.preventDefault(); close(); }
+  };
   // Only a gesture inside the panel may wake its sound. Captured first, so the press that wakes it is heard.
   const onGesture = () => sound.gesture();
 
@@ -122,6 +190,10 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
     const current = drawer(), now = snap();
     if (current === 'shelf' && now.shelf.kind !== 'offered') setDrawer(now.sections.night ? 'tonight' : null);
     else if ((current === 'home' && !now.sections.home) || (current === 'tonight' && !now.sections.night)) setDrawer(null);
+  });
+  // The book belongs to the card: if the card goes (its drawer closed, the streamer hid it, the card withdrawn), so does the book.
+  createEffect(() => {
+    if (book() !== 'shut' && (drawer() !== 'home' || !reading())) { clearTimeout(bookTimer); setBook('shut'); }
   });
   const tabs = () => DRAWERS.filter(item => item.id === 'home' ? snap().sections.home : item.id === 'tonight' ? snap().sections.night : true);
 
@@ -153,6 +225,7 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   onCleanup(() => {
     disposed = true;
     clearTimeout(kindleTimer);
+    clearTimeout(bookTimer);
     unsubscribe();
     adapter.dispose();
     sound.dispose();
@@ -170,7 +243,7 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   return <div class="cp-frame" classList={{ embedded }} ref={element => { frameEl = element; }}><div class="cp" data-chatdom-panel data-source={snap().source.kind} data-connection={snap().connection.kind}
     data-light={snap().light.kind} data-stream={snap().stream} data-home={snap().home.kind} data-drawer={drawer() ?? 'none'} data-ready={ready() ? 'true' : 'false'}
     data-view={snap().picture.kind === 'still' ? 'kingdom' : 'connection'} data-muted={muted() ? 'true' : 'false'}
-    data-act={snap().act?.status.kind ?? 'none'} data-shelf={snap().shelf.kind}>
+    data-act={snap().act?.status.kind ?? 'none'} data-shelf={snap().shelf.kind} data-book={book()}>
     <PanelDefs />
     <header class="cp-head">
       <Seal blank={!snap().kingdom} />
@@ -186,9 +259,9 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
       </button>
     </header>
 
-    <main class="cp-main" aria-hidden={drawer() ? 'true' : undefined} inert={drawer() ? true : undefined}>
+    <main class="cp-main" aria-hidden={drawer() || book() !== 'shut' ? 'true' : undefined} inert={drawer() || book() !== 'shut' ? true : undefined}>
       <PictureFrame picture={snap().picture} connection={snap().connection} embedded={embedded} ref={element => { pictureEl = element; }} />
-      <LightAction snap={snap()} kindling={kindling()} ref={element => { lightEl = element; }} onChoose={event => open('light', event.currentTarget)}
+      <LightAction snap={snap()} kindling={kindling()} portrait={cardOf(snap().home)?.card.portrait ?? null} ref={element => { lightEl = element; }} onChoose={event => open('light', event.currentTarget)}
         onHome={snap().sections.home ? event => open('home', event.currentTarget) : null} />
       <Show when={snap().act} fallback={<Show when={snap().sections.night}><TonightSlip snap={snap()} /></Show>}>{current =>
         <div class="cp-act-wrap" ref={element => { actEl = element; }} tabindex="-1">
@@ -197,8 +270,11 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
       </Show>
     </main>
 
-    <Show when={drawer()}>{current =>
-      <section class="cp-drawer" ref={element => { drawerEl = element; }} role="dialog" aria-modal="false" aria-labelledby="cp-drawer-title" data-drawer={current()}>
+    <Show when={book() !== 'open' ? drawer() : null}>{current =>
+      <section class="cp-drawer" ref={element => { drawerEl = element; }} role="dialog" aria-modal="false" aria-labelledby="cp-drawer-title" data-drawer={current()}
+        data-card={current() === 'home' && cardOf(snap().home) ? 'true' : undefined} data-book={book() === 'shut' ? undefined : book()}
+        inert={book() !== 'shut' ? true : undefined}
+        on:pointerdown={event => { if (current() === 'home') onCardDown(event); }} on:pointerup={event => { if (current() === 'home') onCardUp(event); }}>
         <div class="cp-drawer-head">
           <button class="cp-back" type="button" onClick={close} data-autofocus><BackGlyph /><span>{PARENT[current()] === 'tonight' ? 'Tonight' : 'The kingdom'}</span></button>
           <h2 id="cp-drawer-title" class="cp-drawer-title">{drawerTitle(current(), snap())}</h2>
@@ -206,14 +282,24 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
         <div class="cp-drawer-page" tabindex="-1">
           <Switch>
             <Match when={current() === 'light'}><LightChoiceSheet snap={snap()} onChoose={choose} /></Match>
-            <Match when={current() === 'home'}><HomeSheet snap={snap()} onLight={event => open('light', event.currentTarget)} /></Match>
+            <Match when={current() === 'home'}><HomeSheet snap={snap()} passport={reading()?.state() ?? null} onLight={event => open('light', event.currentTarget)} /></Match>
             <Match when={current() === 'tonight'}><TonightSheet snap={snap()} onShelf={event => open('shelf', event.currentTarget)} /></Match>
             <Match when={current() === 'tavern'}><TavernSheet snap={snap()} empty={reason => <Empty text={reason} detail="When it does, its tables and who sits at them show here." />} /></Match>
             <Match when={current() === 'forge'}><ForgeSheet snap={snap()} empty={reason => <Empty text={reason} detail="When it does, its fire, its anvils and your coals show here." />} /></Match>
             <Match when={current() === 'shelf'}><ShelfSheet snap={snap()} onUse={useProduct} /></Match>
           </Switch>
         </div>
+        <Show when={current() === 'home' && reading()}>
+          <PassportCorner ref={element => { cornerEl = element; }} private={reading()?.state().kind === 'hidden'} onTurn={() => openBook()} />
+        </Show>
       </section>}
+    </Show>
+
+    <Show when={book() !== 'shut' ? readable() : null}>{source =>
+      <div class="cp-book-layer" data-book={book()} inert={book() !== 'open' ? true : undefined}>
+        <PanelPassport transport={source().transport} places={source().places} simulated={source().simulated}
+          {...(reading() ? { reading: reading()! } : {})} onClose={closeBook} backLabel="Your card" onTurn={onBookTurn} />
+      </div>}
     </Show>
 
     <nav class="cp-nav" aria-label="Panel" style={{ '--tabs': tabs().length }}>
@@ -236,6 +322,7 @@ function connectionMotto(connection: Connection): string {
 }
 
 function drawerTitle(drawer: Drawer, snap: PanelSnapshot): string {
+  if (drawer === 'home' && cardOf(snap.home)) return 'Your card';
   if (drawer === 'home' && snap.home.kind === 'guest') return 'Your light here';
   if (drawer === 'tonight' && snap.stream === 'resting') return 'Last night';
   return { light: 'Light your window', home: 'Your home', tonight: 'Tonight', tavern: 'The tavern', forge: 'The forge', shelf: 'The shelf' }[drawer];
@@ -323,12 +410,16 @@ function lightNote(snap: PanelSnapshot): { title: string; detail: string; glyph:
 }
 
 /** The lit or resting plate opens the home card; when the streamer hides that card, the plate is words only. */
-function Plate(props: { class: string; classList?: Record<string, boolean>; onHome: Click | null; children: JSX.Element }) {
-  return <Dynamic component={props.onHome ? 'button' : 'div'} class={props.class} classList={props.classList}
-    {...(props.onHome ? { type: 'button', onClick: props.onHome } : {})}>{props.children}</Dynamic>;
+function Plate(props: { class: string; classList?: Record<string, boolean>; onHome: Click | null; portrait: CardPortrait | null; children: JSX.Element }) {
+  return <Dynamic component={props.onHome ? 'button' : 'div'} class={props.class} classList={{ ...props.classList, 'has-coin': !!props.portrait }}
+    {...(props.onHome ? { type: 'button', onClick: props.onHome } : {})}>
+    {props.children}
+    {/* There you are: your own painted portrait on the plate, opening your card. */}
+    <Show when={props.portrait}>{portrait => <span class="cp-coin" aria-hidden="true"><img src={portrait().url} alt="" width={portrait().width} height={portrait().height} decoding="async" /></span>}</Show>
+  </Dynamic>;
 }
 
-function LightAction(props: { snap: PanelSnapshot; kindling: boolean; ref: (element: HTMLElement) => void; onChoose: Click; onHome: Click | null }) {
+function LightAction(props: { snap: PanelSnapshot; kindling: boolean; portrait: CardPortrait | null; ref: (element: HTMLElement) => void; onChoose: Click; onHome: Click | null }) {
   const light = () => props.snap.light;
   const home = () => props.snap.home;
   const homeName = () => { const h = home(); return h.kind === 'citizen' || h.kind === 'guest' ? h.displayName : null; };
@@ -354,7 +445,7 @@ function LightAction(props: { snap: PanelSnapshot; kindling: boolean; ref: (elem
         </button>
       </Match>
       <Match when={lit()}>{current =>
-        <Plate class="cp-light-button lit" classList={{ kindling: props.kindling, guest: current().as === 'guest', plain: !props.onHome }} onHome={props.onHome}>
+        <Plate class="cp-light-button lit" classList={{ kindling: props.kindling, guest: current().as === 'guest', plain: !props.onHome }} onHome={props.onHome} portrait={props.onHome ? props.portrait : null}>
           <WindowGlyph lit kindling={props.kindling} />
           <span class="cp-light-words">
             <strong>{current().as === 'guest' ? 'Your light burns here' : 'Your window is lit'}</strong>
@@ -366,7 +457,7 @@ function LightAction(props: { snap: PanelSnapshot; kindling: boolean; ref: (elem
         </Plate>}
       </Match>
       <Match when={light().kind === 'resting'}>
-        <Plate class="cp-light-button resting" classList={{ plain: !props.onHome }} onHome={props.onHome}>
+        <Plate class="cp-light-button resting" classList={{ plain: !props.onHome }} onHome={props.onHome} portrait={props.onHome ? props.portrait : null}>
           <WindowGlyph lit={false} ember />
           <span class="cp-light-words"><strong>Your window is resting</strong><small>It lights again with the next stream.</small></span>
         </Plate>
@@ -424,8 +515,10 @@ function windowWords(snap: PanelSnapshot): string {
   }
 }
 
-function HomeSheet(props: { snap: PanelSnapshot; onLight: Click }) {
+function HomeSheet(props: { snap: PanelSnapshot; passport: PassportReadState | null; onLight: Click }) {
   const home = () => props.snap.home;
+  const card = () => cardOf(home())?.card ?? null;
+  const simulated = () => props.snap.source.kind === 'simulated';
   const citizen = () => home().kind === 'citizen' ? home() as Extract<Home, { kind: 'citizen' }> : null;
   const guest = () => home().kind === 'guest' ? home() as Extract<Home, { kind: 'guest' }> : null;
   const canLight = () => props.snap.light.kind === 'unshared' || props.snap.light.kind === 'refused';
@@ -433,6 +526,18 @@ function HomeSheet(props: { snap: PanelSnapshot; onLight: Click }) {
     <Empty text={(home() as { reason: string }).reason} detail={canLight() ? 'Chat still counts: speaking in chat lights your window on stream.' : undefined}>
       <Show when={canLight()}><button type="button" class="cp-inline-action" onClick={props.onLight}>Light your window</button></Show>
     </Empty>}>
+    <Match when={card() && citizen() ? { h: citizen()!, card: card()! } : null}>{found =>
+      <CardSheet card={found().card} street={found().h.street} place={found().h.place} window={windowWords(props.snap)} passport={props.passport} simulated={simulated()}
+        homePicture={found().h.picture.kind === 'still' ? { url: (found().h.picture as Still).url, alt: (found().h.picture as Still).alt } : null}>
+        <History items={found().h.history} label="Earned here" />
+      </CardSheet>}
+    </Match>
+    <Match when={card() && guest() ? { g: guest()!, card: card()! } : null}>{found =>
+      <CardSheet card={found().card} street={null} place={null} window={windowWords(props.snap)} passport={props.passport} simulated={simulated()} homePicture={null}>
+        <p class="cp-body">You already keep three homes, so here your light burns as a guest’s. Your presence still counts.</p>
+        <History items={found().g.history} label="Kept here" />
+      </CardSheet>}
+    </Match>
     <Match when={citizen()}>{h =>
       <div class="cp-sheet">
         <Show when={h().picture.kind === 'still' ? h().picture as Still : null}>{still =>

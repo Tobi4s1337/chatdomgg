@@ -148,12 +148,12 @@ export function createFlash() {
   geometry.setIndex([0, 1, 2, 0, 2, 3]);
   const material = new THREE.ShaderMaterial({
     name: 'forge-flash', transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
-    uniforms: { uPlace: { value: new THREE.Vector3() }, uSize: { value: 1 }, uCore: { value: 0 }, uRing: { value: 0 }, uRingAlpha: { value: 0 }, uColour: { value: new THREE.Color('#ffe7b8') } },
+    uniforms: { uPlace: { value: new THREE.Vector3() }, uSize: { value: 1 }, uCore: { value: 0 }, uHDR: { value: 0 }, uRing: { value: 0 }, uRingAlpha: { value: 0 }, uColour: { value: new THREE.Color('#ffe7b8') } },
     vertexShader: /* glsl */`
       uniform vec3 uPlace;uniform float uSize;varying vec2 vUv;
       void main(){vec4 view=modelViewMatrix*vec4(uPlace,1.);view.xy+=position.xy*uSize;vUv=position.xy;gl_Position=projectionMatrix*view;}`,
     fragmentShader: /* glsl */`
-      uniform float uCore,uRing,uRingAlpha;uniform vec3 uColour;varying vec2 vUv;
+      uniform float uCore,uRing,uRingAlpha,uHDR;uniform vec3 uColour;varying vec2 vUv;
       void main(){
         float r=length(vUv);
         // A soft warm core and a broad, faint shock ring: light on the metal, not a drawn circle.
@@ -161,7 +161,11 @@ export function createFlash() {
         float a=min(1.,core+ring);
         if(a<=.002)discard;
         gl_FragColor=vec4(uColour*a,a);
-        #include <tonemapping_fragment>
+        // Roof contact stays linear HDR for the kingdom post stack.
+        // Preserve the established local hammer flash treatment.
+        if(uHDR<.5){
+          #include <tonemapping_fragment>
+        }
         #include <colorspace_fragment>
       }`,
   });
@@ -170,10 +174,10 @@ export function createFlash() {
   const u = material.uniforms;
   return {
     mesh,
-    set(visible: boolean, place: THREE.Vector3, size: number, core: number, ring: number, ringAlpha: number, colour: THREE.Color) {
+    set(visible: boolean, place: THREE.Vector3, size: number, core: number, ring: number, ringAlpha: number, colour: THREE.Color, hdr = false) {
       mesh.visible = visible && (core > .002 || ringAlpha > .002);
       (u.uPlace!.value as THREE.Vector3).copy(place); u.uSize!.value = size;
-      u.uCore!.value = core; u.uRing!.value = ring; u.uRingAlpha!.value = ringAlpha; (u.uColour!.value as THREE.Color).copy(colour);
+      u.uCore!.value = core; u.uHDR!.value = Number(hdr); u.uRing!.value = ring; u.uRingAlpha!.value = ringAlpha; (u.uColour!.value as THREE.Color).copy(colour);
     },
     dispose() { geometry.dispose(); material.dispose(); },
   };

@@ -1,8 +1,10 @@
-/* global URLSearchParams:readonly, getComputedStyle:readonly */
+/* global URLSearchParams:readonly, getComputedStyle:readonly, NodeFilter:readonly */
 // Captures the citizen card bench (SIMULATED fixtures) under the shared host capture lock: one owned Vite server
-// and one Chromium, both closed before the lock is released.
+// and one Chromium, both closed before the lock is released. The page is Wren Tarnwalker's whole place: their plaque
+// with the portrait painted from their saved look, what they wear, and their passport read beneath it.
 //   node apps/web/src/citizen-card/capture.mjs [--port 5188]
-// Shots land in shots/citizen-card/<name>@<w>x<h>.png; console errors and off-host requests fail the run.
+// Shots land in shots/card-passport/card/<name>@<w>x<h>.png. Console errors, off-host requests, horizontal overflow,
+// text under 12 px and a page without its portrait, worn pieces or open passport fail the run.
 import { chromium } from '@playwright/test';
 import { createServer } from 'vite';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
@@ -15,14 +17,15 @@ const option = name => { const i = args.indexOf(name); return i < 0 ? undefined 
 const port = Number(option('--port') ?? 5188);
 assertCapturePort(port, { name: '--port' });
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
-const output = `${root}shots/citizen-card`;
+const output = `${root}shots/card-passport/card`;
 
-/** name, query, viewport and whether to keep the bench rail (never in product-facing frames). */
+/** name, query, viewport and whether to also keep the whole scrolled page. */
 const SHOTS = [
-  ['page-wren', { fixture: 'wren', mode: 'page' }, [1440, 900]],
-  ['page-wren', { fixture: 'wren', mode: 'page' }, [390, 844]],
+  ['page-wren', { fixture: 'wren', mode: 'page' }, [1440, 900], true],
+  ['page-wren', { fixture: 'wren', mode: 'page' }, [390, 844], true],
   ['dialog-wren', { fixture: 'wren', mode: 'dialog' }, [1440, 900]],
   ['dialog-wren', { fixture: 'wren', mode: 'dialog' }, [390, 844]],
+  ['page-knight', { fixture: 'knight', mode: 'page' }, [1440, 900]],
   ['page-unknown', { fixture: 'unknown', mode: 'page', light: 'night' }, [390, 844]],
   ['page-lapsed', { fixture: 'lapsed', mode: 'page', light: 'day' }, [1440, 900]],
   ['dialog-loading', { fixture: 'wren', mode: 'dialog', state: 'loading' }, [390, 844]],
@@ -58,17 +61,52 @@ try {
     return page;
   };
 
-  for (const [name, query, viewport] of SHOTS) {
+  // What a person can read on the page: the smallest text, overflow, and the parts Wren's page must have.
+  const audit = page => page.evaluate(() => {
+    let smallest = Infinity, where = '';
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const element = node.parentElement;
+      if (!node.textContent.trim() || !element || element.closest('svg, .cpc-visually-hidden, .ccb-bar')) continue;
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      const size = parseFloat(getComputedStyle(element).fontSize);
+      if (size < smallest) { smallest = size; where = node.textContent.trim().slice(0, 30); }
+    }
+    const portrait = document.querySelector('.cc-window img');
+    return {
+      smallest, where, overflow: document.documentElement.scrollWidth > window.innerWidth,
+      portrait: portrait ? { width: portrait.naturalWidth, height: portrait.naturalHeight, alt: portrait.getAttribute('alt') } : null,
+      worn: [...document.querySelectorAll('.cc-worn-name')].map(node => node.textContent),
+      passport: document.querySelector('.cpc')?.getAttribute('data-state') ?? null,
+      holder: document.querySelector('.cpc')?.textContent?.includes('Wren Tarnwalker') ?? false,
+      name: document.querySelector('.cc-name')?.textContent ?? null,
+    };
+  });
+
+  for (const [name, query, viewport, full] of SHOTS) {
     const page = await open(query, viewport);
     const path = `${output}/${name}@${viewport[0]}x${viewport[1]}.png`;
     await page.screenshot({ path });
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-    if (overflow) report.console.push(`${name}@${viewport.join('x')}: horizontal overflow`);
-    report.shots.push({ path: path.slice(root.length), bytes: (await stat(path)).size });
-    if (name === 'page-wren' && viewport[0] === 390) {
-      const full = `${output}/${name}-full@390x844.png`;
-      await page.screenshot({ path: full, fullPage: true });
-      report.shots.push({ path: full.slice(root.length), bytes: (await stat(full)).size });
+    const seen = await audit(page);
+    const at = `${name}@${viewport.join('x')}`;
+    if (seen.overflow) report.console.push(`${at}: horizontal overflow`);
+    if (seen.smallest < 12) report.console.push(`${at}: text at ${seen.smallest}px ("${seen.where}")`);
+    if (name === 'page-wren') {
+      const missing = [
+        seen.name !== 'Wren Tarnwalker' && `name ${seen.name}`,
+        !seen.portrait && 'portrait',
+        seen.worn.length !== 4 && `worn pieces (${seen.worn.length})`,
+        seen.passport !== 'visible' && `open passport (${seen.passport})`,
+        !seen.holder && 'the passport’s holder',
+      ].filter(Boolean);
+      if (missing.length) report.console.push(`${at}: missing ${missing.join(', ')}`);
+    }
+    report.shots.push({ path: path.slice(root.length), bytes: (await stat(path)).size, smallestText: seen.smallest, worn: seen.worn.length, passport: seen.passport });
+    if (full) {
+      const whole = `${output}/${name}-full@${viewport[0]}x${viewport[1]}.png`;
+      await page.screenshot({ path: whole, fullPage: true });
+      report.shots.push({ path: whole.slice(root.length), bytes: (await stat(whole)).size });
     }
     await page.close();
     console.log(`Captured ${name}@${viewport.join('x')}.`);

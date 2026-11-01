@@ -105,12 +105,25 @@
 .cc-page-head { z-index: 1; display: flex; gap: 14px; align-items: baseline; justify-content: center; flex-wrap: wrap; margin-bottom: 18px; text-align: center; }
 .cc-page-mark { font: 400 22px/1 var(--cc-caps); letter-spacing: .16em; color: #f6d995; text-shadow: 0 1px 0 rgba(0, 0, 0, .4); }
 .cc-page-kingdom { font: italic 400 17px/1.2 var(--cc-display); color: #f2e2c0; opacity: .9; }
-/* The SPA also loads the workspace's generic main layout. Keep this host a block so the inline-size
-   contained plaque stretches to the page track instead of shrinking inside a centred flex column. */
+/* The SPA also loads the workspace's generic main layout. Keep the card's own track a block so the inline-size
+   contained plaque stretches to it instead of shrinking inside a centred flex column. */
 .cc-page-main {
-  z-index: 1; display: block; width: min(900px, 100%); min-height: 0; align-self: center;
+  z-index: 1; display: grid; justify-items: center; width: min(1240px, 100%); min-height: 0; align-self: center;
   margin: 0; padding: 0; text-align: start;
 }
+.cc-page-card { display: block; width: min(940px, 100%); }
+/* Their passport, beneath their card: one person's place, read top to bottom. */
+.cc-page[data-beneath='true'] { grid-template-rows: auto auto auto; }
+.cc-page[data-beneath='true'] .cc-page-main { align-self: start; }
+.cc-page-beneath { position: relative; display: grid; justify-items: center; width: 100%; margin-top: 4px; }
+/* A gilt thread from the card's sill down to the book's heading, so the two read as one thing. */
+.cc-page-thread {
+  display: block; width: 2px; height: 46px; margin-bottom: 6px;
+  background: radial-gradient(circle, #e4c27a 0 1px, transparent 1.4px) 0 0 / 2px 7px repeat-y;
+  -webkit-mask: linear-gradient(180deg, transparent, #000 30%, #000 70%, transparent);
+  mask: linear-gradient(180deg, transparent, #000 30%, #000 70%, transparent);
+}
+[data-light='day'] .cc-page-thread { background-image: radial-gradient(circle, #7a5424 0 1px, transparent 1.4px); }
 .cc-page-foot { z-index: 1; margin-top: 22px; font: italic 400 15px/1.4 var(--cc-text); color: #f4e3c3; opacity: .78; text-align: center; max-width: 34em; }
 [data-light='day'] .cc-page-mark { color: #5a3a12; text-shadow: 0 1px 0 rgba(255, 246, 222, .6); }
 [data-light='day'] .cc-page-kingdom, [data-light='day'] .cc-page-foot { color: #3a2a1c; opacity: .88; }
@@ -285,6 +298,33 @@
 /* The seal's corner belongs to it: facts wrap before they would run under the wax. */
 .cc-facts { padding-right: 88px; }
 .cc-seal { display: block; transform: rotate(-9deg); animation: cc-stamp .42s .2s cubic-bezier(.3, 1.4, .5, 1) both; }
+
+/* ---- What they wear of what they earned: a quiet ruled row under the hero ---------------------------------- */
+
+.cc-worn {
+  position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 12px; row-gap: 10px; align-items: center;
+  margin-top: 26px; padding-top: 18px;
+}
+.cc-worn::before {
+  /* A hairline ruled in ink across the sheet, fading at both ends. */
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, rgba(138, 115, 86, 0), rgba(138, 115, 86, .55) 12%, rgba(138, 115, 86, .55) 88%, rgba(138, 115, 86, 0));
+}
+.cc-worn .cc-mark { width: 28px; height: 28px; }
+.cc-worn-label { margin: 0; font: 400 15px/1.2 var(--cc-caps); letter-spacing: .1em; color: var(--cc-ink-faint); }
+.cc-worn-list {
+  grid-column: 1 / -1; list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 26px;
+}
+.cc-worn-piece { position: relative; display: grid; align-content: start; gap: 3px; min-width: 0; padding-left: 16px; }
+.cc-worn-piece::before {
+  /* A small brass stud, the way a piece is pinned to a card. */
+  content: ''; position: absolute; left: 0; top: .52em; width: 7px; height: 7px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff1c4, #c99a45 55%, #6a4716);
+  box-shadow: 0 0 0 .8px #5a3d12, 0 1px 1px rgba(40, 20, 6, .35);
+}
+.cc-worn-name { font: 400 20px/1.15 var(--cc-display); color: var(--cc-ink); overflow-wrap: anywhere; }
+.cc-worn-story { font: italic 400 15px/1.3 var(--cc-text); color: var(--cc-ink-soft); overflow-wrap: anywhere; }
 .cc-crest { display: block; }
 
 /* ---- States -------------------------------------------------------------------------------------------- */
@@ -327,6 +367,9 @@
   .cc-seal { width: 64px !important; height: 64px !important; }
   .cc-plate { max-width: calc(100% - 110px); padding: 4px 24px 5px; }
   .cc-plate span { font-size: 15px; }
+  .cc-worn { margin-top: 18px; }
+  .cc-worn-list { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .cc-worn-name { font-size: 19px; }
 }
 @media (max-width: 480px) {
   .cc-wood { padding: 30px 12px 14px; border-radius: 13px; }
