@@ -1,4 +1,4 @@
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createPanelHttp as createReader, type PanelHttpOptions } from '../public/panel/http';
@@ -7,6 +7,8 @@ import { createTwitchUsers, type TwitchUsers } from '../public/panel/twitch-user
 import { verifyViewerToken } from './token';
 import { PanelPictures, validWebp } from './pictures';
 import { createPanelGifts, type PanelGiftRoute } from './gifts';
+import { createPanelConfiguration } from './configuration';
+import { createPanelBroadcaster } from './broadcast';
 
 interface PanelServices {
   realmOrigin: string;
@@ -16,6 +18,8 @@ interface PanelServices {
   users: TwitchUsers;
   fetch?: typeof fetch;
   gifts?: ReturnType<typeof createPanelGifts>;
+  configuration?: ReturnType<typeof createPanelConfiguration>;
+  broadcast?: ReturnType<typeof createPanelBroadcaster>;
 }
 const PREFIX = '/api/panel/v1/';
 const ID = /^[1-9][0-9]{0,31}$/;
@@ -32,8 +36,10 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
     pictures: new PanelPictures(env.PANEL_STILL_DIRECTORY ?? '/tmp/chatdom-panel-stills'),
     users: createTwitchUsers(env.TWITCH_CLIENT_ID && env.TWITCH_CLIENT_SECRET ? { clientId: env.TWITCH_CLIENT_ID, clientSecret: env.TWITCH_CLIENT_SECRET } : null),
   };
-  const reader = createReader(options), fetcher = services.fetch ?? fetch;
-  const key = options.extension ? extensionKey(options.extension.secret) : null;
+  const fetcher = services.fetch ?? fetch;
+  let key: Uint8Array | null = null;
+  try { key = options.extension?.clientId ? extensionKey(options.extension.secret) : null; } catch { /* Health names incomplete setup without a stack trace. */ }
+  const reader = createReader({ ...options, extension: key ? options.extension : null });
   const allowed = new Set([...(options.extension ? [`https://${options.extension.clientId}.ext-twitch.tv`] : []), ...(options.extraOrigins ?? [])]);
   const realm = async (path: string, body: unknown): Promise<Record<string, unknown>> => {
     if (!services.panelSecret || services.panelSecret.length < 32) throw new Error('REALM_INGRESS_PANEL_SECRET');
@@ -44,11 +50,17 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
     if (!response.ok) throw new Error('realm unavailable');
     return response.json() as Promise<Record<string, unknown>>;
   };
+  const webhookSecret = env.PANEL_BITS_EVENTSUB_SECRET ?? (key ? createHmac('sha256', key).update('chatdom:extension-bits:v1').digest('hex') : undefined);
   const gifts = services.gifts ?? createPanelGifts({ extensionId: options.extension?.clientId ?? '', extensionSecret: options.extension?.secret ?? '',
     ...(env.TWITCH_EXTENSION_CLIENT_SECRET ? { extensionClientSecret: env.TWITCH_EXTENSION_CLIENT_SECRET } : {}),
-    ...(env.PANEL_BITS_EVENTSUB_SECRET ? { webhookSecret: env.PANEL_BITS_EVENTSUB_SECRET } : {}), realm });
+    ...(webhookSecret ? { webhookSecret } : {}), realm });
+  const configuration = services.configuration ?? createPanelConfiguration({ extensionSecret: options.extension?.secret ?? '', realm });
+  const broadcastEnabled = !supplied && options.origin === 'live' && env.PANEL_DISABLE_BROADCAST !== '1' && services.panelSecret && options.extension;
+  const broadcast = services.broadcast ?? createPanelBroadcaster({ ...(broadcastEnabled ? { extensionId: options.extension!.clientId, extensionSecret: options.extension!.secret } : {}), ...(env.TWITCH_EXTENSION_OWNER_ID ? { ownerId: env.TWITCH_EXTENSION_OWNER_ID } : {}),
+    read: channelId => realm('/internal/realm/panel/kingdom', { kingdomId: channelId }) });
   // Supplied services are an explicitly owned test/embedding composition; the production door owns its worker.
   const stopGifts = supplied ? () => {} : gifts.startReconciliation();
+  if (!supplied) broadcast.start();
   const handler = async (request: IncomingMessage, response: ServerResponse, pathname: string): Promise<void> => {
     if (pathname === `${PREFIX}bits-webhook`) {
       if (request.method !== 'POST' || request.headers.origin) { response.writeHead(403, HEADERS).end(); return; }
@@ -85,6 +97,26 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
       return;
     }
     if (typeof origin === 'string' && !allowed.has(origin)) { send(403, { version: 1, status: 'refused' }); return; }
+    if (pathname === `${PREFIX}health`) {
+      if (request.method !== 'GET') { send(405, { version: 1, status: 'refused' }); return; }
+      const missing = [!options.extension?.clientId && 'TWITCH_EXTENSION_CLIENT_ID', !key && 'TWITCH_EXTENSION_SECRET',
+        !services.panelSecret && 'REALM_INGRESS_PANEL_SECRET'].filter((value): value is string => !!value);
+      send(missing.length ? 503 : 200, { version: 1, status: missing.length ? 'unavailable' : 'ready', missing,
+        broadcast: env.PANEL_DISABLE_BROADCAST === '1' || options.origin !== 'live' ? { status: 'disabled', missing: [] } : { status: env.TWITCH_EXTENSION_OWNER_ID && ID.test(env.TWITCH_EXTENSION_OWNER_ID) ? 'configured' : 'unavailable', missing: env.TWITCH_EXTENSION_OWNER_ID && ID.test(env.TWITCH_EXTENSION_OWNER_ID) ? [] : ['TWITCH_EXTENSION_OWNER_ID'] },
+        gifts: gifts.needs().length ? { status: 'unavailable', missing: gifts.needs() } : { status: 'configured', missing: [] } }); return;
+    }
+    if (pathname === `${PREFIX}configuration` || pathname === `${PREFIX}configure`) {
+      if (request.method !== 'POST') { send(405, { version: 1, status: 'refused' }); return; }
+      if (!key) { send(503, { version: 1, status: 'unavailable', message: 'TWITCH_EXTENSION_CLIENT_ID and TWITCH_EXTENSION_SECRET are required.' }); return; }
+      const chunks: Buffer[] = []; let size = 0;
+      for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 8 * 1024) { send(413, { version: 1, status: 'refused' }); return; } chunks.push(chunk); }
+      try {
+        const answer = await configuration.handle(pathname.endsWith('/configure') ? 'configure' : 'configuration', request.headers.authorization ?? null,
+          JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'));
+        send(answer.http, answer.body);
+      } catch { send(400, { version: 1, status: 'refused' }); }
+      return;
+    }
     const giftRoute = (['gifts', 'gift-intent', 'gift-receipt', 'gift-status', 'gift-cancel', 'gift-resolve', 'gift-choices'] as const).find(name => pathname === PREFIX + name);
     if (!giftRoute && !['kingdom', 'light', 'presence', 'pledge', 'picture', 'privacy', 'quiet', 'forget'].some(name => pathname === PREFIX + name)) { send(404, { status: 'refused' }); return; }
     if (request.method !== (pathname === `${PREFIX}picture` ? 'GET' : 'POST')) { send(405, { status: 'refused' }); return; }
@@ -125,6 +157,7 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
     try {
       if (pathname === `${PREFIX}kingdom`) {
         const state = await realm('/internal/realm/panel/kingdom', { kingdomId: viewer.channelId });
+        broadcast.touch(viewer.channelId, state);
         const stored = await services.pictures.read(viewer.channelId);
         const picture = stored ? { capturedAt: stored.capturedAt, revision: stored.revision, kind: stored.kind } : null;
         // Only a committed public fact is projected; no interpretation of private observations or rejected words.
@@ -134,7 +167,8 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
         const gift = state.giftMoment as { line?: string; committedAt?: number } | null;
         const moment = gift && typeof gift.line === 'string' && typeof gift.committedAt === 'number' && gift.committedAt >= (event?.at ?? 0)
           ? gift.line : event?.type === 'home' ? 'A home is raised' : event?.type === 'forge' ? 'A new piece leaves the Forge' : fact?.body?.kind ? words[fact.body.kind] ?? null : null;
-        send(200, { version: 1, status: state.status, stream: state.stream ?? 'resting', lights: state.lights ?? null, moment, picture, pledges: state.pledges ?? null }); return;
+        send(200, { version: 1, status: state.status, stream: state.stream ?? 'resting', lights: state.lights ?? null, moment, picture, pledges: state.pledges ?? null,
+          ...(state.settings ? { settings: state.settings, settingsRevision: state.settingsRevision } : {}) }); return;
       }
       if (viewer.kind !== 'shared') { send(403, { version: 1, status: 'refused' }); return; }
       if (['privacy', 'quiet', 'forget'].some(name => pathname === PREFIX + name)) {
@@ -170,5 +204,5 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
       send(200, { ...claim, ...(pathname.endsWith('/presence') ? { status: 'accepted' } : {}), lit: presence.lit === true, stream: presence.stream ?? 'live' });
     } catch { send(503, { version: 1, status: 'unavailable', message: 'The kingdom is out of reach. Try again shortly.' }); }
   };
-  return Object.assign(handler, { dispose: stopGifts });
+  return Object.assign(handler, { dispose: () => { stopGifts(); broadcast.dispose(); } });
 }

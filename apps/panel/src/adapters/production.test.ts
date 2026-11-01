@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PanelReading } from '../../../api/src/public/panel/contracts';
-import type { HelperBridge, HelperStatus } from '../helper';
+import { bridgeHelper, type HelperBridge, type HelperExt, type HelperStatus } from '../helper';
 import type { PanelAdapter } from '../model';
+import { DEFAULT_SETTINGS } from '../settings/schema';
 import { createProductionAdapter, HELPER_PATIENCE_MS, KINGDOM_REFRESH_MS, READING_REFRESH_MS } from './production';
 
 const BACKEND = 'https://chatdom.io';
@@ -14,12 +15,14 @@ const KINGDOM_STATE = { version: 1, status: 'kingdom', stream: 'live', lights: 3
 
 function standIn(status: HelperStatus = AUTHORIZED, token: string | null = 'token-1') {
   const listeners = new Set<(status: HelperStatus) => void>();
+  const refreshes = new Set<() => void>();
   let visible = true, playing = true, authorization = 1;
   const notify = () => { for (const listener of listeners) listener(status); };
   const requestIdShare = vi.fn(() => true);
   const bridge: HelperBridge = {
     status: () => status, token: () => token, visible: () => visible, active: () => visible && playing, authorization: () => authorization,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); }, requestIdShare,
+    onPanelRefresh(listener) { refreshes.add(listener); return () => refreshes.delete(listener); },
   };
   return {
     bridge, requestIdShare,
@@ -27,6 +30,8 @@ function standIn(status: HelperStatus = AUTHORIZED, token: string | null = 'toke
     viewer(next: HelperStatus) { status = next; notify(); },
     visible(next: boolean) { visible = next; notify(); },
     playing(next: boolean) { playing = next; notify(); },
+    refresh() { for (const listener of refreshes) listener(); },
+    refreshListeners: () => refreshes.size,
   };
 }
 function backend() {
@@ -51,6 +56,65 @@ beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { for (const adapter of open.splice(0)) adapter.dispose(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('verified panel transport', () => {
+  it('refreshes authoritative settings and the gift shelf, and rejects malformed settings', async () => {
+    const { helper, server, adapter } = mount(); await settle();
+    expect(adapter.get().settings).toBeUndefined();
+    const settings = { ...DEFAULT_SETTINGS, hidden: true, gifts: [], tabs: { kingdom: true, you: false, gifts: false } };
+    const before = calls(server, '/gifts').length;
+    server.kingdom({ ...KINGDOM_STATE, settings, settingsRevision: '7' });
+    helper.refresh(); await settle();
+    expect(adapter.get().settings).toEqual(settings); expect(calls(server, '/gifts').length).toBeGreaterThan(before);
+    server.kingdom({ ...KINGDOM_STATE, settings: { ...settings, hidden: 'false' }, settingsRevision: '8' });
+    helper.refresh(); await settle();
+    expect(adapter.get().settings).toEqual(settings); expect(adapter.get().connection.kind).toBe('lost');
+  });
+
+  it('drops a queued invalidation if hidden or disposed before its microtask runs', async () => {
+    const { helper, server, adapter } = mount(); await settle(); const before = server.send.mock.calls.length;
+    helper.refresh(); helper.visible(false); await settle(); expect(server.send).toHaveBeenCalledTimes(before);
+    helper.visible(true); await settle(); const resumed = server.send.mock.calls.length;
+    helper.refresh(); adapter.dispose(); await settle(); expect(server.send).toHaveBeenCalledTimes(resumed);
+  });
+
+  it('coalesces PubSub invalidations, re-reads actual state and retains the five-second fallback', async () => {
+    const { helper, server, adapter } = mount(); await settle();
+    server.kingdom({ ...KINGDOM_STATE, moment: 'The bell rang.' });
+    helper.refresh(); helper.refresh(); helper.refresh(); await settle();
+    expect(calls(server, '/kingdom')).toHaveLength(2); expect(adapter.get().moment).toBe('The bell rang.');
+    expect(calls(server, '/reading')).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS); expect(calls(server, '/kingdom')).toHaveLength(3);
+    helper.visible(false); const count = server.send.mock.calls.length;
+    helper.refresh(); await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS * 2); expect(server.send).toHaveBeenCalledTimes(count);
+    adapter.dispose(); expect(helper.refreshListeners()).toBe(0); helper.refresh(); await settle(); expect(server.send).toHaveBeenCalledTimes(count);
+  });
+
+  it('queues one follow-up invalidation while a kingdom read is in flight', async () => {
+    const helper = standIn(), server = backend();
+    let resolve!: (response: Response) => void;
+    const send = vi.fn<typeof fetch>();
+    send.mockImplementation((url, init) => String(url).endsWith('/kingdom') && send.mock.calls.filter(([path]) => String(path).endsWith('/kingdom')).length === 2
+      ? new Promise(done => { resolve = done; }) : server.send(url, init));
+    const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: send })); await settle();
+    helper.refresh(); await settle(); helper.refresh(); helper.refresh();
+    resolve(new Response(JSON.stringify(KINGDOM_STATE))); await settle();
+    expect(send.mock.calls.filter(([url]) => String(url).endsWith('/kingdom'))).toHaveLength(3);
+    expect(adapter.get().connection.kind).toBe('connected');
+  });
+
+  it('registers one Helper subscription and rejects messages containing state or claims', async () => {
+    let receive!: (topic: string, contentType: string, message: string) => void;
+    const listen = vi.fn((_topic: string, callback: typeof receive) => { receive = callback; });
+    const ext: HelperExt = { listen, onAuthorized(callback) { callback({ channelId: '1001', clientId: 'extension', token: 'jwt', helixToken: '', userId: 'Uviewer' }); }, onContext() {} };
+    const bridge = bridgeHelper(ext), server = backend();
+    const adapter = track(createProductionAdapter(bridge, { backend: BACKEND, fetch: server.send })); await settle();
+    expect(listen).toHaveBeenCalledOnce();
+    const count = server.send.mock.calls.length;
+    for (const [topic, message] of [['whisper-Uviewer', '{"version":1,"type":"panel.refresh"}'], ['broadcast', '{"version":1,"type":"panel.refresh","name":"Anonymous"}'], ['broadcast', '{"version":1,"type":"panel.refresh","gift":"delivered"}'], ['broadcast', '{"version":2,"type":"panel.refresh"}'], ['broadcast', 'null'], ['broadcast', '[]'], ['broadcast', '{'], ['broadcast', 'x'.repeat(129)]]) receive(topic!, 'application/json', message!);
+    await settle(); expect(server.send).toHaveBeenCalledTimes(count);
+    receive('broadcast', 'application/json', '{"version":1,"type":"panel.refresh"}'); await settle();
+    expect(calls(server, '/kingdom')).toHaveLength(2); expect(adapter.get().light.kind).not.toBe('lit');
+    adapter.dispose(); receive('broadcast', 'application/json', '{"version":1,"type":"panel.refresh"}'); await settle(); expect(calls(server, '/kingdom')).toHaveLength(2);
+  });
   it('never sends without a backend or before Twitch authorizes', async () => {
     const helper = standIn({ kind: 'waiting' }, null), server = backend();
     const noBackend = track(createProductionAdapter(helper.bridge, { fetch: server.send }));

@@ -15,6 +15,7 @@ export interface HelperExt {
   onAuthorized(callback: (auth: HelperAuthorized) => void): void;
   onContext(callback: (context: HelperContext, changed: readonly string[]) => void): void;
   onVisibilityChanged?(callback: (visible: boolean) => void): void;
+  listen?(topic: string, callback: (topic: string, contentType: string, message: string) => void): void;
   readonly bits?: {
     getProducts(): Promise<readonly HelperProduct[]>;
     useBits(sku: string): void;
@@ -51,6 +52,8 @@ export interface HelperBridge {
   useBits?(sku: string): boolean;
   onGiftTransaction?(listener: (transaction: HelperTransaction) => void): () => void;
   onGiftCancelled?(listener: () => void): () => void;
+  /** Invalidation only: the listener must re-read verified API state. */
+  onPanelRefresh?(listener: () => void): () => void;
 }
 
 function findHelper(): HelperExt | undefined {
@@ -67,11 +70,23 @@ export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
   const listeners = new Set<(status: HelperStatus) => void>();
   const transactions = new Set<(transaction: HelperTransaction) => void>();
   const cancellations = new Set<() => void>();
+  const refreshes = new Set<() => void>();
   let current: HelperStatus = ext ? { kind: 'waiting' } : { kind: 'absent' };
   let token: string | null = null;
   let visible = true, playing = false, authorization = 0;
   const emit = (next: HelperStatus) => { current = next; for (const listener of listeners) listener(next); };
   if (ext) {
+    // Registered once with the page bridge, never on authorization refresh or per adapter.
+    ext.listen?.('broadcast', (topic, _contentType, message) => {
+      if (topic !== 'broadcast' || typeof message !== 'string' || message.length > 128) return;
+      try {
+        const value: unknown = JSON.parse(message);
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+        const payload = value as Record<string, unknown>;
+        if (Object.keys(payload).length !== 2 || payload.version !== 1 || payload.type !== 'panel.refresh') return;
+        for (const listener of refreshes) listener();
+      } catch { /* Other extension traffic is never panel state. */ }
+    });
     ext.bits?.onTransactionComplete(transaction => { for (const listener of transactions) listener(transaction); });
     ext.bits?.onTransactionCancelled(() => { for (const listener of cancellations) listener(); });
     let last: HelperAuthorized | undefined;
@@ -102,6 +117,7 @@ export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
     } : {}),
     onGiftTransaction(listener) { transactions.add(listener); return () => transactions.delete(listener); },
     onGiftCancelled(listener) { cancellations.add(listener); return () => cancellations.delete(listener); },
+    onPanelRefresh(listener) { refreshes.add(listener); return () => refreshes.delete(listener); },
     requestIdShare() {
       if (!ext?.actions || current.kind !== 'authorized' || !current.loggedIn) return false;
       try { ext.actions.requestIdShare(); return true; } catch { return false; }

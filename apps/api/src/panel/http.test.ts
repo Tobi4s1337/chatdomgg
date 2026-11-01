@@ -6,6 +6,7 @@ import { SignJWT } from 'jose';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createPanelHttp } from './http';
 import { PanelPictures } from './pictures';
+import { DEFAULT_SETTINGS } from '../../../panel/src/settings/schema';
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
@@ -13,12 +14,12 @@ const key = new Uint8Array(32).fill(42);
 async function token(claims: Record<string, unknown> = {}, signing = key) {
   return new SignJWT({ channel_id: '1234', opaque_user_id: 'Uviewer', role: 'viewer', user_id: '5678', ...claims }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('5m').sign(signing);
 }
-async function start() {
+async function start(extension: { clientId: string; secret: string } | null = { clientId: 'panel-lane', secret: Buffer.from(key).toString('base64') }) {
   const directory = await mkdtemp(join(tmpdir(), 'panel-pictures-'));
   cleanup.push(() => rm(directory, { recursive: true, force: true }));
   const requests: { path: string; body: Record<string, unknown> }[] = [];
   const handler = createPanelHttp({
-    extension: { clientId: 'panel-lane', secret: Buffer.from(key).toString('base64') }, origin: 'live',
+    extension, origin: 'live',
     authority: { reading: async () => ({ version: 1, kingdom: null, viewer: { kind: 'anonymous' } }), cardSource: async () => { throw new Error(); } },
   }, {
     realmOrigin: 'http://realm.invalid', panelSecret: 'p'.repeat(40), painterSecret: 's'.repeat(40), pictures: new PanelPictures(directory),
@@ -26,6 +27,7 @@ async function start() {
     fetch: async (url, init) => {
       const path = new URL(String(url)).pathname, body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       requests.push({ path, body });
+      if (path.endsWith('/settings') || path.endsWith('/settings-save')) return Response.json({ version: 1, status: 'settings', revision: '1', settings: body.settings ?? DEFAULT_SETTINGS, connected: true });
       if (path.endsWith('/gift-status') || path.endsWith('/gift-resolve')) return new Response(JSON.stringify({ version: 1, status: 'pending' }));
       if (path.endsWith('/forget')) return new Response(JSON.stringify({ version: 1, status: 'unavailable' }), { status: 503 });
       if (path.endsWith('/privacy') || path.endsWith('/quiet')) return new Response(JSON.stringify({ version: 1, status: path.slice(path.lastIndexOf('/') + 1), quiet: body.quiet ?? false, projection: 'pending', forgetAvailable: false }));
@@ -41,10 +43,36 @@ async function start() {
   const call = async (name: string, jwt: string, body: unknown = {}) => fetch(`http://127.0.0.1:${address.port}/api/panel/v1/${name}`, {
     method: 'POST', headers: { authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
-  return { call, requests };
+  const health = () => fetch(`http://127.0.0.1:${address.port}/api/panel/v1/health`);
+  return { call, requests, health };
 }
 
 describe('verified panel door', () => {
+  it('mounts configuration with verified broadcaster ownership, never selected channel identities', async () => {
+    const { call, requests } = await start();
+    expect(await (await call('configuration', await token())).json()).toMatchObject({ status: 'settings', revision: '1', connected: true });
+    expect(requests.at(-1)).toEqual({ path: '/internal/realm/panel/settings', body: { kingdomId: '1234' } });
+    const settings = { ...DEFAULT_SETTINGS, hidden: true };
+    expect((await call('configure', await token(), { expectedRevision: '0', settings })).status).toBe(403);
+    expect((await call('configure', await token({ role: 'broadcaster' }), { expectedRevision: '0', settings })).status).toBe(403);
+    const broadcaster = await token({ role: 'broadcaster', user_id: '1234' });
+    expect(await (await call('configure', broadcaster, { expectedRevision: '0', settings })).json()).toMatchObject({ status: 'settings', settings: { hidden: true } });
+    expect(requests.at(-1)).toEqual({ path: '/internal/realm/panel/settings-save', body: { kingdomId: '1234', personId: '1234', expectedRevision: '0', settings } });
+    expect((await call('configure', broadcaster, { expectedRevision: '1', settings, kingdomId: '9999' })).status).toBe(400);
+    expect(requests).toHaveLength(2);
+  });
+  it('names missing setup without credential values or startup exceptions', async () => {
+    for (const extension of [null, { clientId: 'panel-lane', secret: 'invalid' }]) {
+      const { health, call, requests } = await start(extension);
+      const response = await health();
+      expect(response.status).toBe(503);
+      const body = await response.json();
+      expect(body).toMatchObject({ status: 'unavailable', missing: expect.arrayContaining(['TWITCH_EXTENSION_SECRET']) });
+      expect(JSON.stringify(body)).not.toContain('invalid');
+      expect((await call('configure', await token(), {})).status).toBe(503);
+      expect(requests).toHaveLength(0);
+    }
+  });
   it('uses only JWT identity, approved names and the real ingress envelope; confirms only after realm evidence', async () => {
     const { call, requests } = await start();
     const answer = await call('light', await token());

@@ -87,6 +87,9 @@ try {
         }
       }
     } finally { await release(); }
+    const configuration = await start([join(root, 'apps/panel/scripts/pw13-capture.mjs')], root, vars, join(logDir, 'pw13.log'));
+    await wait(configuration);
+    console.info('PW13 configuration capture completed.');
   } catch (error) {
     failures.push('PW12 gift shelf captures');
     console.error(error instanceof Error ? error.message : 'PW12 capture failed.');

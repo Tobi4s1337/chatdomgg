@@ -54,15 +54,16 @@ export function signTransactionReceipt(secret, { extensionId, transactionId, use
       cost: { amount: bits, type: 'bits' }, inDevelopment } } });
 }
 export function helperSource(secret, options = {}) {
-  const { channel = '1234', user = '5678', client = 'panel-lane', identity = 'unshared', visible = true, playing = true, bits = false } = options;
+  const { channel = '1234', user = '5678', client = 'panel-lane', identity = 'unshared', visible = true, playing = true, bits = false, role = 'viewer' } = options;
   if (!['logged-out', 'unshared', 'shared'].includes(identity)) throw new Error('Unknown identity');
+  if (!['viewer', 'moderator', 'broadcaster'].includes(role)) throw new Error('Unknown role');
   // Products come only from a direct Node harness option, never a viewer URL or production catalogue.
   const products = productOptions(options.products === undefined ? [] : options.products);
   const expires = Math.floor(Date.now() / 1000) + 3600;
   const auth = {};
   for (const state of ['logged-out', 'unshared', 'shared']) {
     const opaque = state === 'logged-out' ? 'Alaneviewer' : 'Ulaneviewer';
-    const claims = { channel_id: channel, opaque_user_id: opaque, role: 'viewer', exp: expires, pubsub_perms: { listen: ['broadcast'], send: [] }, ...(state === 'shared' ? { user_id: user } : {}) };
+    const claims = { channel_id: channel, opaque_user_id: opaque, role, exp: expires, pubsub_perms: { listen: ['broadcast'], send: [] }, ...(state === 'shared' ? { user_id: user } : {}) };
     auth[state] = { channelId: channel, clientId: client, userId: opaque, token: sign(secret, claims), helixToken: '' };
   }
   // The signed tokens are held in this closure only; none enter a URL, DOM, storage, or log.
@@ -70,17 +71,27 @@ export function helperSource(secret, options = {}) {
     const auth = ${JSON.stringify(auth)};
     const products = ${JSON.stringify(products)};
     let state = ${JSON.stringify(identity)}, visible = ${JSON.stringify(visible)}, playing = ${JSON.stringify(playing)};
-    const authorized = [], viewers = [], contexts = [], visibility = [], features = [], listeners = [], complete = [], cancelled = [];
+    const authorized = [], viewers = [], contexts = [], visibility = [], features = [], listeners = [], complete = [], cancelled = [], configurationChanged = [];
+    let broadcasterConfiguration;
     let shareRequests = 0, bitsRequests = 0, selectedSku = null, pendingSku = null;
     const notifyAuth = () => { viewers.forEach(fn => fn()); authorized.forEach(fn => fn(auth[state])); };
     const ext = {
       onAuthorized(fn) { authorized.push(fn); queueMicrotask(() => fn(auth[state])); },
       onContext(fn) { contexts.push(fn); queueMicrotask(() => fn({ theme: 'dark', isPaused: !playing }, ['theme', 'isPaused'])); },
       onVisibilityChanged(fn) { visibility.push(fn); queueMicrotask(() => fn(visible)); },
-      viewer: { get isLinked() { return state === 'shared'; }, role: 'viewer', onChanged(fn) { viewers.push(fn); } },
+      viewer: { get isLinked() { return state === 'shared'; }, role: ${JSON.stringify(role)}, onChanged(fn) { viewers.push(fn); } },
       features: { isBitsEnabled: ${JSON.stringify(bits)}, onChanged(fn) { features.push(fn); } },
       actions: { requestIdShare() { shareRequests++; if (state === 'unshared') { state = 'shared'; queueMicrotask(notifyAuth); } } },
       listen(topic, fn) { listeners.push({ topic, fn }); },
+      configuration: {
+        get broadcaster() { return broadcasterConfiguration; },
+        onChanged(fn) { configurationChanged.push(fn); queueMicrotask(fn); },
+        set(segment, version, content) {
+          if (${JSON.stringify(role)} !== 'broadcaster' || state !== 'shared' || segment !== 'broadcaster' || typeof version !== 'string' || typeof content !== 'string' || new TextEncoder().encode(content).length > 5120) throw Error('Configuration write refused');
+          broadcasterConfiguration = { version, content };
+          queueMicrotask(() => configurationChanged.forEach(fn => fn()));
+        }
+      },
       bits: {
         getProducts: async () => products.map(product => ({ ...product, cost: { ...product.cost } })),
         useBits(sku) {

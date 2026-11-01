@@ -5,11 +5,12 @@ import { EpochMsSchema, KingdomIdSchema, PersonIdSchema, TokenSchema, type Kingd
 import type { RealmWriterLease } from '@chatdom/shared/realm';
 import type { PanelGiftFact, PanelGiftFriend, PanelGiftOffer, PanelGiftResult } from '../../../../../packages/shared/src/panel';
 import { projectPresence } from '@chatdom/world';
-import { GIFT_CATALOGUE, DEFAULT_GIFT_IDS, type GiftDefinition } from '../../../../panel/src/gifts/catalogue';
+import { GIFT_CATALOGUE, type GiftDefinition } from '../../../../panel/src/gifts/catalogue';
 import { approvedPublicName } from '../../../../api/src/realm-auth/presentation';
 import { canonicalJson, digestOf, RealmCommitUncertainError, RealmWriterFencedError,
-  type DurableKingdom, type DurableRealmServices, type RealmDatabase } from '../../persistence';
+  type DurableRealmServices, type RealmDatabase } from '../../persistence';
 import { decodeIngressCheckpoint, presencePerson } from '../codec';
+import { MissingPanelKingdom, readPanelSettings, withPanelKingdom, type PanelWriterContext } from './settings';
 
 type Sql = Pick<PoolClient, 'query'>;
 type Origin = 'live' | 'simulated';
@@ -66,13 +67,12 @@ interface PaymentRow {
   extension_id: string; transaction_id: string; kingdom_id: string; person_id: string; sku: string; evidence_digest: string;
   occurred_ms: string; public_name: string; intent_id: string | null; fact_id: string | null;
 }
-interface Context { sql: Sql; kingdom: DurableKingdom; lease: RealmWriterLease; now: number; current(): boolean }
+type Context = PanelWriterContext;
 interface People {
   readonly held: ReadonlySet<string>;
   readonly quiet: ReadonlySet<string>;
   readonly named: ReadonlyMap<string, { plotId: string; slot: number; name: string }>;
 }
-class MissingKingdom extends Error {}
 
 /** Own gift facts share the realm writer; they never masquerade as a Twitch moment or award attendance. */
 export class RealmPanelGifts {
@@ -84,10 +84,13 @@ export class RealmPanelGifts {
     try {
       return await this.withKingdom(parsed.data.kingdomId, async ctx => {
         const people = await this.people(ctx, [parsed.data.personId]), live = this.live(ctx);
+        const { settings } = await readPanelSettings(ctx.sql, this.options.origin, parsed.data.kingdomId, true);
         const offers: PanelGiftOffer[] = [];
-        if (live && !people.held.has(parsed.data.personId)) for (const gift of GIFT_CATALOGUE) {
-          if (!DEFAULT_GIFT_IDS.includes(gift.id) || !await this.ready(gift.id, ctx.kingdom.kingdomId)) continue;
-          offers.push({ sku: gift.bands[0].id, giftId: gift.id, title: gift.title, what: gift.what, target: gift.target, durationMs: gift.durationMs });
+        if (live && !settings.hidden && settings.tabs.gifts && !people.held.has(parsed.data.personId)) for (const selection of settings.gifts) {
+          const gift = GIFT_CATALOGUE.find(gift => gift.id === selection.giftId);
+          if (!gift || !await this.ready(gift.id, ctx.kingdom.kingdomId)) continue;
+          const band = gift.bands[{ a: 0, b: 1, c: 2 }[selection.band]]!;
+          offers.push({ sku: band.id, giftId: gift.id, title: gift.title, what: gift.what, target: gift.target, durationMs: gift.durationMs });
         }
         const friends = [...people.named.entries()].filter(([id]) => id !== parsed.data.personId)
           .map(([, p]) => ({ plotId: p.plotId, name: p.name })).sort((a, b) => a.plotId.localeCompare(b.plotId)).slice(0, FRIEND_LIMIT);
@@ -102,7 +105,7 @@ export class RealmPanelGifts {
           ...(active ? { activeIntent: { intentId: active.intent_id, sku: active.sku } } : {}) });
       });
     } catch (error) {
-      return error instanceof MissingKingdom ? ok({ version: 1, status: 'gifts', stream: 'resting', offers: [], friends: [] }) : unavailable();
+      return error instanceof MissingPanelKingdom ? ok({ version: 1, status: 'gifts', stream: 'resting', offers: [], friends: [] }) : unavailable();
     }
   }
 
@@ -114,7 +117,10 @@ export class RealmPanelGifts {
         const prior = await this.requestIntent(ctx.sql, input);
         if (prior) return prior.request_digest === requestDigest ? intentReply(prior) : refused('That request already has a different gift.');
         const chosen = giftForSku(input.sku);
-        if (!chosen || !DEFAULT_GIFT_IDS.includes(chosen.gift.id) || input.sku !== chosen.gift.bands[0].id) return refused('That gift is not on this shelf.');
+        const { settings } = await readPanelSettings(ctx.sql, this.options.origin, input.kingdomId, true);
+        const selection = settings.gifts.find(selection => selection.giftId === chosen?.gift.id);
+        if (!chosen || !selection || settings.hidden || !settings.tabs.gifts
+          || input.sku !== chosen.gift.bands[{ a: 0, b: 1, c: 2 }[selection.band]]!.id) return refused('That gift is not on this shelf.');
         const ready = await this.ready(chosen.gift.id, input.kingdomId), people = await this.people(ctx, [input.personId]);
         if (!this.live(ctx) || !ready || people.held.has(input.personId)) return unavailable('This gift is not available just now.');
         const unresolved = await ctx.sql.query(`SELECT 1 FROM realm_panel_gift_intents WHERE origin = $1 AND extension_id = $2
@@ -217,7 +223,7 @@ export class RealmPanelGifts {
       });
     } catch (error) {
       // No adopted kingdom can consume this payment, but verified money must still have a durable home.
-      if (error instanceof MissingKingdom) {
+      if (error instanceof MissingPanelKingdom) {
         try { return await this.storeUnmatched(input, name); } catch { return unavailable(); }
       }
       if (error instanceof RealmCommitUncertainError) return this.recoverPayment(input);
@@ -428,6 +434,13 @@ export class RealmPanelGifts {
       if (!stored) throw new Error('Gift receipt has no committed fact.');
       return ok({ version: 1, status: 'delivered', fact: await this.disclose(ctx, JSON.parse(stored.fact) as PanelGiftFact, payment.person_id) });
     }
+    // Hide pauses an owed celebration. Shelf and band changes never cancel an immutable paid selection.
+    try {
+      if ((await readPanelSettings(ctx.sql, this.options.origin, ctx.kingdom.kingdomId, true)).settings.hidden) return pending();
+    } catch {
+      // Unsupported preferences cannot dispatch, but verified money still deserves durable retention.
+      return pending();
+    }
     const ready = await this.ready(intent.gift_id, ctx.kingdom.kingdomId);
     if (!this.live(ctx) || !ready || ready.version !== intent.effect_version || !this.options.effectAuthority) return pending();
     if (intent.target_plot_id !== null && !Object.values(ctx.kingdom.privateState.homes).some(home => home.id === intent.target_plot_id && home.slot === intent.target_slot)
@@ -529,34 +542,8 @@ export class RealmPanelGifts {
   private async withKingdom<T>(kingdomId: KingdomId, work: (ctx: Context) => Promise<T>): Promise<T> {
     if (this.pending >= MAX_PENDING) throw new Error('Gift writer queue is full.');
     this.pending++;
-    try {
-      const exists = await this.options.db.query('SELECT 1 FROM realm_kingdoms WHERE kingdom_id = $1 AND origin = $2', [kingdomId, this.options.origin]);
-      if (!exists.rowCount) throw new MissingKingdom();
-      const hold = await this.options.services.retain(kingdomId);
-      try {
-        const kingdom = hold.kingdom;
-        if (!kingdom.current || kingdom.origin !== this.options.origin) throw new RealmWriterFencedError(kingdomId);
-        return await kingdom.writeMoments(async (lease, current) => {
-          const sql = await this.options.db.connect(); let committing = false;
-          try {
-            await sql.query('BEGIN');
-            const fence = (await sql.query<{ now: string; sequence: string; mine: boolean }>(`SELECT ${NOW} AS now, sequence,
-              (writer_epoch = $2 AND lease_expires_ms > ${NOW} AND origin = $3) IS TRUE AS mine
-              FROM realm_kingdoms WHERE kingdom_id = $1 FOR UPDATE`, [kingdomId, lease.epoch, this.options.origin])).rows[0];
-            if (!fence?.mine || !current() || Number(fence.sequence) !== kingdom.sequence) throw new RealmWriterFencedError(kingdomId);
-            const result = await work({ sql, kingdom, lease, now: Number(fence.now), current });
-            const final = await sql.query(`SELECT 1 FROM realm_kingdoms WHERE kingdom_id = $1 AND writer_epoch = $2
-              AND lease_expires_ms > ${NOW} AND origin = $3 AND sequence = $4`, [kingdomId, lease.epoch, this.options.origin, fence.sequence]);
-            if (final.rowCount !== 1 || !current()) throw new RealmWriterFencedError(kingdomId);
-            committing = true; await sql.query('COMMIT'); committing = false;
-            return result;
-          } catch (error) {
-            if (committing) throw new RealmCommitUncertainError(kingdomId, 'panel-gifts');
-            await sql.query('ROLLBACK').catch(() => {}); throw error;
-          } finally { sql.release(committing ? true : undefined); }
-        });
-      } finally { await hold.release(); }
-    } finally { this.pending--; }
+    try { return await withPanelKingdom(this.options, kingdomId, work); }
+    finally { this.pending--; }
   }
 }
 

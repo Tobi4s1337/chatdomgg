@@ -76,6 +76,7 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   });
   const pictureUrl = createMemo(() => { const picture = snap().picture; return picture.kind === 'still' ? picture.url : null; });
   createEffect(() => { void pictureUrl(); setFailed(false); });
+  createEffect(() => { const settings = snap().settings; if (settings && !settings.tabs[tab()]) { setPage(null); setTab('kingdom'); } });
   const card = () => cardOf(snap().home);
   const source = createMemo<Extract<PassportSource, { kind: 'readable' }> | null>(() => { const value = card()?.passport; return value?.kind === 'readable' ? value : null; });
   const picture = () => { const value = snap().picture; return value.kind === 'still' && !failed() ? value : null; };
@@ -168,6 +169,6 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
         </Switch>
       </Show>
     </main>
-    <nav class="cw-nav" aria-label="Panel"><For each={(['kingdom', 'you', 'gifts'] as const)}>{item => <button type="button" aria-current={tab() === item ? 'page' : undefined} onClick={() => openTab(item)}>{item === 'kingdom' ? 'Kingdom' : item === 'you' ? 'You' : 'Gifts'}</button>}</For></nav>
+    <nav class="cw-nav" aria-label="Panel"><For each={(['kingdom', 'you', 'gifts'] as const).filter(item => snap().settings?.tabs[item] !== false)}>{item => <button type="button" aria-current={tab() === item ? 'page' : undefined} onClick={() => openTab(item)}>{item === 'kingdom' ? 'Kingdom' : item === 'you' ? 'You' : 'Gifts'}</button>}</For></nav>
   </div></div>;
 }

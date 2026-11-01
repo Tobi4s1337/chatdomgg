@@ -3,6 +3,7 @@ import type { PanelDoorReply, RealmPanelService } from './service';
 
 type App = uWebSocketsTransport['app'];
 export const REALM_PANEL_ROUTES = {
+  settings: '/internal/realm/panel/settings', settingsSave: '/internal/realm/panel/settings-save',
   giftDrain: '/internal/realm/panel/gift-drain', giftChoices: '/internal/realm/panel/gift-choices', giftResolve: '/internal/realm/panel/gift-resolve', gifts: '/internal/realm/panel/gifts', giftIntent: '/internal/realm/panel/gift-intent', giftStatus: '/internal/realm/panel/gift-status',
   giftCancel: '/internal/realm/panel/gift-cancel', giftEvidence: '/internal/realm/panel/gift-evidence',
   giftReconcile: '/internal/realm/panel/gift-reconcile', giftInbox: '/internal/realm/panel/gift-inbox',
@@ -15,7 +16,7 @@ const LIMIT = 4_096;
 
 /** Internal service routes only: bounded JSON, a bearer gate before buffering, and no browser CORS. */
 export function mountRealmPanelRoutes(app: App, panel: RealmPanelService): void {
-  for (const method of ['claim', 'pledge', 'kingdom', 'presence', 'privacy', 'quiet', 'forget', 'gifts', 'giftIntent', 'giftStatus', 'giftCancel', 'giftEvidence', 'giftReconcile', 'giftInbox', 'giftResolve', 'giftChoices', 'giftDrain'] as const) app.post(REALM_PANEL_ROUTES[method], (res, req) => {
+  for (const method of ['claim', 'pledge', 'kingdom', 'presence', 'privacy', 'quiet', 'forget', 'settings', 'settingsSave', 'gifts', 'giftIntent', 'giftStatus', 'giftCancel', 'giftEvidence', 'giftReconcile', 'giftInbox', 'giftResolve', 'giftChoices', 'giftDrain'] as const) app.post(REALM_PANEL_ROUTES[method], (res, req) => {
     const authorization = req.getHeader('authorization');
     let aborted = false, finished = false, bytes = 0;
     const chunks: Buffer[] = [];

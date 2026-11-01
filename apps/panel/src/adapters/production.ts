@@ -4,6 +4,8 @@ import { createGiftTransport } from '../gifts/transport';
 import type { HelperBridge, HelperStatus } from '../helper';
 import { passportExtensionTransport } from '../passport/transport';
 import { ALL_SECTIONS, type CitizenCard, type Connection, type Home, type Light, type PanelAdapter, type PanelSnapshot, type PassportSource, type Picture, type Privacy } from '../model';
+import type { PanelSettings } from '../../../../packages/shared/src/panel';
+import { parsePanelSettings } from '../settings/schema';
 
 /** After this long without the Helper's answer, the panel says so instead of waiting silently. */
 export const HELPER_PATIENCE_MS = 12_000;
@@ -85,6 +87,8 @@ interface KingdomWire {
   readonly moment: string | null;
   readonly picture: { readonly capturedAt: number; readonly revision: string; readonly kind: 'realm' | 'sketch' } | null;
   readonly pledges: string | null;
+  readonly settings?: PanelSettings;
+  readonly settingsRevision?: string;
 }
 type Claim = 'deed' | 'guest' | 'castle' | 'unfounded' | 'held' | 'unavailable';
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -95,6 +99,7 @@ function kingdomWire(value: unknown): KingdomWire | null {
   if (value.moment !== null && !words(value.moment, 280)) return null;
   if (value.pledges !== null && !words(value.pledges, 120)) return null;
   if (value.picture !== null && (!object(value.picture) || !Number.isSafeInteger(value.picture.capturedAt) || Number(value.picture.capturedAt) < 0 || Number(value.picture.capturedAt) > 8.64e15 || !words(value.picture.revision, 160) || !['realm', 'sketch'].includes(String(value.picture.kind)))) return null;
+  if (value.settings !== undefined && (!parsePanelSettings(value.settings) || !words(value.settingsRevision, 160))) return null;
   return value as unknown as KingdomWire;
 }
 
@@ -112,6 +117,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
   let queued: { token: string | null; authorization: number | undefined } | null = null;
   let readingTimer: ReturnType<typeof setTimeout> | undefined, kingdomTimer: ReturnType<typeof setTimeout> | undefined;
   let retry = RETRY_MS, readingBusy = false, readingAgain = false, kingdomBusy = false, actionBusy = false, presenceBusy = false;
+  let refreshQueued = false, refreshPending = false;
   let epoch = 0, presenceGeneration = 0, presenceSent = false, forgotten = false;
   let privacy: Privacy = { kind: 'loading' };
   let presenceTimer: ReturnType<typeof setTimeout> | undefined, presenceRetry = RETRY_MS;
@@ -146,6 +152,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     const connection = kingdomLost ? kingdomAt ? { kind: 'lost' as const, asOf: timeWords(kingdomAt) } : { kind: 'kingdom-unavailable' as const } : connectionFor(status, patient, reading, Boolean(backend));
     return {
       source: { kind: 'production', label: null }, connection, gifts: gifts.get(), ...(shared() ? { privacy } : {}),
+      ...(kingdom?.settings ? { settings: kingdom.settings } : {}),
       kingdom: realm ? { name: realm.name, tier: realm.tier, motto: realm.motto } : null,
       stream: kingdom?.stream ?? 'unknown', kingdomLights: kingdom?.lights ?? null, moment: kingdom?.moment ?? null,
       picture, light: currentLight(),
@@ -265,7 +272,13 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       void gifts.refresh();
     } catch { if (version === epoch && visible()) { kingdomLost = true; void gifts.refresh(); clearTimeout(presenceTimer); presenceGeneration++; presenceRequest?.abort(); presenceBusy = false; presenceSent = false; } }
     finally {
-      if (version === epoch) { kingdomBusy = false; if (visible()) kingdomTimer = setTimeout(() => void poll(), KINGDOM_REFRESH_MS); }
+      if (version === epoch) {
+        kingdomBusy = false;
+        if (visible()) {
+          if (refreshPending) { refreshPending = false; queuePanelRefresh(); }
+          else kingdomTimer = setTimeout(() => void poll(), KINGDOM_REFRESH_MS);
+        }
+      }
     }
     refresh();
   };
@@ -319,11 +332,23 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     refresh();
   };
   const stop = () => {
+    refreshPending = false;
     gifts.suspend();
     epoch++; presenceGeneration++; if (privacy.kind === 'pending') privacy = { kind: 'unavailable' }; clearTimeout(readingTimer); clearTimeout(kingdomTimer); clearTimeout(presenceTimer);
     for (const controller of requests) controller.abort(); requests.clear();
     readingBusy = false; readingAgain = false; kingdomBusy = false; actionBusy = false; presenceBusy = false; presenceSent = false; queued = null;
     if (light?.kind === 'pending' || light?.kind === 'lit') light = null;
+  };
+  const queuePanelRefresh = () => {
+    if (!backend || !helper.token() || !visible()) return;
+    if (kingdomBusy) { refreshPending = true; return; }
+    if (refreshQueued) return;
+    refreshQueued = true;
+    queueMicrotask(() => {
+      refreshQueued = false;
+      if (!visible()) return;
+      void read(); void poll();
+    });
   };
   let lastToken = helper.token(), lastAuthorization = helper.authorization?.(), wasVisible = visible(), wasActive = active(), wasShared = shared();
   const changed = () => {
@@ -356,6 +381,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     refresh();
   };
   const unsubscribe = helper.subscribe(changed);
+  const unsubscribeRefresh = helper.onPanelRefresh?.(queuePanelRefresh);
   if (typeof document !== 'undefined') document.addEventListener('visibilitychange', changed);
   const timer = helper.status().kind === 'waiting' ? setTimeout(() => { patient = false; refresh(); }, HELPER_PATIENCE_MS) : undefined;
   if (helper.token()) { void read(); void poll(); }
@@ -381,7 +407,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     cancelGiftChoice() { gifts.cancelGiftChoice(); },
     resetGift() { gifts.resetGift(); },
     dispose() {
-      disposed = true; stop(); gifts.dispose(); clearTimeout(timer); unsubscribe(); listeners.clear();
+      disposed = true; stop(); gifts.dispose(); clearTimeout(timer); unsubscribe(); unsubscribeRefresh?.(); listeners.clear();
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', changed);
       if (pictureUrl) URL.revokeObjectURL(pictureUrl);
     },

@@ -1,4 +1,4 @@
-import type { PanelGiftShelf } from '../../../packages/shared/src/panel';
+import type { PanelGiftShelf, PanelSettings } from '../../../packages/shared/src/panel';
 import type { PassportDisclosureView, PassportTransport } from '@chatdom/ui/passport';
 
 // The panel's local view model. It describes only what the panel may show and why;
@@ -364,6 +364,7 @@ export interface PanelSnapshot {
   readonly entry: Entry;
   /** The streamer's choice of sections, as the kingdom carries it to every panel. */
   readonly sections: Sections;
+  readonly settings?: PanelSettings;
 }
 
 /** One adapter per mounted panel. Actions report back only through the snapshot. */

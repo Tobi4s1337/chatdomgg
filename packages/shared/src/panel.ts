@@ -41,3 +41,18 @@ export type PanelGiftResult =
   | { readonly version: 1; readonly status: 'pending'; readonly canCancel?: boolean }
   | { readonly version: 1; readonly status: 'awaiting-target'; readonly paymentRef: string; readonly choices: readonly PanelGiftChoice[]; readonly nextCursor?: string | null }
   | { readonly version: 1; readonly status: 'refused' | 'unavailable'; readonly message: string };
+/** Public channel preferences. Identity, connection and effect readiness are never configuration claims. */
+export interface PanelSettings {
+  readonly version: 1;
+  readonly tabs: { readonly kingdom: true; readonly you: boolean; readonly gifts: boolean };
+  readonly gifts: readonly { readonly giftId: string; readonly band: 'a' | 'b' | 'c' }[];
+  readonly hidden: boolean;
+}
+export interface PanelSettingsReading {
+  readonly version: 1;
+  readonly status: 'settings';
+  readonly revision: string;
+  readonly settings: PanelSettings;
+  /** Derived from the realm, never accepted from the config page. */
+  readonly connected: boolean;
+}

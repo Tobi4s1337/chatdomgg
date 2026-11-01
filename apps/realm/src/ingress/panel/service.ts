@@ -15,7 +15,8 @@ import { decodeIngressCheckpoint, presencePerson } from '../codec';
 import { IngressGate, INGRESS_SECRET_MIN } from '../gate';
 import { personPrivacy, setPersonQuiet, forgetPerson, type RealmForgetAuthority, type PersonPrivacy } from './privacy';
 import type { RealmPanelGifts, PanelGiftReply } from './gifts';
-import type { PanelGiftFact } from '../../../../../packages/shared/src/panel';
+import type { PanelGiftFact, PanelSettings } from '../../../../../packages/shared/src/panel';
+import { readPanelSettings, type RealmPanelSettings, type PanelSettingsBody } from './settings';
 
 const KingdomRequest = z.strictObject({ kingdomId: KingdomIdSchema });
 const PersonRequest = KingdomRequest.extend({ personId: PersonIdSchema });
@@ -37,6 +38,8 @@ export type PanelClaimResult =
   | { readonly version: 1; readonly status: 'guest'; readonly reason: 'three-homes' | 'kingdom-full' }
   | { readonly version: 1; readonly status: 'castle' | 'unfounded' | 'held' };
 export interface PanelKingdomResult {
+  readonly settings: PanelSettings;
+  readonly settingsRevision: string;
   readonly giftMoment: PanelGiftFact | null;
   readonly version: 1; readonly status: 'kingdom'; readonly kingdomId: KingdomId;
   readonly stream: 'live' | 'resting'; readonly lights: number; readonly presence: KingdomPresenceFrame | null;
@@ -49,16 +52,17 @@ export type PanelPublicEvent = { readonly at: number; readonly cursor: number } 
   | { readonly type: 'home'; readonly plotId: string }
   | { readonly type: 'forge'; readonly activityId: string }
   | { readonly type: 'moment'; readonly fact: TwitchMomentFact });
-export type PanelDoorBody = PanelClaimResult | PanelKingdomResult | PanelGiftReply['body']
+export type PanelDoorBody = PanelClaimResult | PanelKingdomResult | PanelGiftReply['body'] | PanelSettingsBody
   | ({ readonly version: 1; readonly status: 'privacy' | 'quiet' } & PersonPrivacy)
   | { readonly version: 1; readonly status: 'forgotten'; readonly operationId: string; readonly erased: readonly string[]; readonly retained: readonly string[] }
   | { readonly version: 1; readonly status: 'pending'; readonly operationId: string }
-  | { readonly version: 1; readonly status: 'unfounded'; readonly pledges: PanelPledgeBand }
+  | { readonly version: 1; readonly status: 'unfounded'; readonly pledges: PanelPledgeBand; readonly settings: PanelSettings; readonly settingsRevision: string }
   | { readonly version: 1; readonly status: 'pledged'; readonly band: PanelPledgeBand }
   | { readonly version: 1; readonly status: 'presence'; readonly lit: boolean; readonly stream: 'live' | 'resting'; readonly held: boolean }
   | { readonly version: 1; readonly status: 'refused' | 'unavailable'; readonly message: string };
 export interface PanelDoorReply { readonly http: 200 | 400 | 401 | 503; readonly body: PanelDoorBody }
 export interface RealmPanelOptions {
+  readonly settings?: RealmPanelSettings;
   readonly gifts?: RealmPanelGifts;
   readonly forgetAuthority?: RealmForgetAuthority;
   readonly db: Pick<RealmDatabase, 'query'>;
@@ -81,6 +85,15 @@ export class RealmPanelService {
     this.gate = new IngressGate(options.secret ? { panel: options.secret } : {}, options.origin);
   }
   authenticate(authorization: string): boolean { return this.gate.authenticate(authorization) === 'panel'; }
+
+  async settings(authorization: string, raw: unknown): Promise<PanelDoorReply> {
+    if (!this.authenticate(authorization)) return unauthorized();
+    return this.options.settings ? this.options.settings.read(raw) : unavailable();
+  }
+  async settingsSave(authorization: string, raw: unknown): Promise<PanelDoorReply> {
+    if (!this.authenticate(authorization)) return unauthorized();
+    return this.options.settings ? this.options.settings.save(raw) : unavailable();
+  }
 
   private async gift(authorization: string, raw: unknown, method: 'gifts' | 'intent' | 'status' | 'cancel' | 'resolve' | 'choices' | 'evidence' | 'reconcile' | 'inbox' | 'drain'): Promise<PanelDoorReply> {
     if (!this.authenticate(authorization)) return unauthorized();
@@ -221,7 +234,9 @@ export class RealmPanelService {
     const { kingdomId } = request.data;
     try {
       const pledges = await this.pledges(kingdomId);
-      if (!await this.options.allocation.currentLayout(kingdomId)) return ok({ version: 1, status: 'unfounded', pledges });
+      const saved = await readPanelSettings(this.options.db, this.options.origin, kingdomId, false);
+      const preferences = { settings: saved.settings, settingsRevision: saved.revision };
+      if (!await this.options.allocation.currentLayout(kingdomId)) return ok({ version: 1, status: 'unfounded', pledges, ...preferences });
       const hold = await this.options.services.retain(kingdomId);
       try {
         const kingdom = hold.kingdom;
@@ -252,7 +267,7 @@ export class RealmPanelService {
         this.assertCurrent(kingdom);
         const now = kingdom.databaseNow(), stream = kingdom.privateState.stream;
         const giftMoment = await this.options.gifts?.latest(kingdomId) ?? null;
-        return ok({ version: 1, status: 'kingdom', kingdomId, pledges, manifest, giftMoment,
+        return ok({ version: 1, status: 'kingdom', kingdomId, pledges, manifest, giftMoment, ...preferences,
           stream: stream.sessionId && stream.liveUntil > now ? 'live' : 'resting',
           // These are the committed public windows, never extension connections or local client counts.
           lights: presence?.windows.filter(window => window.present).length ?? 0, presence, moment,
