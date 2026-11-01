@@ -1,0 +1,4 @@
+
+> chatdom@ typecheck /root/chatdomgg-harness/worktrees/walking-together
+> tsc --noEmit
+

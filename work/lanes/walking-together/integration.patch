@@ -45,7 +45,8 @@
        return labels;
 --- a/apps/web/src/kingdom/index.tsx
 +++ b/apps/web/src/kingdom/index.tsx
-@@ -1,4 +1,4 @@
+@@ -1,5 +1,5 @@
+ import { createDockConnection } from '../stream/dock-connection';
 -import { createSignal, For, Index, onCleanup, onMount, Show } from 'solid-js';
 +import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
  import { createKingdomScene, type CameraName, type NameLabel, type PotentialKingdomView } from './scene';

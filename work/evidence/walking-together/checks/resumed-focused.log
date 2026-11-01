@@ -1,0 +1,215 @@
+
+ RUN  v5.0.5 /root/chatdomgg-harness/worktrees/walking-together
+
+stdout | apps/web/src/walk/realm-predict.test.ts
+ℹ️  optional .env file not found: .env.test, .env
+
+ ✓ apps/web/src/walk/realm-predict.test.ts > the realm client predicts with the room > cancels a jump sampled before an input takeover when no fixed input was due yet 524ms
+ ✓ apps/web/src/walk/realm-predict.test.ts > the realm client predicts with the room > interpolates all twelve rendered samples per 30 Hz fixed step at 360 Hz 149ms
+ ✓ apps/web/src/walk/realm-predict.test.ts > the realm client predicts with the room > keeps the moving camera on SDK render feet through a real acknowledged correction above the fixed-step rate 2003ms
+ ✓ apps/web/src/walk/realm-predict.test.ts > the realm client predicts with the room > stages exactly the due fixed inputs on slow frames, one jump per press, and agrees with the room in every field 3344ms
+ ✓ apps/web/src/walk/realm-predict.test.ts > the realm client predicts with the room > holds prediction across a published wall until its own revision arrives, then predicts with it 5199ms
+ ✓ apps/web/src/walk/realm-predict.test.ts > the realm client predicts with the room > snaps a short room placement for self and neighbours and fences late pre-placement inputs 4465ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > replays a recording identically, whatever order solids arrive in and after field transfer 8025ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > normalizes diagonals and keeps walk and sprint speed exact across tile seams once up to speed 474ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > starts promptly, stops quickly and turns without ever exceeding the target speed 3699ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > never tunnels through a thin or zero-thickness wall at sprint, even on the largest catch-up tick 13ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > slides diagonally along a seamed wall without snagging or gaining speed 20ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > terminates in an inside corner, including zero-time hits from a resting contact 15ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > resolves a convex corner by the earliest contact, mirror-symmetric in X and Z 3ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > lands exactly, jumps once from support, ignores an airborne press and stops under a beam 10ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > reports support at the end of the tick, so walking off a ledge is airborne at once 1ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > pushes an embedded body out by the shortest path that crosses no other solid 4ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > holds a body that cannot be freed without crossing a wall, and the adapter can see it 1ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > does not jump from stale support after a closing door pushes the walker off a ledge 1ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > never moves on a mismatched collision revision 0ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer > stops at the supplied court walls and its blocks at sprint 43ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer half-metre steps > climbs exactly half a metre onto support, solid or built from small voxels, and keeps walking 73ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer half-metre steps > climbs and remains on a slab when the broad phase rejects zero-volume queries 44ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer half-metre steps > refuses a step higher than half a metre and keeps the slide along it 9ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer half-metre steps > needs headroom over the step, and fits under a doorway lintel exactly when the body does 21ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer half-metre steps > slides past a ledge it only grazes, and climbs it when walking into it 10ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer half-metre steps > refuses narrow or unsupported landings: a rail over a drop, a kerb against a wall 76ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer half-metre steps > keeps the longer slide when a climb would only wedge the walker under an overhang 7ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer half-metre steps > never climbs from the air: a falling or jumping walker meets the face of a step 33ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer half-metre steps > stays on its feet down a half-metre step and falls off anything deeper 5ms
+ ✓ packages/world/src/movement/step.test.ts > stepPlayer half-metre steps > climbs the supplied court half-metre block 3ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > queues separate processes until release and makes release idempotent 1308ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > runs two lane captures beside a reserved main capture, with FIFO queues in both classes 5736ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > preserves FIFO for repeated main captures 2445ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > releases when an acquired main caller is killed 1534ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > releases when an acquired lane caller is killed 2434ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > cancels a killed queued main caller without holding the next acquisition 2549ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > cancels a killed queued lane caller without holding the next acquisition 2778ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > cancels a queued main acquisition through its abort signal 3553ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > cancels a queued lane acquisition through its abort signal 3790ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > uses the environment priority and lets an explicit option override it 1329ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > keeps an acquired lock until cleanup even if its queue signal is later aborted 1405ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > rejects a failed lock subprocess instead of granting capture access 1396ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > excludes legacy exclusive holders of  while permitting all three new slots after release 3073ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > excludes legacy exclusive holders of .priority while permitting all three new slots after release 2561ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > holds compatibility locks for the full lifetime of every new capture 1841ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > cleans abandoned ticket records, partial writes and leases without process IDs 453ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > honours a live ticket lease without PID metadata until its owner closes the lease 1187ms
+ ✓ packages/testing/capture-lock.test.ts > capture queue > uses a separate registry namespace without touching prior PID-registry tickets 459ms
+ ✓ apps/web/src/citizens/style-adapter.test.ts > painted citizen runtime adapter > preserves every painted cell in all 20 whole citizens and closes articulated parts within the look budget 4880ms
+ ✓ apps/web/src/citizens/style-adapter.test.ts > painted citizen runtime adapter > keeps long hair on the head and continuous garment hems on their hip hinge 28ms
+ ✓ apps/web/src/citizens/style-adapter.test.ts > painted citizen runtime adapter > uses exact linear paint and source corner AO in the existing environment, including live texture replacement 186ms
+ ✓ apps/web/src/citizens/style-adapter.test.ts > painted citizen runtime adapter > preserves lens transparency without deleting the eyes behind it 59ms
+ ✓ apps/web/src/citizens/style-adapter.test.ts > painted citizen runtime adapter > animates old and new looks together with local shoulder offsets, moving grips and the same thin cloth 456ms
+ ✓ apps/web/src/citizens/style-adapter.test.ts > painted citizen runtime adapter > prepares painted-only looks without workers and rejects duplicate look IDs 170ms
+ ✓ apps/web/src/citizens/style-adapter.test.ts > painted citizen runtime adapter > folds a continuous skirt onto the seated lap without crossing the sole datum 75ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the near-plane footprint > encloses the frustum three.js draws, lens shift included, at 1440×900 57ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the near-plane footprint > encloses the frustum three.js draws, lens shift included, at 390×844 12ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the near-plane footprint > sweeps a box against a solid without letting a fast move tunnel 1ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > pulls in on the very first frame a wall appears behind the citizen at 1440×900 91ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > pulls in on the very first frame a wall appears behind the citizen at 390×844 108ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > backs into a corner, under a roof and past a thin post without clipping at 1440×900 40ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > backs into a corner, under a roof and past a thin post without clipping at 390×844 20ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > catches an obstruction a centre ray alone would miss 1ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > eases back out over about .35 s once clear, independent of the wheel 133ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > approaches a wall in first person without the near plane entering it 116ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > lowers the boom’s pivot under a low ceiling instead of lifting it through 1ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > keeps an upward-looking near plane below a ceiling at the body crown at 1440×900 2ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > keeps an upward-looking near plane below a ceiling at the body crown at 390×844 15ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > keeps a short boom over the shoulder, citizen low and left, at 1440×900 1ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > keeps a short boom over the shoulder, citizen low and left, at 390×844 0ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > never clips across a wide sweep of walls, posts and roofs at both aspects 609ms
+ ✓ apps/web/src/walk/camera/occlusion.test.ts > the camera stays out of solids > asks the world once per frame and is bounded by the boom length 1ms
+ ✓ apps/web/src/avatar-builder/builder.test.ts > the builder catalogue > offers the same nine tabs on page and panel, every control labelled 19ms
+ ✓ apps/web/src/avatar-builder/builder.test.ts > the builder catalogue > makes a valid look from every tile on every look, and the tile then reads as chosen 1746ms
+ ✓ apps/web/src/avatar-builder/builder.test.ts > the builder catalogue > sets any colour from a swatch or the colour wheel, and reads it back 32ms
+ ✓ apps/web/src/avatar-builder/builder.test.ts > the builder catalogue > takes off a forged hat for a hat and the raid scarf for neckwear 3ms
+ ✓ apps/web/src/avatar-builder/builder.test.ts > cape dressing > dims a lapsed sub cape but leaves a moment cape unchanged 42ms
+ ✓ apps/web/src/avatar-builder/builder.test.ts > the draft > undoes and redoes, and a new edit clears what could be redone 3ms
+ ✓ apps/web/src/avatar-builder/builder.test.ts > the draft > merges a run of the same edit into one step, and ignores edits that change nothing 1ms
+ ✓ apps/web/src/avatar-builder/builder.test.ts > the draft > remembers a bounded number of steps and knows when the draft matches the saved look 22ms
+ ✓ apps/web/src/avatar-builder/builder.test.ts > the draft > accepts the canonical saved recipe only while the submitted dress is still current 5ms
+ ✓ apps/web/src/avatar-builder/builder.test.ts > the draft > ignores a pending save after an external update or disposal 1ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > holds actual rendered stance feet at 1.2 m/s with 0.008 second frames through a turn 690ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > holds actual rendered stance feet at 7 m/s with 0.008 second frames through a turn 528ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > holds actual rendered stance feet at 7 m/s with 0.03333333333333333 second frames through a turn 236ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > holds actual rendered stance feet at 7 m/s with 0.05 second frames through a turn 171ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > holds actual rendered stance feet at 7 m/s with 0.06666666666666667 second frames through a turn 97ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > finishes a stop with one supporting foot, restarts smoothly and rebases corrections and height steps 18ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > preserves the planted toe pivot and seated sole datum outside locomotion 80ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > emits each actual touchdown once, with no entry, stationary, rebase or hidden catch-up events 81ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > reconstructs sprint touchdowns at 30 fps without duplicate or catch-up bursts 16ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > reconstructs sprint touchdowns at 20 fps without duplicate or catch-up bursts 18ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > reconstructs sprint touchdowns at 15 fps without duplicate or catch-up bursts 18ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > keeps first-person transparent footsteps, but never replays contacts after frustum culling 123ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > keeps both rendered soles above ground throughout walking into and out of sitting and tiptoe 114ms
+ ✓ apps/web/src/citizens/footsteps.test.ts > keeps planted feet and swing continuity when a walker reverses or strafes abruptly 136ms
+ ✓ apps/web/src/citizens/head-anchors.test.ts > tracks rendered head and tall hat bounds through sitting, bowing, tiptoe and departure 258ms
+ ✓ apps/web/src/citizens/head-anchors.test.ts > includes a legacy hat socket and drops anchors when its citizen is culled 477ms
+ ✓ apps/web/src/citizens/style-study/identity.test.ts > style study fixtures > shows five real everyday looks, each read from its own parts 34ms
+ ✓ apps/web/src/citizens/style-study/identity.test.ts > style study fixtures > reads skin and dyed garb exactly as the wardrobe made them 17ms
+ ✓ apps/web/src/citizens/style-study/identity.test.ts > style study fixtures > converts every fixture into every option 1850ms
+ ✓ apps/web/src/citizens/style-study/identity.test.ts > style study fixtures > refuses a fixture that no longer matches what the study labels it 37ms
+ ✓ apps/web/src/citizens/worn-look.test.ts > carries the worn builder appearance and exact cape paint without granting a cape 804ms
+ ✓ apps/web/src/walk/input/hud.test.ts > the phone thumb map > keeps the stick, Jump and the interaction's action apart at 390×844 59ms
+ ✓ apps/web/src/walk/input/hud.test.ts > the phone thumb map > keeps the stick, Jump and the interaction's action apart at 360×640 49ms
+ ✓ apps/web/src/walk/input/hud.test.ts > the phone thumb map > keeps the stick, Jump and the interaction's action apart at 430×932 11ms
+ ✓ apps/web/src/walk/input/hud.test.ts > the phone thumb map > keeps the stick, Jump and the interaction's action apart at 844×390 20ms
+ ✓ apps/web/src/walk/input/hud.test.ts > the phone thumb map > keeps the stick, Jump and the interaction's action apart at 667×375 22ms
+ ✓ apps/web/src/walk/input/hud.test.ts > the phone thumb map > keeps the stick, Jump and the interaction's action apart at 768×1024 21ms
+ ✓ apps/web/src/walk/input/hud.test.ts > the phone thumb map > keeps the stick, Jump and the interaction's action apart at 1024×768 17ms
+ ✓ apps/web/src/walk/input/hud.test.ts > the phone thumb map > places Jump where its stylesheet draws it 19ms
+ ✓ apps/web/src/walk/input/direction.test.ts > camera-relative walking > walks into the picture whichever way the camera looks 83ms
+ ✓ apps/web/src/walk/input/direction.test.ts > camera-relative walking > never makes a diagonal faster than a straight walk, at any heading 494ms
+ ✓ apps/web/src/walk/input/direction.test.ts > camera-relative walking > keeps a gentle thumb gentle and refuses broken numbers 1ms
+ ✓ apps/web/src/walk/input/direction.test.ts > camera-relative walking > faces the actual walk direction and keeps facing when still 1ms
+ ✓ apps/web/src/walk/input/direction.test.ts > camera-relative walking > measures the short way round 0ms
+ ✓ apps/web/src/citizens/capes.test.ts > keeps cloth separate from voxels, batches cuts, settles after a stop and releases absent identities 330ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > stands the citizen in the lower-left third at 1440×900 119ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > stands the citizen in the lower-left third at 390×844 1ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > walks forward straight into the picture at 1440×900 34ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > walks forward straight into the picture at 390×844 1ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > keeps the horizon level whatever the orbit 75ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > turns the view right when dragged right, and looks up when dragged up 12ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > wheels continuously into the head and back out, with no stuck minimum 75ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > keeps the wheel’s wish apart from what is drawn while it eases 1ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > swings behind the walk only after a manual orbit has rested 19ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > eases a jump or step for the camera without trailing far behind 1ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > blends portrait and landscape framing without a jump as a phone turns 55ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > looks past a faint citizen when a wall pulls the camera in at 1440×900 7ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > looks past a faint citizen when a wall pulls the camera in at 390×844 11ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > brings the citizen back as smoothly as the camera when the wall goes 200ms
+ ✓ apps/web/src/walk/camera/shoulder.test.ts > the shoulder view > draws the walking camera without a view offset another owner left behind 1ms
+ ✓ apps/web/src/walk/input/keyboard.test.ts > walking keys > turns held WASD and arrows into intent, and owns only its keys 5ms
+ ✓ apps/web/src/walk/input/keyboard.test.ts > walking keys > makes one jump per press, never from a held key repeating 1ms
+ ✓ apps/web/src/walk/input/keyboard.test.ts > walking keys > sprints only while Shift is held 0ms
+ ✓ apps/web/src/walk/input/keyboard.test.ts > walking keys > leaves typing, forms and shortcuts alone 2ms
+ ✓ apps/web/src/walk/input/keyboard.test.ts > walking keys > leaves Space and arrows to a keyboard-focused control, but walks and jumps past a clicked button 1ms
+ ✓ apps/web/src/walk/input/keyboard.test.ts > walking keys > leaves keys to an IME that is composing 0ms
+ ✓ apps/web/src/walk/input/keyboard.test.ts > walking keys > never leaves a key stuck after blur, a hidden page, a chat box, a context menu, Cmd or a menu 1ms
+ ✓ apps/web/src/walk/input/keyboard.test.ts > walking keys > lets go of the page when disposed 1ms
+ ✓ apps/web/src/citizens/gestures.test.ts > eases gestures and heading, keeps walking legs distance-driven, and seats only while stopped 800ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > binds local and witnessed gestures while keeping reset, movement and loss of ownership honest 86ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > puts the camera on the connected citizen behind the way they face 22ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > keeps a newly placed citizen facing the way the room placed them 2ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > sends camera-relative, quantized walking with the actual collision revision 12ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > turns a press of Space into exactly one rising edge 8ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > hands the camera over cleanly and takes it back ready to walk 11ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > comes back from a Forge or build camera to the normal walking view and walks on the first frame 13ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > hands a first-person walker back to another camera whole, and takes first person back at once 33ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > follows the given entry heading and resets to it 18ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > uses the resized surface for framing 8ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > walks and sprints with the phone stick, camera relative, and turns with a second finger 39ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > turns a fixed angle per locked mouse pixel, gathering a whole slow frame 12ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > lets go of held keys, a pending jump, the stick and the lock on a dropped connection, a hidden page and a menu 15ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > lets go of everything on dispose 1ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > keeps the camera out of the newest supplied collision world from the first frame a wall exists 19ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > reports a camera with no collision world honestly 1ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > does not inject an exact 30 Hz height change before SDK rendered feet begin moving 15ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > eases a predicted step down without moving collision feet or drawing the head into the next lintel 31ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > drops a queued phone jump and every held input on blur 12ms
+ ✓ apps/web/src/walk/index.test.ts > the walk controller > drops a queued phone jump and every held input on contextmenu 1ms
+ ✓ apps/web/src/walk/motion/step-ease.test.ts > step ease > carries the camera smoothly up and down a real stair without drawing the avatar inside it 241ms
+ ✓ apps/web/src/walk/motion/step-ease.test.ts > step ease > leaves a jump and its landing to the shared step 5ms
+ ✓ apps/web/src/walk/motion/step-ease.test.ts > step ease > forgets its easing on reset and ignores a frame without time 1ms
+ ✓ apps/web/src/walk/motion/step-ease.test.ts > step ease > drops a descending step offset immediately when the citizen jumps or is placed elsewhere 1ms
+ ✓ apps/web/src/walk/input/touch.test.ts > phone walking > splits the surface into a lower-left stick and an orbit region 16ms
+ ✓ apps/web/src/walk/input/touch.test.ts > phone walking > turns thumb offset into gentle, capped intent and sprints past the rim 10ms
+ ✓ apps/web/src/walk/input/touch.test.ts > phone walking > floats the stick under the thumb, keeps it on screen, and lets go cleanly 17ms
+ ✓ apps/web/src/walk/input/touch.test.ts > phone walking > keeps a tap in either region a click, and eats the click that ended a drag 2ms
+ ✓ apps/web/src/walk/input/touch.test.ts > phone walking > orbits with one finger from the first pixel of the press, while the other thumb walks 9ms
+ ✓ apps/web/src/walk/input/touch.test.ts > phone walking > pinches the boom with two orbit fingers and never orbits during the pinch 2ms
+ ✓ apps/web/src/walk/input/touch.test.ts > phone walking > drops every finger on blur, when disabled for a menu, and ignores mouse and pen 1ms
+ ✓ apps/web/src/walk/input/touch.test.ts > phone walking > owns touch-action while alive and restores it 1ms
+ ✓ apps/web/src/walk/input/look.test.ts > mouse look > filters locked movement exactly as R8 asks 10ms
+ ✓ apps/web/src/walk/input/look.test.ts > mouse look > opts in with a real pointer click, ignores the settle window and warps, and gathers every event of a slow frame 7ms
+ ✓ apps/web/src/walk/input/look.test.ts > mouse look > gives the cursor back on Escape, click, blur and when disabled for a menu 2ms
+ ✓ apps/web/src/walk/input/look.test.ts > mouse look > falls back to drag on a refused lock, never on a fast flick, and a later lock clears it 5ms
+ ✓ apps/web/src/walk/input/look.test.ts > mouse look > makes only one standard request per click and quietly survives rejection or a throwing request 4ms
+ ✓ apps/web/src/walk/input/look.test.ts > mouse look > hands back a lock that lands after the walker let go, and ignores late refusals 1ms
+ ✓ apps/web/src/walk/input/look.test.ts > mouse look > never acquires from keyboard activation, synthetic clicks, V or a text field 1ms
+ ✓ apps/web/src/walk/input/look.test.ts > mouse look > reports each change once and stops on dispose 1ms
+ ✓ apps/web/src/walk/gestures/index.test.ts > gesture state > ends timed gestures once, and publishes their end 28ms
+ ✓ apps/web/src/walk/gestures/index.test.ts > gesture state > cancels sit and dance on movement, while allowing a walking wave 2ms
+ ✓ apps/web/src/walk/gestures/index.test.ts > gesture state > rejects invalid clocks and clears a gesture if the sampling clock fails 1ms
+ ✓ apps/web/src/walk/gestures/index.test.ts > gesture state > lets a seated citizen stand by selecting sit again 1ms
+ ✓ apps/web/src/walk/labels.test.ts > keeps nearby speech readable without detaching labels or covering the phone HUD 30ms
+ ✓ apps/web/src/walk/labels.test.ts > is stable under input order, deduplicates, and caps names and speech in a crowded frame 22ms
+ ✓ apps/web/src/walk/labels.test.ts > rejects invalid coordinates and distant speech rather than leaving stale labels 1ms
+ ✓ apps/web/src/walk/labels/index.test.ts > does not reuse a name or removed bubble measurement for different witnessed content 28ms
+ ✓ apps/web/src/walk/labels/index.test.ts > joins only an authoritative slot and retains unmatched speech without inventing a name 14ms
+ ✓ apps/web/src/walk/input/pointer.test.ts > free-cursor camera input > keeps a short press a click for the interaction owner 26ms
+ ✓ apps/web/src/walk/input/pointer.test.ts > free-cursor camera input > orbits once a press travels, gathers every move until the next frame, and eats the trailing click 2ms
+ ✓ apps/web/src/walk/input/pointer.test.ts > free-cursor camera input > ends a drag whose button was released outside the window 1ms
+ ✓ apps/web/src/walk/input/pointer.test.ts > free-cursor camera input > drops the drag on blur and when a menu takes the pointer 10ms
+ ✓ apps/web/src/walk/input/pointer.test.ts > free-cursor camera input > ignores secondary buttons, leaves touch to the phone controls, and drags with a pen 1ms
+ ✓ apps/web/src/walk/input/pointer.test.ts > free-cursor camera input > never drags while mouse look holds the pointer, and switching drops a drag 1ms
+ ✓ apps/web/src/walk/input/pointer.test.ts > free-cursor camera input > reads wheel lines and pages, bounds a single flick, and only scrolls the world 16ms
+ ✓ apps/web/src/walk/input/pointer.test.ts > free-cursor camera input > stops listening when disposed 3ms
+ ✓ apps/web/src/citizens/default-look.test.ts > default citizen wardrobe > keeps presence look IDs and cloth capes while sharing the chosen painted recipes 92ms
+ ✓ apps/web/src/walk/labels/reserved.test.ts > converts visible HUD bounds into a scaled layer coordinate system 32ms
+
+ Test Files  26 passed (26)
+      Tests  200 passed (200)
+   Start at  18:01:10
+   Duration  156.76s (tests 68%, import 21%, transform 11%, worker 1%)
+
+    Isolate  26 workers spawned · ~994ms startup each (spawn + environment, per file)
+             at least ~24.85s faster with isolate: false — reuses workers across files instead of one per file
+
