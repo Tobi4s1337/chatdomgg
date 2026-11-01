@@ -83,26 +83,26 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
   current(kingdomId: KingdomId): FoundedPreparedWorld | undefined;
 } {
   const current = new Map<KingdomId, FoundedPreparedWorld>();
-  const staged = new Map<KingdomId, { homes: RealmPrivateState['homes']; castle: RealmPrivateState['castle']; attachments: RealmPrivateState['attachments']; prepared: FoundedPreparedWorld }>();
+  const staged = new Map<KingdomId, { homes: RealmPrivateState['homes']; castle: RealmPrivateState['castle']; attachments: RealmPrivateState['attachments']; civic: NonNullable<RealmPrivateState['growth']>['civic'] | undefined; prepared: FoundedPreparedWorld }>();
   const publish = (kingdomId: KingdomId, prepared: FoundedPreparedWorld) => {
     current.delete(kingdomId); current.set(kingdomId, prepared);
     while (current.size > 64) current.delete(current.keys().next().value!);
   };
   const stage = async (kingdomId: KingdomId, state: RealmPrivateState): Promise<FoundedPreparedWorld> => {
     const cached = staged.get(kingdomId), head = await source.currentLayout(kingdomId);
-    if (cached && cached.homes === state.homes && cached.castle === state.castle && cached.attachments === state.attachments
+    if (cached && cached.homes === state.homes && cached.castle === state.castle && cached.attachments === state.attachments && cached.civic === state.growth?.civic
       && head?.revision === cached.prepared.scene.layoutRevision) return cached.prepared;
     // First chat claims a native home already standing here. Rebind its public ownership only after checking
     // the actual blueprint against that placement's immutable asset; no geometry or scene bytes change.
     if (cached && head?.revision === cached.prepared.scene.layoutRevision && state.kingdomId === kingdomId
-      && state.origin === source.origin && cached.castle === state.castle && cached.attachments === state.attachments) {
+      && state.origin === source.origin && cached.castle === state.castle && cached.attachments === state.attachments && cached.civic === state.growth?.civic) {
       const build = await claimNativeHomes(cached.prepared.build, cached.homes, state.homes);
       if (build) {
         const latest = await source.currentLayout(kingdomId);
         if (!latest || latest.revision !== head.revision) throw new Error('The adopted layout changed during founded world preparation.');
         const prepared: FoundedPreparedWorld = { ...withOwnedDoorSpawns(cached.prepared, state), build,
           manifestFor: checkpoint => foundedCheckpointMatches(build, checkpoint) ? build.manifest : null };
-        staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, castle: state.castle, attachments: state.attachments, prepared });
+        staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, castle: state.castle, attachments: state.attachments, civic: state.growth?.civic, prepared });
         return prepared;
       }
     }
@@ -123,7 +123,7 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
     // Recheck layout head after asynchronous preparation. Caller still checks held writer/poses at adoption.
     const latest = await source.currentLayout(kingdomId);
     if (!latest || latest.revision !== adopted.revision) throw new Error('The adopted layout changed during founded world preparation.');
-    staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, castle: state.castle, attachments: state.attachments, prepared });
+    staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, castle: state.castle, attachments: state.attachments, civic: state.growth?.civic, prepared });
     while (staged.size > 64) staged.delete(staged.keys().next().value!);
     return prepared;
   };

@@ -150,9 +150,23 @@ describe('humpback bridge', () => {
     });
   }
 
+
+  it('fits an actual deep lake frame without clipping the crest or losing its open deck', () => {
+    const piece = createHumpbackBridge('tide', 20, 28);
+    expect(piece.blueprint.size[1]).toBeGreaterThan(64);
+    for (const box of piece.blueprint.boxes) expect(box.to[1]).toBeLessThanOrEqual(piece.blueprint.size[1]);
+    const { at } = voxels(piece.blueprint);
+    for (let x = 4; x < L - 4; x++) {
+      const top = humpbackDeckTop(x, 20, 28);
+      expect(at(x, top - 1, 16)).not.toBe(0);
+      for (let y = top; y < top + 14; y++) expect(at(x, y, 16)).toBe(0);
+    }
+    expect(at(C, 20, 16)).toBe(0);
+  });
+
   it('refuses kits without a civic dressing and impossible sites', () => {
     expect(() => createHumpbackBridge('grove' as CivicStyle, 6, 14)).toThrow(RangeError);
-    for (const [water, bank] of [[1, 8], [13, 20], [6, 6], [6, 25], [4.5, 10], [6, Number.NaN]] as const) {
+    for (const [water, bank] of [[1, 8], [33, 40], [6, 6], [6, 65], [4.5, 10], [6, Number.NaN]] as const) {
       expect(() => createHumpbackBridge('hearth', water, bank)).toThrow(RangeError);
     }
     expect(() => humpbackDeckTop(L, 6, 14)).toThrow(RangeError);

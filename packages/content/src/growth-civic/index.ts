@@ -26,7 +26,7 @@ export function createGrowthCivicForm(place: GrowthCivicPlace, style: CivicStyle
   }
   else ({ market, tavern, forge, 'castle-court': court } as const)[place](b, kit, stage);
   return { version: 1, id: `growth-${style}-${place}-${level}`, styleId: STYLES[style].id,
-    kind: 'civic', lattice: 'build', size: place === 'bridge' ? [144, 80, 32] : [64, 64, 32], boxes: b.list, windows: [] };
+    kind: 'civic', lattice: 'build', size: place === 'bridge' ? [144, Math.max(80, ...b.list.map(box => box.to[1])), 32] : [64, 64, 32], boxes: b.list, windows: [] };
 }
 
 function stall(b: Boxes, k: CivicKit, x: number, awning: boolean): void {
