@@ -260,15 +260,24 @@ export class AllocationService {
    */
   async install(kingdom: DurableKingdom, deed: Deed): Promise<InstallOutcome> {
     if (kingdom.kingdomId !== deed.kingdomId || kingdom.origin !== deed.origin) throw new TypeError(`Deed ${deed.deedId} does not belong to kingdom ${kingdom.kingdomId}`);
-    if (deed.status === 'installed') return { status: 'installed', sequence: deed.installedSequence! };
+    if (deed.status === 'installed') {
+      await this.bindGrowth(kingdom, deed);
+      return { status: 'installed', sequence: deed.installedSequence! };
+    }
     if (deed.status === 'void') return { status: 'void', reason: 'void' };
     const command = await this.prepare(deed);
     const result: RealmStoredOutcome = await kingdom.execute(installCommandId(deed), command, 'allocation',
       { actor: null, cause: { kind: 'external', source: 'allocation', id: deed.deedId } });
-    if (result.status === 'committed') return { status: 'installed', sequence: result.sequence };
+    if (result.status === 'committed') {
+      await this.bindGrowth(kingdom, deed);
+      return { status: 'installed', sequence: result.sequence };
+    }
     if (result.reason !== 'conflict') return { status: 'pending', reason: result.reason };
     const fresh = await this.deedById(deed.deedId);
-    if (fresh?.status === 'installed') return { status: 'installed', sequence: fresh.installedSequence! };
+    if (fresh?.status === 'installed') {
+      await this.bindGrowth(kingdom, fresh);
+      return { status: 'installed', sequence: fresh.installedSequence! };
+    }
     await this.voidDeed(deed, 'install-refused');
     return { status: 'void', reason: 'install-refused' };
   }
@@ -289,7 +298,31 @@ export class AllocationService {
       }
     }
     if (rows.rows.length) this.log(`kingdom ${kingdom.kingdomId} recovered deeds: ${installed} installed, ${pending} pending, ${voided} void`);
+    // A crash after home installation must not strand its growth binding. The immutable deed carries the tier;
+    // never infer it from an asset name or replace a player's approved home to initialise progression.
+    const missing = Object.values(kingdom.privateState.homes).filter(home => !kingdom.privateState.growth?.citizens[home.ownerId]?.home).map(home => home.id);
+    if (missing.length) {
+      const existing = await this.query<DeedRow>(`SELECT ${DEED_COLUMNS} FROM realm_deeds
+        WHERE kingdom_id = $1 AND origin = $2 AND status = 'installed' AND plot_id = ANY($3::text[])
+        ORDER BY installed_seq, deed_id LIMIT $4`, [kingdom.kingdomId, kingdom.origin, missing, RECOVERY_BATCH]);
+      for (const row of existing.rows) {
+        if (!kingdom.current) break;
+        await this.bindGrowth(kingdom, deedOf(row));
+      }
+    }
     return { installed, pending, voided };
+  }
+
+  /** Failure here never voids an installed deed or prevents a citizen's window from opening. Recovery retries it. */
+  private async bindGrowth(kingdom: DurableKingdom, deed: Deed): Promise<void> {
+    try {
+      const result = await kingdom.execute(`growth:${deed.deedId}`, { type: 'growth.bindHome', homeId: deed.plotId,
+        installedTier: deed.placement.tier, evidenceReceipt: deed.receipt }, 'allocation',
+      { actor: null, cause: { kind: 'external', source: 'allocation', id: deed.deedId } });
+      if (result.status !== 'committed' && !(result.status === 'unchanged' && result.reason === 'duplicate')) this.log(`growth binding stays pending: ${result.reason}`);
+    } catch (error) {
+      this.log(`growth binding stays pending: ${error instanceof AllocationUnavailableError ? error.message : describeStorageFailure(error)}`);
+    }
   }
 
   // -----------------------------------------------------------------------------------------------------------------

@@ -96,7 +96,9 @@ export class PostgresRealmRepository implements RealmRepository {
   async load(lease: RealmWriterLease): Promise<RealmPrivateState> {
     return this.transaction(async tx => {
       const fence = await this.fence(tx, lease);
-      const state = await this.replay(tx, lease.kingdomId, fence.sequence);
+      const state = await this.replay(tx, lease.kingdomId, fence.sequence, fence.now);
+      await this.recoverAllocatedHomeViews(tx, state, fence.now);
+      await this.finalFence(tx, lease, fence.sequence, fence.sequence);
       this.cache.set(key(lease), state);
       return state;
     });
@@ -241,7 +243,7 @@ export class PostgresRealmRepository implements RealmRepository {
     return this.transaction(async tx => {
       const fence = await this.fence(tx, lease);
       const cached = this.cache.get(key(lease));
-      const state = cached?.sequence === fence.sequence ? cached : await this.replay(tx, lease.kingdomId, fence.sequence);
+      const state = cached?.sequence === fence.sequence ? cached : await this.replay(tx, lease.kingdomId, fence.sequence, fence.now);
       await writeSnapshot(tx, state, fence.now);
       await this.finalFence(tx, lease, fence.sequence, fence.sequence);
       return state.sequence;
@@ -249,6 +251,35 @@ export class PostgresRealmRepository implements RealmRepository {
   }
 
   // ---------------------------------------------------------------------------------------------------------------
+
+  /** Older allocations committed no public row. Repair only untouched installed homes, under load's writer lock. */
+  private async recoverAllocatedHomeViews(tx: Tx, state: RealmPrivateState, now: number): Promise<void> {
+    const plots = Object.keys(state.homes);
+    if (!plots.length) return;
+    const candidates = await tx.query<{ fact: string | null; digest: string | null; installed_seq: string; person_id: string;
+      receipt: string; origin: string; layout_revision: string; plot_id: string; slot: number; install_command: string | null }>(
+      `SELECT f.fact, f.digest, d.installed_seq, d.person_id, d.receipt, d.origin, d.layout_revision, d.plot_id, d.slot, d.install_command
+       FROM realm_deeds d LEFT JOIN realm_facts f ON f.kingdom_id = d.kingdom_id AND f.seq = d.installed_seq
+       WHERE d.kingdom_id = $1 AND d.status = 'installed' AND d.plot_id = ANY($2::text[])
+       AND NOT EXISTS (SELECT 1 FROM realm_outbox o WHERE o.kingdom_id = d.kingdom_id AND o.plot_id = d.plot_id
+         AND (o.kind = 'home' OR (o.kind = 'forge' AND o.message::jsonb->'event'->>'type' = 'committed')))
+       ORDER BY d.installed_seq`, [state.kingdomId, plots]);
+    for (const row of candidates.rows) {
+      const fail = (): never => { throw new RealmRecoveryError(state.kingdomId, `allocated home ${row.plot_id} has inconsistent publication history`); };
+      if (!row.fact || sha256Hex(row.fact) !== row.digest) fail();
+      const fact = JSON.parse(row.fact!) as RealmFact;
+      if (fact.version !== 1 || fact.type !== 'realm.transaction' || fact.kingdomId !== state.kingdomId || fact.origin !== state.origin
+        || fact.seq !== Number(row.installed_seq) || fact.seq > state.sequence) fail();
+      if (fact.body.type !== 'home.installAllocated') return fail();
+      const home = fact.body.home;
+      if (row.origin !== state.origin || home.ownerId !== row.person_id || home.allocationReceipt !== row.receipt || home.id !== row.plot_id
+        || home.slot !== row.slot || home.layoutRevision !== row.layout_revision || row.install_command !== canonicalJson(fact.body)
+        || !state.homes[home.id] || canonicalJson(state.homes[home.id]) !== canonicalJson(home) || Object.keys(home.attachments).length) fail();
+      // The original fact's event identity makes retry/restart safe. A later public build or Forge was excluded above.
+      await insertOutbox(tx, state.kingdomId, fact.seq, `${state.kingdomId}:${fact.seq}:0`, home.id,
+        { type: 'home', plotId: home.id, revision: home.revision, assetHash: home.digest, attachments: [] }, now);
+    }
+  }
 
   private async commit(lease: RealmWriterLease, label: string,
     work: (tx: Tx, fence: Fence, state: RealmPrivateState) => Promise<{ done: RealmStoredOutcome } | { written: readonly Written[]; result: RealmStoredOutcome }>,
@@ -259,7 +290,7 @@ export class PostgresRealmRepository implements RealmRepository {
       await tx.query('BEGIN');
       const fence = await this.fence(tx, lease);
       const cached = this.cache.get(key(lease));
-      const state = cached?.sequence === fence.sequence ? cached : await this.replay(tx, lease.kingdomId, fence.sequence);
+      const state = cached?.sequence === fence.sequence ? cached : await this.replay(tx, lease.kingdomId, fence.sequence, fence.now);
       const step = await work(tx, fence, state);
       if ('done' in step) { await tx.query('ROLLBACK'); return step.done; }
       const last = step.written.at(-1);
@@ -322,17 +353,20 @@ export class PostgresRealmRepository implements RealmRepository {
   }
 
   /** One valid snapshot plus the contiguous digested tail, replayed by the world reducer. Fails closed. */
-  private async replay(tx: Tx, kingdomId: KingdomId, through: number): Promise<RealmPrivateState> {
+  private async replay(tx: Tx, kingdomId: KingdomId, through: number, now: number): Promise<RealmPrivateState> {
     const snap = (await tx.query<{ seq: string; version: number; state: string; digest: string }>(
       'SELECT seq, version, state, digest FROM realm_snapshots WHERE kingdom_id = $1 AND seq <= $2 ORDER BY seq DESC LIMIT 1', [kingdomId, through])).rows[0];
     let state: RealmPrivateState;
+    let upgradedSnapshot = false;
     if (snap) {
       if (snap.version !== 1) throw new RealmRecoveryError(kingdomId, `unsupported snapshot version ${snap.version}`);
       if (sha256Hex(snap.state) !== snap.digest) throw new RealmRecoveryError(kingdomId, `snapshot ${snap.seq} fails its digest`);
       const restored = JSON.parse(snap.state) as RealmPrivateState;
-      // Version-one snapshots predate the monarch's separate keep host.
-      state = { ...restored, castle: restored.castle ?? null };
-      if (state.version !== 1 || state.kingdomId !== kingdomId || state.sequence !== Number(snap.seq) || state.origin !== this.origin) throw new RealmRecoveryError(kingdomId, `snapshot ${snap.seq} does not belong to this kingdom`);
+      if (restored.version !== 1 || restored.kingdomId !== kingdomId || restored.sequence !== Number(snap.seq) || restored.origin !== this.origin) throw new RealmRecoveryError(kingdomId, `snapshot ${snap.seq} does not belong to this kingdom`);
+      // A pre-growth snapshot cannot reconstruct witnessed days from its accumulated totals. Replay
+      // immutable stream/interval facts once, then persist the rebuilt snapshot under this writer fence.
+      upgradedSnapshot = !restored.growth;
+      state = restored.growth ? { ...restored, castle: restored.castle ?? null } : createRealmState(kingdomId, this.origin);
     } else state = createRealmState(kingdomId, this.origin);
     const tail = await tx.query<{ seq: string; fact: string; digest: string }>('SELECT seq, fact, digest FROM realm_facts WHERE kingdom_id = $1 AND seq > $2 AND seq <= $3 ORDER BY seq', [kingdomId, state.sequence, through]);
     for (const row of tail.rows) {
@@ -342,6 +376,7 @@ export class PostgresRealmRepository implements RealmRepository {
       catch { throw new RealmRecoveryError(kingdomId, `fact ${row.seq} cannot be replayed`); }
     }
     if (state.sequence !== through) throw new RealmRecoveryError(kingdomId, `history ends at ${state.sequence}, expected ${through}`);
+    if (upgradedSnapshot) await writeSnapshot(tx, state, now);
     return state;
   }
 
@@ -406,7 +441,8 @@ async function insertOutbox(tx: Tx, kingdomId: string, sequence: number, eventId
 async function writeSnapshot(tx: Tx, state: RealmPrivateState, now: number) {
   const text = canonicalJson(state);
   await tx.query(`INSERT INTO realm_snapshots (kingdom_id, seq, version, state, digest, created_ms) VALUES ($1, $2, 1, $3, $4, $5)
-    ON CONFLICT (kingdom_id, seq) DO NOTHING`, [state.kingdomId, state.sequence, text, sha256Hex(text), now]);
+    ON CONFLICT (kingdom_id, seq) DO UPDATE SET state = excluded.state, digest = excluded.digest, created_ms = excluded.created_ms
+    WHERE realm_snapshots.state::jsonb->'growth' IS NULL`, [state.kingdomId, state.sequence, text, sha256Hex(text), now]);
 }
 
 async function checkpointRow(tx: Tx, kingdomId: string): Promise<RealmIngressCheckpoint | null> {

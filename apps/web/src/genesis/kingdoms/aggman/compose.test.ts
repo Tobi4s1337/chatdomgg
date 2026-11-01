@@ -9,6 +9,7 @@ import { createGenesisWaterContent } from '../../water-content';
 import { composeAggman, composeGenesisKingdom, withApprovedEmoteWorks } from './index';
 import { aggmanApprovedEmotes, loadAggmanEmoteDerivatives } from './content';
 import type { Dressing } from '../../../kingdom/settlement-content';
+import { voxels } from '../../../../../../packages/content/src/places/water/piece-checks';
 import { createGenesisSeatContent } from '../../seat-content';
 
 const channel = GENESIS_CHANNELS.find(item => item.id === '63920635')!;
@@ -116,7 +117,8 @@ describe('The_AGGman as a kingdom of its own', () => {
     const k = composeAggman(withApprovedEmoteWorks(recipe), landscape, proposed, await loadAggmanEmoteDerivatives());
     const quay = new Set(k.seat.props.filter(item => item.blueprint.id.startsWith('genesis-aggman-quay-')));
     // Pennant and bunting cloth flies overhead; their posts are set clear by hand and checked below.
-    const overhead = (item: Dressing) => /pennant|bunting/.test(item.blueprint.id);
+    // The shingle is the ground the shore pieces stand on, not a piece beside them.
+    const overhead = (item: Dressing) => /pennant|bunting|shingle/.test(item.blueprint.id);
     const nested = (a: Dressing, b: Dressing) => overhead(a) || overhead(b) || [a, b].some(item => /glass|vane|emote/.test(item.blueprint.id)) && [a, b].some(item => item.blueprint.id.startsWith('genesis-aggman-last-lantern'));
     const shared = new Set(createGenesisSeatContent(recipe, landscape, plan)!.props.map(item => item.blueprint.id));
     const ours = k.seat.props.filter(item => !shared.has(item.blueprint.id) && !quay.has(item));
@@ -146,6 +148,38 @@ describe('The_AGGman as a kingdom of its own', () => {
     for (const item of k.seat.props.filter(p => /drawn-up|gaggle|goose-family|harbour-inn|last-lantern/.test(p.blueprint.id))) {
       const b = bounds(item), centre = [(b.min[0] + b.max[0]) / 2, (b.min[2] + b.max[2]) / 2] as const;
       expect(sampleGenesisSurface(k.plan.genesisSurface!, centre[0], centre[1]).water, item.blueprint.id).toBeNull();
+    }
+  }, 60_000);
+
+  it('lays shingle along the waterline under the drawn-up boats, and none on the quay or under the light', async () => {
+    const k = composeAggman(withApprovedEmoteWorks(recipe), landscape, proposed, await loadAggmanEmoteDerivatives());
+    const strands = k.seat.props.filter(item => item.blueprint.id.startsWith('genesis-aggman-shingle-'));
+    expect(strands.length).toBe(4);
+    const stones = strands.map(item => ({ item, at: voxels(item.blueprint).at }));
+    /** The top stone at world (x, z), in world metres, or null where the turf or the sea shows. */
+    const stoneAt = (x: number, z: number) => {
+      for (const { item, at } of stones) {
+        const cx = Math.floor((x - item.position[0]) / .125), cz = Math.floor((z - item.position[2]) / .125);
+        if (cx < 0 || cz < 0 || cx >= item.blueprint.size[0] || cz >= item.blueprint.size[2]) continue;
+        for (let y = item.blueprint.size[1] - 1; y >= 0; y--) if (at(cx, y, cz)) return item.position[1] + (y + 1) * .125;
+      }
+      return null;
+    };
+    for (const boat of k.seat.props.filter(item => /drawn-up/.test(item.blueprint.id))) {
+      const b = bounds(boat), x = (b.min[0] + b.max[0]) / 2, z = (b.min[2] + b.max[2]) / 2;
+      let covered = 0;
+      for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]]) if (stoneAt(x + dx!, z + dz!) !== null) covered++;
+      expect(covered, boat.blueprint.id).toBeGreaterThanOrEqual(4);
+    }
+    const coping = k.site.quay.z - k.site.quay.halfDepth - 8.5;
+    for (let x = k.site.quay.minX + .5; x < k.site.quay.maxX; x += 1.5) for (let z = coping + .5; z < k.site.quay.z + k.site.quay.halfDepth; z += 1.5)
+      expect(stoneAt(x, z), `quay ${x},${z}`).toBeNull();
+    const light = bounds(k.seat.props.find(item => item.blueprint.id.startsWith('genesis-aggman-last-lantern'))!);
+    expect(stoneAt((light.min[0] + light.max[0]) / 2, (light.min[2] + light.max[2]) / 2)).toBeNull();
+    // Stones lie on the bank: never more than two cells proud of the graded ground.
+    for (let x = 16; x < 110; x += 2.3) for (let z = k.site.shoreZ - 4; z < k.site.shoreZ + 12; z += 1.7) {
+      const top = stoneAt(x, z);
+      if (top !== null) expect(top - terrainHeight(k.plan, x, z), `${x},${z}`).toBeLessThan(.4);
     }
   }, 60_000);
 

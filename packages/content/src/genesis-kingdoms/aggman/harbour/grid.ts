@@ -85,9 +85,9 @@ export class Grid {
    * grows into a rectangle along the second and the rectangle into a block along the third. All six axis orders
    * are tried and the shortest list kept; the result is deterministic for a given grid.
    */
-  toBoxes(): Box[] {
+  toBoxes(orders: readonly (readonly [number, number, number])[] = ORDERS): Box[] {
     let best: Box[] | undefined;
-    for (const order of ORDERS) {
+    for (const order of orders) {
       const boxes = this.sweep(order);
       if (!best || boxes.length < best.length) best = boxes;
     }
@@ -102,7 +102,8 @@ export class Grid {
       p[a] = u; p[b] = v; p[c] = w;
       return [p[0]!, p[1]!, p[2]!];
     };
-    const index = (u: number, v: number, w: number) => { const [x, y, z] = xyz(u, v, w); return x + this.sx * (y + this.sy * z); };
+    const stride = [1, this.sx, this.sx * this.sy], sa = stride[a]!, sb = stride[b]!, sc = stride[c]!;
+    const index = (u: number, v: number, w: number) => u * sa + v * sb + w * sc;
     const taken = new Uint8Array(this.cells.length), out: Box[] = [];
     for (let w = 0; w < nc; w++) for (let v = 0; v < nb; v++) for (let u = 0; u < na; u++) {
       const start = index(u, v, w), m = this.cells[start]!;
@@ -120,9 +121,12 @@ export class Grid {
     return out;
   }
 
-  /** The grid as a Tide prop blueprint. */
-  blueprint(id: string): VoxelBlueprint {
-    return { version: 1, id, styleId: STYLES.tide.id, kind: 'prop', lattice: 'build', size: [this.sx, this.sy, this.sz], boxes: this.toBoxes(), windows: [] };
+  /**
+   * The grid as a Tide prop blueprint. `orders` narrows the packer's search for large, thin pieces (a ground skin)
+   * whose best order is known, so they pack in one sweep instead of six.
+   */
+  blueprint(id: string, orders: readonly (readonly [number, number, number])[] = ORDERS): VoxelBlueprint {
+    return { version: 1, id, styleId: STYLES.tide.id, kind: 'prop', lattice: 'build', size: [this.sx, this.sy, this.sz], boxes: this.toBoxes(orders), windows: [] };
   }
 }
 

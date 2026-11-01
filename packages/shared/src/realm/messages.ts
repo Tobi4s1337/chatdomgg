@@ -7,6 +7,7 @@ import type { ForgeActivity, CommittedForgeAttachment } from './forge-authority'
 import type { CitizenChatCue } from '../citizen-chat';
 import type { RealmInteractionState, RealmSeat } from './interactions';
 import type { TwitchMomentFact } from '../twitch-moments';
+import type { GrowthSceneFrame } from '../growth';
 
 export function kingdomRoomId(kingdom: KingdomId | string): `k:${string}` {
   return `k:${KingdomIdSchema.parse(kingdom)}`;
@@ -52,6 +53,8 @@ export type RealmPublicMessage =
   /** Checkpoint only: never a request to animate historical events. */
   | { readonly type: 'moments.current'; readonly throughSeq: number; readonly facts: readonly TwitchMomentFact[] }
   | { readonly type: 'presence'; readonly frame: KingdomPresenceFrame }
+  /** After-commit read projection. Checkpoints contain no request to repeat the recent ceremonies. */
+  | { readonly type: 'growth'; readonly frame: GrowthSceneFrame }
   | { readonly type: 'forge'; readonly event: ForgeActivity }
   | { readonly type: 'home'; readonly plotId: string; readonly revision: string; readonly assetHash: string; readonly attachments: readonly CommittedForgeAttachment[] }
   | { readonly type: 'castle'; readonly moduleId: string; readonly revision: string; readonly assetHash: string; readonly attachments: readonly CommittedForgeAttachment[] };

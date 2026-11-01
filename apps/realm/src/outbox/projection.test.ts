@@ -3,6 +3,7 @@ import { KingdomIdSchema, PersonIdSchema } from '@chatdom/shared';
 import { VOXEL_FIXTURE } from '@chatdom/shared/world-fixtures';
 import type { CommittedForgeAttachment, RealmOwnedHome, RealmPublicMessage } from '@chatdom/shared/realm';
 import { createRealmState } from '@chatdom/world/realm';
+import { createGrowthState, projectGrowthScene } from '@chatdom/world/growth';
 import { PublicProjection } from './projection';
 
 it('publishes a first forge, replaces its socket, and keeps a later private build behind its public row', () => {
@@ -33,4 +34,22 @@ it('publishes a first forge, replaces its socket, and keeps a later private buil
   projection.adopt([forge(3, replacement)]); // Redelivery cannot undo the later build.
   expect(projection.current()).toEqual([published]);
   expect(projection.cursor).toBe(4);
+});
+
+it('restores growth only through the delivered prefix and removes ceremonies from every bootstrap', () => {
+  const kingdomId = KingdomIdSchema.parse('999000003');
+  const steady = { ...projectGrowthScene(createGrowthState(kingdomId, 'simulated')), sequence: 7, asOf: 100 };
+  const grown = { ...steady, sequence: 9, asOf: 200, civic: { ...steady.civic, tavern: 2 },
+    beats: [{ kind: 'civic-levelled' as const, sourceSeq: 9, at: 200, place: 'tavern' as const, from: 1, to: 2 }] };
+  const projection = new PublicProjection({ homes: [], presence: null, growth: { type: 'growth', frame: steady }, cursor: 10, sequence: 7 });
+  const row = { id: 11, sequence: 9, eventId: 'growth:9', plotId: null, message: { type: 'growth' as const, frame: grown } };
+  // A pending private/outbox milestone cannot appear before delivery adopts its committed row.
+  expect(projection.current()).toEqual([{ type: 'growth', frame: steady }]);
+  projection.adopt([row]);
+  expect(row.message.frame.beats).toHaveLength(1); // Live delivery retains the exact committed ceremony.
+  expect(projection.current()).toEqual([{ type: 'growth', frame: { ...grown, beats: [] } }]);
+  projection.adopt([{ ...row, id: 10, sequence: 7, message: { type: 'growth', frame: steady } }, row]);
+  expect(projection.current()).toEqual([{ type: 'growth', frame: { ...grown, beats: [] } }]);
+  const restarted = new PublicProjection({ homes: [], presence: null, growth: row.message, cursor: row.id, sequence: row.sequence });
+  expect(restarted.current()).toEqual(projection.current());
 });

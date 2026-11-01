@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./growth": "./src/growth/index.ts",
     "./genesis": "./src/genesis/index.ts",
     "./genesis/observed": "./src/genesis/observed-fixtures.ts",
     "./movement": "./src/movement/step.ts",

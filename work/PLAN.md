@@ -330,58 +330,58 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Outcome: the real channel answers, with the team’s moments on stream.** Window wave and
-Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo fill/warm pools, castle/beacon,
-sparse grey-violet smoke, sculpted land/groves and AS10 citizens. No new systems beyond live
-wiring; merge good runtime checkpoints, one visible change per turn, look before accepting.
+**Outcome: growth you can see.** Homes and civic places grow through witnessed days, ceremonies,
+card keepsakes and a scrubbable engine Chronicle. Forge/window wave ACCEPTED/CLOSED. Preserve dusk
+exposure, indigo fill/warm pools, castle/beacon, sparse grey-violet smoke, land/groves and AS10 citizens.
+One visible change per turn; same-view before/after; merge good checkpoints promptly.
 
-**Live-Twitch checkpoint:** preserved producer snapshot in `../worktrees/main-live-twitch`
-(`integrate/live-twitch-checkpoint`); producer WIP untouched. Main03a50f1 froze private
-observation/strike evidence; public raid body now freezes with producer/renderer consumers.
-Bits, v2 Hype Train, incoming raid → Herald durable outbox → authenticated realm ingress →
-moment facts/realm-owned dragon clock → existing public stream feed. Raid uses existing
-staged gate/road/camera ports; no new exterior-trail system blocks it. Fixed script lint and
-obsolete LIVE5191 default (5197 now). Typecheck/scoped lint/build and134 focused tests pass.
+**Growth first consumer:** spec50, `packages/shared/src/growth.ts`, `@chatdom/world/growth`.
+Pure ordered evidence → qualified stream-days, tier/streak/civic progress and milestone proposals;
+public projector strips private identity. Ten confirmed minutes/day; UTC session-start date, one credit
+per date, marathon one day; offline dates do not break streaks. Tent→hut3, cottage7, house30, manor90,
+hall180; only third-night hut is founder-specified, other values are versioned v1 balance. Installed
+homes retain their tier; bootstrap invents no attendance or ceremony. Civic v1 levels have day gates
+and a size-neutral pace; person-days retained. No paid inputs, no message-count rewards.
+**Durable source now wired:** realm source facts also reduce growth in their fenced transaction; public
+frames share the outbox/watch. Allocation-only `growth.bindHome` verifies the immutable installed deed/tier;
+interrupted bindings recover without voiding a home. Legacy snapshots replay original facts once, not counters.
+Walking/spectator connections expose `growthFeed`, passed into `SceneOptions`. Bootstrap/late subscribers
+restore quietly; only new delivered beats celebrate. Typecheck/scoped lint/Realm+web builds pass; focused
+core/ingress/outbox19, binding/feed3 and existing browser23 tests pass. Two real Postgres cases pass: growth
+retry/recovery/legacy replay and global three-home allocation. Newly added SQL in Vitest needs
+`--no-fsModuleCache` (its persistent transformed glob cached the old migration list); migration0009 is additive.
+**Next main slice:** apply earned native-home geometry/asset revisions, preserve custom builds/Forge,
+and mount the lane's ceremony; no enlarged house or watched Chronicle claimed yet. Follow-tenure pieces,
+earned channel-point/keepsake ledger and historical world/replay binding remain next consumer seams.
+Specs51–55 cover civic craft, earned card shelf, crier, Chronicle and seeded history; each owns its folder.
+Existing `growth` lane owns home ceremony/growing quarter; no runtime checkpoint delivered yet.
+Brief0034 is in the conductor briefs; requested old depth-progression document absent from this repo.
 
-Isolated Postgres SIMULATED signed-fixture HTTP smoke: cheer321ms, hype257ms, summon314ms,
-raid312ms; dragon advanced to active on realm clock.16 speakers →16 durable homes and16 lit
-windows;17th new home4735ms. Local Herald capacity12/unplaced4 does NOT cap room allocation:
-evidence crosses before local projection. Correction to prior capacity needs. Adopted plan
-has240 plots; no unlimited-capacity claim. Cold batch settlement took99s, first cold watch
-missed/lease expired: instant first arrival remains weak. Twitch CLI exits99 even for offline
-fixture generation; HTTP proof is NOT CLI-command proof. Owned smoke schema
-`main_live_smoke_20261101` remains; owned5172/5173 services stopped, no live event injected.
+**Recent merges:** growth PRD1207db1, raid-road unnamed-holding fix87b79a8, Aggman harbour
+strandf027d66/1e33a90. Focused22tests, typecheck/scoped lint/web build pass. Root viewed native
+`work/evidence/genesis-aggman/after-hero@1920x1080.png` and `before-after-shingle.png`.
+Shingle connects shore; still too regular/cobbled. Follow-up in lane progress; berth-margin WIP untouched.
 
-**Real grant checked:** chat/chatters/stream work; tobi4s_ lacks `bits:read` and
-`channel:read:hype_train`. After merge: Herald authorize broadcaster helper, preserving all
-existing grants, then check-auth. Raid needs no extra grant. Real cheer/hype/raid/Forge and
-production raid picture remain UNPROVEN. No observer waits for the user. Next: complete
-checkpoint merge, check managed pickup; user consent for missing scopes, then one real event.
+**Real services confirmed:** Herald5194 healthy, all13 EventSub subscriptions enabled, including
+bits.use and three v2 hype events; source LIVE, channel currently offline. Realm5197 ready200;
+Herald pending0/faultnull, delivery drained. New grants survive; no reauthorization helper needed.
+Main115bf29 fixes minute grant refresh; a14221c regression covers consent added after chat works.
+No actual new cheer/hype event observed, and no real-event picture claimed.
+Live-Twitch2cdb14d connects Herald→durable ingress→moment/dragon clock→stream; isolated signed-fixture
+HTTP rehearsal proved16speakers/16homes/windows,17th4735ms. Twitch CLI exits99: fixtures are NOT CLI proof.
+Native additive binding9b1c4f8 reuses scene (claims3702/3424/2927ms→6/1/2ms); cold/end-to-end speedup
+not measured. Adopted plan240plots, not unlimited. Owned smoke schema `main_live_smoke_20261101` remains;
+owned5172/5173 stopped. c0a0a14 publishes allocated homes and fenced/idempotent legacy outbox recovery;
+focused units and3realPostgres cases pass. Its owned17-home restart/entry200 still needs a check.
 
-**Sky32b0197 / main33fb2e9:** actual drawn terrain now supplies lair, train ring and bunting;
-dragon circles castle and contributes fire/sky light. Root viewed native1920×1080
-`shots/magic/dragon-stream-after.png` and matching pair: seam works, held-wide dragon is
-small/dark. Sky lane next: one nearer warm rim-lit pass across castle, preserve town exposure.
-SIMULATED stills, not real hype/motion proof. Capture92805 finished/cleaned;91423 expired20min
-without a frame. Pure HYPE pipeline settled49ms; static pair kept all data steps while
-avoiding140 intermediate SwiftShader RAF draws. No capture active or queued.
+**Other picture handoffs:** sky32b0197/main33fb2e9 uses drawn terrain; viewed `shots/magic/dragon-stream-pair.png`.
+Dragon small/dark: next near warm-rim-lit pass across castle. Raid-road RR10 participant journey is merged;
+AS10 guest/gate mount needs still open in its progress; production incoming raid is distinct from that bench.
+Aggman/PinkKittyRose authored identity/harbour/crossing accepted; keeper/sound mounts remain, and current
+Atlas survey lacks Aggman63920635 (never fabricate a holding). Keep those explicit follow-ups.
 
-**Raid-road a0024e2 / maina689199:** `/-/raid-gate?bench=simulated&road=1`, observed
-MashaD4 → PinkKittyRose departure/Atlas torch road/welcome rehearsal.25 focused tests/lint/
-type/build passed; no successful welcome after-frame. Old77301 cancelled/preview released.
-Participant board stays out of OBS. Lane next detail: AS10 people in gate light, replacing
-paper SVG figures. Public incoming raid renderer is distinct from this participant rehearsal.
-
-**Other merges:** Aggman harbour3a6916a/mainc1c2ddb and PinkKittyRose crossing5eb78b6/main2354488
-accepted from viewed producer stills. Next details: shingle below Aggman's boats; break river
-approach into meadow. Keeper/sound mounts and Atlas crest agreement await. Never restore
-technical “Unfounded land” copy or fabricate a missing Atlas holding. Existing sky/crowd/
-caption seams4ab8d36,5151440 accepted; aurora comb needs broader irregular curtains.
-
-**Opening:** `/stream?source=simulated&tier=town&hour=19.5&seam=starting`, no fixed time.
-Immediate named window light; wide0–8s, street8–12s, return24–36s; lantern/smoke at physical
-arrival. Viewed wave pairs/reduced rehearsal in `shots/magic/`. Curtain alarm was sleeping
-Chrome; preserve real loading text, no readiness bypass. Services:5190web/5196API/5197realm/
-5195Forge/5194herald. Logs ONLY `../conductor/state/services.log`. Capture ports via helper;
-queue main once20min, one still/short clip per lease, cleanup owned resources in finally.
+**Opening/services:** `/stream?source=simulated&tier=town&hour=19.5&seam=starting`; window immediate,
+wide0–8s/street8–12s/return24–36s; lantern/smoke at physical arrival. Curtain alarm was sleeping Chrome.
+Managed5190web/5196API/5197realm/5195Forge/5194Herald. Logs ONLY `../conductor/state/services.log`.
+No root capture active/queued. Main queues once20min, one still/short clip per lease, cleanup in finally.
 Preserve stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.
