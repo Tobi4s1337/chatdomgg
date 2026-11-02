@@ -2,7 +2,7 @@ import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch, type JS
 import { ScrollLeaf } from './controls';
 import { anvilMark, awayMark, cornerCap, doorMark, flourish } from './marks';
 import { BuildPage, HelpPage, ProviderPage, SettingsPage, WayHomePage, type PageProps } from './pages';
-import { folio } from './words';
+import { DRIFT_LINE, folio } from './words';
 import { CardPage } from '../card/CardPage';
 import { MapPage } from '../map/MapPage';
 
@@ -126,6 +126,7 @@ export function LedgerBook(props: PageProps & { phase: LedgerPhase }): JSX.Eleme
               <span class="pl-back-words"><span class="pl-back-title">Back to the street</span>
                 <span class="pl-back-hint">{props.cursor().state === 'touch' ? 'Tap to walk on' : 'Click to walk on'}</span></span>
             </button>
+            <Show when={props.cursor().drifting}><p class="pl-drift-note" role="note">{DRIFT_LINE}</p></Show>
             <p class="pl-escape-hint" aria-hidden="true">Escape closes the ledger</p>
           </div>
         </div>

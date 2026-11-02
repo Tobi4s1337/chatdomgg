@@ -64,3 +64,6 @@ export function sensitivityStop(value: number): number {
 export const sensitivityWords = (value: number) => `${value.toFixed(2)}×`;
 export const percentWords = (value: number) => `${Math.round(value * 100)}%`;
 export const fovWords = (value: number) => `${Math.round(value)}°`;
+
+/** Said when the browser lets the captured cursor drift (Firefox on X11), in the street and in the ledger. */
+export const DRIFT_LINE = 'Your browser lets the cursor drift. Hold the right mouse button to look, or run Firefox on Wayland.';

@@ -8,7 +8,7 @@ import { equipTool, registerActionBinding, registerArrivalStep, registerHeldTool
 import type { PlayWorld } from './tools';
 import type { PlayHost, PlayHud } from './host';
 
-function harness(world?: PlayWorld) {
+function harness(world?: PlayWorld, options: { echoFilter?: boolean } = {}) {
   const doc = Object.assign(new EventTarget(), {
     pointerLockElement: null as unknown,
     exitPointerLock() { if (doc.pointerLockElement) { doc.pointerLockElement = null; doc.dispatchEvent(new Event('pointerlockchange')); } },
@@ -17,7 +17,7 @@ function harness(world?: PlayWorld) {
     requestPointerLock() { doc.pointerLockElement = surface; doc.dispatchEvent(new Event('pointerlockchange')); },
   });
   const keyboard = windowKeys();
-  const cursor = createWalkLook(surface, doc, keyboard, { keyboardLock: null });
+  const cursor = createWalkLook(surface, doc, keyboard, { keyboardLock: null, ...(options.echoFilter ? { echoFilter: true } : {}) });
   let held = false, sink: ((dx: number, dy: number) => void) | null = null;
   const controller = { cursor, touch: false, owner: 'walking', hold: vi.fn((value: boolean) => { held = value; }), get held() { return held; },
     divertLook: (next: typeof sink) => { sink = next; } } as unknown as WalkController;
@@ -47,7 +47,8 @@ function harness(world?: PlayWorld) {
   const lock = () => cursor.capture({ isTrusted: true, type: 'pointerdown', button: 0 });
   /** The browser's own release: it ate Escape. */
   const browserEscape = () => { doc.pointerLockElement = null; doc.dispatchEvent(new Event('pointerlockchange')); };
-  return { session, controller, cursor, hud, settings, key, lock, browserEscape, cue, use, host: () => host!, doc, listenForKey,
+  const lockedMove = (movementX: number, movementY: number) => doc.dispatchEvent(Object.assign(new Event('mousemove'), { movementX, movementY }));
+  return { session, controller, cursor, hud, settings, key, lock, browserEscape, cue, use, host: () => host!, doc, listenForKey, lockedMove,
     moveMouse: (dx: number, dy: number) => sink?.(dx, dy) };
 }
 
@@ -95,6 +96,27 @@ describe('the play session', () => {
     hud.closeLedger();
     expect(cursor.mode).toBe('idle');
     expect(controller.held).toBe(false);
+  });
+
+  it('a lock lost to a drifting cursor (Firefox on X11) stays in the street the first time and says why', async () => {
+    const { session, hud, cursor, lock, browserEscape, lockedMove, host, key } = harness(undefined, { echoFilter: true });
+    await session.arrived;
+    lock();
+    // The hidden cursor's offset reported after each real move, drifting with it (Tobias's recorded shape).
+    for (let i = 0; i < 12; i++) { lockedMove(1, 0); lockedMove(-978 + i + 1, 105); }
+    expect(host().cursor.drifting).toBe(true);
+    browserEscape();
+    expect(hud.ledgerOpen).toBe(false);
+    expect(host().cursor.state).toBe('idle');
+    // Escape from the calm street still opens the ledger, which says the same line.
+    key('Escape');
+    expect(hud.ledgerOpen).toBe(true);
+    hud.closeLedger();
+    lock();
+    for (let i = 0; i < 12; i++) { lockedMove(1, 0); lockedMove(-978 + i + 1, 105); }
+    browserEscape();
+    expect(hud.ledgerOpen).toBe(true);
+    expect(cursor.drifting).toBe(true);
   });
 
   it('closes the ledger with Escape into the calm click-to-walk state, and opens it again from there', async () => {

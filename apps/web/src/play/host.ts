@@ -32,6 +32,11 @@ export interface CursorView {
   readonly canFullscreen: boolean;
   /** This browser can lock the keyboard in fullscreen (Chromium on desktop). */
   readonly canLockKeyboard: boolean;
+  /**
+   * This browser lets the hidden cursor drift while captured (Firefox on X11): the turn is kept true, but the capture
+   * breaks at the window's edge. The HUD and the ledger say so once, calmly, and offer the right-button look.
+   */
+  readonly drifting?: boolean;
 }
 
 /** The way to your own door, from the founded plan and your real plot. Null when you have no home here. */
