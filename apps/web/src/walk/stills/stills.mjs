@@ -28,7 +28,7 @@ const [width, height] = values.size.split('x').map(Number);
 const pc = values.target === 'pc';
 if (!['town', 'hamlet'].includes(values.land)) throw new Error('--land is town or hamlet');
 const repo = fileURLToPath(new URL('../../../../../', import.meta.url));
-const ALL = values.land === 'hamlet' ? ['dusk', 'third'] : ['third', 'first', 'dusk', 'slope-before', 'slope-after', 'stairs-before', 'stairs-after', 'floor-before', 'floor-after'];
+const ALL = values.land === 'hamlet' ? ['dusk', 'third'] : ['third', 'first', 'dusk', 'crowd', 'slope-before', 'slope-after', 'stairs-before', 'stairs-after', 'floor-before', 'floor-after'];
 const names = values.only ? values.only.split(',') : ALL;
 if (!pc && names.length > 1) {
   // One still per lock hold: run each in its own process and let the queue serve the other lanes in between.
@@ -46,31 +46,52 @@ const stamp = name => `${values.out}/${values.land}-${name}${pc ? '-gpu' : ''}@$
 const free = port => new Promise(resolve => { const probe = createProbe(); probe.once('error', () => resolve(false)); probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true))); });
 async function ports() {
   if (pc) return [5191, 5192]; // the lease checked both are free and forwards them to the GPU machine
-  const found = [];
-  for (const port of CAPTURE_PORTS) { if (await free(port)) found.push(port); if (found.length === 2) return found; }
+  // Two lane captures run beside main's, and other harnesses take the first free ports, so this one draws at random.
+  const found = [], order = [...CAPTURE_PORTS].sort(() => Math.random() - .5);
+  for (const port of order) { if (await free(port)) found.push(port); if (found.length === 2) return found; }
   throw new Error('No free capture ports');
 }
+// uWS listens beside another uWS on the same port without an error and the kernel then shares connections between
+// them, so the realm proves the port answers only to this run before anything uses it.
+const nonce = globalThis.crypto.randomUUID();
+async function ownRealm(origin) {
+  for (let i = 0; i < 6; i++) {
+    const answer = await globalThis.fetch(`${origin}/stills/nonce`).then(response => response.text(), () => 'unreachable');
+    if (answer !== nonce) throw new Error(`The realm port ${origin} answers for another server (${answer.slice(0, 80)}); run again`);
+  }
+}
 
-let loader, web, realm, browser, release;
+let loader, web, realm, browser, release, crowd;
 try {
   await mkdir(values.out, { recursive: true });
   console.log(`Stills: building the ${values.land} and its collision`);
   loader = await createServer({ root: repo, configFile: false, appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, entries: [] }, server: { middlewareMode: true, hmr: false, ws: false } });
-  const [{ createRealmServer }, { referenceServices }, { createStillsFixture }] = await Promise.all([
-    loader.ssrLoadModule('/apps/realm/src/server.ts'), loader.ssrLoadModule('/apps/realm/src/reference.ts'), loader.ssrLoadModule('/apps/web/src/walk/stills/fixture.ts')]);
+  const [{ createRealmServer }, { referenceServices }, { createStillsFixture }, { connectRealm }] = await Promise.all([
+    loader.ssrLoadModule('/apps/realm/src/server.ts'), loader.ssrLoadModule('/apps/realm/src/reference.ts'), loader.ssrLoadModule('/apps/web/src/walk/stills/fixture.ts'),
+    loader.ssrLoadModule('/apps/web/src/realm/client.ts')]);
   const fixture = createStillsFixture(values.land);
-  report.fixture = { homes: fixture.homes, placements: fixture.scene.placements.length, spots: fixture.spots, speakers: fixture.speakers };
+  report.fixture = { homes: fixture.homes, placements: fixture.scene.placements.length, spots: fixture.spots, speakers: fixture.speakers, crowdSpots: fixture.crowd.length };
   console.log(`Stills: ${fixture.homes} homes; spots ${Object.entries(fixture.spots).map(([k, v]) => `${k}${v ? '' : ' (none)'}`).join(', ')}`);
-  const info = JSON.stringify({ land: fixture.land, manifest: fixture.manifest, spots: fixture.spots, beside: fixture.beside, speakers: fixture.speakers });
+  const info = JSON.stringify({ land: fixture.land, manifest: fixture.manifest, spots: fixture.spots, beside: fixture.beside, speakers: fixture.speakers, crowd: fixture.crowd.length });
 
   if (!pc) release = await acquireCaptureLock();
   const [realmPort, webPort] = await ports(), endpoint = pc ? `http://localhost:${realmPort}` : `http://127.0.0.1:${realmPort}`;
   const base = referenceServices();
   let effects;
   const names3 = ['Rowan', 'Wren', 'Juniper'];
+  // The crowd still's walkers, after the first three: test names in the memory room only, the six starter looks.
+  const CROWD_NAMES = ['Alder', 'Briar', 'Cedar', 'Dove', 'Elm', 'Fern', 'Gale', 'Heath', 'Ivy', 'Jay', 'Kestrel', 'Larch', 'Marigold',
+    'Nettle', 'Oriel', 'Pip', 'Quill', 'Reed', 'Sorrel', 'Thistle', 'Umber', 'Vale', 'Willow', 'Yarrow'];
+  const LOOKS = ['hearth', 'tide', 'grove', 'clay', 'sun', 'dusk'];
+  // Names follow who asked for the ticket: the page's walkers are Rowan, Wren and Juniper, the runner's crowd the rest.
+  const crowdTickets = new Map(), named = new Map();
+  let pageWalkers = 0;
   const created = createRealmServer({ auth: { ...base.auth, authenticate: async join => {
-    const principal = await base.auth.authenticate(join), index = Number(principal.personId) - 990000001;
-    return { ...principal, publicName: names3[index % 3], look: ['tide', 'grove', 'clay'][index % 3] };
+    const principal = await base.auth.authenticate(join), crowdIndex = crowdTickets.get(join.ticket);
+    if (!named.has(principal.personId)) named.set(principal.personId, crowdIndex === undefined
+      ? { publicName: names3[pageWalkers % 3], look: ['tide', 'grove', 'clay'][pageWalkers++ % 3] }
+      : { publicName: `${CROWD_NAMES[crowdIndex % CROWD_NAMES.length]} ${Math.floor(crowdIndex / CROWD_NAMES.length) + 1}`, look: LOOKS[crowdIndex % LOOKS.length] });
+    return { ...principal, ...named.get(principal.personId) };
   } }, open: async id => {
     const handle = await base.open(id);
     return { ...handle, layoutRevision: fixture.scene.layoutRevision, world: fixture.world,
@@ -88,7 +109,47 @@ try {
     const ok = at.every(Number.isFinite) && !!effects?.placeWalker(q.get('id') ?? '', at, fixture.world.revision);
     cors(response).writeStatus(ok ? '200 OK' : '409 Conflict').end(ok ? 'placed' : 'refused');
   });
+  // The crowd still: its walkers join from here (not the page, which only draws them), each stood on its own open
+  // spot. They start joining as soon as the realm listens, while the page is still opening the kingdom (in software
+  // that takes minutes), so the still does not pay for 120 joins in a row under the capture lock.
+  crowd = [];
+  const CROWD = 120;
+  const joinCrowd = async count => {
+    const issue = i => { const join = base.issue(); crowdTickets.set(join.ticket, i); return join; };
+    for (let i = crowd.length; i < Math.min(count, fixture.crowd.length); i++) {
+      let client;
+      for (let attempt = 1; !client; attempt++) {
+        try {
+          client = await connectRealm(`http://127.0.0.1:${realmPort}`, { kingdomId: fixture.manifest.kingdomId, ticket: async () => issue(i),
+            resumeScope: `stills-crowd-${i}-${globalThis.crypto.randomUUID()}` }, fixture.world);
+        } catch (error) {
+          if (attempt >= 3) throw error;
+          await new Promise(resolve => globalThis.setTimeout(resolve, 2_000));
+        }
+      }
+      crowd.push(client);
+      if (!effects?.placeWalker(client.selfId, fixture.crowd[i], fixture.world.revision)) throw new Error(`The realm would not place crowd walker ${i}`);
+      if ((i + 1) % 30 === 0) console.log(`Stills: ${i + 1} crowd walkers in the street`);
+    }
+    return crowd.length;
+  };
+  let crowdJoin = null;
+  globalThis.setInterval(() => { for (const client of crowd) client.tick(globalThis.performance.now(), { moveX: 0, moveZ: 0, buttons: 0, yaw: 0, collisionRevision: fixture.world.revision }); }, 50).unref();
+  created.transport.app.get('/stills/crowd', (response, request) => {
+    const count = Math.max(0, Math.min(fixture.crowd.length, Number(new globalThis.URLSearchParams(request.getQuery() ?? '').get('n')) || 0));
+    let aborted = false;
+    response.onAborted(() => { aborted = true; });
+    crowdJoin ??= joinCrowd(Math.max(count, CROWD));
+    crowdJoin.then(joined => { if (!aborted) response.cork(() => cors(response).writeHeader('Content-Type', 'application/json').end(JSON.stringify({ joined }))); },
+      error => { console.error(error); if (!aborted) response.cork(() => cors(response).writeStatus('409 Conflict').end(String(error?.message ?? error))); });
+  });
+  created.transport.app.get('/stills/nonce', response => cors(response).end(nonce));
   await realm.listen(realmPort, '127.0.0.1');
+  await ownRealm(`http://127.0.0.1:${realmPort}`);
+  if (names.includes('crowd')) {
+    crowdJoin = joinCrowd(CROWD);
+    crowdJoin.catch(error => console.error(`Stills: the crowd did not join: ${error?.message ?? error}`));
+  }
   const plugin = { name: 'play-stills', enforce: 'pre',
     transform(_code, id) { if (id.split('?')[0] === `${repo}apps/web/src/main.tsx`) return { code: "import './walk/stills/page';", map: null }; },
     configureServer(server) { server.middlewares.use((request, response, next) => {
@@ -100,6 +161,7 @@ try {
   web = await createServer({ root: `${repo}apps/web`, configFile: `${repo}apps/web/vite.config.ts`, plugins: [plugin], logLevel: 'error',
     server: { host: '127.0.0.1', port: webPort, strictPort: true, hmr: false } });
   await web.listen();
+  await ownRealm(`http://127.0.0.1:${realmPort}`);
   const url = name => `http://${pc ? 'localhost' : '127.0.0.1'}:${webPort}/?source=simulated&hour=19.5&still=${name}&realm=${encodeURIComponent(endpoint)}`;
 
   if (pc) {
@@ -118,7 +180,10 @@ try {
     await page.goto(url(names[0]), { waitUntil: 'commit' });
     for (const [index, name] of names.entries()) {
       if (index) await page.evaluate(name => window.__chatdomStills.stage(name), name);
-      await page.waitForFunction(() => window.__chatdomReady === true || !!window.__chatdomStills?.error, null, { timeout: 420_000 });
+      await page.waitForFunction(() => window.__chatdomReady === true || !!window.__chatdomStills?.error, null, { timeout: 420_000 }).catch(async error => {
+        const progress = await page.evaluate(() => window.__chatdomStillsProgress ?? 'the page script had not started').catch(() => 'unreadable');
+        throw new Error(`${error.message} (the page was at: ${progress}; crowd joined ${crowd.length})`);
+      });
       const error = await page.evaluate(() => window.__chatdomStills?.error);
       if (error) throw new Error(error);
       const out = `${stamp(name)}.png`;
@@ -135,6 +200,7 @@ try {
   await writeFile(`${values.out}/${values.land}${pc ? '-gpu' : `-${names[0]}`}.json`, JSON.stringify(report, null, 2)).catch(() => {});
   await browser?.close().catch(() => {});
   await web?.close().catch(() => {});
+  await crowd?.reduce((all, client) => all.then(() => client.dispose?.()), Promise.resolve()).catch(() => {});
   await realm?.gracefullyShutdown(false).catch(() => {});
   await loader?.close().catch(() => {});
   await release?.();

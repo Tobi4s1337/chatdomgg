@@ -370,7 +370,10 @@ differ most, a stair tread and a raised floor) with a memory realm the script ow
 still from `?still=` and sets `__chatdomReady` only once it has settled, so `chatdom-pc shot`, which can only open a
 URL, takes the same pictures: `third`, `first`, `dusk` (bubbles over lit homes, only walkers in the street) and
 `<slope|stairs|floor>-<before|after>` (the "before" binds the walk with `drawnGround: false`, bodies at the physics
-height). The hamlet is nine people: three walking and six chatting from home; its street stands in the open nearest a
+height), and `crowd`, the 5,000-chatter town: Willowmere's 240 homes (the largest town the founding makes) all lit and
+speaking at about 15 lines a second, a Poisson stream from random lit homes, with 120 more walkers that the runner
+joins from Node (not the page, which only draws them) and stands on open spots at least 2.5 m apart, so the nearest
+64 draw in full and the rest as simple figures, seen from above and behind the walker. The hamlet is nine people: three walking and six chatting from home; its street stands in the open nearest a
 cluster of six homes, because a hamlet's homes sit beyond bubble range of its market. The sole close-up camera is
 chosen in the collision (low beside the feet, on the first side with a clear sight line). A chat still waits for a
 bubble to ease fully in, and a page that fails while setting up ends the run at once, so nothing waits out a timeout

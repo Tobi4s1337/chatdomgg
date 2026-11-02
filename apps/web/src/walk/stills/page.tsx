@@ -27,6 +27,8 @@ interface FixtureInfo {
   readonly spots: Readonly<Record<'street' | 'slope' | 'stairs' | 'floor', StillSpot | null>>;
   readonly beside: readonly Vec3[];
   readonly speakers: readonly number[];
+  /** Open standing spots the runner holds for the crowd still. */
+  readonly crowd: number;
 }
 
 interface Still {
@@ -34,23 +36,34 @@ interface Still {
   readonly view: 'third' | 'first';
   /** Drawn bodies on the drawn ground (after F07), or at the physics height (before). */
   readonly drawnGround: boolean;
-  /** The evidence camera: the spot's close sole camera, a wide view over the street, or the walk's own camera. */
-  readonly camera: 'walk' | 'close' | 'wide';
+  /** The evidence camera: the spot's close sole camera, a wide view over the street, a high one over a crowd, or the walk's own camera. */
+  readonly camera: 'walk' | 'close' | 'wide' | 'high';
   readonly others: boolean;
-  readonly chat: boolean;
+  /** 'near': the six homes nearest the street speak every four seconds; 'town': every lit home, at a big channel's rate. */
+  readonly chat: false | 'near' | 'town';
+  /** More walkers the runner joins and stands in the streets around (the crowd still). */
+  readonly crowd?: number;
 }
 
-const walkStill = (view: Still['view']): Still => ({ spot: 'street', view, drawnGround: true, camera: 'walk', others: true, chat: true });
+const walkStill = (view: Still['view']): Still => ({ spot: 'street', view, drawnGround: true, camera: 'walk', others: true, chat: 'near' });
 const sole = (spot: Still['spot'], drawnGround: boolean): Still => ({ spot, view: 'third', drawnGround, camera: 'close', others: false, chat: false });
 export const STILLS: Readonly<Record<string, Still>> = {
   third: walkStill('third'),
   first: walkStill('first'),
-  dusk: { spot: 'street', view: 'third', drawnGround: true, camera: 'wide', others: true, chat: true },
+  dusk: { spot: 'street', view: 'third', drawnGround: true, camera: 'wide', others: true, chat: 'near' },
+  // The 5,000-chatter town: the largest town the founding makes (Willowmere, 240 homes) with every home lit and speaking
+  // at the rate a 5,000-viewer chat runs at, and 120 more people walking, so past the nearest 64 they are simple figures.
+  crowd: { spot: 'street', view: 'third', drawnGround: true, camera: 'high', others: true, chat: 'town', crowd: 120 },
   'slope-before': sole('slope', false), 'slope-after': sole('slope', true),
   'stairs-before': sole('stairs', false), 'stairs-after': sole('stairs', true),
   'floor-before': sole('floor', false), 'floor-after': sole('floor', true),
 };
 
+/** Lines a second from a chat of about 5,000 people (a busy evening, not a hype train). */
+const TOWN_LINES_PER_SECOND = 15;
+const TOWN_LINES = ['gg', 'LETS GO', 'hi chat!', 'who else is walking right now?', 'the market looks so cosy tonight',
+  'first time here, this is lovely', 'my house has a blue door now', 'anyone at the forge?', 'that was clean', 'lol',
+  'evening from the coast 🌊', 'I can see your lantern from mine', 'brb tea', 'raid soon?', 'the castle at dusk though'];
 const LINES = ['Evening, everyone!', 'the lanterns are on along our street', 'Who is coming to the campfire?',
   'Rowan, your roof looks amazing', 'just got home 🌿', 'that raid last night was something'];
 const NAMES = ['Juniper', 'Moss', 'Hazel', 'Bramble', 'Clover', 'Finch'];
@@ -59,10 +72,13 @@ type KingdomTestWindow = Window & {
   __chatdomReady?: boolean;
   __chatdomKingdom?: { stats: { ready: boolean; fieldSettled?: boolean; activeWindows?: number; citizens?: number }; attachWalk(binding: unknown): Promise<void>; detachWalk(): void;
     pose(eye: Vec3 | null, target?: Vec3, fov?: number): void };
-  __chatdomWalk?: { ready: boolean; owner: string; self: { x: number; y: number; z: number } | null; person: string; camera: { distance: number } };
+  __chatdomWalk?: { ready: boolean; owner: string; walkers: number; self: { x: number; y: number; z: number } | null; person: string; camera: { distance: number } };
   __chatdomStills?: { stage(name: string): Promise<void>; current: string | null; error: string | null; facts: Record<string, unknown> | null };
 };
 const page = window as KingdomTestWindow;
+// Where the page has got to, for the runner's message when a still does not settle in time.
+const progress = (step: string) => { (window as Window & { __chatdomStillsProgress?: string }).__chatdomStillsProgress = `${step} (${Math.round(performance.now() / 1000)} s)`; };
+progress('loading the scene');
 const query = new URLSearchParams(location.search);
 const endpoint = query.get('realm') ?? '';
 
@@ -108,7 +124,7 @@ const presenceFeed: PresenceFeed = { label: 'SIMULATED', subscribe(receive) {
 } };
 const chatListeners = new Set<Parameters<RealmChatFeed['subscribe']>[0]>();
 const chatFeed: RealmChatFeed = { subscribe(receive) { chatListeners.add(receive); return () => { chatListeners.delete(receive); }; } };
-let chatting = false, chatRound = 0, heard = 0;
+let chatting: Still['chat'] = false, chatRound = 0, heard = 0;
 // What the scene publishes for the label layer: the last frame that carried any line (for a failed still's message).
 let published = 0, lastLines = '';
 let speechCanvas: HTMLCanvasElement | null = null, lastAt = 0;
@@ -118,15 +134,26 @@ const ownership = () => { const layer = document.querySelector('.walk-people-lab
     canvasParent: canvas?.parentElement?.className, layerParent: layer?.parentElement?.className, age: Math.round(performance.now() - lastAt) }); };
 subscribeSpeech((canvas, frame) => { speechCanvas = canvas; lastAt = frame.at; published++; if (frame.speech.length) lastLines = JSON.stringify(frame.speech.map(line => ({ slot: line.slot, from: line.from,
   d: line.distance?.toFixed(1), v: line.visibility, x: line.x?.toFixed(0), y: line.y?.toFixed(0) }))); });
-const speak = () => {
-  if (!chatting) return;
+const say = (slot: number, text: string) => {
+  const at = Date.now();
+  const cue = { version: 1, id: `stills-${chatRound}-${slot}-${heard}`, kingdomId: WORLD_FIXTURE_KINGDOM, epoch, origin: 'simulated', slot,
+    asOf: at, expiresAt: at + 9_000, parts: [{ kind: 'text', text }] };
+  for (const receive of chatListeners) { receive({ type: 'chat', cue } as never); heard++; }
+};
+// The town's chat: lines arrive at random (a Poisson stream), each from a random lit home.
+const homesLit = () => founded.plan.homes.filter(home => present.has(home.slot));
+setInterval(() => {
+  if (chatting !== 'town') return;
   chatRound++;
-  info.speakers.filter(slot => present.has(slot)).forEach((slot, index) => {
-    const at = Date.now();
-    const cue = { version: 1, id: `stills-${chatRound}-${slot}`, kingdomId: WORLD_FIXTURE_KINGDOM, epoch, origin: 'simulated', slot,
-      asOf: at, expiresAt: at + 9_000, parts: [{ kind: 'text', text: LINES[index % LINES.length]! }] };
-    for (const receive of chatListeners) { receive({ type: 'chat', cue } as never); heard++; }
-  });
+  const lit = homesLit();
+  let lines = 0;
+  for (let p = Math.random(), limit = Math.exp(-TOWN_LINES_PER_SECOND * .25); p > limit; p *= Math.random()) lines++;
+  for (let i = 0; i < lines && lit.length; i++) say(lit[Math.floor(Math.random() * lit.length)]!.slot, TOWN_LINES[Math.floor(Math.random() * TOWN_LINES.length)]!);
+}, 250);
+const speak = () => {
+  if (chatting !== 'near') return;
+  chatRound++;
+  info.speakers.filter(slot => present.has(slot)).forEach((slot, index) => say(slot, LINES[index % LINES.length]!));
 };
 setInterval(speak, 4_000);
 
@@ -134,11 +161,13 @@ setInterval(speak, 4_000);
 const settings = sharedPlaySettings(), before = settings.current.view;
 addEventListener('pagehide', () => settings.set({ view: before }));
 
+progress('opening the kingdom');
 render(() => createComponent(Kingdom, { founded, presenceFeed, chatFeed, kingdomName: info.land === 'hamlet' ? 'Brackenfold' : 'Willowmere' }), document.getElementById('root')!);
 await until(() => kingdomReady && !!page.__chatdomKingdom?.stats.ready, 300_000, 'the kingdom opening');
 
 const ticket = async () => (await fetch(`${endpoint}/reference/session`, { method: 'POST' })).json();
 const join = () => connectRealm(endpoint, { kingdomId: info.manifest.kingdomId, resumeScope: crypto.randomUUID(), ticket }, collision);
+progress('joining the realm');
 const self = await join();
 const peers: RealmClient[] = [];
 for (let i = 0; i < 2; i++) peers.push(await join());
@@ -159,6 +188,7 @@ async function stage(name: string) {
   const spot = info.spots[still.spot];
   if (!spot) throw new Error(`Stills: the ${info.land} has no ${still.spot} spot`);
   const kingdom = page.__chatdomKingdom!;
+  progress(`staging ${name}: placing the walkers`);
   kingdom.pose(null);
   settings.set({ view: still.view });
   await place(self, spot.feet);
@@ -168,11 +198,13 @@ async function stage(name: string) {
     await kingdom.attachWalk({ client: self, collision, manifest: info.manifest, heading: spot.heading, drawnGround: still.drawnGround });
     attachedGround = still.drawnGround;
   }
+  progress(`staging ${name}: waiting to stand at the ${still.spot}`);
   await until(() => {
     const walk = page.__chatdomWalk;
     return !!walk?.ready && !!walk.self && Math.hypot(walk.self.x - spot.feet[0], walk.self.z - spot.feet[2]) < .3 && walk.person === still.view;
   }, 60_000, () => `standing at the ${still.spot} (walk: ${JSON.stringify({ ready: page.__chatdomWalk?.ready, owner: page.__chatdomWalk?.owner,
     self: page.__chatdomWalk?.self, person: page.__chatdomWalk?.person })})`);
+  progress(`staging ${name}: the boom settling`);
   // The boom has swung all the way (frames are slow without a GPU, and its ease is capped per frame).
   let last = -1, steady = 0;
   await until(() => {
@@ -180,8 +212,15 @@ async function stage(name: string) {
     steady = Math.abs(distance - last) < .005 ? steady + 1 : 0; last = distance;
     return steady >= 4 && (still.view === 'first' ? distance < .05 : distance > .5);
   }, 120_000, () => `the ${still.view}-person boom settling (distance ${last})`);
+  if (still.crowd) {
+    progress(`staging ${name}: the crowd arriving`);
+    const response = await fetch(`${endpoint}/stills/crowd?n=${still.crowd}`);
+    if (!response.ok) throw new Error(`Stills: the crowd did not join (${await response.text()})`);
+    const { joined } = await response.json() as { joined: number };
+    await until(() => (page.__chatdomWalk?.walkers ?? 0) >= joined + 3, 120_000, () => `the crowd arriving (${page.__chatdomWalk?.walkers} of ${joined + 3})`);
+  }
   chatting = still.chat;
-  if (chatting) speak();
+  speak();
   if (still.camera === 'close') kingdom.pose([...spot.close!.eye], [...spot.close!.target], spot.close!.fov);
   if (still.camera === 'wide') {
     const homes = founded.plan.homes.filter(home => info.speakers.includes(home.slot));
@@ -190,17 +229,24 @@ async function stage(name: string) {
     const away = Math.atan2(spot.feet[0] - target[0], spot.feet[2] - target[2]);
     kingdom.pose([spot.feet[0] + Math.sin(away) * 6, spot.feet[1] + 4.5, spot.feet[2] + Math.cos(away) * 6], target, 50);
   }
+  if (still.camera === 'high') {
+    // Above and behind the walker, looking down the street it faces: the crowd near and far, and the lit homes beyond.
+    const fx = Math.sin(spot.heading), fz = Math.cos(spot.heading);
+    kingdom.pose([spot.feet[0] - fx * 11, spot.feet[1] + 9, spot.feet[2] - fz * 11], [spot.feet[0] + fx * 14, spot.feet[1] + 1, spot.feet[2] + fz * 14], 55);
+  }
   // The boom eases, the drawn ground settles and bubbles rise; then the lighting must have settled too.
+  progress(`staging ${name}: the lighting settling`);
   await sleep(3_500);
   await until(() => page.__chatdomKingdom!.stats.fieldSettled !== false, 120_000, 'the lighting settling');
   // A chat still waits for a bubble to rise and ease fully in, never shooting in the gap between two lines. Under a
   // loaded software renderer a frame can stall for seconds and the label layer rightly lets the lines go, so the wait
   // is soft: it records what it saw (with why, in the facts) and the still is taken either way.
+  progress(`staging ${name}: waiting for a bubble`);
   let bubbleWait: string | null = null;
   if (chatting) await until(() => [...document.querySelectorAll<HTMLElement>('.is-speech')].some(bubble => Number(getComputedStyle(bubble).opacity) > .95),
     30_000, '').catch(() => { bubbleWait = `no bubble within 30 s: heard ${heard}, speech frames ${published}, ownership ${ownership()}, last lines ${lastLines || 'none'}`; });
   const stats = page.__chatdomKingdom!.stats;
-  page.__chatdomStills!.facts = { activeWindows: stats.activeWindows, citizens: stats.citizens, person: page.__chatdomWalk?.person,
+  page.__chatdomStills!.facts = { activeWindows: stats.activeWindows, citizens: stats.citizens, walkers: page.__chatdomWalk?.walkers, heard, person: page.__chatdomWalk?.person,
     boom: page.__chatdomWalk?.camera.distance, bubbles: document.querySelectorAll('.is-speech').length, ...(bubbleWait ? { bubbleWait } : {}) };
   page.__chatdomStills!.current = name;
   staged = true;

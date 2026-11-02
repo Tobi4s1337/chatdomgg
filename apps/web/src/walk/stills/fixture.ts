@@ -36,8 +36,16 @@ export interface StillsFixture {
   readonly beside: readonly Vec3[];
   /** Home slots nearest the street spot: whose lit windows speak in the dusk still. */
   readonly speakers: readonly number[];
+  /**
+   * The crowd still's walkers: open, nearly flat standing spots at least 2.5 m apart, nearest the street spot first
+   * (the town only; empty for the hamlet). Enough of them that the nearest 64 draw in full and the rest as figures.
+   */
+  readonly crowd: readonly Vec3[];
   readonly homes: number;
 }
+
+/** Standing spots kept for the crowd still: more than the 64 drawn in full, and under the room's 300 seats. */
+export const CROWD_SPOTS = 160;
 
 const digest = (bytes: string) => createHash('sha256').update(bytes).digest('hex');
 
@@ -112,6 +120,7 @@ export function createStillsFixture(land: StillsLand = 'town'): StillsFixture {
   const cx = corners.reduce((sum, [x]) => sum + x, 0) / corners.length, cz = corners.reduce((sum, [, z]) => sum + z, 0) / corners.length;
   const spots: Record<'street' | 'slope' | 'stairs' | 'floor', StillSpot | null> = { street: null, slope: null, stairs: null, floor: null };
   let slopeScore = 0, stairScore = 0, floorScore = 0, streetScore = Infinity;
+  const standing: { x: number; y: number; z: number }[] = [];
   const reach = land === 'hamlet' ? 70 : 60;
   // The town's street stands near its market. A hamlet's homes sit far out from its market, beyond bubble range, so
   // its street stands in the open nearest a cluster of six homes, whose lit windows and bubbles the dusk still shows.
@@ -127,6 +136,7 @@ export function createStillsFixture(land: StillsLand = 'town'): StillsFixture {
       const gx = (terrainHeight(plan, px + 1, pz) - terrainHeight(plan, px - 1, pz)) / 2;
       const gz = (terrainHeight(plan, px, pz + 1) - terrainHeight(plan, px, pz - 1)) / 2;
       const grade = Math.hypot(gx, gz);
+      if (land === 'town' && grade < .2) standing.push({ x: px, y, z: pz });
       const score = grade < .55 && clearAround(world, px, y, pz, 1.5) ? grade * (.1 + Math.abs(lift)) : 0;
       if (score > slopeScore) { slopeScore = score; spots.slope = { feet: [px, y, pz], heading: Math.atan2(gx, gz), gap: lift, close: closeCamera(world, [px, drawn, pz], Math.atan2(gx, gz)) }; }
       // The street: flat open ground near the market with room around it for the others.
@@ -170,7 +180,18 @@ export function createStillsFixture(land: StillsLand = 'town'): StillsFixture {
   const sx = speakers.reduce((sum, home) => sum + home.position[0], 0) / speakers.length;
   const sz = speakers.reduce((sum, home) => sum + home.position[2], 0) / speakers.length;
   spots.street = { ...street, heading: Math.atan2(sx - street.feet[0], sz - street.feet[2]) };
-  return { land, scene, sceneBytes, manifest, world, spots, beside, speakers: speakers.map(home => home.slot), homes: plan.homes.length };
+  // The crowd: greedy from the street spot outward, keeping clear of the three walkers' own places.
+  const crowd: Vec3[] = [], taken = [street.feet, ...beside.slice(0, 9)];
+  const [fx, , fz] = street.feet;
+  standing.sort((a, b) => Math.hypot(a.x - fx, a.z - fz) - Math.hypot(b.x - fx, b.z - fz));
+  for (const at of standing) {
+    if (crowd.length >= CROWD_SPOTS) break;
+    if (taken.some(([x, , z]) => Math.hypot(x - at.x, z - at.z) < 2.5)) continue;
+    if (!clearAround(world, at.x, at.y, at.z, .6)) continue;
+    const spot: Vec3 = [at.x, at.y, at.z];
+    crowd.push(spot); taken.push(spot);
+  }
+  return { land, scene, sceneBytes, manifest, world, spots, beside, speakers: speakers.map(home => home.slot), crowd, homes: plan.homes.length };
 }
 
 /** The physics ground (half-metre cells) at a point, for the notes: what the realm stands a walker on. */
