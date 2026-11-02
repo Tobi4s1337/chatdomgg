@@ -177,7 +177,8 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
     const column = tableView?.column() ?? null;
     if (now - lastNames > 200 || !ready || column !== lastColumn) {
       for (const pose of poses) {
-        if (pose.self && selected) continue;
+        // Your own name never floats over a body you cannot see: seated, or faded as the camera comes in.
+        if (pose.self && (selected || controller.selfOpacity < .5)) continue;
         const head = people.heads.get(pose.id); if (!head || head.distanceTo(stage.camera.position) > 20) continue;
         projected.copy(head).project(stage.camera); if (projected.z < -1 || projected.z > 1 || Math.abs(projected.x) > 1 || Math.abs(projected.y) > 1) continue;
         candidates.push({ id: pose.id, name: pose.name, x: (projected.x + 1) * stage.canvas.clientWidth / 2, y: (1 - projected.y) * stage.canvas.clientHeight / 2, distance: head.distanceTo(stage.camera.position), width: nameMeasurer.width(pose.name) });

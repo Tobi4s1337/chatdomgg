@@ -156,13 +156,28 @@ try {
     }
   }, 1000 / 30);
   // Dice and Stones: each SDK player acts promptly on its own turn; a browser player waits out its clock.
-  const playing = new Map();
+  // The actor is found from the match's own public player names, so a chair change never moves the wrong person.
+  const playing = new Set();
+  const personNamed = name => people.find(p => watcher.room.state.walkers.get(p.room.sessionId)?.name === name) ?? null;
+  // Tables kept live: a finished match is started again by its first seated reference walker, so the frame-time
+  // reading sees three games in play rather than three finished boards.
+  const keepLive = new Set();
+  const restarting = new Set();
   let pace = 1500;
   diceTimer = setInterval(() => {
-    for (const [table, roster] of playing) {
+    for (const table of keepLive) {
+      const entry = tableOf(watcher, table), view = entry && (entry.pong ?? entry.stones ?? entry.dice);
+      if (!view || view.phase !== 'finished' || restarting.has(table)) continue;
+      const opener = entry.seats.map(personNamed).find(p => p && p.state.self?.table === table);
+      if (!opener) continue;
+      restarting.add(table);
+      setTimeout(() => start(opener, table).then(() => { report.rematches = (report.rematches ?? 0) + 1; }, error => { report.checks.push(`rematch ${table}: ${error.message}`); })
+        .finally(() => restarting.delete(table)), 400);
+    }
+    for (const table of playing) {
       const entry = tableOf(watcher, table), view = entry?.dice ?? entry?.stones;
       if (!view || view.phase !== 'playing') continue;
-      const actor = roster[view.turn];
+      const actor = personNamed(entry.players[view.turn]);
       const key = `${view.match}:${view.revision}`;
       if (!actor || actor.busy === key) continue;
       actor.busy = key;
@@ -178,7 +193,8 @@ try {
   // --- The room full: three live games, eight people. ---
   await sitAll([[p0, 'middle', 1], [p1, 'middle', 2], [p2, 'west', 1], [p3, 'west', 2], [p4, 'hearth', 1], [p5, 'hearth', 2], [p6, 'east', 1]]);
   await start(p0, 'middle'); await start(p2, 'west'); await start(p4, 'hearth');
-  playing.set('west', [p2, p3]); playing.set('hearth', [p4, p5]);
+  playing.add('west'); playing.add('hearth');
+  for (const table of ['middle', 'west', 'hearth']) keepLive.add(table);
   await until(() => live('middle', 'pong') && live('west', 'stones') && live('hearth', 'dice'), 'three live games');
   await until(() => tableOf(watcher, 'west').stones.board.filter(Boolean).length >= 5 && tableOf(watcher, 'hearth').dice.scores.some(s => s > 0), 'stones and banked dice on the tables', 40000);
   report.checks.push('Seven reference walkers walked to chairs and sat through the room\'s interaction receipts; Pong, Stones and Hearth Dice were live before any shot.');
@@ -245,18 +261,29 @@ try {
     await shot('stones', '&seat=tavern:east:seat:2', '1440x900', 48, async () => {
       await awaitBrowserAt('east', 1);
       await start(p6, 'east');
-      playing.set('east', [p6, null]);
+      playing.add('east');
     });
   });
   // A tab that closes is a dropped connection: its person stays for the reconnect grace, seated or where they stood.
   // So the phone room follows a seated shot, and every shot records how many people the room really held.
   await shot('room-phone', '', '390x844', 6);
-  if (only.has('fps') && !standin) {
-    const line = await pc(['fps', `http://localhost:${webPort}/-/tavern?testWalker=1`, '--seconds', '10', '--size', '1440x900', '--timeout', '60']);
-    report.fps = { line, walkers: watcher.room.state.walkers.size, live: ['middle', 'west', 'hearth'].filter(t => live(t, t === 'middle' ? 'pong' : t === 'west' ? 'stones' : 'dice')) };
+  if (only.has('fps') && !localBrowser) {
+    // What was live is recorded, not assumed: the tables are sampled every half second for the whole reading.
+    const liveNow = () => ['middle', 'west', 'hearth'].filter(t => live(t, t === 'middle' ? 'pong' : t === 'west' ? 'stones' : 'dice'));
+    const samples = [];
+    const sampler = setInterval(() => samples.push({ at: Date.now(), walkers: watcher.room.state.walkers.size, live: liveNow() }), 500);
+    let line;
+    // A stand-in rehearsal holds the same ten seconds without a frame reading, so the live sampling is rehearsed too.
+    try { line = standin ? await sleep(10000).then(() => 'stand-in: no frame reading') : await pc(['fps', `http://localhost:${webPort}/-/tavern?testWalker=1`, '--seconds', '10', '--size', '1440x900', '--timeout', '60']); }
+    finally { clearInterval(sampler); }
+    const share = table => samples.filter(sample => sample.live.includes(table)).length / Math.max(1, samples.length);
+    report.fps = { line, walkers: watcher.room.state.walkers.size, samples: samples.length,
+      liveShare: Object.fromEntries(['middle', 'west', 'hearth'].map(t => [t, Math.round(share(t) * 100) / 100])),
+      minWalkers: Math.min(...samples.map(sample => sample.walkers)), live: liveNow() };
     console.log(`[gather] fps ${line}`);
   }
 
+  keepLive.clear();
   pace = 900;
   // --- Seated Pong: the person across stands and gives the chair; the browser walks to it and the match starts. ---
   const pongSeated = async () => {
@@ -269,16 +296,17 @@ try {
     await walkAll([[p1, [5.75, .125, 2.625]]]);
     await shot('pong', '&seat=tavern:middle:seat:2', '1440x900', 16, pongSeated);
   });
-  // --- Seated Hearth Dice: a fresh three-player match, the browser third at the hearth. ---
+  // --- Seated Hearth Dice: a fresh three-player match. The browser takes the south chair, across from walker 5 with
+  // the bar behind them; walker 6 moves round to the west side chair. ---
   await step('dice', async () => {
     await interact(p5, 'tavern:hearth:seat:2', 'stand');
     await until(() => !live('hearth', 'dice'), 'the old dice match ends');
     playing.delete('hearth');
-    assert.equal((await interact(p5, 'tavern:hearth:seat:2', 'tavern')).status, 'applied', 'walker 6 sits again');
-    await shot('dice', '&seat=tavern:hearth:seat:4', '1440x900', 22, async () => {
-      await awaitBrowserAt('hearth', 3);
+    await sitAll([[p5, 'hearth', 3]]);
+    await shot('dice', '&seat=tavern:hearth:seat:2', '1440x900', 24, async () => {
+      await awaitBrowserAt('hearth', 1);
       await start(p4, 'hearth');
-      playing.set('hearth', [p4, p5, null]);
+      playing.add('hearth');
     });
   });
   // --- Seated Pong on a phone: the chair comes back after the reconnect grace. ---

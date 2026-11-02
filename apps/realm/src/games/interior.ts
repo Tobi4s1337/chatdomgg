@@ -1,7 +1,7 @@
 import { createTavernKit, TAVERN_FLOOR, TAVERN_ROOM_BOUNDS } from '../../../../packages/content/src/tavern';
 import { TAVERN_INTERIOR_ENTRY, TAVERN_INTERIOR_EXIT } from '../../../../packages/content/src/tavern/portal';
 import type { CollisionWorld, SolidBox } from '@chatdom/shared/realm';
-import { createInteractionRegistry } from '@chatdom/world/interactions';
+import { createInteractionRegistry, standingClear } from '@chatdom/world/interactions';
 import { tavernPlacement } from '../../../../packages/world/src/interactions/places';
 
 export const TAVERN_ENTRY = TAVERN_INTERIOR_ENTRY;
@@ -9,6 +9,22 @@ export const TAVERN_ENTRY = TAVERN_INTERIOR_ENTRY;
 export const TAVERN_EXIT = TAVERN_INTERIOR_EXIT;
 /** 2: the hearth bench moved to the hearthstone's lip so every chair has a full aisle (2026-11-02). */
 export const TAVERN_COLLISION_REVISION = 2;
+/**
+ * Where a new arrival appears: the entry, or the nearest clear spot inside the doorway when someone already stands
+ * there (a person who just came in, or one inside their reconnect grace). Two bodies never share a spot, so nobody
+ * arrives looking out through someone else's head. Every spot is a step in from the threshold and faces the room.
+ */
+const ARRIVAL_OFFSETS = [[0, 0], [-.75, 0], [.75, 0], [0, -.75], [-.75, -.75], [.75, -.75], [-1.5, 0], [1.5, 0], [-1.5, -.75], [1.5, -.75], [0, -1.5]] as const;
+export const ARRIVAL_SPACING = .7;
+export function tavernArrival(world: CollisionWorld, standing: Iterable<{ readonly x: number; readonly z: number }>): [number, number, number] {
+  const others = [...standing];
+  const [x, y, z] = TAVERN_ENTRY.feet;
+  for (const [dx, dz] of ARRIVAL_OFFSETS) {
+    const feet: [number, number, number] = [x + dx, y, z + dz];
+    if (others.every(o => Math.hypot(o.x - feet[0], o.z - feet[2]) >= ARRIVAL_SPACING) && standingClear(world, feet)) return feet;
+  }
+  return [x, y, z];
+}
 /** No kingdom placement changes: these solids and targets belong only to the portal destination. */
 export function createTavernInterior() {
   const kit = createTavernKit('hearth');

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { standingClear, withinReach } from '@chatdom/world/interactions';
 import { TAVERN_FLOOR } from '../../../../packages/content/src/tavern';
-import { createTavernInterior, TAVERN_ENTRY } from './interior';
+import { ARRIVAL_SPACING, createTavernInterior, tavernArrival, TAVERN_ENTRY, TAVERN_EXIT } from './interior';
+import { seatApproachDriver } from '../../../web/src/games/walker';
 
 describe('tavern destination', () => {
   it('installs all ten chairs with safe approaches and a reachable interaction', () => {
@@ -15,6 +16,22 @@ describe('tavern destination', () => {
       expect(withinReach(world, approach, { position, reach }), id).toBe(true);
       expect(registry.get(id)?.zone, id).toBe('tavern:main');
     }
+  });
+
+  it('gives each new arrival its own clear spot inside the door, away from the threshold, with a way to every chair', () => {
+    const { world, registry } = createTavernInterior();
+    expect(tavernArrival(world, [])).toEqual([...TAVERN_ENTRY.feet]);
+    const standing: { x: number; z: number }[] = [];
+    for (let n = 0; n < 11; n++) {
+      const feet = tavernArrival(world, standing);
+      expect(standingClear(world, feet), `arrival ${n}`).toBe(true);
+      for (const other of standing) expect(Math.hypot(other.x - feet[0], other.z - feet[2]), `arrival ${n}`).toBeGreaterThanOrEqual(ARRIVAL_SPACING);
+      expect(feet[2] < TAVERN_EXIT.min[2] || feet[0] < TAVERN_EXIT.min[0] || feet[0] > TAVERN_EXIT.max[0], `arrival ${n} is clear of the way out`).toBe(true);
+      for (const target of registry.targets()) expect(() => seatApproachDriver(world, feet, target.approach, [14, 10]), `${n} → ${target.id}`).not.toThrow();
+      standing.push({ x: feet[0], z: feet[2] });
+    }
+    // Someone who has walked on frees the entry for the next person.
+    expect(tavernArrival(world, [{ x: 3, z: 6 }])).toEqual([...TAVERN_ENTRY.feet]);
   });
 
   it('spawns on a clear supported floor and stops bodies at walls and furniture', () => {

@@ -55,7 +55,7 @@ try {
   loader = await createServer({ root: repo, configFile: false, appType: 'custom', logLevel: 'error', cacheDir: '/tmp/chatdom-gather/vite-harness-loader',
     optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false } });
   const load = path => loader.ssrLoadModule(path);
-  const [{ createRealmServer }, { referenceServices, REFERENCE_KINGDOM }, shared, { KingdomRoomState }, { createTavernInterior, TAVERN_ENTRY, TAVERN_EXIT },
+  const [{ createRealmServer }, { referenceServices, REFERENCE_KINGDOM }, shared, { KingdomRoomState }, { createTavernInterior, ARRIVAL_SPACING, TAVERN_ENTRY, TAVERN_EXIT },
     { seatApproachDriver }, { installGatherStore, MemoryGatherStore }, { tavernPortalFor }, worldPkg, { createGrowthState }, { createRealmState },
     { createNativeTown, assembleFoundedScene, compileFoundedScene }, { stepPlayer }] = await Promise.all([
     load('/apps/realm/src/server.ts'), load('/apps/realm/src/reference.ts'), load('/packages/shared/src/index.ts'), load('/packages/shared/src/realm/index.ts'),
@@ -198,7 +198,9 @@ try {
     await until(() => walker.state.tables && walker.state.self && walker.state.interior && room.state.walkers.get(room.sessionId), `${walker.label} inside`);
     const inside = room.state.walkers.get(room.sessionId);
     assert.equal(inside.name, walker.principal.publicName); assert.equal(inside.look, walker.principal.look);
-    assert.deepEqual([inside.x, inside.y, inside.z].map(n => +n.toFixed(3)), TAVERN_ENTRY.feet.map(n => +n.toFixed(3)), `${walker.label} arrives at the interior entry`);
+    // The entry, or the nearest clear spot inside the doorway when someone already stands there: never inside a person.
+    assert.ok(Math.hypot(inside.x - TAVERN_ENTRY.feet[0], inside.z - TAVERN_ENTRY.feet[2]) <= 1.7 && inside.z < TAVERN_EXIT.min[2], `${walker.label} arrives just inside the door`);
+    for (const [id, other] of room.state.walkers) if (id !== room.sessionId) assert.ok(Math.hypot(other.x - inside.x, other.z - inside.z) >= ARRIVAL_SPACING - 1e-6, `${walker.label} never arrives inside ${other.name}`);
     await until(() => inTavern.state.walkers.has(room.sessionId), `the tavern observer sees ${walker.label} arrive`);
     arriving.stop();
     assert.equal(arriving.samples.both, 0, `${walker.label} was never in both rooms on the way in`);
@@ -211,7 +213,7 @@ try {
   assert.ok(walkers.every(w => w.tavern.roomId === one.tavern.roomId), 'one tavern room for the kingdom');
   assert.ok(inTavern.roomId === one.tavern.roomId, 'the tavern observer shares the room');
   assert.equal(square.state.walkers.size, 1, 'only the observer is left on the square');
-  report.checks.push(`All three crossed the exterior door inward (predicted and authoritative feet within ${Math.max(...walkers.map(w => w.door.agreement)).toFixed(3)} m), left the kingdom room (the observer on the square saw each go before the tavern opened), were refused with the spent ticket, and entered ${one.tavern.roomId} with a fresh ticket as the same name and look, at the interior entry.`);
+  report.checks.push(`All three crossed the exterior door inward (predicted and authoritative feet within ${Math.max(...walkers.map(w => w.door.agreement)).toFixed(3)} m), left the kingdom room (the observer on the square saw each go before the tavern opened), were refused with the spent ticket, and entered ${one.tavern.roomId} with a fresh ticket as the same name and look, just inside the door and never inside another person.`);
 
   // --- The room: walk to chairs through the interior's collision, sit, play, stand. ---
   const interior = createTavernInterior();

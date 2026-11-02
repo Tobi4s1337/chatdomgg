@@ -9,7 +9,7 @@ import { createInteractionAuthority, composeInteractionHosts, type InteractionAu
 import type { RealmRoomServices } from '../ports';
 import { GatherTables, TAVERN_TABLES } from './tables';
 import { gatherStoreFor } from './store';
-import { createTavernInterior, TAVERN_ENTRY, TAVERN_EXIT } from './interior';
+import { createTavernInterior, tavernArrival, TAVERN_ENTRY, TAVERN_EXIT } from './interior';
 
 /** Its own world and physical seats. The generic portal controller supplies a fresh session entry ticket. */
 export function createTavernRoom(services: RealmRoomServices) {
@@ -131,7 +131,7 @@ export function createTavernRoom(services: RealmRoomServices) {
       const auth = client.auth;
       if (!auth || auth.kingdomId !== this.state.kingdomId || !await services.auth.current(auth, Date.now()) || !this.accepting) throw new ServerError(403, 'The tavern entry has ended');
       const previous = this.seats.seatOf(auth.personId), carried = previous ? this.state.walkers.get(previous) : undefined;
-      const position = carried ? [carried.x, carried.y, carried.z] as const : TAVERN_ENTRY.feet;
+      const position = carried ? [carried.x, carried.y, carried.z] as const : tavernArrival(this.interior.world, this.state.walkers.values());
       const replaced = this.seats.seat(auth, client.sessionId);
       if (replaced) this.remove(replaced);
       this.owner.set(auth.personId, client.sessionId); this.state.origin = auth.origin;
