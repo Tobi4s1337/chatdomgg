@@ -21,6 +21,11 @@
     "../../../apps/web/src/raid-gate/road/*.ts",
     "../../../apps/web/src/raid-gate/road/*.tsx",
     "../../../apps/web/src/raid-gate/bench.ts",
-    "../../../apps/web/src/raid-gate/controller*.ts"
+    "../../../apps/web/src/raid-gate/controller*.ts",
+    "../../../apps/web/src/raid-gate/journey*.ts",
+    "../../../apps/web/src/raid-gate/JourneyLayer.tsx",
+    "../../../apps/web/src/raid-gate/walk-gate*.ts",
+    "../../../apps/web/src/raid-gate/play-slot*.ts",
+    "../../../apps/web/src/raid-gate/walk-gate-bench.tsx"
   ]
 }

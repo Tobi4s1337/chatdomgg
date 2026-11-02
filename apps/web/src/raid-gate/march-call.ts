@@ -103,9 +103,9 @@ export function marchDestinationName(destination: GateDestination | null): strin
   return destination.channel?.kingdomName ?? destination.channel?.displayName ?? (destination.target.founded ? 'a neighbouring kingdom' : 'a live channel');
 }
 
-/** The source's monarch, as chat calls them. */
+/** The source's monarch, as chat calls them; a host that is not told the channel's login says it plainly. */
 export function monarchName(source: GateKingdom): string {
-  return source.login;
+  return source.login || 'The monarch';
 }
 
 /** Whether the destination is a founded kingdom, by the authority's own word (the map's land only refines it). */
@@ -125,8 +125,20 @@ export function marchPartyLine(s: GateSnapshot): string {
 export type MarchTone = 'call' | 'breath' | 'checking' | 'ride' | 'waiting' | 'journey' | 'arrived' | 'news';
 export type MarchWords = Readonly<{ eyebrow: string; title: string; detail: string; tone: MarchTone }>;
 
+/**
+ * A title begins with a capital when it begins with one of our own plain phrases ("a neighbouring kingdom"). A channel's
+ * login keeps the case its owner chose.
+ */
+function titled(words: MarchWords): MarchWords {
+  return /^(a|that) /u.test(words.title) ? { ...words, title: words.title.charAt(0).toUpperCase() + words.title.slice(1) } : words;
+}
+
 /** The whole of what the piece says, for one snapshot at one moment. */
 export function marchWords(s: GateSnapshot, now: number): MarchWords {
+  return titled(saidNow(s, now));
+}
+
+function saidNow(s: GateSnapshot, now: number): MarchWords {
   if (s.journey) return journeyWords(s, s.journey);
   const where = marchDestinationName(s.destination);
   const monarch = s.viewer === 'monarch';
@@ -295,6 +307,24 @@ export function marchActions(s: GateSnapshot): readonly MarchAction[] {
   }
 }
 
+/** The one thing the walking key answers the gate with: joining, riding out, going home or trying again. Never leaving. */
+export function marchPrimary(s: GateSnapshot): MarchAction | null {
+  const actions = marchActions(s);
+  return (['join', 'ride', 'return', 'again', 'check'] as const).find(action => actions.includes(action)) ?? null;
+}
+
+/** Presses `action` on the controller, exactly as its button would. */
+export function pressMarch(controller: RaidGateController, action: MarchAction): void {
+  switch (action) {
+    case 'join': void controller.join(); return;
+    case 'ride': void controller.travel(); return;
+    case 'return': void controller.returnHome(); return;
+    case 'again': controller.dismissJourney(); void controller.travel(); return;
+    case 'check': void controller.reconcileTravel(); return;
+    default: return;
+  }
+}
+
 /** A Twitch channel page for a login, for an ordinary link the person opens themselves. */
 export function twitchChannelUrl(login: string): string {
   return `https://www.twitch.tv/${encodeURIComponent(login)}`;
@@ -319,6 +349,14 @@ export type RaidMarchCallOptions = Readonly<{
   clock?: () => number;
   /** Where the piece's layer is placed; defaults to the page body. */
   parent?: HTMLElement;
+  /** `slot`: the piece flows in a HUD region rather than standing at the foot of the page. */
+  placement?: 'page' | 'slot';
+  /** Every snapshot, for a host that follows the journey (the journey layer). */
+  onSnapshot?: (snapshot: GateSnapshot) => void;
+  /** The piece's own element and controller, for a host that moves the piece or presses it from a key. */
+  onMount?: (host: HTMLElement, controller: RaidGateController) => void;
+  /** The key that answers the gate while walking, shown on the primary button (for example `G`). */
+  keyHint?: () => string | null;
 }>;
 
 /**
@@ -334,7 +372,9 @@ export function mountRaidMarchCall(options: RaidMarchCallOptions): () => void {
   const controller: RaidGateController = createRaidGateController({ api, atlas: options.atlas ?? null, source: options.source, clock });
   const host = document.createElement('div');
   host.className = 'mc-host';
+  host.dataset.place = options.placement ?? 'page';
   (options.parent ?? document.body).append(host);
+  options.onMount?.(host, controller);
 
   let disposed = false;
   let loading = false;
@@ -344,14 +384,15 @@ export function mountRaidMarchCall(options: RaidMarchCallOptions): () => void {
     loading = true;
     void Promise.all([import('solid-js/web'), import('./MarchCall')]).then(([web, view]) => {
       if (disposed) return;
-      unrender = web.render(() => web.createComponent(view.MarchCall, { controller, clock, pathname }), host);
+      unrender = web.render(() => web.createComponent(view.MarchCall, { controller, clock, pathname, ...(options.keyHint ? { keyHint: options.keyHint } : {}) }), host);
     }, error => {
       loading = false;
       console.error('The march call could not be loaded', error);
     });
   };
-  const stop = controller.subscribe(load);
+  const stop = controller.subscribe(snapshot => { load(snapshot); options.onSnapshot?.(snapshot); });
   load(controller.snapshot());
+  options.onSnapshot?.(controller.snapshot());
 
   const dispose = () => {
     if (disposed) return;

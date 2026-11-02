@@ -8,6 +8,7 @@ import type { BenchCast, GateBench } from '../bench';
 import { createRaidGateController, type GateSnapshot, type RaidGateController } from '../controller';
 import { incoming } from '../welcome';
 import { GateDefs, RaidGatePane } from '../RaidGatePane';
+import { MarchCall } from '../MarchCall';
 import { Seal } from '../Seal';
 import { twitchChannelUrl } from '../march-call';
 import { CHAPTERS, chapterOf, mapFrame, momentAt, ramp, REDUCED_TIMING, ROAD_TIMING, type RoadFacts, type RoadMoment, type RoadTiming } from './director';
@@ -101,6 +102,7 @@ export default function RaidRoad() {
   const capture = query.get('capture') === '1';
   const captureFrames = capture ? (frameGate ??= installFrameGate()) : null;
   const reduced = query.get('motion') === 'reduced' || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 600px)').matches;
   const land: 'founded' | 'waiting' = query.get('to') === 'waiting' ? 'waiting' : 'founded';
   const timing: RoadTiming = reduced ? REDUCED_TIMING : ROAD_TIMING;
   const from = roadLand(ROAD_PAIR.from), to = roadLand(ROAD_PAIR.to);
@@ -410,6 +412,8 @@ export default function RaidRoad() {
   const homeIn = () => (act() === 'home' && homeReady() ? Math.min(1, moment().elapsed / 1.4) : 0);
   const onRoad = () => ['rise', 'ride', 'hold', 'wake', 'land'].includes(act());
   const atGate = () => act() === 'gather' || act() === 'setout';
+  /** A walker on a phone is called by the march call, as in the walking view; the throne's board would cover the party. */
+  const calling = () => narrow && atGate();
   const chapter = () => chapterOf(act());
   const raid = () => snap()?.raid ?? null;
   const partySize = () => snap()?.welcome?.view?.party ?? 0;
@@ -475,7 +479,7 @@ export default function RaidRoad() {
   const sourceShown = () => act() === 'gather' || act() === 'setout' || act() === 'rise';
   const destShown = () => act() === 'wake' || act() === 'welcome' || (act() === 'home' && homeIn() < 1);
 
-  return <div class="rr-route" classList={{ 'rg-route': true, 'rr-reduced': reduced }} data-act={act()} data-land={land}>
+  return <div class="rr-route" classList={{ 'rg-route': true, 'rr-reduced': reduced, 'rr-calling': calling(), 'rr-capture': capture }} data-act={act()} data-land={land}>
     <GateDefs />
     <div class="rr-map" ref={element => { mapHost = element; }} aria-label={`The Atlas: the road from ${from.name} to ${to.name}`}
       style={{ opacity: atGate() ? 0 : act() === 'home' ? String(1 - homeIn()) : String(ramp(0.05, 0.7, rise())) }} />
@@ -530,7 +534,10 @@ export default function RaidRoad() {
       </aside>
     </Show>
 
-    <Show when={controller() && (atGate() || act() === 'welcome' || (act() === 'home' && land === 'founded'))}>
+    <Show when={controller() && calling()}>
+      <div class="rr-call"><MarchCall controller={controller()!} clock={clock} pathname={() => location.pathname} storage={null} /></div>
+    </Show>
+    <Show when={controller() && !calling() && (atGate() || act() === 'welcome' || (act() === 'home' && land === 'founded'))}>
       <div class="rr-board" classList={{ 'rr-board-late': act() === 'welcome' }}><RaidGatePane controller={controller()!} clock={clock} /></div>
     </Show>
     <Show when={worldError() || !sourceReady()}><div class="rg-veil" role="status"><p>{worldError() ?? `Unfolding ${from.name}'s land…`}</p></div></Show>

@@ -41,6 +41,8 @@ const RaidRoad = lazy(() => import('./road/RaidRoad'));
 const IncomingRaid = lazy(() => import('./incoming'));
 const NoticeBench = lazy(() => import('./entry/notice-bench'));
 const GuestInsigniaBench = lazy(() => import('./guest-insignia-bench'));
+/** `/-/raid-gate?walkGate=<stage>`: the march call in play's HUD region and the journey layer, over a street at dusk. */
+const WalkGateBench = lazy(() => import('./walk-gate-bench'));
 /**
  * `/-/raid-gate?guestWalk=/raid/<kingdom>/<key>` walks a signed-in raider into the lane's own mock stack through the
  * production welcome entry (the RS10 stage serves this build against that stack only). It admits a simulated kingdom
@@ -51,6 +53,8 @@ const GuestWalk = lazy(() => import('./entry'));
 export default function RaidGatePage() {
   const query = new URLSearchParams(location.search);
   if (query.get('guestInsignia') === '1') return <GuestInsigniaBench />;
+  const walkGate = query.get('walkGate');
+  if (walkGate !== null) return <WalkGateBench stage={walkGate} />;
   const walk = query.get('guestWalk');
   if (walk !== null) {
     if (!parseRaidWelcomePath(walk)) return <p class="rg-bench-refused" role="alert">This bench walks in only through a raid welcome path.</p>;
