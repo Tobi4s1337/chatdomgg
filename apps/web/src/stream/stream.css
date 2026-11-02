@@ -210,3 +210,10 @@ html.stream-preview-document, html.stream-preview-document body { background: #1
 .stream-bench-foot { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; color: #d5ba8f; }
 .stream-bench-foot p { margin: 0; }
 .stream-bench-foot code { font: 13px ui-monospace, monospace; color: #f2e3c5; }
+
+/* The parchment opening (kingdom/grand-land/opening) sits above the curtain while the stage opens. Its own
+   dissolve starts after the first lit frame; the curtain behind it waits so the town is revealed only once. */
+.stream-opening { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.stream-opening:empty, .stream-opening.hidden { display: none; }
+.stream-curtain.opening-held.open { transition-delay: .9s, 2.5s; }
+.stream-opening-mark { display: none; }

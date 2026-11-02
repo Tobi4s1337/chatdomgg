@@ -28,8 +28,8 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
-function fixture(exacts: readonly number[] = [1, 3], side = 2) {
-  const ref = { hash, gzipHash: hash, rawBytes: 72, gzipBytes: 64, minY: 0, maxY: 32, quadCount: 1 };
+function fixture(exacts: readonly number[] = [1, 3], side = 2, quadCount = 65536) {
+  const ref = { hash, gzipHash: hash, rawBytes: 64 + quadCount * 8, gzipBytes: 64, minY: 0, maxY: 32, quadCount };
   const regions = Array.from({ length: side * side }, (_, i) => {
     const rx = i % side, rz = Math.floor(i / side), exact = exacts.includes(i);
     return { rx, rz, exact, bounds: { min: [rx * 128 - 16, -5, rz * 128 - 32] as const,
@@ -90,10 +90,27 @@ describe('baked terrain renderer scheduling', () => {
     expect(f.scene.children[0]!.position.toArray()).toEqual([-16, -5, -32]);
   });
 
-  it('prioritizes every physical L0 region and reserves decoded space until installation finishes', async () => {
-    const f = fixture(), owner = await f.start();
+  it('requests the physical L0 regions at open, before any camera, and reserves their exact decoded size', async () => {
+    const f = fixture(), owner = await f.prepare();
+    // The installed streets are asked for as soon as the source opens, nearest the town centre first.
+    expect(f.pending.map(p => [p.ref.rx, p.ref.rz, p.ref.level])).toEqual([[1, 0, 0], [1, 1, 0]]);
+    owner.update(performance.now());
+    // The first update takes those two over and asks for the rest of the view, at most six at a time.
+    expect(f.pending.length).toBeGreaterThan(2); expect(f.pending.length).toBeLessThanOrEqual(6);
+    expect(owner.stats.busy).toBe(f.pending.length);
+    for (const p of f.pending) p.result.resolve(mesh(p.ref)); await flush();
+    let now = performance.now();
+    for (let i = 0; i < 100 && owner.stats.covered < 2; i++) owner.update(now += 10);
+    const root = f.scene.children[0]!;
+    expect(root.children[0]!.scale.toArray()).toEqual([.5, .5, .5]);
+    expect(root.children[0]!.position.x).toBe(128);
+  });
+
+  it('never holds more than 16 MiB of decoded results, counting early requests and pending installs', async () => {
+    const f = fixture([1, 3], 2, BAKED_REGION_QUAD_BYTES / 8), owner = await f.prepare();
     expect(f.pending).toHaveLength(2);
-    expect(f.pending.map(p => [p.ref.rx, p.ref.rz, p.ref.level])).toEqual([[1, 1, 0], [1, 0, 0]]);
+    owner.update(performance.now());
+    expect(f.pending).toHaveLength(2); expect(owner.stats.busy).toBe(2);
     for (const p of f.pending) p.result.resolve(mesh(p.ref, BAKED_REGION_QUAD_BYTES));
     await flush();
     let now = performance.now();
@@ -103,15 +120,19 @@ describe('baked terrain renderer scheduling', () => {
     for (let i = 0; i < 100 && f.pending.length === 2; i++) owner.update(now += 10);
     expect(f.pending.length).toBeGreaterThan(2);
     expect(owner.stats.covered).toBeGreaterThan(0);
-    const root = f.scene.children[0]!;
-    expect(root.children[0]!.scale.toArray()).toEqual([.5, .5, .5]);
-    expect(root.children[0]!.position.x).toBe(128);
     expect(owner.stats.resultBytes + owner.stats.busy * BAKED_REGION_QUAD_BYTES).toBeLessThanOrEqual(16 * 1024 * 1024);
+  });
+
+  it('rejects a decoded region larger than its reference names', async () => {
+    const f = fixture([1, 3], 2, 1), owner = await f.prepare(), failure = expect(owner.ready).rejects.toThrow('mesh result budget');
+    owner.update(performance.now());
+    f.pending[0]!.result.resolve(mesh(f.pending[0]!.ref, 16)); await flush(); await failure;
+    expect(f.scene.children).toHaveLength(0);
   });
 
   it('uses the first update camera for required coverage and never coarsens off-camera physical floor', async () => {
     const f = fixture(), owner = await f.prepare();
-    expect(f.pending).toHaveLength(0);
+    expect(f.pending).toHaveLength(2);
     f.camera.position.set(1000, 100, 1000); f.camera.lookAt(2000, 100, 2000);
     owner.update(performance.now());
     expect(f.pending).toHaveLength(2); expect(f.pending.every(p => p.ref.level === 0 && p.ref.rx === 1)).toBe(true);

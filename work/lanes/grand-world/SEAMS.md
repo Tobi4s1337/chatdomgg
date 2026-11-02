@@ -719,3 +719,35 @@ For the integrator: publish tobi4s_'s land from the **grader 3, format 2 store**
 (`bake --recipe shots/grand-world/adopted-recipe-g3.json`, 17.63 MB, 92.6 CPU s, 400 MiB peak at nice 19),
 not from the earlier `land-bake-a` or `land-bake-f2` stores; their metadata names grader 2 and the client
 rejects them. The commands in `apps/realm/src/land/README.md` carry the new recipe hash.
+
+## GW11 the opening loader, mountable — 2026-11-02
+
+The kingdom page, the stream stage and `/-/grand` now open behind one loader: the parchment map of the kingdom.
+It reads only an opening journal, and only real steps write to that journal:
+- the founded scene verified;
+- the land's binding, metadata and surface verified, after which the real coast and relief are drawn from the baked surface;
+- each region's first mesh in the scene, shown as a colour wash over exactly that region;
+- bytes actually read from the network and the browser cache;
+- assets actually meshed;
+- the first loaded frame drawn.
+
+There is no timer-driven or estimated progress. The loader dissolves 0.9 s after the first lit frame.
+
+For the entry gate (front-door), the Chronicle and the panel (panel-window):
+
+```ts
+import { createOpeningJournal } from 'apps/web/src/kingdom/grand-land/opening/journal';
+import { mountOpeningLoader } from 'apps/web/src/kingdom/grand-land/opening/loader';
+const journal = createOpeningJournal();
+const loader = mountOpeningLoader(host, { variant: 'page' /* or 'stream' */, name: 'Willowmere', onGone() {} });
+loader.follow(journal);
+// Hand the journal to the scene: createKingdomScene(canvas, { ...options, opening: journal })
+// or, through the stream mount, createSceneMount({ ..., onOpening: journal => loader.follow(journal) }).
+```
+
+- `host` is any positioned element. The loader fills it (`position:absolute; inset:0`) and removes itself.
+- `dispose()` removes it at once.
+- A failed attempt reads "The road needs a moment" with the scene's own reason. A retry with a new journal keeps the parchment unrolled.
+- The panel at 318×496 fits the portrait layout. It was looked at only at 390×844.
+- Fonts come from the Atlas woff2 files already in the build.
+- No other lane's files were edited.

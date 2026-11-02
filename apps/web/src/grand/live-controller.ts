@@ -2,6 +2,7 @@ import { createRealmSpectatorSource } from '../kingdom-entry/spectator';
 import { createSceneMount } from '../stream/mount';
 import { createDockConnection } from '../stream/dock-connection';
 import { grandLiveSelection } from './live-source';
+import type { OpeningJournal } from '../kingdom/grand-land/opening/journal';
 
 export interface GrandLiveState {
   readonly phase: 'checking' | 'loading' | 'ready' | 'unavailable' | 'hidden';
@@ -17,7 +18,7 @@ const unavailable = 'The kingdom could not be reached. Try again, or find anothe
 
 /** The public grand view is the native kingdom host with a free overview lens. Its verified watch owns every
  * placement, light and live event; its pinned recipe owns the land. No local founding or presence fallback. */
-export function createGrandLiveController(hooks: { host(): HTMLElement; onState(state: GrandLiveState): void }) {
+export function createGrandLiveController(hooks: { host(): HTMLElement; onState(state: GrandLiveState): void; onOpening?(journal: OpeningJournal): void }) {
   const params = new URLSearchParams(location.search), selected = grandLiveSelection(params);
   let disposed = false, started = false, firstView = true;
   let state: GrandLiveState = { phase: 'checking', title: 'Your kingdom', biome: null, hour: selected?.hour ?? 17.5,
@@ -53,6 +54,7 @@ export function createGrandLiveController(hooks: { host(): HTMLElement; onState(
       else if (phase === 'failed') emit({ phase: 'unavailable', error: unavailable, progress: null, source: null });
       else emit({ phase: phase === 'hidden' ? 'hidden' : 'loading', error: null, progress: null, source: null });
     },
+    ...(hooks.onOpening ? { onOpening: hooks.onOpening } : {}),
     onProgress: (text, fraction) => emit({ phase: 'loading', progress: { text, fraction }, error: null }),
     onSource: source => emit({ source }),
     onNames: () => {},
