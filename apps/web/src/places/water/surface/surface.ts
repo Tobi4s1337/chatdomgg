@@ -5,7 +5,7 @@ import type { XZ } from '@chatdom/world';
 import type { WaterReach } from '../../../../../../packages/world/src/places/water/reaches';
 import { assertGround, basinDistance, waterAt, type WaterAt, type WaterGround } from './coverage';
 import { basinGeometry, reachGeometry } from './geometry';
-import { assertRaster, rasterGeometry, rasterGround, rasterSamples, rasterWaterAt, type WaterRaster } from './raster';
+import { assertRaster, rasterGeometry, rasterSamples, rasterWaterAt, type WaterRaster } from './raster';
 import { FLOW_PERIOD, waterPhases } from './phases';
 import { PILLAR_CAP, selectPillars, type PillarSelection, type WaterLightSource } from './pillars';
 import { createPlanarReflection, type PlanarReflectionOptions, type ReflectionDiagnostics, type ReflectionFrame, type ReflectionReport } from './reflection';
@@ -85,9 +85,12 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
   let quality = options.quality;
   if (quality !== 'full' && quality !== 'reduced') throw new RangeError(`Unknown water quality "${String(quality)}"`);
 
-  const shaderGround = options.raster ? rasterGround(ground) : ground;
-  const heights = new THREE.DataTexture(shaderGround.data, shaderGround.width, shaderGround.height, THREE.RedFormat, THREE.FloatType);
+  const quantized = ground.encoding === 'quantized';
+  const heights = new THREE.DataTexture(ground.data, ground.width, ground.height,
+    quantized ? THREE.RedIntegerFormat : THREE.RedFormat, quantized ? THREE.UnsignedShortType : THREE.FloatType);
+  if (quantized) heights.internalFormat = 'R16UI';
   heights.minFilter = heights.magFilter = THREE.NearestFilter;
+  heights.unpackAlignment = quantized ? 2 : 4;
   heights.generateMipmaps = false; heights.needsUpdate = true;
   const reflection = createPlanarReflection(options.reflection);
   if (quality === 'reduced') reflection.setMode('reduced');
@@ -95,7 +98,8 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
   const v4 = (n: number) => Array.from({ length: n }, () => new THREE.Vector4());
   const shared = {
     uHeight: { value: heights }, uOrigin: { value: new THREE.Vector2(...ground.origin) },
-    uSize: { value: new THREE.Vector2(shaderGround.width, shaderGround.height) }, uStep: { value: ground.step },
+    uSize: { value: new THREE.Vector2(ground.width + (options.raster ? 1 : 0), ground.height + (options.raster ? 1 : 0)) }, uStep: { value: ground.step },
+    uGroundScale: { value: quantized ? ground.scale : 1 }, uGroundOffset: { value: quantized ? ground.offset : 0 },
     uOutsideGroundHeight: { value: outsideGroundHeight },
     uBasins: { value: v4(BASIN_CAP) }, uBasinLevels: { value: new Array<number>(BASIN_CAP).fill(-1e6) }, uBasinCount: { value: options.raster ? 0 : bodies.length },
     uWind: { value: new THREE.Vector3() }, uFlowPhase: { value: new THREE.Vector2() },
@@ -121,6 +125,7 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
   const material = (mode: 0 | 1, own: Record<string, THREE.IUniform>) => {
     const made = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3, vertexShader: waterVertex, fragmentShader: waterFragment,
+      defines: quantized ? { QUANTIZED_GROUND: 1 } : {},
       uniforms: { ...shared, uMode: { value: mode }, ...own },
       transparent: true, depthWrite: false, premultipliedAlpha: true, blending: THREE.NormalBlending,
     });
@@ -267,7 +272,7 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
         quality, reflection: reflection.diagnostics, plane,
         pillars: { cap: PILLAR_CAP, drawn: selection.pillars.length, considered: selection.considered, dropped: selection.dropped, rejected: selection.rejected },
         contacts: { cap: CONTACT_CAP, count: contactCount },
-        bytes: { ground: shaderGround.width * shaderGround.height * 4, reflection: reflection.diagnostics.targetBytes },
+        bytes: { ground: ground.data.byteLength, reflection: reflection.diagnostics.targetBytes },
         meshes: meshes.length, triangles,
       };
     },

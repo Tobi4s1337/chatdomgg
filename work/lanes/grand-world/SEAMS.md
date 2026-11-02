@@ -560,3 +560,24 @@ Full artifact verification is not free: the isolated real CLI pass cost 2.44 CPU
 under contention and peaked at 213.4 MiB. Preparation needs scheduling outside the held writer's time-sensitive
 adoption window; do not treat this result as an instant Forge/reconnect latency proof. The root land identity,
 producer scheduling and live/historical integration remain open. Evidence: `work/evidence/grand-world/GW10-publication.md`.
+
+## GW10 compact native water — 2026-11-02
+
+`bakedNativeWater(surface, seat)` now returns `{ ground, raster }` referencing the verified surface's original
+Uint16 arrays. Both carry `encoding: 'quantized'`, scale 0.5 and offset `-seat.offset[1]`; `raster.dryGround`
+must be exactly `ground.data`. Wetness is the encoded comparison `levels[i] > dryGround[i]`, before translation.
+`groundSample` and `rasterLevel` decode to metres without materializing grids. Existing float callers still work.
+The kingdom host passes `land.water.ground` and `land.water.raster` directly to its one water owner; pier sampling
+and coverage certificates also decode these units. The water texture borrows the bed array and uploads R16UI,
+clamping edge texels to preserve the old padded last row/column. Disposal never mutates or detaches caller arrays.
+
+Hosted diagnostics now expose `surfaceBytes` and `waterRasterExtraBytes`, counting unique backing buffers.
+For the existing 2560-square real bake they report 26,214,400 and zero bytes. Including the formerly padded texture
+array, retained CPU surface/water data falls from 104,878,084 to 26,214,400 bytes; GPU bed texture payload falls from
+26,234,884 to 13,107,200 bytes. These are scoped allocations, not total browser/GPU memory measurements. Decoder
+transient memory, geometry scratch and all other scene resources remain outside this accounting. Artifacts,
+recipe, physical floor and receipt identity are unchanged; no rebake or migration is required.
+
+Evidence and limits: `work/evidence/grand-world/GW10-compact-water.md`. This checkpoint does not resolve the native
+GPU/walk matrix or publication integration. Gather still receives only the exterior tavern portal door on both
+lands, plus the separate optional campfire clearing; the founded tavern building is unchanged.

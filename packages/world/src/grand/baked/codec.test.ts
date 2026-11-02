@@ -48,8 +48,12 @@ describe('portable immutable baked land', () => {
     expect(bakedVisualHeight(result, seated.seat, -17, 0)).toBeNull();
     expect(bakedVisualHeight(result, seated.seat, NaN, 0)).toBeNull();
     const native = bakedNativeWater(result, seated.seat);
-    expect(native.ground.data[i]).toBe(-2); expect(native.levels[i]).toBe(1);
-    expect(native.levels[0]).toBeNaN(); expect(native.ground.origin).toEqual([-16, -32]);
+    expect(native.ground.data).toBe(result.ground); expect(native.raster.levels).toBe(result.water);
+    expect(native.ground.data[i]! * native.ground.scale + native.ground.offset).toBe(-2);
+    expect(native.raster.levels[i]! * native.raster.scale + native.raster.offset).toBe(1);
+    expect(native.raster.dryGround).toBe(result.ground);
+    expect(native.raster.levels[0]!).toBeLessThanOrEqual(native.raster.dryGround[0]!);
+    expect(native.ground.origin).toEqual([-16, -32]);
     const bad = encoded.slice(); new DataView(bad.buffer).setUint32(8, 0xffffffff, true);
     expect(() => decodeBakedSurface(bad)).toThrow();
     expect(() => decodeBakedSurface(encoded.subarray(0, -1))).toThrow();

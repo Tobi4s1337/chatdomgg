@@ -2,8 +2,8 @@ import type { RealmFoundedScene } from '../../../../../packages/world/src/founde
 import type { LandGroundSource } from '../../../../../packages/world/src/land-interface';
 import type { LandWaterSource, LandWaterSample, LandWaterCoverage } from '../../../../../packages/world/src/grand-adoption/pier-sites-types';
 import type { BoundsXZ } from '../../../../../packages/world/src/settlement/types';
-import { BASIN_FEATHER, assertGround, basinDistance, groundAt, waterAt, type WaterGround } from '../../places/water/surface/coverage';
-import { assertRaster, rasterWaterAt } from '../../places/water/surface/raster';
+import { BASIN_FEATHER, assertGround, basinDistance, groundAt, groundSample, waterAt, type WaterGround } from '../../places/water/surface/coverage';
+import { assertRaster, rasterLevel, rasterWaterAt } from '../../places/water/surface/raster';
 import type { WaterSurfaceOptions } from '../../places/water/surface/surface';
 
 type Metadata = { readonly kind: 'lake' | 'river' | 'sea'; readonly biome: string };
@@ -67,7 +67,7 @@ export function createSurfaceLandWater(scene: Pick<RealmFoundedScene, 'layoutRev
     for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
       const extrema = cellExtrema(ground, x, z);
       if (!extrema) return null;
-      const y = raster ? raster.levels[x + z * ground.width]! : bodies[0]!.level;
+      const y = raster ? rasterLevel(raster, x + z * ground.width) : bodies[0]!.level;
       let cell: 'dry' | 'wet' | 'shore';
       if (raster) {
         if (!Number.isFinite(y) || extrema.min >= y) cell = 'dry';
@@ -107,8 +107,8 @@ export function createSurfaceLandWater(scene: Pick<RealmFoundedScene, 'layoutRev
 
 /** A triangle-linear bed stays between its cell vertices; raster's last row/column repeat their edge heights. */
 function cellExtrema(ground: WaterGround, x: number, z: number): { min: number; max: number } | null {
-  const values = [ground.data[x + z * ground.width]!, ground.data[Math.min(x + 1, ground.width - 1) + z * ground.width]!,
-    ground.data[x + Math.min(z + 1, ground.height - 1) * ground.width]!,
-    ground.data[Math.min(x + 1, ground.width - 1) + Math.min(z + 1, ground.height - 1) * ground.width]!];
+  const values = [groundSample(ground, x + z * ground.width), groundSample(ground, Math.min(x + 1, ground.width - 1) + z * ground.width),
+    groundSample(ground, x + Math.min(z + 1, ground.height - 1) * ground.width),
+    groundSample(ground, Math.min(x + 1, ground.width - 1) + Math.min(z + 1, ground.height - 1) * ground.width)];
   return values.every(Number.isFinite) ? { min: Math.min(...values), max: Math.max(...values) } : null;
 }

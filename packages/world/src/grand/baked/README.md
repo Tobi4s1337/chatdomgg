@@ -53,8 +53,10 @@ coarse level they may exceed the nominal world height by the final chunk's paddi
 
 The surface header is 32 bytes: `GDS1`; uint16 version/header length at 4/6; uint32 size, height, sea level and column
 count at 8/12/16/20; bytes 24..31 zero. Payload is a full uint16 ground raster followed by a uint16 water raster,
-x fastest. Values remain in half-metre land units. Water zero is dry. `bakedVisualHeight` translates native queries;
-`bakedNativeWater` reproduces the existing native float ground/water inputs, including dry NaN water levels.
+x fastest. Values remain in half-metre land units. Water is wet only when its encoded level exceeds its ground
+sample. `bakedVisualHeight` translates native queries; `bakedNativeWater` returns `{ ground, raster }` borrowing
+the original Uint16 arrays with explicit `encoding: 'quantized'`, scale 0.5 and offset `-seat.offset[1]`.
+The water owner decodes samples to metres on demand; dry queries remain NaN. Neither adapter generates land.
 
 Metadata is strict canonical UTF-8 JSON: format/compiler identity, kingdom/recipe/plan identity, dimensions, seat,
 native total and physical bounds, palette, surface descriptor and complete per-region descriptors. Hashes are
@@ -68,10 +70,15 @@ at most 512. The height limit follows the packed chunk-slot Y nibble. Exceeding 
 decision, never truncation. Region encode/decode is linear in quads; surface encode/decode is linear in columns;
 metadata validation is linear in the manifest. Codecs have no per-frame work and land has no per-frame network traffic.
 
-A 2560-square surface is 25 MiB raw plus its header. The native water adapter adds 50 MiB of float rasters. It must be
-installed once and released with its water owner; it is not a per-frame operation. These numbers expose an outstanding
-phone/working-set problem. A tiled water/raster owner or lazy sampling is needed before claiming the spec's phone
-budget or the first-street cold-load budget. Gzip transport does not reduce resident decoded bytes.
+A 2560-square decoded surface retains 25 MiB. The native water adapter and texture borrow these arrays without
+expanded float grids or padded edge copies; the bed uploads as R16UI (12.5 MiB). The previous retained CPU total
+was 100.02 MiB: 25 MiB compact data + 50 MiB float rasters + 25.02 MiB padded texture data. Final-edge sampling
+clamps in the shader and preserves the previous repeated edge heights. Caller arrays must outlive the water owner;
+water disposal releases its GPU resources without detaching or mutating those arrays.
+
+This accounting excludes decoder transient memory (raw bytes and owned decoded arrays can coexist), raster geometry,
+driver copies and the rest of the scene. It does not establish the phone or cold-load budget. Gzip transport does
+not reduce resident decoded bytes. No format version, artifact bytes, recipe or collision authority changed.
 
 One mesher owns its scratch volume, voxel context/tree cache and buckets. Bake one kingdom at nice 19, with at most
 two workers, and write each completed blob immediately rather than retaining all mesh results. The first offline

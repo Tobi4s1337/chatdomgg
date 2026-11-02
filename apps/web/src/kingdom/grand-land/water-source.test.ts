@@ -15,6 +15,25 @@ const meta = { raster: { kind: 'sea' as const, biome: 'coast' }, lake: { kind: '
 const rect = (minX: number, minZ: number, maxX: number, maxZ: number) => ({ minX, minZ, maxX, maxZ });
 
 describe('renderer water land adapter', () => {
+  it('preserves metre-based physical depths and coverage certificates with encoded surface arrays', () => {
+    const data = new Uint16Array([4, 4, 4, 4, 4, 4, 9, 4, 4, 4, 4, 4, 4, 4, 4, 4]);
+    const levels = new Uint16Array(16).fill(8); levels[1] = 4;
+    const ground = { width: 4, height: 4, step: .5, origin: [-2, -3] as const,
+      data, encoding: 'quantized' as const, scale: .5, offset: -4 };
+    const raster = { levels, dryGround: data, encoding: 'quantized' as const, scale: .5, offset: -4, seaLevel: 0 };
+    const legacyGround = { width: 4, height: 4, step: .5, origin: ground.origin, data: Float32Array.from(data, n => n * .5 - 4) };
+    const legacyRaster = { seaLevel: 0, levels: Float32Array.from(levels, (n, i) => n > data[i]! ? n * .5 - 4 : NaN) };
+    const compact = createSurfaceLandWater(scene, physical(), { ground, raster, bodies: [], reaches: [] }, meta);
+    const legacy = createSurfaceLandWater(scene, physical(), { ground: legacyGround, raster: legacyRaster, bodies: [], reaches: [] }, meta);
+    for (let z = -3.125; z <= -.875; z += .125) for (let x = -2.125; x <= .125; x += .125)
+      expect(compact.sample(x, z)).toEqual(legacy.sample(x, z));
+    for (let z = -3; z < -1; z += .5) for (let x = -2; x < 0; x += .5)
+      expect(compact.coverage(rect(x, z, x + .5, z + .5))).toEqual(legacy.coverage(rect(x, z, x + .5, z + .5)));
+    expect(compact.coverage(rect(-2, -3, -1.5, -2.5))).toEqual({ state: 'wet', level: 0, minDepth: 2, ...meta.raster });
+    expect(compact.sample(-1.4, -2.9)).toEqual({ state: 'dry' });
+    expect(compact.coverage(rect(-2, -3, -1, -2.5))).toEqual(legacy.coverage(rect(-2, -3, -1, -2.5)));
+  });
+
   it('matches raster renderer wet/dry cells but uses physical rather than interpolated visual depth', () => {
     const ground = grid(), raster = { levels: new Float32Array(16).fill(1), seaLevel: 0 };
     raster.levels[1] = NaN;

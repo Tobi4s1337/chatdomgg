@@ -11,7 +11,8 @@ tailrace) with one material and at most one planar reflection pass per frame. It
 const water = createWaterSurface({
   bodies,            // readonly WaterBody[]: still basins (at most 4)
   reaches,           // readonly WaterReach[]: deriveWaterReaches(landform)
-  ground,            // { data: Float32Array, width, height, origin: [x, z], step }: the caller's terrain heights (bed)
+  ground,            // WaterGround: caller's Float32 metre heights or explicitly quantized Uint16 bed
+  raster,            // optional WaterRaster: native grid water, replacing bodies/reaches
   contacts,          // optional WaterContact[] (≤ CONTACT_CAP = 48): piles, stones, hull sides, weir crests
   quality,           // 'full' | 'reduced'
   reflection,        // optional { scale ≤ 0.5 (default 0.5), maxEdge (default 1024) }
@@ -96,8 +97,23 @@ The integrator owns `scene.ts`. To replace the old water exactly once:
 | lake-postcard | 1 (one basin) | 2 | 17 calls, 368k tris | 21 calls, 371k tris | 720×450 RGBA16F + depth, 3.89 MB | 11 drawn of 13 sources (2 dark), cap 24 |
 | bridge-pond | 4 (pond, stream, tailrace, leat) | 338 | 33 calls, 143k tris | 42 calls, 146k tris | 720×450 RGBA16F + depth, 3.89 MB | 0 of 4 lamps: each reflects onto the bank (dry), honestly none |
 
-The ground height texture is the caller's grid at 4 bytes per sample: 313 KB for the lake fixture, 64 KB for the
-millrace. Reduced quality frees the target, so its reflection bytes are 0. The pass roughly doubles scene draw
+The ground height texture borrows the caller's grid at 4 bytes per float sample: 313 KB for the lake fixture, 64 KB for the
+millrace. Quantized grids use R16UI at 2 bytes per sample, with nearest filtering and 2-byte row alignment. Raster
+coverage extends through the final sample's cell; the shader repeats edge texels without allocating a padded grid.
+Reduced quality frees the target, so its reflection bytes are 0. The pass roughly doubles scene draw
 calls, because it re-renders the clay scene from the mirrored camera. That is the main real-GPU question: frame
 time on Tobias's machine, the full path at 1440×900 and 1920×1080, and whether a `scale` of 0.35 is needed on
 phones.
+
+## Compact native rasters
+
+`WaterGround` accepts the existing `{ data: Float32Array, width, height, origin, step }`, or the same grid with
+`data: Uint16Array, encoding: 'quantized', scale, offset`. `groundSample` returns metres as `sample * scale + offset`.
+`WaterRaster` accepts float `levels` with NaN dry cells, or Uint16 `levels` with the same explicit encoding/units and
+`dryGround` referencing exactly `ground.data`. Quantized water is wet only when `levels[i] > dryGround[i]` before
+translation. `rasterLevel` returns metres or NaN; zero and negative world levels remain valid water.
+
+Geometry, flows, reflections, queries and the native land's pier certificates use these decoded units. The texture
+owns its GPU allocation, while the caller owns and retains every supplied array. The legacy `rasterGround` helper
+still materializes a float padded grid for explicit callers; production rendering does not call it. See
+`work/evidence/grand-world/GW10-compact-water.md` for real-artifact memory accounting and rendered parity checks.

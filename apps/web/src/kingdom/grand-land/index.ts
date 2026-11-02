@@ -32,6 +32,7 @@ export interface HostedGrandStats {
   regions: number; covered: number; exactRegions: number; residentBytes: number;
   queued: number; busy: number; resultBytes: number; installs: number; revision: number;
   readonly generatedColumns: 0; readonly workers: 0;
+  surfaceBytes: number; waterRasterExtraBytes: number;
   networkBytes: number; cacheBytes: number; verifiedRawBytes: number; completedBlobs: number;
   cacheHits: number; cacheCorruptions: number; activeRequests: number; queuedRequests: number; pendingCompressedBytes: number;
 }
@@ -44,8 +45,7 @@ export interface HostedGrandLand {
   readonly revision: number;
   /** Visual only. Collision and interaction authority remain the installed scene's bounded compilation. */
   height(x: number, z: number): number | null;
-  readonly water: { readonly ground: { readonly data: Float32Array; readonly width: number; readonly height: number;
-    readonly origin: [number, number]; readonly step: number }; readonly levels: Float32Array; readonly seaLevel: number };
+  readonly water: ReturnType<typeof bakedNativeWater>;
   update(now: number): void;
   dispose(): void;
 }
@@ -101,6 +101,7 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
   const root = new THREE.Group(); root.name = 'installed-grand-land';
   const stats: HostedGrandStats = { phase: 'meshing', regions: 0, covered: 0, exactRegions: 0,
     residentBytes: 0, queued: 0, busy: 0, resultBytes: 0, installs: 0, revision: 0, generatedColumns: 0, workers: 0,
+    surfaceBytes: 0, waterRasterExtraBytes: 0,
     networkBytes: 0, cacheBytes: 0, verifiedRawBytes: 0, completedBlobs: 0, cacheHits: 0, cacheCorruptions: 0,
     activeRequests: 0, queuedRequests: 0, pendingCompressedBytes: 0 };
   function free(mesh: RegionMesh) {
@@ -300,10 +301,14 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
       } catch (error) { fail(error instanceof Error ? error : new Error(String(error))); }
     }
     const nativeWater = bakedNativeWater(surface, metadata.seat);
+    const surfaceBuffers = new Set([surface.ground.buffer, surface.water.buffer]);
+    stats.surfaceBytes = [...surfaceBuffers].reduce((bytes, buffer) => bytes + buffer.byteLength, 0);
+    const waterBuffers = new Set([nativeWater.ground.data.buffer, nativeWater.raster.levels.buffer, nativeWater.raster.dryGround.buffer]);
+    stats.waterRasterExtraBytes = [...waterBuffers].filter(buffer => !surfaceBuffers.has(buffer)).reduce((bytes, buffer) => bytes + buffer.byteLength, 0);
     const owner: HostedGrandLand = { ready, identity, bounds, stats,
       get revision() { return stats.revision; },
       height: (x, z) => bakedVisualHeight(surface, metadata.seat, x, z),
-      water: { ...nativeWater, ground: { ...nativeWater.ground, origin: [...nativeWater.ground.origin] } },
+      water: nativeWater,
       update, dispose,
     };
     return owner;

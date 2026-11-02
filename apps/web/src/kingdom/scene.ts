@@ -752,7 +752,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
         overview.setActive(overviewOwnsLens());overview.apply(camera,target);camera.updateMatrixWorld();
       }
       camera.far=Math.max(camera.far,land.bounds.getSize(new THREE.Vector3()).length()+(overview?overview.inspect().limits.maxDistance:camera.position.length()));camera.updateProjectionMatrix();
-      const replacement=own(createWaterSurface({bodies:[],reaches:[],ground:land.water.ground,raster:{levels:land.water.levels,seaLevel:land.water.seaLevel},quality:waterQuality}));
+      const replacement=own(createWaterSurface({bodies:[],reaches:[],ground:land.water.ground,raster:land.water.raster,quality:waterQuality}));
       water.root.removeFromParent();water.dispose();water=replacement;scene.add(water.root);
       poseRevision++;
       await land.ready;

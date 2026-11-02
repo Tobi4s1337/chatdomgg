@@ -1,15 +1,34 @@
 import * as THREE from 'three';
-import { groundAt, type WaterAt, type WaterGround } from './coverage';
+import { assertGround, assertQuantizedUnits, groundAt, groundSample, type WaterAt, type WaterGround } from './coverage';
 
-/** Water levels at the ground grid's sample points. NaN means dry; zero is a valid level. */
-export interface WaterRaster {
-  readonly levels: Float32Array;
-  readonly seaLevel: number;
-}
+/** Water levels on the ground grid. Float metres use NaN for dry; zero remains a valid wet level.
+ * Quantized samples are wet only above their shared encoded bed, then decode with the ground's units. */
+export type WaterRaster = { readonly seaLevel: number }
+  & ({ readonly levels: Float32Array; readonly encoding?: 'metres' }
+    | { readonly levels: Uint16Array; readonly encoding: 'quantized'; readonly scale: number; readonly offset: number;
+      readonly dryGround: Uint16Array });
 
 export function assertRaster(raster: WaterRaster, ground: WaterGround): void {
+  assertGround(ground);
   if (raster.levels.length !== ground.width * ground.height || !Number.isFinite(raster.seaLevel))
     throw new RangeError('Water raster needs one level per ground sample and a finite sea level');
+  if (raster.encoding === 'quantized') {
+    if (!(raster.levels instanceof Uint16Array) || !(raster.dryGround instanceof Uint16Array)
+      || raster.dryGround.length !== raster.levels.length)
+      throw new RangeError('Quantized water raster needs complete Uint16 level and bed samples');
+    assertQuantizedUnits(raster.scale, raster.offset);
+    if (ground.encoding !== 'quantized' || ground.scale !== raster.scale || ground.offset !== raster.offset
+      || ground.data !== raster.dryGround)
+      throw new RangeError('Quantized water raster must share its ground samples and units');
+  } else if (!(raster.levels instanceof Float32Array) || (raster.encoding !== undefined && raster.encoding !== 'metres'))
+    throw new RangeError('Water raster needs Float32 metre samples or an explicit quantized encoding');
+}
+
+/** Decode one valid raster index; dry remains NaN even when the translated world has negative heights. */
+export function rasterLevel(raster: WaterRaster, index: number): number {
+  if (raster.encoding !== 'quantized') return raster.levels[index]!;
+  const level = raster.levels[index]!;
+  return level > raster.dryGround[index]! ? level * raster.scale + raster.offset : NaN;
 }
 
 /** Each sample owns the cell beginning at its grid position. */
@@ -17,13 +36,13 @@ export function rasterWaterAt(raster: WaterRaster, ground: WaterGround, x: numbe
   const gx = (x - ground.origin[0]) / ground.step, gz = (z - ground.origin[1]) / ground.step;
   if (!(gx >= 0 && gz >= 0 && gx < ground.width && gz < ground.height)) return null;
   const i = Math.floor(gx), k = Math.floor(gz);
-  const level = raster.levels[i + ground.width * k]!, bed = groundAt(ground, Math.min(x, ground.origin[0] + (ground.width - 1) * ground.step), Math.min(z, ground.origin[1] + (ground.height - 1) * ground.step));
+  const level = rasterLevel(raster, i + ground.width * k), bed = groundAt(ground, Math.min(x, ground.origin[0] + (ground.width - 1) * ground.step), Math.min(z, ground.origin[1] + (ground.height - 1) * ground.step));
   return Number.isFinite(level) && Number.isFinite(bed) && bed < level ? { id: 'raster', level, depth: level - bed } : null;
 }
 
 /** One indexed mesh, greedily merging equal-level cells in both dimensions. */
 export function rasterGeometry(raster: WaterRaster, ground: WaterGround): THREE.BufferGeometry {
-  const { width: w, height: h, origin, step } = ground, levels = raster.levels;
+  const { width: w, height: h, origin, step } = ground;
   const used = new Uint8Array(w * h);
   let capacity = 256, count = 0;
   let positions = new Float32Array(capacity * 12), flows = new Float32Array(capacity * 12), indices = new Uint32Array(capacity * 6);
@@ -33,13 +52,13 @@ export function rasterGeometry(raster: WaterRaster, ground: WaterGround): THREE.
     p.set(positions); f.set(flows); ix.set(indices); positions = p; flows = f; indices = ix;
   }
   for (let k = 0; k < h; k++) for (let i = 0; i < w; i++) {
-    const start = i + k * w, level = levels[start]!;
+    const start = i + k * w, level = rasterLevel(raster, start);
     if (used[start] || !Number.isFinite(level)) continue;
     let end = i + 1;
-    while (end < w && !used[end + k * w] && levels[end + k * w] === level) end++;
+    while (end < w && !used[end + k * w] && rasterLevel(raster, end + k * w) === level) end++;
     let bottom = k + 1;
     rows: while (bottom < h) {
-      for (let x = i; x < end; x++) if (used[x + bottom * w] || levels[x + bottom * w] !== level) break rows;
+      for (let x = i; x < end; x++) if (used[x + bottom * w] || rasterLevel(raster, x + bottom * w) !== level) break rows;
       bottom++;
     }
     for (let z = k; z < bottom; z++) used.fill(1, z * w + i, z * w + end);
@@ -48,7 +67,11 @@ export function rasterGeometry(raster: WaterRaster, ground: WaterGround): THREE.
     const z0 = origin[1] + k * step, z1 = origin[1] + bottom * step;
     positions.set([x0, level, z0, x1, level, z0, x0, level, z1, x1, level, z1], count * 12);
     // A local downhill gradient gives stepped courses a consistent native flow; still water remains still.
-    const neighbour = (x: number, z: number) => x >= 0 && x < w && z >= 0 && z < h && Number.isFinite(levels[x + z * w]!) ? levels[x + z * w]! : level;
+    const neighbour = (x: number, z: number) => {
+      if (x < 0 || x >= w || z < 0 || z >= h) return level;
+      const sample = rasterLevel(raster, x + z * w);
+      return Number.isFinite(sample) ? sample : level;
+    };
     const dx = neighbour(i - 1, k) - neighbour(end, k), dz = neighbour(i, k - 1) - neighbour(i, bottom);
     const length = Math.hypot(dx, dz), fx = length ? dx / length * 0.45 : 0, fz = length ? dz / length * 0.45 : 0;
     flows.set([fx, fz, 0, fx, fz, 0, fx, fz, 0, fx, fz, 0], count * 12);
@@ -79,14 +102,15 @@ export function rasterSamples(raster: WaterRaster, ground: WaterGround) {
   return samples;
 }
 
-/** Extend edge heights one sample so the final row and column of cells have a bed. */
+/** Legacy materializing adapter. Production raster rendering clamps edge texels in the shader instead.
+ * Extend edge heights one sample so the final row and column of cells have a bed, in decoded metres. */
 export function rasterGround(ground: WaterGround): WaterGround {
   const width = ground.width + 1, height = ground.height + 1;
   const data = new Float32Array(width * height);
   for (let z = 0; z < height; z++) {
     const source = Math.min(z, ground.height - 1) * ground.width;
-    data.set(ground.data.subarray(source, source + ground.width), z * width);
-    data[z * width + ground.width] = ground.data[source + ground.width - 1]!;
+    for (let x = 0; x < ground.width; x++) data[z * width + x] = groundSample(ground, source + x);
+    data[z * width + ground.width] = groundSample(ground, source + ground.width - 1);
   }
-  return { ...ground, data, width, height };
+  return { data, width, height, origin: ground.origin, step: ground.step };
 }

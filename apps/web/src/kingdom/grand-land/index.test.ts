@@ -7,6 +7,8 @@ import { BAKED_COMPILERS, BAKED_REGION_QUAD_BYTES, type BakedMetadata, type Bake
 import { canonicalSceneJson, sha256Hex, utf8 } from '../../../../../packages/world/src/founded-world/codec';
 import { openBakedLand, type BakedLandSource } from './baked-client';
 import { prepareHostedGrandLand, type HostedGrandLand } from './index';
+import { groundSample } from '../../places/water/surface/coverage';
+import { rasterLevel } from '../../places/water/surface/raster';
 
 vi.mock('./baked-client', () => ({ openBakedLand: vi.fn() }));
 const owners: HostedGrandLand[] = [];
@@ -79,8 +81,11 @@ describe('baked terrain renderer scheduling', () => {
     expect(f.options.materialFactory).toHaveBeenCalledWith(f.source.metadata.palette);
     expect(owner.bounds.min.toArray()).toEqual([-16, -5, -32]);
     expect(owner.height(0, 0)).toBe(-1); expect(owner.height(-17, 0)).toBeNull();
-    expect(owner.water.ground.origin).toEqual([-16, -32]); expect(owner.water.ground.data[0]).toBe(-1);
-    expect(owner.water.levels[0]).toBe(0); expect(owner.water.seaLevel).toBe(0);
+    expect(owner.water.ground.origin).toEqual([-16, -32]); expect(groundSample(owner.water.ground, 0)).toBe(-1);
+    expect(rasterLevel(owner.water.raster, 0)).toBe(0); expect(owner.water.raster.seaLevel).toBe(0);
+    expect(owner.water.ground.data).toBe(f.source.surface.ground);
+    expect(owner.water.raster.levels).toBe(f.source.surface.water);
+    expect(owner.stats).toMatchObject({ surfaceBytes: 512 ** 2 * 4, waterRasterExtraBytes: 0 });
     expect(owner.stats).toMatchObject({ generatedColumns: 0, workers: 0, networkBytes: 64 });
     expect(f.scene.children[0]!.position.toArray()).toEqual([-16, -5, -32]);
   });
