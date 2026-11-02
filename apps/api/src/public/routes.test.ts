@@ -156,17 +156,20 @@ describe('the public origin route table', () => {
     for (const search of ['?source=realm&kingdom=1001', '?source=live', '?walk=1&kingdom=1001', '?signin=ok']) expect(asksForStagedData(search), search).toBe(false);
   });
 
-  it('opens the app itself when the bare origin carries any other query', () => {
+  it('opens the app on the bare origin only for the walk; any other query keeps the front page', () => {
     expect(classify('/', '?walk=1&kingdom=1001')).toEqual({ kind: 'page' });
-    expect(classify('/', '?forge=1')).toEqual({ kind: 'page' });
-    expect(classify('/', '?signin=ok&kingdom=1001')).toEqual({ kind: 'page' });
+    expect(classify('/', '?walk=1&kingdom=1001&signin=ok')).toEqual({ kind: 'page' });
+    expect(classify('/', '?walk=1&kingdom=1001&forgeChat=connected')).toEqual({ kind: 'page' });
+    for (const search of ['?forge=1', '?signin=ok&kingdom=1001', '?forgeChat=expired', '?hour=23', '?tier=hamlet&hour=19.5&forge=1', '?walk=0', '?utm_source=x']) {
+      expect(classify('/', search), search).toEqual({ kind: 'site', page: 'index' });
+    }
   });
 
   it('serves the listed product pages and nothing that merely looks like one', () => {
-    for (const path of ['/stream', '/panel', '/map', '/map/tobi4s_', '/kingdom/1001', '/-/avatar-builder', '/dock', '/dock/']) {
+    for (const path of ['/stream', '/panel', '/map', '/map/tobi4s_', '/kingdom/1001', '/dock', '/dock/']) {
       expect(classify(path, ''), path).toEqual({ kind: 'page' });
     }
-    for (const path of ['/showcase/', '/map/Tobi4s', '/map/a-b', '/map/abcdefghijklmnopqrstuvwxyz', '/kingdom/0', '/kingdom/01', '/kingdom/abc', '/kingdom/1001/x', '/bench', '/-/other', '/dock/bench', '/-/citizen-card', '/-/citizen-card/bench']) {
+    for (const path of ['/showcase/', '/map/Tobi4s', '/map/a-b', '/map/abcdefghijklmnopqrstuvwxyz', '/kingdom/0', '/kingdom/01', '/kingdom/abc', '/kingdom/1001/x', '/bench', '/-/other', '/-/avatar-builder', '/dock/bench', '/-/citizen-card', '/-/citizen-card/bench']) {
       expect(classify(path, ''), path).toEqual({ kind: 'file' });
     }
   });

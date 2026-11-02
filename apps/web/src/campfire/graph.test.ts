@@ -16,22 +16,30 @@ function graph(entry: string): Set<string> {
       const specifier = match[1] ?? match[2];
       if (!specifier || specifier.endsWith('.css')) continue;
       const base = resolve(dirname(file), specifier);
-      const found = [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`].find(p => existsSync(p) && !p.endsWith('/'));
-      if (found && /\.(t|j)sx?$/.test(found)) visit(found);
+      const found = [`${base}.ts`, `${base}.tsx`, base, `${base}/index.ts`, `${base}/index.tsx`].find(p => existsSync(p) && /\.(t|j)sx?$/.test(p));
+      if (found) visit(found);
     }
   };
   visit(entry);
   return seen;
 }
 
-describe('public stream entry', () => {
-  const reached = [...graph(resolve(here, 'public.tsx'))].map(p => p.slice(here.length + 1));
-  it('never reaches the private hand, its decoder or the development cast', () => {
-    expect(reached).toContain('ports.ts');
-    for (const file of reached) expect(file).not.toMatch(/^(self|private|hand|fixture)/);
+describe('the stream overlay', () => {
+  const reached = [...graph(resolve(here, 'StreamOverlay.tsx'))].map(p => p.slice(here.length + 1));
+  it('never reaches the seated HUD, the hand or a card', () => {
+    for (const file of reached) expect(file).not.toMatch(/^(Hud|input|keys|walk)\.tsx?$/);
   });
-  it('accepts only public views', () => {
-    const source = readFileSync(resolve(here, 'public.tsx'), 'utf8');
-    expect(source).not.toMatch(/CampfireSelf|hideSecrets|subscribeSelf/);
+  it('reads only the public frame', () => {
+    for (const file of ['StreamOverlay.tsx', 'plate.tsx']) {
+      const source = readFileSync(resolve(here, file), 'utf8');
+      expect(source).not.toMatch(/\.self\b|CampfireSelf|cardWords|choice/);
+    }
+  });
+});
+
+describe('the walk', () => {
+  it('opens a private session only for a walker with an identity', () => {
+    const source = readFileSync(resolve(here, 'walk.ts'), 'utf8');
+    expect(source).toMatch(/private: walk\.mode === 'walking' && !!walk\.self/);
   });
 });

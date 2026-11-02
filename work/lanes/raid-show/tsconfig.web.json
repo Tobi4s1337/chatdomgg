@@ -14,6 +14,18 @@
     "../../../apps/web/src/realm-reference/index.tsx",
     "../../../apps/web/src/raid-gate/entry/**/*.ts",
     "../../../apps/web/src/raid-gate/entry/**/*.tsx",
-    "../../../apps/web/src/twitch-moments/controller.ts"
+    "../../../apps/web/src/twitch-moments/controller.ts",
+    "../../../apps/web/src/raid-gate/march-call*.ts",
+    "../../../apps/web/src/raid-gate/MarchCall.tsx",
+    "../../../apps/web/src/raid-gate/march-bench.tsx",
+    "../../../apps/web/src/raid-gate/road/*.ts",
+    "../../../apps/web/src/raid-gate/road/*.tsx",
+    "../../../apps/web/src/raid-gate/bench.ts",
+    "../../../apps/web/src/raid-gate/controller*.ts",
+    "../../../apps/web/src/raid-gate/journey*.ts",
+    "../../../apps/web/src/raid-gate/JourneyLayer.tsx",
+    "../../../apps/web/src/raid-gate/walk-gate*.ts",
+    "../../../apps/web/src/raid-gate/play-slot*.ts",
+    "../../../apps/web/src/raid-gate/walk-gate-bench.tsx"
   ]
 }

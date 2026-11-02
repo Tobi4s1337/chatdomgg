@@ -1,12 +1,13 @@
-/* The raid road: one journey across three layers (the leaving kingdom, the Atlas, the destination), with the gate's
-   tableaux, a carved header that names the chapter, and the caravan's parchment tag riding with the column on the map. */
+/* The raid road: one journey across the leaving kingdom's world, the Atlas and the destination (or its waiting land),
+   with a carved header that names the chapter, words as a lower third that never covers the gate, and the caravan's
+   parchment tag riding with the column on the map. */
 
-.rr-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .rr-route { background: #e2d3ae; }
 .rr-map { position: absolute; inset: 0; z-index: 1; background: #e2d3ae; pointer-events: none; }
 .rr-map canvas { display: block; }
 .rr-world { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; transform-origin: 50% 46%; }
 .rr-dest { z-index: 3; }
+.rr-home { z-index: 3; }
 .rr-shade { z-index: 4; transition: opacity .6s; }
 .rr-route[data-act='rise'] .rr-shade, .rr-route[data-act='ride'] .rr-shade, .rr-route[data-act='hold'] .rr-shade { opacity: 0; }
 .rr-route[data-act='welcome'] .rr-shade { background: linear-gradient(90deg, transparent 45%, #12142466 78%, #10121fa6), linear-gradient(180deg, #11142450, transparent 22%), linear-gradient(0deg, #0d0f1ccc, #0d0f1c66 24%, transparent 46%); }
@@ -25,22 +26,32 @@
 .rr-chapters li.rr-now { opacity: 1; color: #f3d69c; }
 .rr-chapters li.rr-now::before { content: ''; width: 6px; height: 6px; background: #e7b864; transform: rotate(45deg) translateY(-1px); box-shadow: 0 0 8px #e7b864aa; align-self: center; }
 
-/* ---- The tableau stage at the foot of each kingdom ----------------------------------------------------------- */
-.rr-stage { position: absolute; z-index: 5; left: 0; bottom: 0; width: min(1400px, calc(100vw - 490px)); height: min(50vh, 500px); pointer-events: none; opacity: var(--reveal); }
-.rr-stage::before { content: ''; position: absolute; inset: -14% 0 0 0; z-index: -1;
-  background: radial-gradient(ellipse 72% 64% at 0% 100%, #0b0c18f2 0, #0b0c18c4 45%, transparent 100%), linear-gradient(0deg, #0b0c18e6 0, #0b0c1880 18%, transparent 46%); }
-.rr-words { position: absolute; left: 44px; top: 0; max-width: 760px; text-shadow: 0 2px 12px #0b0c18, 0 1px 0 #0b0c18; }
+/* ---- The words: a lower third at the foot of the world, clear of the gate in the middle of the picture ----------- */
+.rr-stage { position: absolute; z-index: 5; left: 0; bottom: 0; width: min(1100px, calc(100vw - 490px)); height: min(34vh, 330px); pointer-events: none; opacity: var(--reveal); }
+.rr-stage::before { content: ''; position: absolute; inset: -30% 0 0 0; z-index: -1;
+  background: radial-gradient(ellipse 80% 90% at 0% 100%, #0b0c18e6 0, #0b0c18a6 45%, transparent 100%), linear-gradient(0deg, #0b0c18cc 0, #0b0c1866 26%, transparent 60%); }
+.rr-words { position: absolute; left: 44px; bottom: 40px; max-width: 700px; text-shadow: 0 2px 12px #0b0c18, 0 1px 0 #0b0c18; }
 .rr-eyebrow { margin: 0 0 6px; font: 13px 'IM Fell English SC', Georgia, serif; letter-spacing: .2em; text-transform: lowercase; color: #f0c98b; }
-.rr-title { margin: 0; font: 400 46px/1.02 'IM Fell English', Georgia, serif; color: #fff1d6; letter-spacing: -.01em; text-wrap: balance; }
-.rr-line { margin: 10px 0 0; max-width: 660px; font: italic 19.5px/1.4 Alegreya, Georgia, serif; color: #f0dcbc; text-wrap: pretty; }
-.rr-scene { position: absolute; left: 0; right: 0; bottom: 0; height: 74%; }
-.rr-scene svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.rr-bloom, .rr-ember { mix-blend-mode: screen; }
-.rr-ember { fill: #ffcb7a; }
-.rr-gate-seal { overflow: visible; filter: drop-shadow(0 0 10px #ffc4704d) drop-shadow(0 3px 2px #0b0c18aa); }
-.rr-gate-seal > * { display: block; margin: 3px auto 0; }
-.rr-you { font: 13px 'IM Fell English SC', Georgia, serif; letter-spacing: .12em; fill: #f7dca4; paint-order: stroke; stroke: #120d14; stroke-width: 3px; }
-.rr-more { font: italic 18px Alegreya, Georgia, serif; fill: #e8d1ac; paint-order: stroke; stroke: #120d14; stroke-width: 3px; }
+.rr-title { margin: 0; font: 400 42px/1.02 'IM Fell English', Georgia, serif; color: #fff1d6; letter-spacing: -.01em; text-wrap: balance; }
+.rr-line { margin: 10px 0 0; max-width: 640px; font: italic 19px/1.4 Alegreya, Georgia, serif; color: #f0dcbc; text-wrap: pretty; }
+/* Twitch's own countdown, read from its createdAt: the held breath before the party leaves. */
+.rr-count { display: flex; align-items: baseline; gap: 12px; margin: 14px 0 0; }
+.rr-count span { font: 13px 'IM Fell English SC', Georgia, serif; letter-spacing: .18em; text-transform: lowercase; color: #f0c98b; }
+.rr-count b { font: 400 40px/1 'IM Fell English', Georgia, serif; color: #ffe2a8; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px #ff9a3c80, 0 2px 10px #0b0c18; }
+
+/* ---- Waiting land: a parchment card on the map at the end of the road (no world is entered) ----------------- */
+.rr-land { position: absolute; z-index: 7; right: 44px; bottom: 44px; width: min(440px, calc(100vw - 32px)); padding: 22px 24px 20px; color: #3b2f25;
+  background: linear-gradient(#f6ecd3, #ead9b2); border: 1px solid #3b2f25; border-radius: 2px;
+  box-shadow: 0 0 0 4px #f6ecd3, 0 0 0 5px #3b2f2566, 0 14px 30px #3b2f2540; }
+.rr-land .rr-eyebrow { margin-top: 10px; color: #8a5a2f; }
+.rr-land h2 { margin: 0; font: 400 30px/1.05 'IM Fell English', Georgia, serif; text-wrap: balance; }
+.rr-land p:not(.rr-eyebrow) { margin: 10px 0 0; font: italic 17px/1.42 Alegreya, Georgia, serif; color: #4d3a28; text-wrap: pretty; }
+.rr-land-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.rr-land-acts a, .rr-land-acts button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 3px; cursor: pointer;
+  font: 400 17px 'IM Fell English', Georgia, serif; text-decoration: none; }
+.rr-land-watch { color: #fbecd0; background: linear-gradient(#6a4a9a, #4f3478); border: 1px solid #2f1f48; box-shadow: inset 0 1px 0 #ffffff33; }
+.rr-land-home { color: #3b2f25; background: transparent; border: 1px solid #3b2f25; }
+.rr-land-acts a:focus-visible, .rr-land-acts button:focus-visible { outline: 2px solid #b8435a; outline-offset: 2px; }
 
 /* ---- The caravan's tag, riding with the column on the map ----------------------------------------------------- */
 .rr-caravan { position: absolute; z-index: 6; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
@@ -56,15 +67,24 @@
 .rr-board { display: contents; }
 .rr-board .rg-pane { z-index: 8; }
 
+/* A walker on a phone: the march call sits under the carved header, the words at the foot, the party between them. */
+.rr-call .mc-layer { top: 82px; bottom: auto; }
+/* Under a capture the page's timeline only moves as the capture seeks, so an entrance animation would hold its first frame. */
+.rr-capture .mc-call { animation: none; }
+
 @media (max-width: 760px) {
   .rr-header { top: 12px; left: 12px; right: 12px; padding: 9px 12px; gap: 10px; }
   .rr-header h1 { font-size: 22px; }
   .rr-chapters { gap: 8px; font-size: 10px; }
   .rr-chapters li:not(.rr-now) { display: none; }
-  .rr-stage { width: 100vw; height: 40vh; bottom: 38vh; }
-  .rr-words { left: 16px; right: 16px; }
+  .rr-stage { width: 100vw; height: 30vh; bottom: 42vh; }
+  .rr-calling .rr-stage { bottom: 0; height: 28vh; }
+  .rr-words { left: 16px; right: 16px; bottom: 16px; }
   .rr-title { font-size: 26px; }
   .rr-line { font-size: 15px; }
-  .rr-route[data-act='welcome'] .rr-stage, .rr-route[data-act='gather'] .rr-stage, .rr-route[data-act='setout'] .rr-stage { bottom: 42vh; }
+  .rr-count b { font-size: 30px; }
+  .rr-land { left: 16px; right: 16px; bottom: 16px; width: auto; padding: 16px; }
+  .rr-land h2 { font-size: 24px; }
+  .rr-land p:not(.rr-eyebrow) { font-size: 15px; }
   .rr-caravan-tag b { font-size: 17px; }
 }

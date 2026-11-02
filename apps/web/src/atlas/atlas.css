@@ -206,7 +206,8 @@
 .atlas[data-layout='phone'] .atlas-card::before { content: ''; position: absolute; top: 7px; left: 50%; width: 36px; height: 3px; margin-left: -18px; border-radius: 2px; background: var(--ink-faint); }
 @keyframes atlas-sheet-in { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .atlas[data-layout='phone'] .atlas-card h2 { font-size: 24px; }
-.atlas[data-layout='phone'] .atlas-notice { top: auto; bottom: 66px; }
+/* Pinned from the left edge to beside the zoom column: centred on half the width, a notice wrapped one word a line. */
+.atlas[data-layout='phone'] .atlas-notice { top: auto; bottom: 66px; left: 10px; right: 64px; transform: none; max-width: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .atlas *, .atlas *::before, .atlas *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
@@ -335,3 +336,27 @@
 .atlas[data-state='ready'] .atlas-map { z-index: 1; }
 .atlas[data-state='ready'] .atlas-still { pointer-events: none; }
 .atlas[data-state='ready'] > :not(.atlas-map):not(.atlas-still) { z-index: 2; }
+
+/* ── A streamer's own channel: the quiet hide line and the card only its owner sees ─────────── */
+.atlas-owner-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(59, 47, 37, 0.22); }
+.atlas-owner-mine { display: inline-flex; align-items: center; gap: 6px; font: 400 11.5px/1.2 var(--caps); letter-spacing: 0.16em; text-transform: lowercase; color: var(--ink-soft); }
+.atlas-owner-mine svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.atlas-owner-mine .atlas-key-brass { stroke: #936421; stroke-width: 1.7; }
+.atlas-owner-hide {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 4px; border: 0; background: none; cursor: pointer;
+  font: 400 14.5px/1 var(--display); color: var(--ink); text-decoration: underline; text-decoration-color: rgba(59, 47, 37, 0.35); text-underline-offset: 4px;
+  transition: text-decoration-color 140ms;
+}
+.atlas-owner-hide:hover { text-decoration-color: var(--ink); }
+.atlas-owner-hide svg, .atlas-owner-show svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.atlas-owner-hide[aria-busy='true'], .atlas-owner-show[aria-busy='true'] { cursor: progress; opacity: 0.72; }
+.atlas-owner-failed { flex-basis: 100%; margin: 0; font-size: 12.5px; line-height: 1.35; color: var(--ink-soft); }
+.atlas-owner-card .atlas-card-head .atlas-seal, .atlas-owner-card .atlas-card-head > :first-child { filter: saturate(0.55); }
+.atlas-owner-card .atlas-card-status { color: var(--ink); }
+.atlas-owner-note { font-size: 13.5px !important; }
+.atlas-owner-show { width: 100%; }
+@media (prefers-reduced-motion: no-preference) {
+  .atlas-owner-card { animation: atlas-owner-settle 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  @keyframes atlas-owner-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}
+.atlas-search-own { color: var(--ink); font-style: italic; }

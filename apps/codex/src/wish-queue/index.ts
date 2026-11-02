@@ -382,6 +382,24 @@ export class FileForgeWishQueue {
     });
   }
 
+  /**
+   * Forget finished wishes whose maker has heard the outcome and that arrived before `before`. They hold no words;
+   * dropping them bounds startup and disk. Unfinished or unacknowledged wishes are never touched.
+   */
+  async prune(before: number): Promise<number> {
+    if (!Number.isSafeInteger(before)) throw new ForgeWishQueueError('invalid');
+    return this.work(async () => {
+      let removed = 0;
+      for (const record of [...this.records.values()]) {
+        if (record.state !== 'finished' || record.observedAt >= before || this.active.has(record.key)
+          || (record.delivery !== undefined && !record.delivery.acknowledged)) continue;
+        await this.files.remove(recordName(record.key));
+        this.records.delete(record.key); removed++;
+      }
+      return removed;
+    });
+  }
+
   async get(key: string): Promise<ForgeWishReceipt | null> {
     if (!keySchema.safeParse(key).success) throw new ForgeWishQueueError('invalid');
     return this.work(async () => { const record = this.records.get(key); return record ? plain(record) : null; });

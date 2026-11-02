@@ -58,6 +58,7 @@ import { createHomeLife } from './home-life';
 import { createRoyalLife } from './royal-life';
 import { foundedLifeSites, foundedForgeSites, generatedHomeLifeSites } from './home-life-sites';
 import { createForgeEmitters } from '../forge/emitters';
+import { createEmptyPointSkipper } from './grand-land/empty-points';
 import { checkWalkBinding, createKingdomWalk, type KingdomWalkBinding, type WalkerLabel } from './walk-scene';
 import { createObservedWalkers, walkerSlots } from './observed-walkers';
 import { RealmDockStageStateSchema, type RealmWalkerFeed } from '@chatdom/shared/realm';
@@ -86,9 +87,13 @@ import { createPlaceMounts, type PlaceMounter } from './grand-land/place-mount';
 import { createPlaceShot } from './grand-land/place-shot';
 import type { PlaceShot } from '../interactions/places/framing';
 import { createKingdomLayers } from './grand-land/kingdom-layer';
+// Registered kingdom layers (effects only; solids stay founded placements): the pier's lanterns.
 import { createSceneStills, type SceneStillOptions } from './grand-land/scene-still';
 import { pierShot, type PierShotPose } from './grand-land/pier-shot';
+import { createRaidMomentHooks, raidTorchLights } from './grand-land/raid-support';
 import { automaticSceneQuality, sceneQualityBudget, type SceneQuality } from './grand-land/scene-quality';
+import { createQualityGovernor, GOVERNOR_BUDGETS, softwareRenderer } from './grand-land/quality-governor';
+import { createGpuFrameTimer } from './grand-land/gpu-timer';
 export type { PlaceMount, PlaceMounter } from './grand-land/place-mount';
 export { registerKingdomLayer, type KingdomLayerMount, type KingdomLayerMounter } from './grand-land/kingdom-layer';
 export { SCENE_QUALITIES, isSceneQuality, type SceneQuality, type SceneQualityBudget } from './grand-land/scene-quality';
@@ -196,9 +201,15 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     handoffPose={view:copy,rotation:new THREE.Quaternion().setFromRotationMatrix(matrix),elapsed:0};poseRevision++;
   }
   if(options.initialView)startHandoff(options.initialView);
-  // A person's quality choice scales effects only (scene-quality.ts); null keeps the automatic opening choice.
-  const openedQuality=automaticSceneQuality(canvas.clientWidth);let qualityChoice:SceneQuality|null=null;
-  const post=own(createPostStack(renderer,scene,camera,{quality:openedQuality,toneMapping:'aces',fog:'material'}));
+  // A person's quality choice scales effects and distance only (scene-quality.ts); null is automatic: the governor
+  // moves the tier from where it opened by what frames measurably cost. Beside a game in OBS it opens balanced on a
+  // 4 ms GPU budget. A software renderer, a replay or a fixed evidence frame is never governed (captures stay exact).
+  const insideObs='obsstudio' in window,openedQuality=automaticSceneQuality(canvas.clientWidth);
+  let qualityChoice:SceneQuality|null=null,automaticQuality:SceneQuality=insideObs&&openedQuality==='high'?'balanced':openedQuality;
+  const governor=createQualityGovernor({start:automaticQuality,budget:insideObs?GOVERNOR_BUDGETS.obs:GOVERNOR_BUDGETS.desktop,blindCeiling:insideObs?'balanced':'high'});
+  const software=softwareRenderer(renderer.getContext()),gpuTimer=software?null:createGpuFrameTimer(renderer.getContext());
+  let governedAt=0,governedCamera='',proposedAt=0,frameStartedAt=0;const governedEye=new THREE.Vector3();
+  const post=own(createPostStack(renderer,scene,camera,{quality:automaticQuality,toneMapping:'aces',fog:'material'}));
   /** Bound only while programs precompile for render-target drawing (see precompile below). */
   const precompileTarget=own(new THREE.WebGLRenderTarget(1,1,{depthBuffer:false}));
   /** Ask the driver to link `objects`' programs (lights and fog from the scene) in the variants the frame draws. */
@@ -310,6 +321,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const forgeHearth=own(createRoyalLife(scene,clay,undefined,forgeSites.fires.filter(site=>site.normal[1]===0),undefined,true));
   const forgeFire=own(createRoyalLife(scene,clay,undefined,forgeSites.fires.filter(site=>site.normal[1]!==0),undefined,false,true));
   const forgeBreath=own(createForgeEmitters(scene));
+  // Idle particle pools submit nothing (spec 56 counts every draw): see grand-land/empty-points.ts.
+  const emptyPoints=own(createEmptyPointSkipper(scene));
   const windows=own(createWindowLights(scene,presenceHouses));
   // Begin the arrival among neighbours, not alone at the newest edge of town.
   const arrivalHomes=layout.homes.filter(h=>h.tier==='house');
@@ -462,7 +475,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(!dockKingdomId)throw new Error('Dock presentations need the installed kingdom identity');
     if(dockActive)activateDock();
   }
-  function resize(){renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);post.resize(canvas.clientWidth,canvas.clientHeight,renderer.getPixelRatio());camera.aspect=canvas.clientWidth/canvas.clientHeight;setHero();focusHome(focusSlot);walk?.controller.resize(canvas.clientWidth,canvas.clientHeight);sunShadows.setResolution(portrait()?1024:2048);placeMounts.resize(canvas.clientWidth,canvas.clientHeight);}
+  function resize(){renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);post.resize(canvas.clientWidth,canvas.clientHeight,renderer.getPixelRatio());applyLandQuality();camera.aspect=canvas.clientWidth/canvas.clientHeight;setHero();focusHome(focusSlot);walk?.controller.resize(canvas.clientWidth,canvas.clientHeight);sunShadows.setResolution(portrait()?1024:2048);placeMounts.resize(canvas.clientWidth,canvas.clientHeight);}
   const observer=new ResizeObserver(resize);earlyCleanups.push(()=>observer.disconnect());observer.observe(canvas);resize();
   const blockers=installed?[...houses,...props.map(p=>({...p,slot:65534}))]:buildings;
   const lightBounds=inhabitedLightBounds(layout.homes);
@@ -577,11 +590,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   earlyCleanups.push(()=>horizonGeometry.dispose());
   const coverInput={ground:landHeight,waterKeepOut:lakeKeepOut(layout),occupied:content,keepClear:[{x:0,z:8,radius:7}]};
   let dressing:GroundDressing|undefined,coverCounts:Readonly<Record<string,number>>={};
+  const reflectionExclusions=[...atmosphere.reflectionExclusions];
   const mountDressing=(coverPlan:GroundDressingPlan)=>{
     coverCounts=coverPlan.report.counts;
     dressing=createGroundDressing({...coverInput,land:{plan:layout,sites:[],places:{court:{boundary:layout.castle.court.boundary}}},
       seed:layout.config.seed,tier:layout.config.tier,plan:coverPlan,scene,camera,pool,clay,signal:abort.signal,
       registerShadow:mesh=>sunShadows.register(mesh)});
+    reflectionExclusions.push(dressing.root);
     return dressing.ready;
   };
   // On the grand floor the planting ground is terrainHeight (its land is not installed yet), so the plan comes from a
@@ -708,8 +723,28 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   let lastAmbience=-Infinity,ambienceTarget:AmbienceTarget={wind:0,water:0,waterPan:0};
   const listenerRight=new THREE.Vector3();
   let forgeShade=0;
+  /** Land detail is a screen error in rendered pixels: the post stack may draw the scene below the canvas size
+   * (balanced and low, or a dense display), so the error is converted to drawing-buffer pixels, which the land
+   * host measures in. Detail finer than a rendered pixel cannot be seen and is not drawn. */
+  function landDetail(pixels:number|null):number|null{const post$=post.diagnostics(),buffer=renderer.getDrawingBufferSize(new THREE.Vector2()).y;const scale=post$.hdr&&buffer>0?Math.min(1,post$.height/buffer):1;return scale>.98?pixels:Math.min(8,(pixels??1.5)/scale);}
+  function applyQuality(){const budget=sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth);post.setQuality(budget.post);applyLandQuality();lastRenderedKey='';}
+  // How fine far land is drawn and its share of the main-view triangle budget, both in drawing-buffer pixels.
+  function applyLandQuality(){const budget=sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth);grandLand?.setDetail(landDetail(budget.landDetail));grandLand?.setBudget({quads:budget.landBudget.quads,maxPixels:landDetail(budget.landBudget.maxPixels)??budget.landBudget.maxPixels});}
+  // Called after each drawn frame. A step the governor proposes waits for a camera cut (a new director shot, or the
+  // eye jumping) so the picture never changes inside a shot; walking has no cuts, so a step down applies after 1.5 s
+  // and a step up after 6 s. Only drawn, live frames count: a capture, a replay or a still never feeds it.
+  function governFrame(now:number){
+    const gpuMs=gpuTimer?.take()??null,interval=governedAt?now-governedAt:Infinity;governedAt=now;
+    const cut=camName!==governedCamera||camera.position.distanceToSquared(governedEye)>36;governedCamera=camName;governedEye.copy(camera.position);
+    if(software||fixedTime||qualityChoice!==null||!loaded||document.visibilityState==='hidden'){proposedAt=0;return;}
+    const proposed=governor.sample({at:now,intervalMs:interval,cpuMs:performance.now()-frameStartedAt,gpuMs});
+    if(!proposed){proposedAt=0;return;}
+    proposedAt||=now;
+    const down=['low','balanced','high'].indexOf(proposed)<['low','balanced','high'].indexOf(automaticQuality);
+    if(cut||now-proposedAt>=(down?1500:6000)){automaticQuality=proposed;governor.applied(proposed,now);proposedAt=0;applyQuality();}
+  }
   function render(now:number){
-    if(disposed||renderHolds>0)return;try {grandLand?.update(now);if(grandLand){canvas.dataset.hostedLand=JSON.stringify({...grandLand.stats,identity:grandLand.identity});if(opening){reportLandBytes(grandLand.stats);if(grandLand.stats.startupPhase==='settled'&&announcedReady)opening.step('whole');}}const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
+    if(disposed||renderHolds>0)return;frameStartedAt=performance.now();try {grandLand?.update(now);if(grandLand){canvas.dataset.hostedLand=JSON.stringify({...grandLand.stats,identity:grandLand.identity});if(opening){reportLandBytes(grandLand.stats);if(grandLand.stats.startupPhase==='settled'&&announcedReady)opening.step('whole');}}const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
     if(loaded&&debug.ready&&!fixedTime)time+=dt;
     if(ownSimulation)simulation.advance(time);
     // A transport retry does not revoke a still-valid presence lease or send everyone home again.
@@ -850,7 +885,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
     fog.color.set(grade.fog);fog.density=grade.fogDensity;renderer.toneMappingExposure=grade.exposure;
     post.update({environment:grade,hour,focusDistance:camName==='window'||forgeDirected||forge.status().busy?camera.position.distanceTo(forgeDirected&&realmForge?realmForge.focusPoint:target):null,beacon:{position:new THREE.Vector3(...beaconPosition),strength:beacon},forge:{position:new THREE.Vector3(0,layout.market.elevation+1.6,8),strength:realmForge?.active()||forge.status().busy?1:0}});
-    const nextWaterQuality=sceneQualityBudget(qualityChoice,openedQuality,canvas.clientWidth).water;
+    const nextWaterQuality=sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth).water;
     if(nextWaterQuality!==waterQuality){waterQuality=nextWaterQuality;water.setQuality(waterQuality);}
     water.update({time,environment:grade,camera,sources:[
       ...[...windows.getSources(),...build.getSources()].map(source=>({...source,kind:'window' as const})),
@@ -859,7 +894,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     ]});
     dressing?.hideLot(buildHidden?simulation.firstSlot:null);
     dressing?.update({time,walkers:(walk?.poses??observed?.poses??[]).map(p=>[p.x,p.y,p.z] as Vec3)});
-    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,groundHeight(lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...(civicLife?.sources()??[]),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...forge.sources(),...(realmForge?.sources()??[]),...(growth?.sources()??[]),...(dockVisuals?.sources()??[])];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
+    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,groundHeight(lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...(civicLife?.sources()??[]),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...forge.sources(),...(realmForge?.sources()??[]),...(growth?.sources()??[]),...(dockVisuals?.sources()??[]),...raidTorchLights(moments?.metrics())];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
     const people=walk??observed;
     if(people)options.onWalkers?.(people.labels().filter(label=>{
       const person=people.poses.find(p=>p.id===label.id);
@@ -869,13 +904,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     // Fixed evidence frames have no animation between seeks. Keep the public
     // feed/watchdog alive, but don't burn SwiftShader CPU redrawing identical
     // pixels while a capture waits on fonts, a field worker or the filesystem.
-    const renderKey=[dockCameraDirected?now:0,poseRevision,overview?.revision??0,placeShot.revision,placeMounts.revision,kingdomLayers?.revision??0,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,grandLand?.revision??0,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
+    const renderKey=[dockCameraDirected?now:0,poseRevision,overview?.revision??0,placeShot.revision,placeMounts.revision,kingdomLayers?.revision??0,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,grandLand?.revision??0,fixedTime?moments?.metrics().view['pennantWall.revision']??0:0,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
     // The stream curtain covers preparation. Keep the bounded land install/update pump running,
     // but do not redraw a hidden high-quality reflection/post stack for every installed region.
     // The sun-shadow map is refreshed only for a frame that draws: every region attached during
     // startup dirties it, and re-rendering the whole static shadow pass per install starved the pump.
     // The first loaded frame below still draws the full native view before announcing ready.
-    if((loaded||!useGrandLand)&&(!grandLand||grandLand.canPresent())&&((loaded&&(!fixedTime||!!walk))||renderKey!==lastRenderedKey)){renderPhase='drawing';renderStartedAt=performance.now();if(loaded)sunShadows.updateSunDirection(grade.sunDirection);water.reflect({renderer,scene,camera,frame:++waterFrame,exclusions:atmosphere.reflectionExclusions});post.render(dt);stills.drawn();if(!landPresentationDeferred||handoffAwaiter){grandLand?.markPresented();landPresentationDeferred=false;}renderCompletedAt=performance.now();if(handoffAwaiter){const complete=handoffAwaiter;handoffAwaiter=undefined;complete.resolve();}renderPhase='drawn';lastRenderedKey=renderKey;if(dockVisible){dockActs?.drawn();if(dockVisuals?.finished())dockActs?.finish();}}
+    if((loaded||!useGrandLand)&&(!grandLand||grandLand.canPresent())&&((loaded&&(!fixedTime||!!walk))||renderKey!==lastRenderedKey)){renderPhase='drawing';renderStartedAt=performance.now();if(loaded)sunShadows.updateSunDirection(grade.sunDirection);emptyPoints.update(now);gpuTimer?.begin();water.reflect({renderer,scene,camera,frame:++waterFrame,exclusions:reflectionExclusions});post.render(dt);gpuTimer?.end();governFrame(now);stills.drawn();if(!landPresentationDeferred||handoffAwaiter){grandLand?.markPresented();landPresentationDeferred=false;}renderCompletedAt=performance.now();if(handoffAwaiter){const complete=handoffAwaiter;handoffAwaiter=undefined;complete.resolve();}renderPhase='drawn';lastRenderedKey=renderKey;if(dockVisible){dockActs?.drawn();if(dockVisuals?.finished())dockActs?.finish();}}
     // The gate covers loading the place, not background light refinement. The
     // full scene and presence windows have drawn; independently scheduled light
     // workers may still be waking. Captures can wait on lightingReady separately.
@@ -924,7 +959,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       }}:{}),
     })).then(async land=>{
       if(disposed){land.dispose();return;}
-      grandLand=land;loadMark('land-owner');setHero();landSurface=grandFloorSurface(layout,{seaLevel:land.water.raster.seaLevel});
+      grandLand=land;loadMark('land-owner');applyLandQuality();setHero();landSurface=grandFloorSurface(layout,{seaLevel:land.water.raster.seaLevel});
       if(options.overview){
         const physical=new THREE.Box3(new THREE.Vector3(layout.bounds.minX,layout.castle.centre[1],layout.bounds.minZ),new THREE.Vector3(layout.bounds.maxX,layout.castle.centre[1],layout.bounds.maxZ));
         // Ordered installed blueprints determine the town's true vertical extent; no guessed city layout.
@@ -946,7 +981,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }
     opening?.step('ground');
   }));
-  function dispose(){if(disposed)return;stills.dispose();handoffAwaiter?.reject(new DOMException('The kingdom closed during view handoff','AbortError'));handoffAwaiter=undefined;const checkpoint=options.founded&&!options.replay&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);overview?.dispose();kingdomLayers?.dispose();placeMounts.dispose();walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();grandLand?.dispose();clearInterval(soulClockTimer);soul?.dispose();civicLife?.dispose();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();precompileTarget.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;stills.dispose();handoffAwaiter?.reject(new DOMException('The kingdom closed during view handoff','AbortError'));handoffAwaiter=undefined;const checkpoint=options.founded&&!options.replay&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);overview?.dispose();kingdomLayers?.dispose();placeMounts.dispose();walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();dressing?.dispose();grandLand?.dispose();clearInterval(soulClockTimer);soul?.dispose();civicLife?.dispose();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();emptyPoints.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();gpuTimer?.dispose();post.dispose();precompileTarget.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();opening?.fail('The kingdom lost its rendering context');options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
@@ -968,13 +1003,15 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   try {await Promise.all(tasks);loadMark('tasks');precompile();
     if(disposed)throw new Error('Scene closed while loading');
     options.onProgress('Welcoming the citizens',1);await crowd.prepare();
+    let foundedWorld:CollisionWorld|undefined,foundedGround:((x:number,z:number)=>Vec3|null)|undefined;
     if(options.founded&&!options.replay){
-      const founded=options.founded,collision=collisionOfFounded();
+      const founded=options.founded,collision=collisionOfFounded();foundedWorld=collision;
       const land=createKingdomLandInterface({scene:founded,collision,ground:{layoutRevision:founded.layoutRevision,collisionRevision:founded.collisionRevision,
         sample:(x,z)=>x>=layout.bounds.minX&&x<layout.bounds.maxX&&z>=layout.bounds.minZ&&z<layout.bounds.maxZ?foundedGroundAt(layout,x,z):null}});
       // UTC and woodland are explicit presentation defaults until Genesis supplies its biome/zone.
       const keepers=await createSoulKeeperRenderer(scene,crowd.material,pool);
       if(disposed){keepers.dispose();throw new Error('Scene closed while preparing keepers');}
+      foundedGround=land.groundAt;
       soul=createSoulSceneHost(scene,foundedSoulBinding(land,'woodland',0),sound.soulHost,keepers);
       void soulClock.sync(abort.signal);
       soulClockTimer=setInterval(()=>{void soulClock.sync(abort.signal);},60_000);
@@ -984,7 +1021,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const kingdomId=options.founded?.kingdomId??options.kingdomId;
       if(!kingdomId||options.founded&&options.momentFeed.origin!==options.founded.origin)throw new Error('Moments need this kingdom and its actual source');
       const castleKeep=installed?installed.forgeHosts.find(h=>h.slot===65534):castleBuildings.find(h=>h.id===layout.castle.beaconModuleId);
-      moments=own(createKingdomMoments({scene,camera,canvas,target,plan:layout,houses,...(castleKeep?{castleKeep}:{}),pool,material:clay,registry,kingdomId,feed:options.momentFeed,sound:sound.moments,ground:landHeight,kit:options.forgeFamily==='tide'?'tide':'hearth',signal:abort.signal}));
+      // Raid props stand and moment shots see through this scene's one adopted world and floor (raid-show SEAMS §8).
+      // The options are raid-show's to forward in its own moments module; until it does, they are inert.
+      const raidHooks=foundedWorld&&foundedGround?createRaidMomentHooks({world:foundedWorld,region:layout.bounds,live:()=>!disposed,groundAt:foundedGround,
+        waterDepth:(x,z)=>{const sample=landSurface?.(x,z);return sample?sample.waterDepth:null;},height:landHeight,eye:()=>camera.position.toArray() as Vec3}):{};
+      moments=own(createKingdomMoments({scene,camera,canvas,target,plan:layout,houses,...(castleKeep?{castleKeep}:{}),pool,material:clay,registry,kingdomId,feed:options.momentFeed,sound:sound.moments,ground:landHeight,kit:options.forgeFamily==='tide'?'tide':'hearth',signal:abort.signal,...raidHooks}));
       // Optional future spectacles prepare on their four bounded worker lanes after the citizens. The gate
       // opens on the world drawing; a failed moment view detaches itself and reports failure in inspect().
       void moments.ready.catch(()=>{});
@@ -1015,7 +1056,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     walkSelected:()=>walkSelected,
     selectWalk(selected:boolean){walkSelected=selected&&!!walk;overview?.setActive(overviewOwnsLens());if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
     seekGrowthCeremony(seconds:number|null){growth?.seek(seconds);},
-    inspect:()=>({overview:overview?.inspect()??null,placeShot:placeShot.inspect(),land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),shadow:{...sunShadows.stats},moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing?.stats(),counts:coverCounts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
+    inspect:()=>({quality:{...sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth),governed:!software&&!fixedTime&&qualityChoice===null,gpuTimer:gpuTimer?.supported??false,obs:insideObs,governor:governor.state()},overview:overview?.inspect()??null,placeShot:placeShot.inspect(),land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),shadow:{...sunShadows.stats},moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing?.stats(),counts:coverCounts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
       if(!crowd.receiveChat(input))return false;
       const cue=CitizenChatCueSchema.parse(input),at=Date.now();
       if(cue.asOf<=at&&at-cue.asOf<=5000&&cue.expiresAt>at)arrivalDirector?.chat(cue.slot,at);
@@ -1048,8 +1089,10 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     still(width:number,options?:SceneStillOptions){return stills.still(width,options);},
     setHour(value:number){targetHour=value;sound.cue('wood');},
     /** Play's ledger setting: effects scale, palette, light, near detail and dusk windows never do. Null is automatic. */
-    setQuality(value:SceneQuality|null){const budget=sceneQualityBudget(value,openedQuality,canvas.clientWidth);qualityChoice=budget.choice;post.setQuality(budget.post);lastRenderedKey='';},
-    quality:()=>sceneQualityBudget(qualityChoice,openedQuality,canvas.clientWidth),
+    setQuality(value:SceneQuality|null){qualityChoice=sceneQualityBudget(value,automaticQuality,canvas.clientWidth).choice;applyQuality();},
+    quality:()=>sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth),
+    /** Evidence only: far land error in pixels, until the next quality change (null: the quality's own). */
+    setLandDetail(pixels:number|null){grandLand?.setDetail(landDetail(pixels??sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth).landDetail));lastRenderedKey='';},
     setCamera(value:CameraName){arrivalDirector?.cancel();walkSelected=false;walk?.controller.release();capturePose=null;poseRevision++;camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
     /** Evidence framing only. Null returns control to the current production camera. */
     pose(eye:Vec3|null,lookAt?:Vec3,fov=43){

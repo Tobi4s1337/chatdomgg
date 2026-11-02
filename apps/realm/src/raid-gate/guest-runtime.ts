@@ -1,4 +1,4 @@
-import type { PresenceInput, RaidGuestVisualMark } from '@chatdom/shared';
+import type { KingdomId, PersonId, PresenceInput, RaidGuestVisualMark } from '@chatdom/shared';
 import type { DurableKingdom, RealmLifecycleListener } from '../persistence/kingdom';
 import type { RaidGuestProjection, RaidGuestRoomReceipt } from '../../../api/src/raid-gate/guest-contracts';
 import { RaidGuestProjectionSchema } from '../../../api/src/raid-gate/guest-contracts';
@@ -17,18 +17,34 @@ export interface RaidGuestRuntimeOptions {
   readonly clock?: () => number;
   /** The same committed chat qualification, for transient presentation; never a second stamp authority. */
   readonly chatPresented?: (input: PresenceInput, result: RaidGuestChatResult | null) => void;
+  /**
+   * Committed marchers from another kingdom's Raid Gate (RS11): a seat that is not an invited guest may still be a
+   * visitor who rode out under its source's banner, and wears that crest while it stands here.
+   */
+  readonly marchers?: { marchMark(personId: PersonId, kingdomId: KingdomId, at: number): Promise<RaidGuestVisualMark | null> };
 }
 
 /** Actual room callbacks only. A failed receipt stays pending; it never turns authentication into an arrival. */
 export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
   const pending = new Map<string, ReceiptJob>(), running = new Set<Promise<void>>();
   const subscriptions = new Set<() => void>();
-  type Seat = { receipt: RaidGuestRoomReceipt; confirmed: boolean; guest?: RaidGuestProjection; publish(mark: RaidGuestVisualMark | null): void };
+  type Seat = { receipt: RaidGuestRoomReceipt; confirmed: boolean; guest?: RaidGuestProjection; marcher?: boolean; publish(mark: RaidGuestVisualMark | null): void };
+  /** A marcher's crest comes from their committed journey, read again on every renewal; nothing else dresses them. */
+  const dressMarcher = (seat: Seat) => {
+    const { personId, kingdomId, entryId } = seat.receipt;
+    void Promise.resolve().then(() => options.marchers!.marchMark(personId, kingdomId, Math.floor(now()))).then(mark => {
+      if (seats.get(entryId) !== seat) return;
+      if (mark) { seat.marcher = true; dress(seat, mark); }
+      else { dress(seat, null); seats.delete(entryId); }
+    }, () => { options.log?.('A marcher\'s crest could not be read; the walker stays undressed.'); });
+  };
   const seats = new Map<string, Seat>();
   const dress = (seat: Seat, mark: RaidGuestVisualMark | null) => {
     try { seat.publish(mark); } catch { options.log?.('Raid guest dress could not be updated; no new arrival was inferred.'); }
   };
   const now = options.clock ?? Date.now;
+  /** Who walks where right now, by the actual room's join and leave: the gate party draws each body once. */
+  const walking = new Map<string, Map<string, string>>();
   let stopping = false, closed = false, failures = 0, overflow = 0;
 
   function pump() {
@@ -43,7 +59,10 @@ export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
         const seat = seats.get(job.receipt.entryId);
         // A DB result may arrive after leave/detach or a replacement seat. It cannot dress that later visitor.
         if (seat && seat === expectedSeat) {
-          if (result.status === 'refused') { dress(seat, null); seats.delete(job.receipt.entryId); }
+          if (result.status === 'refused') {
+            if (job.kind === 'join' && options.marchers) dressMarcher(seat);
+            else { dress(seat, null); seats.delete(job.receipt.entryId); }
+          }
           else if (job.kind === 'join' && 'guest' in result) {
             seat.guest = RaidGuestProjectionSchema.parse(result.guest); seat.confirmed = true;
             dress(seat, deriveRaidGuestVisualMark(seat.guest, job.receipt.at, Math.floor(now())));
@@ -90,7 +109,10 @@ export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
   };
   // A dead process cannot renew these leases. Authentication rows never reconstruct a current walker.
   const heartbeat = setInterval(() => {
-    if (!stopping) for (const seat of seats.values()) if (seat.confirmed) enqueue('present', { ...seat.receipt, at: Math.floor(now()) });
+    if (!stopping) for (const seat of seats.values()) {
+      if (seat.confirmed) enqueue('present', { ...seat.receipt, at: Math.floor(now()) });
+      else if (seat.marcher) dressMarcher(seat);
+    }
   }, 15_000);
   heartbeat.unref();
   async function barrier(jobs: readonly ReceiptJob[], timeout: number) {
@@ -105,13 +127,16 @@ export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
   return {
     attach(kingdom: Pick<DurableKingdom, 'onLifecycle'> & Partial<Pick<DurableKingdom, 'presentRaidGuest'>>): () => void {
       if (stopping) throw new Error('Raid guest callbacks are closed.');
-      const entries = new Set<string>();
+      const entries = new Set<string>(), walkers = new Set<readonly [string, string, string]>();
       let detached = false;
       const off = kingdom.onLifecycle((event, principal, walker, at) => {
         if (detached) return;
         if (principal.origin === options.origin) {
           if (event === 'join') entries.add(principal.sessionId);
           else if (event === 'leave') entries.delete(principal.sessionId);
+          const here = walking.get(principal.kingdomId) ?? new Map<string, string>();
+          if (event === 'join') { here.set(principal.personId, walker); walking.set(principal.kingdomId, here); walkers.add([principal.kingdomId, principal.personId, walker]); }
+          else if (event === 'leave' && here.get(principal.personId) === walker) here.delete(principal.personId);
         }
         queue(event, principal, at, mark => kingdom.presentRaidGuest?.(walker, mark));
       });
@@ -121,6 +146,8 @@ export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
         // A retired room no longer witnesses presence, even when no explicit leave callback ran.
         for (const entryId of entries) { const seat = seats.get(entryId); if (seat) dress(seat, null); seats.delete(entryId); }
         entries.clear();
+        for (const [kingdomId, personId, walker] of walkers) if (walking.get(kingdomId)?.get(personId) === walker) walking.get(kingdomId)!.delete(personId);
+        walkers.clear();
       };
       subscriptions.add(detach); return detach;
     },
@@ -149,6 +176,8 @@ export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
         return visitors.includes(person.personId) ? null : settler.settle(kingdom, person, tenure);
       } };
     },
+    /** The person's current public walker ID in this kingdom's room, or null when they are not walking there. */
+    walkerOf: (kingdomId: string, personId: string): string | null => walking.get(kingdomId)?.get(personId) ?? null,
     flush: (timeout = 10_000) => barrier([...pending.values()], timeout),
     health: () => ({ pending: pending.size, running: running.size, failures, overflow, closed: stopping }),
     async close() {

@@ -10,4 +10,5 @@ export { createCivicProp, CIVIC_FORMS, CIVIC_STYLES, FOOTBRIDGE, type CivicForm,
 export { createDoorLantern, createGateBrazier, DOOR_LANTERN_MOUNT, DOOR_LANTERN_GLASS, GATE_BRAZIER_MOUNT, GATE_BRAZIER_FLAME } from './arrival-lights';
 export { createSeatLog, createMarketSeatLog, MARKET_SEAT_LOG_GROUND, type SeatLogProp } from './seating';
 export { createForgeHearth, FORGE_HEARTH_PIVOT, FORGE_HEARTH_FLAME, FORGE_HEARTH_CHIMNEY_NOSE } from './forge-square';
+export { createForgeLedgerWall, FORGE_LEDGER_WALL_SIZE, FORGE_LEDGER_WALL_PIVOT, FORGE_LEDGER_WALL_NICHES, FORGE_LEDGER_WALL_HEADER, type ForgeLedgerWallNiche } from './forge-square/ledger-wall';
 export { createForgeWorkshop, FORGE_WORKSHOP_HEARTH_PIVOT } from './forge-workshop';

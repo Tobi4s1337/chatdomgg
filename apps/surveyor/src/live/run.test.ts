@@ -7,6 +7,7 @@ import { previewDir } from '../preview/store';
 import { runLive } from './run';
 import { liveRoot, liveTargetDir, readLiveManifest, readLiveState } from './store';
 import type { LiveTarget } from './target';
+import { appendOwnerAct } from '../policy/owner-hide';
 import { IDS, LANDLESS, copyLand, fixtureLand, iso, liveAt, liveSnapshot, writeWithheld, type Land, type LiveChannelSpec } from './fixtures.test-support';
 
 let base: Land;
@@ -208,5 +209,26 @@ describe('runLive', () => {
     // Nothing else is withheld on the next run, so the frame is left as it is.
     const again = await step(l, liveSnapshot(liveAt(2), channelsAt(liveAt(2)), { streams: 20 }), liveAt(2) + 45_000);
     expect(again.targets).toEqual([]);
+  });
+
+  it('takes a streamer’s own hide off the live paint at the next run, wash and pencil dab alike, and gives it back after showing', async () => {
+    const l = land();
+    await step(l, complete(1), liveAt(1) + 15_000);
+    const own = (kingdomId: string, act: 'hide' | 'show', hidden: ReadonlySet<string>) =>
+      appendOwnerAct(l.dataDir, { version: 1, kind: 'chatdom-atlas-owner-visibility', kingdomId: kingdomId as never, act, at: liveAt(1) + 20_000, receivedAt: liveAt(1) + 20_000 }, hidden);
+    own(IDS.village, 'hide', new Set());
+    own(LANDLESS[0], 'hide', new Set([IDS.village]));
+    const hidden = await step(l, complete(1), liveAt(1) + 45_000);
+    expect(hidden.targets[0]!.counts!.gated.withheld).toBe(2);
+    const read = async () => {
+      const manifest = readLiveManifest(l.dataDir, l.previewId)!;
+      const frame = manifest.live.path.split('/')[4]!;
+      return decodeLiveV2(new Uint8Array(readFileSync(join(liveTargetDir(l.dataDir, l.previewId), frame, 'live.bin'))), manifest, base.target.alignment);
+    };
+    expect((await read())[base.target.ordinalOf.get(IDS.village)! * 2]).toBe(0);
+    expect((await read())[base.target.ordinalOf.get(IDS.capital)! * 2]).toBeGreaterThan(0);
+    own(IDS.village, 'show', new Set([IDS.village, LANDLESS[0]]));
+    await step(l, complete(2), liveAt(2) + 15_000);
+    expect((await read())[base.target.ordinalOf.get(IDS.village)! * 2]).toBe(3);
   });
 });

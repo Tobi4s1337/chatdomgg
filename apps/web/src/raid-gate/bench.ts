@@ -3,7 +3,8 @@
  * repository, a controlled policy and a stand-in for the Atlas finder. Everything it produces is SIMULATED and the
  * pane says so. It exists to exercise the gate before main binds authenticated transports; it is never the default.
  */
-import { AtlasChannelSchema, AtlasRaidSchema, type AtlasChannel, type AtlasRaid } from '@chatdom/shared';
+import { AtlasChannelSchema, AtlasRaidSchema, type AtlasChannel, type AtlasRaid, type RaidPartyPublicFrame } from '@chatdom/shared';
+import { buildRaidPartyFrame } from '../../../realm/src/raid-gate/raid-party-frame';
 import { createRaidGateApplication, createRaidMarchCheck } from '../../../api/src/raid-gate/application';
 import { createMemoryItemTransfers, type MemoryItemTransfers } from '../../../api/src/raid-gate/gift-memory';
 import { createVisitorGifts, type GiftHosts, type GiftItem } from '../../../api/src/raid-gate/gifts';
@@ -107,6 +108,13 @@ export type GateBench = Readonly<{
   reconnect(): void;
   /** SIMULATED walkers send their own join commands. */
   walkersJoin(count: number, requestId: string): Promise<void>;
+  /** The monarch chooses to march at the head of their own party. */
+  monarchJoin(requestId: string): Promise<GateReply>;
+  /**
+   * The public gate party now, built by the realm's own rule from this bench's gate records: who joined, in their
+   * starter looks, the monarch first. Null when the gate holds no party.
+   */
+  partyFrame(): Promise<RaidPartyPublicFrame | null>;
   /** Runs the monarch's own start as the monarch, with the token their last bench preview received. */
   monarchStart(requestId: string): Promise<GateReply>;
   /** SIMULATED: Twitch's `channel.raid` for this request arrives through the verified-ingress path. */
@@ -126,6 +134,17 @@ export type GateBench = Readonly<{
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** A stable 24-hex key for the bench's marchers (the realm uses SHA-256; any stable opaque key serves a bench). */
+function hex24(text: string): string {
+  let out = '';
+  for (let round = 0; round < 3; round++) {
+    let h = 2166136261 ^ round;
+    for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+    out += (h >>> 0).toString(16).padStart(8, '0');
+  }
+  return out;
 }
 
 export function createGateBench(options: GateBenchOptions): GateBench {
@@ -269,13 +288,29 @@ export function createGateBench(options: GateBenchOptions): GateBench {
       if (reply.kind === 'preview') tokens.set(reply.value.requestId, reply.value.token);
       return reply;
     },
+    monarchJoin: requestId => as(SOURCE.kingdomId, { op: 'join', requestId }),
+    async partyFrame() {
+      const now = options.clock();
+      return repository.transaction(async tx => {
+        const pointer = await tx.getGate(SOURCE.kingdomId);
+        const action = pointer?.requestId ? await tx.getAction(pointer.requestId) : null;
+        if (!action) return null;
+        const people = [SOURCE.kingdomId as string, ...WALKERS];
+        const members = (await Promise.all(people.map(personId => tx.getMember(action.requestId, personId as PersonId))))
+          .flatMap(record => record ? [{ record, name: NAMES[record.personId] ?? null }] : []);
+        const channel = DESTINATIONS.find(each => each.channel.kingdomId === action.to)?.channel;
+        return buildRaidPartyFrame({ origin: 'simulated', kingdomId: SOURCE.kingdomId, now, action, members,
+          faces: { source: { login: SOURCE.login, name: SOURCE.name }, destination: { login: channel?.login ?? null, name: channel?.displayName ?? null } },
+          key: (requestId, personId) => `marcher.${hex24(`${requestId}\u0000${personId}`)}` });
+      }, new AbortController().signal);
+    },
     monarchStart: requestId => as(SOURCE.kingdomId, { op: 'start', requestId, previewToken: tokens.get(requestId) ?? 'none' }),
     async witness(requestId, viewers = 23) {
       const action = await as(SOURCE.kingdomId, { op: 'read-action', requestId });
       if (action.kind !== 'action') return { kind: 'ignored', reason: 'unknown-request' };
       const at = options.clock();
       const raid = AtlasRaidSchema.parse({
-        version: 1, id: `simulated-raid-${requestId}`, fromKingdomId: action.value.from, toKingdomId: action.value.to, viewers,
+        version: 1, id: `raid.${await sha256Hex(`bench-raid\u0000${requestId}`)}`, fromKingdomId: action.value.from, toKingdomId: action.value.to, viewers,
         observedAt: at, occurredAt: at, evidence: { kind: 'simulated', asOf: at, label: 'SIMULATED' }, delivery: 'resumable', source: 'simulation',
       });
       // As main's verified ingress would: correlated to the request its transport sent, with an upstream event ID.

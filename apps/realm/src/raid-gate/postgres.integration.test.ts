@@ -41,7 +41,7 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('Raid travel on Postgre
   it('requires the exact registered migration set and rejects missing, changed and unknown records', async () => {
     const migration = REALM_MIGRATIONS.find(item => item.id === '0011_realm_raid_gate');
     expect(migration).toBeDefined();
-    const rows = await pool.query<{ id: string; checksum: string }>('select id, checksum from realm_schema_migrations order by id');
+    const rows = await pool.query<{ id: string; checksum: string }>('select id, checksum from realm_schema_migrations order by id collate "C"');
     expect(rows.rows).toEqual(REALM_MIGRATIONS.map(({ id, checksum }) => ({ id, checksum })));
     await pool.query('delete from realm_schema_migrations where id = $1', [migration!.id]);
     try {

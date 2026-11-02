@@ -105,8 +105,11 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 describe('TileFarm', () => {
   it('bakes the most wanted tile first and drops wishes that went stale', () => {
     const { farm: f, bakers, baked, requested } = farm();
-    expect(bakers[0]!.posted[0]!.type).toBe('init');
+    // No baker is started until a tile is wanted (a map seeded with the still's land may never need one).
+    f.want([]);
+    expect(bakers).toHaveLength(0);
     f.want([key(1), key(2), key(3)]);
+    expect(bakers[0]!.posted[0]!.type).toBe('init');
     expect(requested()).toEqual(['4/1/2']);
     f.want([key(3), key(1)]); // key(2) is no longer on screen; key(1) is already being baked
     bakers[0]!.answer(true);

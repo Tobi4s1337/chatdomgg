@@ -1,78 +1,125 @@
-import type { CampfirePhaseId, CampfirePublicView, DuskCourtRole } from './ports';
+import { DUSK_COURT, type CampfireFrame, type CampfireSelf, type DuskCourtRole, type DuskCourtView } from '@chatdom/shared';
 
-/* The campfire's words. Plain, warm and exact: only what the public view actually says. */
+/* The fire's words. Plain, warm and exact: only what the frame and your own card say. */
 
-export const PHASE_NAMES: Record<CampfirePhaseId, string> = {
-  dusk: 'Dusk', night: 'Night', dawn: 'Dawn', discussion: 'Discussion', ballot: 'The ballot', runoff: 'The runoff', verdict: 'The verdict', ending: 'The last word',
-};
-
-export const ROLE_NAMES: Record<DuskCourtRole, string> = { snuffer: 'Snuffer', watchman: 'Watchman', lamplighter: 'Lamplighter', fool: 'Fool', townsfolk: 'Townsfolk' };
+export const ROLE_NAMES: Record<DuskCourtRole, string> = { wolf: 'Wolf', watchman: 'Watchman', townsfolk: 'Townsfolk' };
 
 export const ROLE_LINES: Record<DuskCourtRole, string> = {
-  snuffer: 'Each night the Snuffers choose one lantern to put out. They win once they match everyone else around the fire.',
-  watchman: 'Each night asks after one person, and learns privately at dawn whether they are a Snuffer.',
-  lamplighter: 'Each night guards one lantern, even their own, though never the same one two nights running.',
-  fool: 'Has no night power. Wins alone if the circle banishes them by ballot.',
-  townsfolk: 'No night power, and the same voice and the same vote as anyone.',
+  wolf: 'Each night, tap one lantern to snuff it. You win when the Wolves equal everyone else still lit.',
+  watchman: 'Each night, ask the fire about one person. At dawn it tells you, and only you, whether they are a Wolf.',
+  townsfolk: 'No night tap. Talk, watch the lanterns and vote the Wolf out.',
 };
 
-const PHASE_LINES: Record<CampfirePhaseId, string> = {
-  dusk: 'Every seat is dealt a sealed card.',
-  night: 'Every card is sealed. Choices are private and land together at dawn.',
-  dawn: 'The night is told as it happened.',
-  discussion: 'Talk it through. Everything said at the fire is public.',
-  ballot: 'Each living player votes once, or abstains.',
-  runoff: 'One more ballot between the tied. A second tie spares everyone.',
-  verdict: 'The circle has decided.',
-  ending: 'Every card is turned over.',
-};
+/** The rules on one carved card. */
+export const RULES: readonly { readonly mark: 'wolf' | 'watchman' | 'lantern'; readonly title: string; readonly line: string }[] = [
+  { mark: 'wolf', title: 'The Wolf', line: `One of the circle (two from ${DUSK_COURT.secondWolfAt} players). Each night they snuff a lantern.` },
+  { mark: 'watchman', title: 'The Watchman', line: 'Each night they ask the fire about one person, and learn alone if that person is a Wolf.' },
+  { mark: 'lantern', title: 'The lanterns', line: 'A snuffed lantern stays in the circle, dark: it watches and no longer votes. By day the circle talks, then votes; the most votes is sent away, a tie sends nobody.' },
+];
+export const RULES_WIN = `The town wins when every Wolf is out. The Wolves win when they equal the rest, or after night ${DUSK_COURT.nights}.`;
 
-/** mm:ss, never negative; hours never occur in a finite Dusk Court phase. */
+/** mm:ss, never negative. */
 export function clockText(ms: number): string {
   const seconds = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-export interface StateWords { readonly eyebrow: string; readonly title: string; readonly line: string }
+export const nameAt = (frame: CampfireFrame | null, seat: number | null): string | null => {
+  if (seat === null || !frame) return null;
+  return frame.court?.players.find(p => p.seat === seat)?.name ?? frame.seated.find(s => s.seat === seat)?.name ?? null;
+};
 
-/** What the fire is doing, for the plate under the circle. */
-export function stateWords(view: CampfirePublicView): StateWords {
-  const textOnly = view.voice.mode === 'text';
-  switch (view.lifecycle) {
-    case 'closed':
-      return { eyebrow: 'The fire is banked', title: 'No gathering tonight', line: 'The Magistrate has closed the campfire. The logs will be here when it is lit again.' };
-    case 'gathering':
-      return { eyebrow: 'The fire is lit', title: 'Sit a while', line: 'No game yet. The Magistrate can open Dusk Court whenever the circle is ready.' };
-    case 'seating': {
-      const seating = view.seating!;
-      const left = seating.seats - seating.accepted;
-      return { eyebrow: 'Dusk Court is open', title: `${seating.accepted} of ${seating.seats} seats taken`, line: left > 0 ? `Type !join in chat to enter the draw for ${left === 1 ? 'the last seat' : `the ${left} seats left`}. Every name has the same chance.` : 'Every seat is taken. The game begins when the Magistrate starts it.' };
+export interface PhaseWords { readonly eyebrow: string; readonly title: string; readonly line: string }
+
+const RESULT_TITLES = {
+  caught: 'The town has found its Wolf', outnumbered: 'The Wolves have the night', lanterns: 'The lanterns ran out', left: 'The round is over',
+} as const;
+
+function resultWords(court: DuskCourtView): PhaseWords {
+  const result = court.result;
+  const wolves = court.players.filter(p => p.role === 'wolf').map(p => p.name);
+  const named = wolves.length === 0 ? '' : wolves.length === 1 ? `${wolves[0]} was the Wolf.` : `${wolves.join(' and ')} were the Wolves.`;
+  if (!result) return { eyebrow: 'Dusk Court', title: 'The round is over', line: named };
+  const line = result.reason === 'caught' ? `${named} The town wins.`
+    : result.reason === 'outnumbered' ? `${named} They equal everyone still lit, and win.`
+    : result.reason === 'lanterns' ? `Night ${DUSK_COURT.nights} has passed with a Wolf still in the circle. ${named} The Wolves win.`
+    : `Too few are left at the fire to go on. ${named} Nobody wins this one.`;
+  return { eyebrow: 'Dusk Court', title: RESULT_TITLES[result.reason], line: line.trim() };
+}
+
+/** What the fire is doing, for the plate. Public: never reads a card. */
+export function phaseWords(frame: CampfireFrame | null): PhaseWords {
+  if (!frame) return { eyebrow: 'The campfire', title: 'The fire is lit', line: 'Warm yourself a while.' };
+  const court = frame.court;
+  if (!court) {
+    const sitting = frame.seated.filter(s => s.seat !== 0).length;
+    const line = sitting >= DUSK_COURT.minPlayers ? 'Enough are sitting for a round of Dusk Court. Anyone on a log can ask the fire.'
+      : `Dusk Court needs ${DUSK_COURT.minPlayers} on the logs. Sit down and wait for company.`;
+    return { eyebrow: frame.magistrate ? `${frame.magistrate} sits in the Magistrate’s chair` : 'The campfire', title: sitting ? 'Sitting by the fire' : 'The fire is lit', line };
+  }
+  const night = `Night ${court.night} of ${DUSK_COURT.nights}`;
+  if (court.waiting) return { eyebrow: `Dusk Court · ${night}`, title: 'Waiting for the Magistrate', line: 'The Magistrate reads this one aloud. If they do not, the fire goes on by itself in a moment.' };
+  switch (court.phase) {
+    case 'call': return { eyebrow: 'Dusk Court', title: 'A round is called', line: 'Sit down now to play. Whoever is on a log when the call ends is dealt a card.' };
+    case 'deal': return { eyebrow: 'Dusk Court', title: 'Turn your card', line: `${court.wolves === 2 ? 'Two Wolves' : 'One Wolf'} and one Watchman are among you. Keep your card to yourself.` };
+    case 'night': return { eyebrow: `Dusk Court · ${night}`, title: 'Night falls', line: 'Eyes on the fire. The Wolf chooses a lantern; the Watchman asks about someone.' };
+    case 'dawn': {
+      const out = court.dawn?.night === court.night ? nameAt(frame, court.dawn.seat) : null;
+      return { eyebrow: `Dusk Court · ${night}`, title: 'Dawn', line: out ? `${out}’s lantern was snuffed in the night.` : 'Every lantern made it through the night.' };
     }
-    case 'playing':
-    case 'paused': {
-      const phase = view.phase!;
-      const voice = textOnly ? ' This fire talks in chat tonight: every seat plays by text, with the same say.' : '';
-      return { eyebrow: `Dusk Court · Day ${phase.day}${view.lifecycle === 'paused' ? ' · paused' : ''}`, title: PHASE_NAMES[phase.id], line: view.lifecycle === 'paused' ? 'The fire waits for the stream to return. Every timer is held.' : `${PHASE_LINES[phase.id]}${phase.id === 'night' || phase.id === 'dusk' ? voice : ''}` };
+    case 'talk': return { eyebrow: `Dusk Court · ${night}`, title: 'Talk it through', line: 'Who snuffed it? Everything said at the fire is public. The ballot follows.' };
+    case 'ballot': return { eyebrow: `Dusk Court · ${night}`, title: 'The ballot', line: 'Everyone still lit taps one name, or abstains. The most votes is sent away.' };
+    case 'verdict': {
+      const verdict = court.verdict?.night === court.night ? court.verdict : null;
+      const sent = verdict && nameAt(frame, verdict.seat);
+      const role = verdict && court.players.find(p => p.seat === verdict.seat)?.role;
+      const line = !verdict ? 'The circle has decided.' : sent ? `${sent} is sent away from the circle.${role ? ` They were ${role === 'townsfolk' ? 'Townsfolk' : `the ${ROLE_NAMES[role]}`}.` : ''}`
+        : verdict.tie ? 'A tie. Nobody is sent away tonight.' : 'Nobody voted. Nobody is sent away tonight.';
+      return { eyebrow: `Dusk Court · ${night}`, title: 'The verdict', line };
     }
-    case 'ended': {
-      const outcome = view.result!.outcome;
-      const title = outcome === 'town' ? 'The town keeps its lanterns' : outcome === 'snuffers' ? 'The Snuffers have the night' : outcome === 'fool' ? 'The Fool is banished, and wins' : 'Eight days, and no one prevailed';
-      return { eyebrow: `Dusk Court · Day ${view.result!.day}`, title, line: 'Thank you for sitting at the fire. The circle returns to the same clearing.' };
-    }
-    case 'interrupted':
-      return { eyebrow: 'Dusk Court', title: 'The night was interrupted', line: 'This game ends without a winner. Thank you for sitting at the fire.' };
+    case 'ended': return resultWords(court);
   }
 }
 
-/** The Gallery's invitation, only while its suspicion window is open. */
-export function galleryWords(view: CampfirePublicView): string | null {
-  if (!view.gallery?.open) return null;
-  return 'Watching on Twitch? Type !sus and a name. Suspicion glows by their log; only the seated vote.';
+/** Your own card's words. Private: shown only on your own screen. */
+export function cardWords(frame: CampfireFrame | null, self: CampfireSelf): { readonly title: string; readonly line: string; readonly notes: readonly string[] } | null {
+  if (!self.role) return null;
+  const notes: string[] = [];
+  if (self.role === 'wolf' && self.wolves.length) {
+    const names = self.wolves.map(seat => nameAt(frame, seat)).filter((n): n is string => !!n);
+    if (names.length) notes.push(`Your fellow Wolf: ${names.join(' and ')}.`);
+  }
+  if (self.role === 'watchman') for (const answer of self.answers) {
+    const name = nameAt(frame, answer.seat) ?? `Seat ${answer.seat}`;
+    notes.push(`Night ${answer.night}: ${name} ${answer.wolf ? 'is a Wolf.' : 'is not a Wolf.'}`);
+  }
+  return { title: self.role === 'townsfolk' ? 'You are Townsfolk' : `You are the ${ROLE_NAMES[self.role]}`, line: ROLE_LINES[self.role], notes };
 }
 
-export function remaining(view: CampfirePublicView, atMs: number): number | null {
-  if (view.lifecycle === 'paused') return view.phase?.pausedRemainingMs ?? null;
-  if (view.lifecycle === 'playing' && view.phase?.deadlineMs) return view.phase.deadlineMs - atMs;
-  if (view.lifecycle === 'seating' && view.seating?.deadlineMs) return view.seating.deadlineMs - atMs;
+/** The open choice's prompt and its rest/abstain word. */
+export const CHOICE_WORDS = {
+  snuff: { title: 'Snuff a lantern', rest: 'Leave it to the wind', hint: 'Tap a lantern. If you tap nobody, the wind snuffs one for you.' },
+  watch: { title: 'Ask the fire about someone', rest: 'Ask about nobody', hint: 'Tap a name. The fire answers you alone at dawn.' },
+  vote: { title: 'Cast your vote', rest: 'Abstain', hint: 'Tap a name. You can change it until the ballot closes.' },
+} as const;
+
+/** The Magistrate's one call for the current phase. */
+export function callWords(court: DuskCourtView | null): string {
+  if (!court) return 'Call a round';
+  return court.phase === 'dawn' ? 'Read the dawn' : court.phase === 'talk' ? 'End the talk' : court.phase === 'verdict' ? 'Read the verdict' : 'Call the next phase';
+}
+
+export const ASK_WORDS = 'Ask the fire for a round';
+export const GALLERY_WORDS = 'Watching on Twitch? Type !sus and a name. An ember glows by their log. Only the circle votes.';
+
+/** Why you can see but not play this round. */
+export function watchWords(frame: CampfireFrame | null, self: CampfireSelf | null): string | null {
+  const court = frame?.court;
+  if (!court || court.phase === 'ended' || !self) return null;
+  if (self.seat === null) return 'Sit on a free log to play the next round.';
+  if (self.seat === 0) return null;
+  const mine = court.players.find(p => p.seat === self.seat);
+  if (!mine) return 'This round started without you. You can watch, and play the next.';
+  if (mine.lantern !== 'lit') return 'Your lantern is dark. You watch the rest of the round and no longer vote.';
   return null;
 }

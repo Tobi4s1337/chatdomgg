@@ -9,7 +9,7 @@
  * capture lands on the same frame.
  */
 
-export const ACTS = ['gather', 'setout', 'rise', 'ride', 'hold', 'wake', 'welcome'] as const;
+export const ACTS = ['gather', 'setout', 'rise', 'ride', 'hold', 'wake', 'welcome', 'land', 'home'] as const;
 export type Act = typeof ACTS[number];
 
 /** Presentation seconds at which each fact was first observed, or null while it has not been. */
@@ -22,6 +22,13 @@ export interface RoadFacts {
   arrivedAt: number | null;
   /** The authority answered with the welcome at the destination's gate. */
   welcomedAt: number | null;
+  /**
+   * Where the road ends. Waiting land has no world to enter (spec 23 R7): the column stops at its place on the map,
+   * where the walker can watch the channel on Twitch, and nothing is woken or welcomed. Founded unless said.
+   */
+  land?: 'founded' | 'waiting';
+  /** The walker chose to come home (their return journey committed, or they left the waiting land's map). */
+  homeAt?: number | null;
 }
 
 export interface RoadTiming {
@@ -34,7 +41,7 @@ export interface RoadTiming {
   wake: number;
 }
 
-export const ROAD_TIMING: RoadTiming = { gather: 9, setout: 3.4, rise: 1.6, ride: 16, wake: 2.2 };
+export const ROAD_TIMING: RoadTiming = { gather: 9, setout: 7, rise: 1.6, ride: 16, wake: 2.2 };
 /** Reduced motion keeps every stage and its facts but dissolves instead of travelling. */
 export const REDUCED_TIMING: RoadTiming = { gather: 4, setout: 1, rise: 0.6, ride: 3, wake: 0.8 };
 
@@ -66,6 +73,13 @@ export function schedule(facts: RoadFacts, timing: RoadTiming): ActSpan[] {
   const ride = rise + timing.rise;
   spans.push({ act: 'ride', start: ride, length: timing.ride });
   const rideEnd = ride + timing.ride;
+  const home = after(facts.homeAt ?? null);
+  if (facts.land === 'waiting') {
+    // The road ends at the waiting land's place on the map: no hold for a world, no wake, no welcome.
+    spans.push({ act: 'land', start: rideEnd, length: Infinity });
+    if (Number.isFinite(home)) spans.push({ act: 'home', start: Math.max(rideEnd + 0.5, home), length: Infinity });
+    return spans;
+  }
   // The column waits at the destination's edge only if the destination is not ready when it gets there.
   const arrived = after(facts.arrivedAt);
   if (arrived > rideEnd) {
@@ -77,6 +91,7 @@ export function schedule(facts: RoadFacts, timing: RoadTiming): ActSpan[] {
   const welcome = Math.max(wake + timing.wake, after(facts.welcomedAt));
   if (!Number.isFinite(welcome)) return spans;
   spans.push({ act: 'welcome', start: welcome, length: Infinity });
+  if (Number.isFinite(home)) spans.push({ act: 'home', start: Math.max(welcome + 0.5, home), length: Infinity });
   return spans;
 }
 
@@ -105,6 +120,8 @@ export function mapFrame(moment: RoadMoment): { rise: number; travel: number; fi
     case 'hold': return { rise: 1, travel: 1, file: 0, wake: 0, marching: true };
     case 'wake': return { rise: 1, travel: 1, file: Math.min(1, moment.progress / 0.7), wake: moment.progress, marching: moment.progress < 0.7 };
     case 'welcome': return { rise: 1, travel: 1, file: 1, wake: 1, marching: false };
+    case 'land': return { rise: 1, travel: 1, file: 1, wake: 0, marching: false };
+    case 'home': return { rise: 0, travel: 0, file: 0, wake: 0, marching: false };
   }
 }
 
@@ -115,5 +132,11 @@ export const CHAPTERS = [
   { id: 'welcome', title: 'The welcome' },
 ] as const;
 export function chapterOf(act: Act): typeof CHAPTERS[number]['id'] {
-  return act === 'gather' || act === 'setout' ? 'gate' : act === 'welcome' || act === 'wake' ? 'welcome' : 'road';
+  return act === 'gather' || act === 'setout' || act === 'home' ? 'gate' : act === 'welcome' || act === 'wake' || act === 'land' ? 'welcome' : 'road';
 }
+
+/** A smooth step from `from` to `to`, for fades driven by an act's progress. */
+export const ramp = (from: number, to: number, v: number) => {
+  const t = Math.min(1, Math.max(0, (v - from) / (to - from)));
+  return t * t * (3 - 2 * t);
+};

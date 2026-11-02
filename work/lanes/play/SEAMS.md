@@ -414,3 +414,8 @@ export const REALM_LOOK_ROUTES = {
   one line to `play/providers.ts`.
 - **Build rack owner name.** PL10 changes the one `ownerName="Juniper"` line in `kingdom/index.tsx` to the walker's
   real approved name. PL11 owns everything inside `build/` and `build-tools/`.
+
+## from launch
+
+- needs (2 Nov, LA10 walk): the launch walk lists "walking, the HUD, minimap and lantern path" as a visitor step on
+  chatdom.io; the minimap and the lantern path do not exist in the walk yet. That is PL12; the walk marks it handed over.

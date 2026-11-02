@@ -3,7 +3,8 @@ import { queryKey } from './normalize';
 import { MAX_RESULTS, type CardReply, type SearchReply } from './schema';
 import { LookupUnavailable, type TwitchLookup } from './twitch-lookup';
 
-const CLIENT_CAPACITY = 6;
+/** Twitch lookups one client may start per minute, unless the service is told otherwise (ATLAS_LOOKUPS_PER_CLIENT_MINUTE). */
+export const CLIENT_LOOKUPS_PER_MINUTE = 6;
 const CLIENT_WINDOW_MS = 60_000;
 const MAX_CLIENTS = 10_000;
 
@@ -11,6 +12,11 @@ interface ClientBucket { tokens: number; at: number }
 
 export interface DirectoryFallbackOptions {
   now?: () => number;
+  /**
+   * Lookups one client address may start per minute. Behind a proxy that cannot name the visitor, every visitor shares
+   * one address, so the operator raises this toward the shared Twitch budget, which still bounds the whole service.
+   */
+  perClientMinute?: number;
 }
 
 /**
@@ -20,22 +26,24 @@ export interface DirectoryFallbackOptions {
 export class DirectoryFallback {
   private readonly clients = new Map<string, ClientBucket>();
   private readonly now: () => number;
+  private readonly capacity: number;
 
   constructor(private readonly twitch: TwitchLookup, options: DirectoryFallbackOptions = {}) {
     this.now = options.now ?? Date.now;
+    this.capacity = options.perClientMinute ?? CLIENT_LOOKUPS_PER_MINUTE;
   }
 
   private admit(ip: string, at: number): void {
     const held = this.clients.get(ip);
-    const bucket = held ?? { tokens: CLIENT_CAPACITY, at };
-    bucket.tokens = Math.min(CLIENT_CAPACITY, bucket.tokens + Math.max(0, at - bucket.at) * CLIENT_CAPACITY / CLIENT_WINDOW_MS);
+    const bucket = held ?? { tokens: this.capacity, at };
+    bucket.tokens = Math.min(this.capacity, bucket.tokens + Math.max(0, at - bucket.at) * this.capacity / CLIENT_WINDOW_MS);
     bucket.at = Math.max(bucket.at, at);
     // Refresh insertion order, so the bounded table retains clients who are still asking.
     this.clients.delete(ip);
     this.clients.set(ip, bucket);
     while (this.clients.size > MAX_CLIENTS) this.clients.delete(this.clients.keys().next().value!);
     if (bucket.tokens < 1) {
-      throw new LookupUnavailable('limited', Math.max(1, Math.ceil((1 - bucket.tokens) * CLIENT_WINDOW_MS / CLIENT_CAPACITY / 1_000)));
+      throw new LookupUnavailable('limited', Math.max(1, Math.ceil((1 - bucket.tokens) * CLIENT_WINDOW_MS / this.capacity / 1_000)));
     }
     bucket.tokens--;
   }

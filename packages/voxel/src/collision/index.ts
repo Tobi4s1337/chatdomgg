@@ -68,6 +68,57 @@ function transform(b: CollisionBox, p: Vec3, turn: number): CollisionBox {
   return freezeBox([p[0] + horizontal[0]!, p[1] + y, p[2] + horizontal[1]!], [p[0] + horizontal[2]!, p[1] + Y, p[2] + horizontal[3]!]);
 }
 
+/*
+ * Reuse across compiles. A founded kingdom is recompiled whole on every adoption (a Forge commit adds one attachment
+ * to one home), and almost every asset and placement is unchanged. Trusted scene compiles (no limits) keep each
+ * asset's coalesced local boxes and each placement's world boxes, keyed by asset hash and checked against the exact
+ * blueprint writes and solid materials before reuse, so a hit returns the same boxes a fresh compile would. Untrusted
+ * proposals (explicit limits) never read or fill the cache. The cache is bounded by assets and by retained boxes.
+ */
+interface CachedAsset {
+  readonly hash: string; readonly lattice: Blueprint['lattice']; readonly size: Vec3; readonly writes: Int32Array; readonly solid: string;
+  readonly boxes: readonly CollisionBox[]; readonly placed: Map<string, readonly CollisionBox[]>; retained: number;
+}
+const assetCache = new Map<string, CachedAsset>();
+const MAX_CACHED_ASSETS = 1024, MAX_CACHED_BOXES = 1_000_000, MAX_PLACED_PER_ASSET = 8192;
+let cachedBoxes = 0;
+const writesOf = (bp: Blueprint) => {
+  const out = new Int32Array(bp.boxes.length * 7);
+  bp.boxes.forEach((b, i) => { out.set([b.from[0], b.from[1], b.from[2], b.to[0], b.to[1], b.to[2], b.material], i * 7); });
+  return out;
+};
+const sameWrites = (a: Int32Array, b: Int32Array) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+function evict(): void {
+  while (assetCache.size > MAX_CACHED_ASSETS || cachedBoxes > MAX_CACHED_BOXES) {
+    const oldest = assetCache.keys().next();
+    if (oldest.done) return;
+    cachedBoxes -= assetCache.get(oldest.value)!.retained;
+    assetCache.delete(oldest.value);
+  }
+}
+function cachedAsset(hash: string, bp: Blueprint, solid: Map<number, boolean>, solidKey: string): CachedAsset {
+  const writes = writesOf(bp), hit = assetCache.get(hash);
+  if (hit && hit.lattice === bp.lattice && hit.size.every((v, i) => v === bp.size[i]) && hit.solid === solidKey && sameWrites(hit.writes, writes)) {
+    assetCache.delete(hash); assetCache.set(hash, hit);
+    return hit;
+  }
+  if (hit) { cachedBoxes -= hit.retained; assetCache.delete(hash); }
+  const boxes = Object.freeze(compileAsset(bp, solid));
+  const entry: CachedAsset = { hash, lattice: bp.lattice, size: [bp.size[0], bp.size[1], bp.size[2]], writes, solid: solidKey, boxes, placed: new Map(), retained: boxes.length };
+  assetCache.set(hash, entry); cachedBoxes += boxes.length; evict();
+  return entry;
+}
+function placedBoxes(entry: CachedAsset, position: Vec3, rotation: number): readonly CollisionBox[] {
+  const key = `${position[0]},${position[1]},${position[2]},${rotation}`, hit = entry.placed.get(key);
+  if (hit) return hit;
+  const boxes = Object.freeze(entry.boxes.map(b => transform(b, position, rotation)));
+  if (assetCache.get(entry.hash) === entry && entry.placed.size < MAX_PLACED_PER_ASSET) { entry.placed.set(key, boxes); entry.retained += boxes.length; cachedBoxes += boxes.length; evict(); }
+  return boxes;
+}
+/** Test seam: forget every reused compile. */
+export function clearCollisionCompileCache(): void { assetCache.clear(); cachedBoxes = 0; }
+export function collisionCompileCacheStats(): { readonly assets: number; readonly boxes: number } { return { assets: assetCache.size, boxes: cachedBoxes }; }
+
 /** Actual ordered-write interiors only. No terrain, exterior unknown barriers, synthetic support or revision.
  * Overlay these boxes on one existing CollisionWorld; never union independently compiled finite worlds.
  * All requested allocation/write budgets and headers are checked before any voxel occupancy allocation. */
@@ -100,6 +151,13 @@ export function compilePlacedSolids(input: PlacedSolidsInput, limits?: PlacedSol
     if (ids.has(p.id) || !finite(p.position) || !Number.isInteger(p.rotation) || p.rotation < 0 || p.rotation > 3) throw new Error('Invalid collision placement.');
     if (!hashes.has(p.assetHash)) throw new Error('Missing collision asset.');
     ids.add(p.id);
+  }
+  if (!limits) {
+    const solidKey = [...solid].sort((a, b) => a[0] - b[0]).map(([id, value]) => `${id}${value ? 's' : 'a'}`).join(',');
+    const entries = new Map(input.assets.map(a => [a.assetHash, cachedAsset(a.assetHash, a.blueprint, solid, solidKey)]));
+    const out: CollisionBox[] = [];
+    for (const p of input.placements) for (const b of placedBoxes(entries.get(p.assetHash)!, p.position, p.rotation)) out.push(b);
+    return Object.freeze(out);
   }
   const assets = new Map<string, CollisionBox[]>();
   let localBoxes = 0;

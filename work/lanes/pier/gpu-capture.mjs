@@ -4,6 +4,7 @@
 //
 //   chatdom-pc-lease --max 10 -- node work/lanes/pier/gpu-capture.mjs --stills --size=1440x900
 //   chatdom-pc-lease --max 10 -- node work/lanes/pier/gpu-capture.mjs --bag --size=390x844
+//   chatdom-pc-lease --max 10 -- node work/lanes/pier/gpu-capture.mjs --bench='view=chat&at=9.12' --name=pi11-chat-stream --size=1920x1080
 //   chatdom-pc-lease --max 10 -- node work/lanes/pier/gpu-capture.mjs --clip --fps=20 --from=0 --to=900
 //
 // --stills shoots every beat of one catch on the bench's paused clock (each still is exact, not timed). --clip shoots
@@ -131,6 +132,23 @@ try {
     const measured = { capturedAt: new Date().toISOString(), url, width, height, renderer: await renderer(), browser: version.Browser, timing, layer, frame: whole };
     await writeFile(resolve(output, `pi10-gpu-fps-${width}x${height}.json`), JSON.stringify(measured, null, 2) + '\n');
     console.log(`fps ${width}x${height}: ${JSON.stringify(timing)} ${measured.renderer}`);
+  } else if (arg('bench')) {
+    // One still of a review view on the real GPU: --bench='view=almanac&page=fish:moonlit-pike&still=1' --name=pi11-almanac-pike
+    const query = arg('bench'), name = arg('name') ?? 'pi11-bench';
+    // --frames=from:to:fps shoots a frozen-time view (`at=`) frame by frame into <name>-frames/, for a clip.
+    const frames = arg('frames')?.split(':').map(Number);
+    const times = frames ? Array.from({ length: Math.round((frames[1] - frames[0]) * frames[2]) }, (_, i) => +(frames[0] + i / frames[2]).toFixed(4)) : [null];
+    if (frames) await mkdir(resolve(output, `${name}-frames`), { recursive: true });
+    for (const [index, at] of times.entries()) {
+      const url = `http://localhost:${port}/-/pier?${query}${at === null ? '' : `&at=${at}`}`;
+      await send('Page.navigate', { url });
+      for (let i = 0; i < 240 && !await evaluate('!!window.__chatdomReady', false).catch(() => false); i++) await pause(250);
+      await pause(at === null ? 900 : 250);
+      const path = at === null ? resolve(output, `${name}@${width}x${height}.png`) : resolve(output, `${name}-frames`, `${String(index).padStart(4, '0')}.png`);
+      await capture(path);
+      if (at === null || index === 0) measurements.push({ path: path.replace(root + '/', ''), url, renderer: await renderer() });
+      console.log(path.replace(root + '/', ''));
+    }
   } else if (has('bag')) {
     // The bag with the Moonlit Pike's card open, and the belt below it.
     const url = `http://localhost:${port}/-/pier?view=bag&card=5f7b9d14-2e3a-4b62-9dae-8a4b5c6d7e56`;
@@ -143,7 +161,8 @@ try {
     console.log(path.replace(root + '/', ''));
   } else {
     const clip = has('clip');
-    const url = `http://localhost:${port}/-/pier?view=play&kingdom=${scene.kingdomId}&hour=${hour}&seed=${seed}${clip ? '&clip=1' : '&hold=1'}`;
+    // --query adds bench params (`camera=first&rodcatches=34&legend=fish:frostking-char`); --prefix names the stills.
+    const url = `http://localhost:${port}/-/pier?view=play&kingdom=${scene.kingdomId}&hour=${hour}&seed=${seed}${clip ? '&clip=1' : '&hold=1'}${arg('query') ? `&${arg('query')}` : ''}`;
     await send('Page.navigate', { url });
     for (let i = 0; ; i++) {
       const state = await evaluate('JSON.stringify({ready:window.__chatdomPier?.stats.ready,error:window.__chatdomPierError})', false).then(JSON.parse).catch(() => ({}));
@@ -195,11 +214,13 @@ try {
     const shoot = async name => {
       if (clip || (only && !only.includes(name))) return;
       await evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
-      const path = resolve(output, `pi10-gpu-${name}-dusk@${width}x${height}.png`);
+      const path = resolve(output, `${arg('prefix') ?? 'pi10-gpu'}-${name}-dusk@${width}x${height}.png`);
       await capture(path);
       const stats = await play('stats'), pier = await evaluate('({calls: window.__chatdomPier.stats.calls, triangles: window.__chatdomPier.stats.triangles})', false);
       measurements.push({ path: path.replace(root + '/', ''), url, renderer: gpu, layer: stats, frame: pier });
       console.log(`${path.replace(root + '/', '')} ${JSON.stringify(pier)} layer ${JSON.stringify(stats)}`);
+      // Hold the lease only as long as the stills asked for.
+      if (only && name === only.at(-1)) throw Symbol.for('done');
     };
     // Advance the stage: in clip mode every 1/fps is one shot frame; for stills it is stepped in server ticks.
     const advance = async ms => {
@@ -238,7 +259,8 @@ try {
     if (clip) console.log(`Clip frames ${from}..${Math.min(frame, to)} of ${frame} at ${fps} fps in ${clipDir}.`);
   }
   if (measurements.length) {
-    const name = resolve(output, `pi10-gpu-${has('stream') ? 'stream' : has('bag') ? 'bag' : 'play'}-${width}x${height}-stats.json`);
+    const name = resolve(output, arg('bench') ? `${arg('name') ?? 'pi11-bench'}@${width}x${height}-gpu.json`
+      : `pi10-gpu-${has('stream') ? 'stream' : has('bag') ? 'bag' : 'play'}-${width}x${height}-stats.json`);
     await writeFile(name, JSON.stringify({ capturedAt: new Date().toISOString(), receipt: realmBehind ? measurements[0]?.manifest ?? null : receipt, browser: version.Browser, measurements }, null, 2) + '\n');
   }
   console.log(`Held the GPU ${Math.round((Date.now() - started) / 1000)} s.`);

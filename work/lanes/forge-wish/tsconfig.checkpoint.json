@@ -5,6 +5,9 @@
     "../../../apps/codex/src/**/*.ts",
     "../../../apps/realm/src/wiring/**/*.ts",
     "../../../apps/realm/src/evening/bridge.ts",
+    "../../../apps/realm/src/forge-queue/**/*.ts",
+    "../../../apps/api/src/public/routes.ts",
+    "../../../packages/shared/src/forge-queue.ts",
     "../../../apps/realm/src/evening/bridge.test.ts",
     "../../../apps/realm/src/main.ts",
     "../../../apps/realm/src/forge-chat/**/*.ts",
@@ -27,6 +30,9 @@
     "../../../apps/realm/src/founded/scene.ts",
     "../../../apps/realm/src/founded/scene.test.ts",
     "../../../apps/realm/src/growth/**/*.ts",
+    "../../../apps/realm/src/forge-ledger/**/*.ts",
+    "../../../packages/shared/src/forge-ledger.ts",
+    "../../../packages/content/src/forge-square/**/*.ts",
     "vitest.checkpoint.config.ts"
   ]
 }

@@ -87,12 +87,18 @@ describe('campfire clearing props', { timeout: 60_000 }, () => {
     }
   });
 
-  it('puts the lantern flame in air, closed in on four sides by glass and brass', () => {
+  it('puts the lantern flame in air between four brass posts, open for its pane, low at the feet', () => {
     for (const seed of [1, 2, 5]) {
       const lantern = createGameLantern(seed), c = lantern.anchor.map((v, i) => Math.floor(v + lantern.flame[i]! / M)) as [number, number, number];
       expect(at(lantern, ...c)).toBe(MAT.air);
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) expect([MAT.glass, MAT.brass]).toContain(at(lantern, c[0] + dx, c[1], c[2] + dz));
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) expect(at(lantern, c[0] + dx, c[1], c[2] + dz)).toBe(MAT.air);
+      for (const [dx, dz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]] as const) expect(at(lantern, c[0] + dx, c[1], c[2] + dz)).toBe(MAT.brass);
       expect(at(lantern, c[0], c[1] - 2, c[2])).toBe(MAT.brass);
+      expect(at(lantern, c[0], c[1] + 1, c[2])).toBe(MAT.brass);
+      // Below a seated face: the whole lantern stands under 0.65 m.
+      expect((lantern.asset.size[1] - lantern.anchor[1]) * M).toBeLessThanOrEqual(.65);
+      // The pane fills the open courses inside the posts' outer faces.
+      expect(lantern.pane.size[0]).toBeLessThan(3 * M); expect(lantern.pane.size[1]).toBeCloseTo(2 * M);
     }
   });
 

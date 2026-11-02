@@ -28,9 +28,10 @@ function requireWriter(hold: ProofHold): void {
 }
 
 /** The caller guards its PostgreSQL schema; this helper never creates or clears a namespace. */
-export async function adoptProofLayout(boot: ProofBoot, kingdomId: KingdomId) {
+/** A hamlet seats about twelve homes a quarter; the fifty-wish run needs a town for one citizen per wish. */
+export async function adoptProofLayout(boot: ProofBoot, kingdomId: KingdomId, tier: 'hamlet' | 'town' = 'hamlet') {
   requireSimulated(boot);
-  const plan = generateSettlementPlan({ seed: 'forge-wish-fw10-proof', tier: 'hamlet', firstYear: 2023, year: 2026 });
+  const plan = generateSettlementPlan({ seed: 'forge-wish-fw10-proof', tier, firstYear: 2023, year: 2026 });
   const adopted = await boot.allocation.adoptLayout(kingdomId, plan);
   if (adopted.status !== 'founded' && adopted.status !== 'unchanged') {
     throw new Error('The proof layout requires an empty or identically founded simulated kingdom.');

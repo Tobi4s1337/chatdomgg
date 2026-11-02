@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { generateSettlementPlan, type SettlementPlan } from '@chatdom/world';
-import { RAID_SHOT_FOREGROUND, RAID_SHOT_SOLIDS, raidShotClearOf } from './raid-shot-clear';
+import { RAID_SHOT_FOREGROUND, RAID_SHOT_SOLIDS, raidShotClearOf, sceneTreeCrowns, treeCrownGrid } from './raid-shot-clear';
 
 const generated = generateSettlementPlan({ seed: 'raid-shot-clear', tier: 'hamlet', firstYear: 2026, year: 2026 });
 function site(): SettlementPlan {
@@ -56,5 +56,35 @@ describe('the gate shot standing check from the adopted plan', () => {
     expect(clear(...roofed, frame)).toBe(false);
     // The mirrored view, with the home behind the eye's shoulder and out of the picture, stays open.
     expect(clear(v(-30, 22, 56), v(-12, 3, 0), frame)).toBe(true);
+  });
+
+  it('counts the scene’s planted tree crowns as solid: never an eye in a canopy, never a crown across the picture', () => {
+    const crowns = treeCrownGrid([{ x: 0, y: 8, z: 40, r: 4 }, { x: 3, y: 7, z: 30, r: 3.5 }]);
+    const wooded = raidShotClearOf(site(), () => 2, () => crowns);
+    expect(clear(v(0, 9, 40), v(0, 3, 0))).toBe(true);
+    expect(wooded(v(0, 9, 40), v(0, 3, 0))).toBe(false);
+    expect(wooded(v(0, 9, 48), v(0, 3, 0))).toBe(false);
+    expect(wooded(v(-14, 9, 40), v(-14, 3, 0))).toBe(true);
+    expect(wooded(v(0, 30, 48), v(0, 3, 0))).toBe(true);
+  });
+
+  it('reads crowns from the scene’s instanced tree meshes once per change, one ball per tree', () => {
+    const scene = new THREE.Scene(), geometry = new THREE.BoxGeometry(4, 8, 4).translate(0, 4, 0);
+    const near = new THREE.InstancedMesh(geometry, new THREE.MeshBasicMaterial(), 2), far = new THREE.InstancedMesh(geometry, new THREE.MeshBasicMaterial(), 1);
+    near.name = 'tree-oak-hearth-0'; far.name = 'tree-oak-hearth-0';
+    near.setMatrixAt(0, new THREE.Matrix4().makeTranslation(10, 2, 10)); near.setMatrixAt(1, new THREE.Matrix4().makeTranslation(-10, 2, 10));
+    far.setMatrixAt(0, new THREE.Matrix4().makeTranslation(10, 2, 10));
+    const house = new THREE.InstancedMesh(geometry, new THREE.MeshBasicMaterial(), 1); house.name = 'home-hearth-0';
+    scene.add(near, far, house);
+    const read = sceneTreeCrowns(scene), grid = read();
+    expect(read()).toBe(grid);
+    const at = grid.near(10, 10);
+    expect(at).toHaveLength(1);
+    // The crown sits at the top of the tree, as wide as its narrower half; the trunk below stays open.
+    expect(at[0]).toMatchObject({ x: 10, y: 8, z: 10 });
+    expect(at[0]!.r).toBeCloseTo(1.6, 5);
+    expect(grid.near(-10, 10)).toHaveLength(1);
+    near.count = 1;
+    expect(read().near(-10, 10)).toHaveLength(0);
   });
 });

@@ -70,6 +70,11 @@ export interface QueuedKingdomForgeControl {
   readonly canCommit?: () => boolean;
   /** Keep an anvil available for earlier accepted work that has not reserved yet. */
   readonly canReserve?: () => boolean;
+  /**
+   * Which stage events may reach the room. Defaults to commit eligibility; a caller with its own ordered
+   * presenter passes every stage through and decides there (commit eligibility may wait on that presenter).
+   */
+  readonly canPresent?: () => boolean;
 }
 
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -260,7 +265,11 @@ export function createQueuedKingdomForgeApplication(options: QueuedKingdomForgeO
           return result;
         } },
         // Committed pieces already belong to the authority's durable outbox. Never replay that ceremony here.
-        publish: event => { if (event.type !== 'committed' && mayCommit()) options.publish(event); },
+        publish: event => {
+          let present: boolean;
+          try { present = control.canPresent ? control.canPresent() : mayCommit(); } catch { present = false; }
+          if (event.type !== 'committed' && present) options.publish(event);
+        },
       });
       const outcome = await run(command, lease, execution);
       if (!owned()) return pending(attempt);

@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import type { SettlementPlan } from '@chatdom/world';
 import type { RealmFoundedManifest } from '@chatdom/shared/realm';
-import { createQuadGeometry } from '../../../../../packages/render/src/grand/quad-geometry';
+import { CHUNK_QUADS, createTerrainChunk, runOrdered, visibleRuns, type RunOrder, type TerrainChunk } from './terrain-runs';
+import type { RunOrderedRegionMesh } from './baked-client-decode';
 import type { GrandMaterial } from '../../../../../packages/world/src/grand/palette';
 import { GRAND_LEVELS, GRAND_REGION, type GrandLandSeed } from '../../../../../packages/world/src/grand/types';
-import { balanceLevels, chooseLevel, type LodState } from '../../grand/lod';
+import { balanceLevels, chooseLevel, fitLodBudget, type BudgetRegion, type LodBudget, type LodState } from '../../grand/lod';
 import { HOSTED_GRAND_COMPILER, BAKED_REGION_QUAD_BYTES, type BakedMetadata, type BakedRegionRef, type BakedRegionMesh } from '../../../../../packages/world/src/grand/baked/types';
 import { bakedNativeWater, bakedVisualHeight } from '../../../../../packages/world/src/grand/baked/surface';
 import { openBakedLand, type BakedLandSource, type BakedLandStats } from './baked-client';
@@ -15,11 +16,23 @@ import { planStartupCoverage, stepBalancedLevels, STARTUP_BUDGET_BYTES, type Sta
 export { createHostedGrandMaterial, hostedPalette } from './material';
 
 const MiB = 1024 * 1024;
-const INSTALL_BYTES = 256 * 1024;
-/** Before the land is first presented nothing is drawn, so a frame may install far more without a visible hitch. */
+/** GPU installation per frame: at most 1 MiB of quads (one chunk), and .75 ms of main-thread work. */
+const INSTALL_BYTES = MiB;
 const OPENING_INSTALL_BYTES = 4 * MiB, OPENING_INSTALL_MS = 6;
 const RESIDENT_BYTES = 128 * MiB;
 const FADE_MS = 400;
+/**
+ * The share of a region's quads one view submits: per-pass selection draws only faces that can face the eye (all
+ * tops from above, one of each side pair), measured at 42 to 47% over the six budget poses on Willowmere.
+ */
+const FACING_SHARE = .47;
+/**
+ * The water reflection is drawn at half resolution through moving water, so outside the installed town (exact
+ * regions keep their only level, L0) it draws the land no finer than level 2: one 1 m cell is under a pixel of the
+ * reflection target beyond about 400 m, and the reflected land is rarely nearer. Level 2 of every outer region is
+ * kept resident for it (about 1.2 MB compressed and 3.2 MB on the GPU for Willowmere), loaded once the view settles.
+ */
+export const REFLECTION_LEVEL = 2;
 
 export interface HostedGrandIdentity {
   readonly compiler: typeof HOSTED_GRAND_COMPILER;
@@ -43,6 +56,10 @@ export interface HostedGrandStats {
   initialRequiredRegions: number; initialCoveredRegions: number; initialCoverageReady: boolean;
   initialPlannedBytes: number; initialActualBytes: number; initialNetworkBytes: number;
   initialBudgetBytes: number; initialBudgetExceeded: boolean; fadingRegions: number;
+  /** Regions displayed in the main view by level, and quads submitted by the last main and reflection passes. */
+  displayedLevels: number[]; mainQuads: number; reflectionQuads: number; reflectionMeshes: number;
+  /** The main-view budget's estimate after the last selection, and how many level steps it took to fit. */
+  budgetQuads: number; budgetCoarsened: number; budgetFits: boolean;
 }
 export interface HostedGrandLand {
   /** All installed physical ground and first visible background coverage has actually installed. */
@@ -58,6 +75,17 @@ export interface HostedGrandLand {
   canPresent(): boolean;
   /** Call only after the native host actually draws this complete view; refinement starts next update. */
   markPresented(): void;
+  /**
+   * How fine distant land is drawn, in pixels of error per voxel step (spec 56: 1.5 on desktop, 2 under 650 px).
+   * The quality governor raises it on weaker devices: only far regions coarsen; exact regions and near land, whose
+   * finest level is already many pixels wide, never change. `null` restores the width-based default.
+   */
+  setDetail(pixels: number | null): void;
+  /**
+   * Spec 56's main-view triangle budget for the land, as quads (`null`: none). Over it, the farthest visible land
+   * coarsens first, never past `maxPixels` per cell; the installed town never coarsens.
+   */
+  setBudget(budget: LodBudget | null): void;
   update(now: number): void;
   dispose(): void;
 }
@@ -166,13 +194,18 @@ export function openHostedGrandLand(options: HostedGrandOpenOptions): HostedGran
 }
 
 interface RegionMesh { readonly group: THREE.Group; readonly level: number; readonly bytes: number;
-  readonly cleanups: (() => void)[]; lastUsed: number }
+  readonly cleanups: (() => void)[]; lastUsed: number;
+  readonly cells: { readonly span: number; readonly minY: number; readonly maxY: number };
+  readonly chunks: TerrainChunk[]; displayed: boolean;
+  /** The run order's face planes, kept for per-pass selection once installed (its quads live in the chunks). */
+  order: Pick<RunOrder, 'starts' | 'planes' | 'ends'> | null }
 interface Region { readonly rx: number; readonly rz: number; readonly box: THREE.Box3; readonly exact: boolean;
   readonly bounds: BakedMetadata['regions'][number]['bounds'];
   readonly refs: ReadonlyMap<number, BakedRegionRef>; readonly neighbours: number[]; readonly meshes: Map<number, RegionMesh>; readonly pending: Map<number, number>;
   readonly lod: LodState; desired: number; shown: RegionMesh | null; visible: boolean; required: boolean }
 interface Job { readonly region: Region; readonly level: number; readonly id: number; readonly bytes: number }
-interface Install { readonly reply: BakedRegionMesh; readonly region: Region; readonly mesh: RegionMesh; face: number; from: number }
+interface Install { readonly reply: BakedRegionMesh; readonly region: Region; readonly mesh: RegionMesh;
+  ordered?: RunOrder; from: number }
 interface Fade { readonly region: Region; readonly from: RegionMesh; readonly to: RegionMesh }
 interface RefinementWave {
   readonly levels: readonly number[]; readonly targets: ReadonlyMap<Region, number>;
@@ -202,11 +235,14 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
   // an unhandled rejected promise while keeping the original promise rejected for its actual consumer.
   void ready.catch(() => undefined);
   const regions: Region[] = [], installs: Install[] = [];
-  let sequence = 1, lastSelection = -Infinity, lastProgress = -1;
+  let sequence = 1, lastSelection = -Infinity, lastProgress = -1, detail: number | null = null, budget: LodBudget | null = null;
   let startup: StartupCoverage | undefined, bootstrapBytes = 0, presented = false;
   let coverageLevels: readonly number[] = [], wave: RefinementWave | undefined;
   let material: HostedGrandMaterial | undefined;
+  let passHook: { readonly previous: THREE.Scene['onBeforeRender'] } | undefined;
   const root = new THREE.Group(); root.name = 'installed-grand-land';
+  // Level-2 meshes kept only for the reflection (not displayed in the main view) wait here, hidden from other passes.
+  const reflectionRoot = new THREE.Group(); reflectionRoot.name = 'installed-grand-land-reflection';
   const stats: HostedGrandStats = { phase: 'meshing', regions: 0, covered: 0, exactRegions: 0,
     residentBytes: 0, queued: 0, busy: 0, resultBytes: 0, installs: 0, revision: 0, generatedColumns: 0, workers: 0,
     surfaceBytes: 0, waterRasterExtraBytes: 0,
@@ -214,11 +250,14 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
     activeRequests: 0, queuedRequests: 0, pendingCompressedBytes: 0,
     startupPhase: 'selecting', initialRequiredRegions: 0, initialCoveredRegions: 0, initialCoverageReady: false,
     initialPlannedBytes: 0, initialActualBytes: 0, initialNetworkBytes: 0,
-    initialBudgetBytes: STARTUP_BUDGET_BYTES, initialBudgetExceeded: false, fadingRegions: 0 };
+    initialBudgetBytes: STARTUP_BUDGET_BYTES, initialBudgetExceeded: false, fadingRegions: 0,
+    displayedLevels: [0, 0, 0, 0], mainQuads: 0, reflectionQuads: 0, reflectionMeshes: 0,
+    budgetQuads: 0, budgetCoarsened: 0, budgetFits: true };
   function free(mesh: RegionMesh) {
     for (const cleanup of mesh.cleanups) cleanup();
-    mesh.group.traverse(object => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });
-    mesh.group.removeFromParent();
+    mesh.cleanups.length = 0;
+    for (const chunk of mesh.chunks) chunk.dispose();
+    mesh.group.removeFromParent(); mesh.displayed = false;
   }
   function dispose() {
     if (stopped) return;
@@ -235,7 +274,8 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
     wave = undefined; stats.fadingRegions = 0; stats.initialCoverageReady = false;
     stats.busy = 0; stats.resultBytes = 0; stats.queued = 0; stats.covered = 0; stats.residentBytes = 0;
     stats.activeRequests = 0; stats.queuedRequests = 0; stats.pendingCompressedBytes = 0;
-    material?.dispose(); root.removeFromParent();
+    material?.dispose(); root.removeFromParent(); reflectionRoot.removeFromParent();
+    if (passHook) { options.scene.onBeforeRender = passHook.previous; passHook = undefined; }
     stats.phase = failed ? 'failed' : 'disposed';
     const error = failed ?? new DOMException('The kingdom closed', 'AbortError');
     readyReject(error);
@@ -260,8 +300,11 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
     const group = new THREE.Group();
     group.position.set(reply.rx * GRAND_REGION * .5, 0, reply.rz * GRAND_REGION * .5);
     group.scale.setScalar((1 << reply.level) * .5);
-    const mesh: RegionMesh = { group, level: reply.level, bytes: reply.quads.byteLength, cleanups: [], lastUsed: performance.now() };
-    installs.push({ reply, region, mesh, face: 0, from: reply.offsets[0]! });
+    group.matrixAutoUpdate = true;
+    const mesh: RegionMesh = { group, level: reply.level, bytes: reply.quads.byteLength, cleanups: [], lastUsed: performance.now(),
+      cells: { span: GRAND_REGION / (1 << reply.level), minY: reply.minY, maxY: Math.max(reply.minY + 1, reply.maxY) },
+      chunks: [], displayed: false, order: null };
+    installs.push({ reply, region, mesh, from: 0 });
   }
   try {
     const { source: opened, recipeHash } = await opening.opened;
@@ -297,24 +340,33 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
     function setFade(mesh: RegionMesh, value: number) {
       for (const child of mesh.group.children) child.userData.grandLodFade = value;
     }
-    function detach(mesh: RegionMesh) {
-      mesh.group.removeFromParent();
+    /** A reflection-only mesh: outer level-2 coverage the reflection draws while the main view shows finer land. */
+    const reflectionOnly = (region: Region, mesh: RegionMesh) => !region.exact && mesh.level === REFLECTION_LEVEL;
+    function park(mesh: RegionMesh) {
+      if (!reflectionRoot.parent) options.scene.add(reflectionRoot);
+      reflectionRoot.add(mesh.group); mesh.group.updateMatrixWorld(true);
+      for (const chunk of mesh.chunks) chunk.hide();
+    }
+    function detach(mesh: RegionMesh, region?: Region) {
+      mesh.displayed = false;
       for (const cleanup of mesh.cleanups) cleanup();
       mesh.cleanups.length = 0;
-      for (const child of mesh.group.children) child.userData.hostedShadow = false;
+      if (region && reflectionOnly(region, mesh)) park(mesh); else mesh.group.removeFromParent();
     }
     function attach(mesh: RegionMesh, now: number) {
-      mesh.lastUsed = now;
-      root.add(mesh.group); root.updateMatrixWorld(true);
-      for (const child of mesh.group.children) if (child instanceof THREE.Mesh && !child.userData.hostedShadow) {
-        const cleanup = options.register?.(child); if (cleanup) mesh.cleanups.push(cleanup);
-        child.userData.hostedShadow = true;
+      mesh.lastUsed = now; mesh.displayed = true;
+      root.add(mesh.group); mesh.group.updateMatrixWorld(true);
+      // Every chunk shows all its faces until the first pass selects runs for its camera.
+      for (const chunk of mesh.chunks) chunk.showAll();
+      // The shadow owner copies each chunk's whole mesh; it renders casters from both sides itself.
+      if (!mesh.cleanups.length) for (const chunk of mesh.chunks) {
+        const cleanup = options.register?.(chunk.whole); if (cleanup) mesh.cleanups.push(cleanup);
       }
     }
     function showInitial(region: Region, mesh: RegionMesh, now: number) {
       if (region.shown === mesh) return;
       const first = !region.shown;
-      if (region.shown) detach(region.shown);
+      if (region.shown) detach(region.shown, region);
       setFade(mesh, 1); attach(mesh, now); region.shown = mesh; stats.revision++;
       if (first) options.onRegionShown?.({ rx: region.rx, rz: region.rz, level: mesh.level, exact: region.exact, bounds: region.bounds });
     }
@@ -322,29 +374,75 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
       const started = performance.now(); let bytes = 0;
       while (installs.length) {
         const item = installs[0]!, { reply, mesh } = item;
-        if (item.face >= 6) {
+        // Faces are copied into run order once; each step then makes one chunk (one GPU buffer of at most 1 MiB).
+        if (!item.ordered) {
+          // The decode worker delivers the run order; a mesh from anywhere else is ordered here.
+          const decoded = reply as Partial<RunOrderedRegionMesh> & BakedRegionMesh;
+          item.ordered = decoded.runOrdered === true ? { quads: reply.quads, starts: reply.offsets, planes: decoded.planes!, ends: decoded.ends! }
+            : runOrdered(reply.quads, reply.offsets);
+          mesh.order = { starts: item.ordered.starts, planes: item.ordered.planes, ends: item.ordered.ends };
+        }
+        const total = item.ordered.starts[item.ordered.starts.length - 1]!;
+        if (item.from >= total) {
           installs.shift();
           const old = item.region.meshes.get(mesh.level); if (old) free(old);
           item.region.meshes.set(mesh.level, mesh);
           if (!presented) showInitial(item.region, mesh, now);
+          else if (reflectionOnly(item.region, mesh) && !mesh.displayed) park(mesh);
           continue;
         }
-        const end = reply.offsets[item.face + 1]!;
-        const to = Math.min(end, item.from + INSTALL_BYTES / 8);
-        if (to > item.from) {
-          const span = GRAND_REGION / (1 << reply.level);
-          const box = new THREE.Box3(new THREE.Vector3(0, reply.minY, 0), new THREE.Vector3(span, Math.max(reply.minY + 1, reply.maxY), span));
-          const geometry = createQuadGeometry(reply.quads.subarray(item.from * 2, to * 2), box);
-          const face = new THREE.Mesh(geometry, material!.material);
-          face.userData.grandLodFade = 1; material!.bindFade?.(face);
-          face.matrixAutoUpdate = false; mesh.group.add(face); bytes += (to - item.from) * 8; stats.installs++;
-        }
-        item.from = to;
-        if (to >= end) { item.face++; item.from = reply.offsets[item.face]!; }
-        if (presented ? bytes >= INSTALL_BYTES || performance.now() - started >= .75
-          : bytes >= OPENING_INSTALL_BYTES || performance.now() - started >= OPENING_INSTALL_MS) break;
+        const to = Math.min(total, item.from + CHUNK_QUADS);
+        const { span, minY, maxY } = mesh.cells;
+        const box = new THREE.Box3(new THREE.Vector3(0, minY, 0), new THREE.Vector3(span, maxY, span));
+        const chunk = createTerrainChunk(item.ordered.quads, item.from, to, box, material!.material,
+          run => material!.bindFade?.(run));
+        mesh.chunks.push(chunk); mesh.group.add(...chunk.runs, chunk.whole);
+        bytes += (to - item.from) * 8; stats.installs++; item.from = to;
+        if (presented ? bytes >= INSTALL_BYTES || performance.now() - started >= .75 : bytes >= OPENING_INSTALL_BYTES || performance.now() - started >= OPENING_INSTALL_MS) break;
       }
     }
+    /**
+     * Per-pass selection (spec 56: main, reflection and shadows are selected separately). Runs from the scene's
+     * own onBeforeRender, before three culls, for whichever camera draws the scene: each displayed chunk submits
+     * only the faces that can face that camera. A reflection camera (marked by the water's planar pass) draws the
+     * outer land at no finer than REFLECTION_LEVEL where that level is resident and the region is not fading.
+     */
+    const eye = new THREE.Vector3(), local = new THREE.Vector3(), ranges: number[] = [];
+    function selectPass(camera: THREE.Camera) {
+      const reflection = camera.userData.chatdomReflection === true;
+      const orthographic = (camera as THREE.OrthographicCamera).isOrthographicCamera === true;
+      camera.getWorldPosition(eye); eye.sub(root.position);
+      let quads = 0;
+      const draw = (mesh: RegionMesh) => {
+        if (orthographic || !mesh.order) { for (const chunk of mesh.chunks) quads += chunk.showAll(); return; }
+        local.copy(eye).sub(mesh.group.position).divideScalar(mesh.group.scale.x);
+        visibleRuns(mesh.order, local, ranges);
+        for (const chunk of mesh.chunks) quads += chunk.show(ranges);
+      };
+      const fading = new Set<Region>();
+      if (wave?.startedAt !== null) for (const fade of wave?.fades ?? []) fading.add(fade.region);
+      for (const region of regions) {
+        const parked = region.meshes.get(REFLECTION_LEVEL);
+        if (parked && !parked.displayed) for (const chunk of parked.chunks) chunk.hide();
+        if (!region.shown) continue;
+        const shown = region.shown;
+        if (reflection && !region.exact && !fading.has(region) && shown.level < REFLECTION_LEVEL && parked && !parked.displayed) {
+          for (const chunk of shown.chunks) chunk.hide();
+          draw(parked);
+          continue;
+        }
+        draw(shown);
+      }
+      for (const fade of wave?.fades ?? []) if (fade.to.displayed) draw(fade.to);
+      if (reflection) stats.reflectionQuads = quads; else stats.mainQuads = quads;
+    }
+    const previous = options.scene.onBeforeRender;
+    passHook = { previous };
+    // three calls a scene's hook with (renderer, scene, camera, target) at the start of every render, before culling.
+    options.scene.onBeforeRender = function (...args: Parameters<THREE.Scene['onBeforeRender']>) {
+      previous.apply(this, args);
+      if (!stopped) selectPass(args[2]);
+    };
     function visibility() {
       camera.updateMatrixWorld();
       projectionView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(projectionView);
@@ -377,20 +475,27 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
       visibility();
       renderer.getDrawingBufferSize(size);
       const projection = Math.max(1, size.y) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
-      const target = size.x < 650 ? 2 : 1.5;
+      const target = Math.max(detail ?? 0, size.x < 650 ? 2 : 1.5);
+      const budgeted: BudgetRegion[] = [];
       for (const region of regions) {
         region.lod.shown = region.shown?.level ?? null;
+        region.box.clampPoint(camera.position, nearest);
+        const depth = Math.max(.5, nearest.distanceTo(camera.position));
+        const pixels = (level: number) => (1 << level) * .5 * projection / depth;
         if (region.exact) region.lod.ideal = 0;
-        else {
-          region.box.clampPoint(camera.position, nearest);
-          const depth = Math.max(.5, nearest.distanceTo(camera.position));
-          chooseLevel(region.lod, level => (1 << level) * .5 * projection / depth, target, GRAND_LEVELS, now);
-        }
+        else chooseLevel(region.lod, pixels, target, GRAND_LEVELS, now);
+        budgeted.push({ state: region.lod, visible: region.visible, pinned: region.exact, pixels,
+          quads: Array.from({ length: GRAND_LEVELS }, (_, level) => (region.refs.get(level)?.quadCount ?? 0) * FACING_SHARE) });
       }
-      balanceLevels(regions.map(r => r.lod), regions.map(r => r.neighbours), GRAND_LEVELS);
+      const neighbours = regions.map(r => r.neighbours);
+      balanceLevels(regions.map(r => r.lod), neighbours, GRAND_LEVELS);
+      if (budget) {
+        const fit = fitLodBudget(budgeted, neighbours, budget, GRAND_LEVELS);
+        stats.budgetQuads = Math.round(fit.estimated); stats.budgetCoarsened = fit.coarsened; stats.budgetFits = fit.fits;
+      } else { stats.budgetQuads = 0; stats.budgetCoarsened = 0; stats.budgetFits = true; }
       for (const region of regions) {
         region.desired = region.exact ? 0 : region.lod.desired;
-        for (const [level, mesh] of region.meshes) if (mesh.group.parent !== root && level !== region.desired
+        for (const [level, mesh] of region.meshes) if (!mesh.displayed && !reflectionOnly(region, mesh) && level !== region.desired
           && wave?.targets.get(region) !== level && wave?.baselines.get(region) !== level && now - mesh.lastUsed > 2000) {
           free(mesh); region.meshes.delete(level);
         }
@@ -443,7 +548,7 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
       }
       if (progress < 1 && wave.fades.length) return;
       for (const fade of wave.fades) {
-        detach(fade.from); setFade(fade.to, 1); fade.region.shown = fade.to;
+        detach(fade.from, fade.region); setFade(fade.to, 1); fade.region.shown = fade.to;
         fade.from.lastUsed = now; fade.to.lastUsed = now;
       }
       coverageLevels = wave.levels; wave = undefined; stats.fadingRegions = 0; lastSelection = -Infinity;
@@ -452,7 +557,11 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
       // Rebuild at most 64 requests from the current camera. There is no unbounded waiting queue.
       const wanted = !presented ? new Map(regions.filter(region => region.required).map(region => [region, region.desired]))
         : wave?.startedAt === null ? new Map([...wave.targets].map(([region, level]) =>
-          [region, !region.shown ? wave!.baselines.get(region)! : level])) : new Map<Region, number>();
+          [region, !region.shown ? wave!.baselines.get(region)! : level]))
+        // Once the view has settled, the reflection's outer level fills in behind it, nearest first.
+        : !wave && stats.startupPhase === 'settled'
+          ? new Map(regions.filter(region => !region.exact && region.refs.has(REFLECTION_LEVEL)).map(region => [region, REFLECTION_LEVEL]))
+          : new Map<Region, number>();
       const candidates = [...wanted].filter(([region, level]) => !region.meshes.has(level)
         && !region.pending.has(level) && !installs.some(item => item.region === region && item.mesh.level === level));
       candidates.sort(([a], [b]) => Number(!a.exact) - Number(!b.exact)
@@ -497,10 +606,13 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
         }
         dispatch();
         stats.covered = regions.filter(r => r.shown).length;
+        stats.displayedLevels = [0, 0, 0, 0];
+        for (const region of regions) if (region.shown) stats.displayedLevels[region.shown.level] = (stats.displayedLevels[region.shown.level] ?? 0) + 1;
+        stats.reflectionMeshes = regions.filter(region => !region.exact && region.meshes.has(REFLECTION_LEVEL)).length;
         stats.residentBytes = regions.reduce((sum, region) => sum + [...region.meshes.values()].reduce((n, mesh) => n + mesh.bytes, 0), 0);
         if (stats.residentBytes > RESIDENT_BYTES) {
           // Last coverage stays installed; only cold alternative resolutions may be evicted.
-          for (const region of regions) for (const [level, mesh] of region.meshes) if (mesh.group.parent !== root
+          for (const region of regions) for (const [level, mesh] of region.meshes) if (!mesh.displayed && !reflectionOnly(region, mesh)
             && level !== region.desired && wave?.targets.get(region) !== level && wave?.baselines.get(region) !== level) {
             free(mesh); region.meshes.delete(level); stats.residentBytes -= mesh.bytes;
           }
@@ -528,6 +640,16 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
       markPresented() {
         if (presented || !owner.canPresent()) return;
         presented = true; lastSelection = -Infinity; stats.startupPhase = 'refining';
+      },
+      setDetail(pixels) {
+        if (pixels !== null && !(pixels >= 1 && pixels <= 8)) throw new Error(`Land detail must be 1 to 8 pixels, not ${pixels}`);
+        if (pixels === detail) return;
+        detail = pixels; lastSelection = -Infinity;
+      },
+      setBudget(next) {
+        if (next !== null && !(next.quads > 0 && next.maxPixels >= 1)) throw new Error('A land budget needs quads and a pixel cap of at least one');
+        if (next?.quads === budget?.quads && next?.maxPixels === budget?.maxPixels) return;
+        budget = next ? { quads: next.quads, maxPixels: next.maxPixels } : null; lastSelection = -Infinity;
       },
       update, dispose,
     };

@@ -1,12 +1,14 @@
-import { raidShotClearOf } from './raid-shot-clear';
+import { raidShotClearOf, sceneTreeCrowns } from './raid-shot-clear';
 import type * as THREE from 'three';
-import { parseRaidChatFrame, parseRaidGuestVisualMark, type KingdomId, type RaidChatFeed, type RaidChatFrame } from '@chatdom/shared';
+import type { VoxelRenderState } from '@chatdom/render';
+import { parseRaidChatFrame, parseRaidGuestVisualMark, parseRaidPartyFrame, type KingdomId, type RaidChatFeed, type RaidChatFrame, type RaidPartyPublicFeed, type RaidPartyPublicFrame } from '@chatdom/shared';
 import type { TwitchMomentFeed } from '../../twitch-moments/contracts';
 import type { createTwitchMomentView } from '../../twitch-moments/view';
 import { createGuestCrest } from '../../raid-gate/guest-insignia';
 import type { SettlementPlan } from '@chatdom/world';
 import { raidApproachGroundOf, raidChatGroundOf, type RaidChatSupport } from './raid-chat-ground';
 import { mountKingdomRaidPennants } from './raid-pennants';
+import { createRaidPartyFeed, createRaidPartyPeople, raidPartyGroundOf } from './raid-party';
 import '../../raid-gate/raid-chat.css';
 
 /** A short-lived public current-state reader. It never retains a chat history. */
@@ -76,16 +78,38 @@ export interface KingdomRaidChatOptions {
   support?: RaidChatSupport;
   pennantVisible?: import('./raid-pennants').KingdomRaidPennantOptions['visible'];
   pennantReading?: import('./raid-pennants').KingdomRaidPennantOptions['reading'];
+  /** The scene and its clay material, for the gate party's marchers; without them the party is not drawn. */
+  party?: { readonly scene: THREE.Scene; readonly material: VoxelRenderState };
+  /** The gate party's reader; defaults to the feed's own, then to the realm's public endpoint. */
+  partyFeed?: RaidPartyPublicFeed;
 }
 
 /** Projects only the moment view's currently visible verified lanterns, moving or beside the gate. */
-export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock, plan, ground, support, pennantVisible, pennantReading }: KingdomRaidChatOptions): () => void {
+export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock, plan, ground, support, pennantVisible, pennantReading, party, partyFeed }: KingdomRaidChatOptions): () => void {
   if (signal.aborted) return () => {};
   const detachPennants = mountKingdomRaidPennants({ view, feed, kingdomId, signal, clock, canvas, camera,
     ...(plan ? { plan } : {}), ...(ground ? { ground } : {}), ...(support ? { support } : {}), ...(pennantVisible ? { visible: pennantVisible } : {}), ...(pennantReading ? { reading: pennantReading } : {}) });
   view.setRaidChatGround(plan && ground ? raidChatGroundOf(plan, ground, support) : undefined);
-  view.setRaidShotClear(plan && ground ? raidShotClearOf(plan, ground) : undefined);
+  view.setRaidShotClear(plan && ground ? raidShotClearOf(plan, ground, party ? sceneTreeCrowns(party.scene) : undefined) : undefined);
   view.setRaidApproachGround(plan && ground ? raidApproachGroundOf(plan, ground, support) : undefined);
+  const detachParty = party ? mountRaidParty() : () => {};
+  /** The real marchers at the gate: the realm's public frame, checked here, drawn by the view with the town's people. */
+  function mountRaidParty(): () => void {
+    view.setRaidPartyGround(plan && ground ? raidPartyGroundOf(plan, ground, support) : undefined);
+    view.setRaidPartyPeople(createRaidPartyPeople(party!.scene, party!.material));
+    const reader = partyFeed ?? feed.raidParty ?? createRaidPartyFeed(kingdomId, feed.origin, clock);
+    let latest: RaidPartyPublicFrame | null = null, lastAsOf = 0, check = 0;
+    const show = (frame: RaidPartyPublicFrame | null) => { latest = frame; view.receiveRaidParty(frame); };
+    const stop = reader.origin === feed.origin ? reader.subscribe(raw => {
+      const frame = raw && parseRaidPartyFrame(raw, clock());
+      if (!frame || frame.kingdomId !== kingdomId || frame.origin !== feed.origin || frame.asOf < lastAsOf) { show(null); return; }
+      lastAsOf = frame.asOf; show(frame);
+    }) : () => {};
+    // A reader that falls silent must not leave a gathering standing at the gate: drop the frame once it goes stale.
+    const stale = () => { if (latest && !parseRaidPartyFrame(latest, clock())) show(null); check = window.setTimeout(stale, 1000); };
+    check = window.setTimeout(stale, 1000);
+    return () => { window.clearTimeout(check); stop(); show(null); view.setRaidPartyPeople(undefined); view.setRaidPartyGround(undefined); };
+  }
   const layer = document.createElement('div');
   layer.className = 'raid-chat-layer';
   layer.setAttribute('aria-live', 'off');
@@ -156,7 +180,7 @@ export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, si
   let unsubscribeView = () => {};
   const dispose = () => {
     if (stopped) return; stopped = true; signal.removeEventListener('abort', dispose);
-    unsubscribeView(); cancelAnimationFrame(animation); disconnect(); detachPennants(); clear(); view.setRaidChatGround(undefined); view.setRaidShotClear(undefined); view.setRaidApproachGround(undefined); layer.remove();
+    unsubscribeView(); cancelAnimationFrame(animation); disconnect(); detachPennants(); detachParty(); clear(); view.setRaidChatGround(undefined); view.setRaidShotClear(undefined); view.setRaidApproachGround(undefined); layer.remove();
   };
   unsubscribeView = view.onDispose(dispose);
   if (stopped) unsubscribeView();

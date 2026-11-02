@@ -36,6 +36,8 @@ export function Card(props: {
   onEnter?: (holding: DoorHolding) => void;
   /** The road ledger's view of its roads (see RegisterFacts). */
   ledger?: (() => JSX.Element | null) | undefined;
+  /** Only on the signed-in broadcaster's own card: the line that hides it. */
+  owner?: (() => JSX.Element | null) | undefined;
 }) {
   let closeButton: HTMLButtonElement | undefined;
   const region = () => props.world.regions[props.settler.region];
@@ -143,6 +145,7 @@ export function Card(props: {
         <Show when={url()}>{(href) => <WatchLink href={href()} />}</Show>
         <Show when={props.login}>{(login) => <ShareButton path={`/map/${login()}`} title={`${props.name} on the Atlas of Kingdoms`} />}</Show>
       </div>
+      {props.owner?.()}
       </footer>
     </section>
   );

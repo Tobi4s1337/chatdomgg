@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ForgeCallBudgetError, type ForgeCallBudget } from './budget';
 export { createForgeCallBudget, ForgeCallBudgetError, type ForgeCallBudget } from './budget';
 import { ForgeDraftSchema, type ForgeDraft, type ForgeHouseSocket } from '../../../../packages/shared/src/index';
-import { runCodexDraft, type CodexDraftRunner } from './codex-cli';
+import { ForgeUsageLimitError, runCodexDraft, type CodexDraftRunner } from './codex-cli';
 import { ForgeRunRecoveryError } from '../run-recovery/types';
 import { FORGE_FLOOR, FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, forgeJudgeQuestions,
   decideForgeSafety, primaryForgeSafetyPass, FORGE_SUBJECT_INSTRUCTIONS, FORGE_SUBJECT_JSON_SCHEMA, readForgeWishSubject,
@@ -121,9 +121,10 @@ Do not use tools. Return only JSON matching the supplied schema. Do not repeat e
         } },
       },
     };
+    // Strict structured output rejects `uniqueItems` (a 400 on every escalated read); uniqueness is checked on parse.
     const terraSchema: JsonObject = { type: 'object', additionalProperties: false, required: ['outcome', 'concerns', 'subject'],
       properties: { outcome: { type: 'string', enum: ['pass', 'hold', 'refuse'] },
-        concerns: { type: 'array', uniqueItems: true, maxItems: questions.length, items: { type: 'string', enum: questions.map(question => question.name) } },
+        concerns: { type: 'array', maxItems: questions.length, items: { type: 'string', enum: questions.map(question => question.name) } },
         subject: FORGE_SUBJECT_JSON_SCHEMA } };
     async function invoke(input: Omit<Parameters<CodexDraftRunner>[0], 'signal'>): Promise<PromiseSettledResult<string>> {
       try {
@@ -232,7 +233,12 @@ ${JSON.stringify({ wish: words, sockets: availableSockets.map(({ kind, profile, 
       const charged = budget?.take();
       if (charged) await charged;
       active.throwIfAborted();
-      return runner({ prompt, schema: (candidate ? ForgeDraftCandidateSchema : ForgeDraftSchema).toJSONSchema() as Record<string, unknown>, signal: active });
+      try { return await runner({ prompt, schema: (candidate ? ForgeDraftCandidateSchema : ForgeDraftSchema).toJSONSchema() as Record<string, unknown>, signal: active }); }
+      catch (error) {
+        // Like a gate read, a drafting transport failure is the forge's helpers being away, not a verdict on the wish.
+        if (active.aborted || error instanceof ForgeCallBudgetError || error instanceof ForgeUsageLimitError) throw error;
+        throw new ForgeProviderColdError();
+      }
     }, combinedSignal(signal, draftTimeout));
     if (raw.length > 32_768) throw new Error('Forge draft exceeded its budget.');
     const result = candidate ? ForgeDraftCandidateSchema.parse(JSON.parse(raw)) : ForgeDraftSchema.parse(JSON.parse(raw));

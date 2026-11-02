@@ -1,76 +1,56 @@
 # The campfire (web)
 
-The clearing at the edge of the Wilds where Dusk Court is played (spec 21). This folder holds the
-presentation side: the place, its people, the public surfaces and the local ports they read.
+The fire at the clearing on the edge of the Wilds, and Dusk Court, in the browser. The clearing's logs, hearth and
+Magistrate's chair are founded geometry (`packages/content/src/campfire`, installed by the realm's founded scene
+hook); the kingdom draws them and collides with them like any placement. This folder adds only what moves, glows
+and speaks, and the carved HUD.
 
-## Entry points
+## In a kingdom walk (the product path)
 
-| Module | What it is |
-|---|---|
-| `index.tsx` | Default export: the `/-/campfire` development surface over the SIMULATED session. Also re-exports the pieces below for main's mounts |
-| `Surface.tsx` | `CampfireSurface({ session, clock })`: the circle as a walker sees it, from the public view only |
-| `public.tsx` | `CampfireStream({ source, clock })` and `publicSource(session)`: the broadcast surface. Accepts `CampfirePublicView` only and never reaches a private module (`graph.test.ts`) |
-| `clearing/index.ts` | `mountCampfireClearing({ scene, pool, materials })`: the three.js clearing, attachable to a main-owned scene. `update(view, atMs)` is a pure function of the public view and public time; `seats()`, `approach(seat)` and `suggestions(view, atMs)` implement `CampfireScenePort` |
-| `stage.ts` | A standalone renderer/sky/camera around the clearing, for surfaces with no kingdom scene |
-| `ports.ts` | Version 1 local ports and the strict public decoder (below) |
-| `fixture.ts` | `createSimulatedCampfireSession`: a deterministic SIMULATED session for presentation work |
+`register.ts` is the one line for play's `providers.ts`: `import '../campfire/register';`. It registers the walk
+feature `campfire` (play's `registerWalkFeature`, B1c). For every walk, `walk.ts` (`mountCampfireWalk`):
 
-## Ports (version 1)
+- finds the installed clearing in the walk's own founded scene (`clearing.ts` `findClearing`, placement
+  `campfire:clearing:v1`); a kingdom without it gets nothing;
+- mounts `effects.ts` in the walk's scene: the flame, sparks, embers, smoke, a game lantern by each playing seat
+  (snuffed, sent and tipped as the round says), the Gallery's embers and Twitch chat rising as lanterns beyond the
+  logs (from the room's `transient` chat), with their words in play's feature overlay; a glow and a warm pool on the ground round the fire; 14 draws, no real lights;
+- opens a `session.ts` on the same kingdom room (`campfire`, `campfire.self`, `campfire.receipt`); private only for a
+  walker with an identity, never on the watching or stream view;
+- shows the carved HUD (`Hud.tsx` through `walk-hud.tsx`) while you sit at the fire, or stand within 9 m of it while
+  a round runs; sitting frees the cursor (play's `requestCursor`) and the arrows, digits and Enter go round the circle
+  (`keys.ts`, `input.ts`); E and Escape stay with the seat's interaction;
+- sounds the fire, the night and the round's public moments (`sound/`) through the kingdom's own mixer.
 
-`ports.ts` defines `CampfirePublicView`, `CampfireSelfView`/`CampfireSelfEnvelope` (types only here),
-`CampfireIntent`/`CampfireIntentEnvelope`/`CampfireReceipt`, `CampfireSessionPort`, `CampfireVoicePort`,
-`CampfireAudioPort` and `CampfireScenePort`. They are lane-local seams; main promotes the cross-process
-messages into shared before real routes launch.
+Sitting is the realm's `sit` interaction on `fire:clearing:seat:<n>` and the kingdom room's `CampfireSeatHost`
+(`apps/realm/src/campfire`). Seat 0 is the Magistrate's chair, the streamer's only.
 
-`decodeCampfirePublicView` is an allowlist: every object rejects keys it does not name, labels are
-`DisplayNameSchema` strings of at most 40 characters without control characters, IDs use the shared
-`KingdomIdSchema`/`TokenSchema`/`EpochMsSchema`, and looks must name authored body, hair and wearable
-catalogue entries and registered swatches. It also rejects a view that breaks the reveal boundary:
-a role beside a lit lantern before the game has ended, any role or lantern on the Magistrate, an
-interrupted night that reveals anything, suspicion resting anywhere but beside a living player, a
-lantern outside a match, or match fields outside their lifecycle.
+## The stream
 
-## The place
+`StreamOverlay.tsx` reads only the public frame from a session opened with `private: false`; with no round it shows
+nothing (`graph.test.ts` keeps it away from the HUD, the hand and every card).
 
-- Seat ring (`arrangement.ts`): 0–11 players plus the Magistrate on straight logs of two (one of three
-  for odd counts), sized so sitters are 0.8 m apart; the Magistrate's chair sits across the fire from
-  the establishing camera; the footpath leaves on the far left toward the kingdom on the horizon.
-  Lanterns stand beside each player's shins. `approachRoute` walks in by the footpath and round the
-  corridor between feet and hearth stones; tests keep it clear of logs, lanterns and the fire.
-- Seated people (`pose.ts`, `people.ts`): the authored body, hair and wearables on the common rig, as
-  nested bone groups meshed by the production voxel worker, with parts shared between seats. Every
-  posture shares one leg pose, solved against the actual body geometry so the soles rest exactly on
-  the ground and the seat surface sits exactly under the thighs (`sharedSeatTop()`, 0.155 m); logs
-  are authored to that height. Breathing, gaze drift and attention to the Magistrate, a neighbour or
-  the Gallery's suspect live in the chest, head and arms only, so contact never slides.
-- Light (`light.ts`): the fire and lit lanterns written into the renderer's existing near light-field
-  contract (0.5 m cells, corner samples via the kingdom's `buildLightFieldSamples`). Radial, with a
-  short occlusion march, so a lone fire draws a round pool and backs turn away from the warmth.
-- Fire (`fire.ts`): flame, sparks, ash embers, smoke, lantern flames and Gallery embers are tiny
-  cubes, each a pure function of time. Colours stay below white.
-- Distance (`distance.ts`): three stepped violet ridge layers with authored aerial perspective and the
-  kingdom on its hill in a saddle of the ridges, windows lit, its beacon drawn by the shared atmosphere.
-- Props (`clearing/props.ts`): logs, the Magistrate's chair, the hearth ring and crib, game lanterns,
-  Wilds trees, rocks, undergrowth and the clearing floor on the 0.125 m prop lattice, registered
-  materials only, deterministic per seed.
+## `/-/campfire`
 
-## Bench and capture
+Says where the fire is. It never stages a circle.
 
-`/-/campfire?state=waiting|playing|text-only|closed&seats=6..12&surface=circle|stream&still=1&at=<ms>&guide=open|closed`.
-`?source=live` shows that the live campfire is not connected yet; it never pretends.
+## The recorded round (dev only)
 
-```sh
-pnpm build
-node apps/web/src/campfire/capture.mjs                      # owns a temporary preview of this checkout
-node apps/web/src/campfire/capture.mjs --base-url http://127.0.0.1:5190 --only circle,stream
-```
+`round.mjs` plays a whole Dusk Court round in the lane's own in-memory realm (SIMULATED reference identities, a
+founded hamlet from a seed) with five headless walkers and one browser walker, and writes `ga11-round.json/.md` to
+the evidence folder. It builds `round-page.tsx` (play's `KingdomEntry` on the live entry source) in place of
+`main.tsx`; that page is never a route. It needs play's walk feature slot, so it runs from an assembled tree.
 
-Shots go to `shots/campfire/<name>@<w>x<h>.png`. The script queues on the shared capture lock, waits for
-`window.__chatdomReady`, and fails on console errors, a missing SIMULATED label, the wrong surface,
-viewport overflow or private vocabulary in public text.
+- SwiftShader: `node round.mjs` (the browser presses real keys; holds the shared capture lock).
+- Real GPU: `node round.mjs --build-only`, then `chatdom-pc-lease --wait 30 --max 10 -- node round.mjs --gpu
+  --skip-build`. The leased Chrome can only open a URL and wait, so each still is its own page (`?shot=`), the
+  harness seats that person through the same interaction authority E reaches (`campfireReference().sit`) on every
+  page (a new page replaces the old session, which leaves its log; the court holds the player as away meanwhile),
+  and the fire's clock stands still between the operator's steps, so the hold never runs out.
+
+The kingdom's source ribbon is hidden in these stills: presence comes only from the realm's durable outbox, which
+the in-memory realm never writes, so it would always read "Connection lost".
 
 ## Provenance
 
-No third-party code or assets are added here. Fonts are the repository's existing IM Fell English and
-Alegreya files under `apps/web/src/atlas/assets/fonts` (SIL OFL, already credited). Glyphs, props,
-effects and words are authored for the campfire. No sound sources yet.
+No third-party code or assets. Glyphs, props, effects, sounds and words are authored here.

@@ -1,0 +1,49 @@
+/* The public Almanac page: the book on a dark writing desk under a lantern. While it is fetched, or when it cannot be
+   opened, the closed book lies there with a parchment slip that says why. */
+
+.almp { position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 55% 50% at 50% 44%, #8a552c40, transparent 72%),
+    repeating-linear-gradient(91deg, #ffdcae05 0 2px, transparent 2px 11px, #0000000d 11px 12px, transparent 12px 23px),
+    radial-gradient(ellipse 130% 100% at 50% 36%, #2a1a10, #120b07 70%, #080504); }
+.almp > .alm { background: none; }
+
+.almp-desk { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 26px; padding: 24px; }
+.almp-closed { position: relative; width: min(300px, 62vw); aspect-ratio: .74; }
+.almp-pages { position: absolute; inset: 6px -7px -6px 8px; border-radius: 3px 8px 8px 3px;
+  background: repeating-linear-gradient(180deg, #efe2c2 0 1px, #cdb88f 1px 2px); box-shadow: 0 30px 50px #000000b3, 0 10px 18px #00000080; }
+.almp-cover { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 12px; border-radius: 4px 12px 12px 4px;
+  border: 1px solid var(--alm-leather-edge);
+  background:
+    radial-gradient(circle at 30% 40%, #d8f0d00a 0 .7px, transparent 1.3px) 0 0 / 5px 6px,
+    radial-gradient(ellipse 80% 60% at 30% 20%, #6f8f6a3a, transparent 70%),
+    linear-gradient(90deg, #00000059, transparent 9%),
+    linear-gradient(180deg, var(--alm-leather-hi), var(--alm-leather) 50%, var(--alm-leather-lo));
+  box-shadow: inset 0 0 0 7px #00000014, inset 0 1px 0 #c8e6b62e; animation: almp-breathe 3.2s ease-in-out infinite; }
+.almp-cover::before { content: ''; position: absolute; inset: 14px 14px 14px 22px; border: 2px solid transparent; border-image: var(--alm-gilt) 1; opacity: .85; }
+.almp-cover .alm-front-title { font-size: clamp(26px, 6vw, 38px); }
+.almp-cover .alm-front-sub { font-size: clamp(14px, 3.4vw, 18px); text-align: center; padding: 0 28px; }
+.almp-band { position: absolute; left: 62%; top: -2px; bottom: -2px; width: 0; }
+@keyframes almp-breathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.07); } }
+.almp[data-state='error'] .almp-cover, .almp[data-state='no-pier'] .almp-cover { animation: none; }
+
+.almp-note { font: italic 17px/1.3 var(--cd-face-story); color: var(--cd-cream-soft); text-align: center; }
+.almp-slip { position: relative; max-width: min(420px, calc(100vw - 48px)); padding: 16px 22px 18px; text-align: center; transform: rotate(-1.2deg);
+  color: var(--alm-ink, #2e2118); border-radius: 2px;
+  background:
+    radial-gradient(ellipse at 30% 15%, var(--cd-parch-hi), transparent 75%),
+    linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #ffffff52, inset 0 -4px 9px #a0784020, 0 2px 0 #00000052, 0 10px 22px #0000008c; }
+.almp-slip::before { content: ''; position: absolute; top: -7px; left: 50%; width: 14px; height: 14px; translate: -50% 0; border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, var(--cd-brass-hi), var(--cd-brass) 50%, var(--cd-brass-lo)); box-shadow: 0 1px 2px #0009, 0 0 0 1px #3a2812; }
+.almp-slip-head { margin: 0; font: 400 22px/1.2 var(--cd-face-story); }
+.almp-slip-line { margin: 8px 0 0; font: italic 16px/1.4 var(--cd-face-body); color: var(--cd-ink-soft); }
+.almp-again { appearance: none; margin-top: 14px; min-height: 44px; padding: 0 22px; border: 1px solid var(--cd-wood-edge); border-radius: 7px; cursor: pointer;
+  font: 15px/1 var(--cd-face-label); letter-spacing: .1em; color: var(--cd-cream);
+  background: repeating-linear-gradient(92deg, #ffdcae07 0 2px, transparent 2px 8px, #1a0c0412 8px 9px, transparent 9px 15px), linear-gradient(176deg, var(--cd-wood-hi), var(--cd-wood) 45%, var(--cd-wood-lo));
+  box-shadow: inset 0 1px 0 #ffe1b438, inset 0 -2px 0 #00000040, 0 2px 0 #0000006b; transition: transform .12s ease; }
+.almp-again:hover { transform: translateY(-1px); }
+.almp-again:active { transform: translateY(1px); box-shadow: inset 0 1px 0 #ffe1b42e, 0 1px 0 #0000006b; }
+.almp-again:focus { outline: none; }
+.almp-again:focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); }
+@media (prefers-reduced-motion: reduce) { .almp-cover { animation: none; } .almp-again { transition: none; } }

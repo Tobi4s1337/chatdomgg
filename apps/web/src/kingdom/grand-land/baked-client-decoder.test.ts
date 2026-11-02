@@ -44,6 +44,12 @@ it('transfers compressed buffers into no more than two workers, returns only dec
     expect(result.compressed.byteLength).toBe(ref.gzipBytes);
     expect(result).not.toHaveProperty('raw');
     expect('quads' in result.value && result.value.quads.length).toBe(2);
+    // The worker already put the quads in run order with their plane groups (the main thread only slices them).
+    expect(result.value).toMatchObject({ runOrdered: true });
+    if ('runOrdered' in result.value) {
+      expect(result.value.offsets).toHaveLength(7); expect(result.value.offsets[6]).toBe(1);
+      expect(result.value.planes).toHaveLength(6); expect(result.value.ends.flatMap(ends => [...ends])).toEqual([1]);
+    }
   }
   decoder.dispose(); expect(TransferWorker.instances.every(worker => worker.terminated)).toBe(true);
 });

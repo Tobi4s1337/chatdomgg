@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { RaidChatCue, RaidChatFrame, RaidPennantFrame, Vec3, VoxelBlueprint } from '@chatdom/shared';
+import type { RaidChatCue, RaidChatFrame, RaidPartyPublicFrame, RaidPennantFrame, Vec3, VoxelBlueprint } from '@chatdom/shared';
 import {
   BANNER_CELLS, BANNER_TIERS, CELL, RIBBON_SLOTS, SHIMMER_PHASES, SWAG_CELLS, bannerBracket, bannerParts, bannerRibbon, type BannerKit, type BannerTier,
 } from './banner';
@@ -11,6 +11,7 @@ import { createGiftLayer, type DoorAnchor, type GiftRoute, type PlaceAnchor } fr
 import { createRaidLayer, type RaidChatGround } from './raid-view';
 import type { RaidShotClear } from './raid-shot';
 import { createRaidPennantWall } from './raid-pennant-wall';
+import { createRaidPartyLayer, type MomentPeoplePort } from './raid-party-view';
 import { createSkyFlightLayer } from './sky-flight-view';
 import { createSkyLightLayer } from './sky-light-view';
 import type { CrowdCall } from './stage-beat';
@@ -21,6 +22,7 @@ import type { TownLayerHost } from './town';
 import { createTownLayer } from './town-view';
 
 export type { DoorAnchor, GiftRoute, PlaceAnchor } from './gift-view';
+export type { MomentPeople, MomentPeoplePort } from './raid-party-view';
 
 /** Public anchors for one home, supplied by the host's real settlement. Never derived from a deed. */
 export interface HomeAnchor {
@@ -82,6 +84,8 @@ export interface MomentViewHost {
   crowd?(call: CrowdCall | null): void;
   /** Where the host's present people would stand to watch, so a sky shot can keep a few of them in its foreground. */
   watchers?(): readonly Vec3[];
+  /** The host's people renderer, for the gate party's real marchers (a host can also attach it later). */
+  readonly people?: MomentPeoplePort;
 }
 
 export interface SkyGlow {
@@ -198,6 +202,10 @@ export function createTwitchMomentView(host: MomentViewHost) {
     place: place => host.placeAnchor?.(place) ?? null, route: () => host.giftRoute?.() ?? null });
   const pennantWall = createRaidPennantWall(root, { kit: host.kit, material: host.material, mesh: (blueprint, offset) => meshOf(blueprint, offset),
     place: place => host.placeAnchor?.(place) ?? null, route: () => host.giftRoute?.() ?? null });
+  // The gate party: the real marchers gathered at the same gate, setting out down the same road on Twitch's word.
+  const party = createRaidPartyLayer(root, { kit: host.kit, material: host.material, mesh: (blueprint, offset) => meshOf(blueprint, offset),
+    place: place => host.placeAnchor?.(place) ?? null, route: () => host.giftRoute?.() ?? null, gateBusy: () => raid.gate() !== null,
+    ...(host.people ? { people: host.people } : {}) });
 
   // The spectacle layers: the sky's light, what flies through it, the festival train and the dragon.
   const places = host.places ?? NO_PLACES;
@@ -214,7 +222,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
 
   /** Mesh every banner and gift part before the first meaningful frame, so no beat waits on a worker. */
   async function prepare(): Promise<void> {
-    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints(), ...raid.blueprints(), ...pennantWall.blueprints(), ...spectacles.flatMap(layer => layer.blueprints()),
+    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints(), ...raid.blueprints(), ...pennantWall.blueprints(), ...party.blueprints(), ...spectacles.flatMap(layer => layer.blueprints()),
       ...townLayer.blueprints(), ...decree.blueprints()];
     for (const tier of BANNER_TIERS) {
       const p = bannerParts(tier, host.kit);
@@ -738,6 +746,49 @@ export function createTwitchMomentView(host: MomentViewHost) {
     lease.write(prior); lease.release(); abort.abort();
   }
 
+  /**
+   * The gathering's gate shot. It takes the camera only while a party stands at the gate and no moment holds it, yields
+   * at once to any moment that cuts in (and takes it back after), and hands the viewer's own view back when the party
+   * has gone. The view before the party is kept across interruptions; a host that takes the camera away clears it.
+   */
+  let partyCamera: { lease: CameraLease; abort: AbortController; shot: CameraPose; from: CameraPose; since: number; leaving: number | null; shape: string } | null = null;
+  let partyPrior: CameraPose | null = null;
+  const farApart = (a: CameraPose, b: CameraPose) => Math.hypot(a.eye[0] - b.eye[0], a.eye[1] - b.eye[1], a.eye[2] - b.eye[2]) > GLIDE_LIMIT;
+  const partyShot = () => { const { width, height } = host.viewport(); return first(party.shots(width > 0 && height > 0 ? width / height : 16 / 9)); };
+  function releaseParty(): void {
+    if (!partyCamera) return;
+    const { lease, abort } = partyCamera;
+    partyCamera = null; lease.release(); abort.abort();
+  }
+  function directParty(frame: MomentFrame): void {
+    const atMs = frame.atMs, present = party.present();
+    // A moment that cuts in takes the camera from the gathering straight away; the gathering's own prior view is kept.
+    if (partyCamera && frame.visible && frame.focus?.cut && atMs < frame.focus.endAt) releaseParty();
+    const wanted = frame.visible && present && !director && !(frame.focus?.cut && atMs < frame.focus.endAt);
+    if (partyCamera && !wanted && partyCamera.leaving === null) { partyCamera.leaving = atMs; partyCamera.from = partyCamera.lease.read(); }
+    if (!partyCamera && wanted && host.camera) {
+      const abort = new AbortController(), lease = host.camera.acquire('twitch-moments', DIRECTOR_PRIORITY, abort.signal);
+      const from = lease?.read(), shot = lease ? partyShot() : null;
+      if (lease && from && shot) { partyPrior ??= from; partyCamera = { lease, abort, shot, from, since: atMs, leaving: null, shape: party.shape() }; }
+      else if (lease) { lease.release(); abort.abort(); }
+    }
+    if (!partyCamera) { if (!present) partyPrior = null; return; }
+    const held = partyCamera;
+    if (held.leaving === null && party.shape() !== held.shape) {
+      // The party grew a rank or lost one: re-frame it with a short glide.
+      held.shape = party.shape();
+      const next = partyShot();
+      if (next) { held.from = held.lease.read(); held.shot = next; held.since = atMs; }
+    }
+    let next: CameraPose;
+    if (held.leaving !== null) {
+      const prior = partyPrior ?? held.from, t = (atMs - held.leaving) / EASE_OUT_MS;
+      if (t >= 1 || farApart(held.from, prior)) { held.lease.write(prior); releaseParty(); partyPrior = null; return; }
+      next = mix(held.from, prior, t);
+    } else next = farApart(held.from, held.shot) ? held.shot : mix(held.from, held.shot, (atMs - held.since) / EASE_IN_MS);
+    if (!held.lease.write(next)) { held.abort.abort(); partyCamera = null; partyPrior = null; }
+  }
+
   function direct(frame: MomentFrame): void {
     const atMs = frame.atMs, focus = frame.visible && frame.focus?.cut ? frame.focus : null;
     if (director && director.leaving === null && atMs < director.focus.endAt && (!focus || focus.id !== director.focus.id)) {
@@ -788,13 +839,23 @@ export function createTwitchMomentView(host: MomentViewHost) {
     /** The feature host supplies its adopted surface; no sampler means no stationary fixtures. */
     setRaidChatGround(sample: RaidChatGround | undefined): void { if (!disposed) raid.ground(sample); },
     /** The open land in front of the gate, from the adopted plan and terrain, that an incoming column may come down. */
-    setRaidApproachGround(sample: RaidChatGround | undefined): void { if (!disposed) raid.approachGround(sample); },
+    setRaidApproachGround(sample: RaidChatGround | undefined): void { if (!disposed) { raid.approachGround(sample); party.approachGround(sample); } },
     /** The adopted world's standing check for the gate shot: houses, the castle and the ground the eye may not enter. */
-    setRaidShotClear(check: RaidShotClear | undefined): void { if (!disposed) raid.setShotClear(check); },
+    setRaidShotClear(check: RaidShotClear | undefined): void { if (!disposed) { raid.setShotClear(check); party.setShotClear(check); } },
     raidPennantSites: () => pennantWall.sites(),
     /** The torch posts the current raid has actually drawn beside the street, for the scene's occupancy and light field. */
     raidTorchSites: () => raid.torchSites(),
     receiveRaidPennants(frame: RaidPennantFrame | null): void { if (!disposed) pennantWall.receive(frame); },
+    /** The gate party now, or null when nobody gathers. Caller has checked its kingdom, origin and freshness. */
+    receiveRaidParty(frame: RaidPartyPublicFrame | null): void { if (!disposed) party.receive(frame); },
+    /** Supported standing ground in and around the gate's street, from the adopted plan and terrain; none means nobody stands. */
+    setRaidPartyGround(sample: RaidChatGround | undefined): void { if (!disposed) party.ground(sample); },
+    /** Attaches (or detaches) the host's people renderer for the party's marchers. */
+    setRaidPartyPeople(port: MomentPeoplePort | undefined): void { if (!disposed) party.setPeople(port); },
+    /** Public walker IDs the party is drawing at the gate this frame: the host hides those bodies where they walk. */
+    raidPartyWalkers: () => party.walkers(),
+    /** The party's torches and braziers this frame, for the host's light field. */
+    raidPartyFires: () => party.fires(),
     setRaidPennantGround(sample: RaidChatGround | undefined): void { if (!disposed) pennantWall.ground(sample); },
     onDispose(listener: () => void): () => void {
       if (disposed) { listener(); return () => {}; }
@@ -837,6 +898,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       gifts.apply(frame);
       raid.apply(frame.visible ? frame.raids : [], frame.atMs);
       pennantWall.apply(frame.atMs, frame.visible);
+      party.apply(frame.atMs, frame.visible);
       skyLight.apply(frame.visible ? frame.sky : [], frame.atMs);
       flight.apply(frame.visible ? frame.sky : [], frame.atMs);
       trainLayer.apply(frame.visible ? frame.train : null, frame.atMs);
@@ -846,7 +908,9 @@ export function createTwitchMomentView(host: MomentViewHost) {
       host.light?.(frame.visible ? { ...glowNow(), hush: Math.min(1, Math.max(0, frame.stage?.hush ?? 0)) } : { colour: [0, 0, 0], strength: 0, hush: 0 });
       callCrowd(frame);
       syncAudio(frame);
+      if (frame.visible && frame.focus?.cut && frame.atMs < frame.focus.endAt) releaseParty();
       if (frame.visible) direct(frame); else release();
+      directParty(frame);
     },
     labels(camera: THREE.Camera): ScreenCaption[] {
       if (!lastFrame?.visible) return [];
@@ -891,8 +955,8 @@ export function createTwitchMomentView(host: MomentViewHost) {
     glow: glowNow,
     stats: (): Record<string, number | boolean> => ({ banners: banners.size, meshes: [...banners.values()].reduce((n, b) => n + b.root.children.length, 0), edges: edges.size,
       ...gifts.stats(), ...prefixed('sky', skyLight.stats()), ...prefixed('flight', flight.stats()), ...prefixed('train', trainLayer.stats()),
-      ...prefixed('dragon', dragon.stats()), ...prefixed('raid', raid.stats()), ...prefixed('pennantWall', pennantWall.stats()),
-      ...prefixed('town', townLayer.stats()), ...prefixed('decree', decree.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent,
+      ...prefixed('dragon', dragon.stats()), ...prefixed('raid', raid.stats()), ...prefixed('pennantWall', pennantWall.stats()), ...prefixed('party', party.stats()),
+      ...prefixed('town', townLayer.stats()), ...prefixed('decree', decree.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, partyLeased: partyCamera !== null, attached: root.parent === host.parent,
       'stage.watchers': lastFrame?.visible && lastFrame.stage ? lastFrame.stage.watchers : 0, crowd: crowdCalled }),
     dispose(): void {
       if (disposed) return;
@@ -903,13 +967,15 @@ export function createTwitchMomentView(host: MomentViewHost) {
         try { listener(); } catch (error) { console.error('Moment view disposal listener failed', error); }
       }
       release();
+      if (partyCamera) { partyCamera.lease.write(partyPrior ?? partyCamera.from); releaseParty(); }
+      partyPrior = null;
       if (crowdCalled) { host.crowd?.(null); crowdCalled = false; }
       host.light?.({ colour: [0, 0, 0], strength: 0, hush: 0 });
       for (const cancel of playing.values()) cancel();
       playing.clear();
       for (const slot of [...banners.keys()]) remove(slot);
       for (const edge of edges.values()) root.remove(edge.group);
-      edges.clear(); gifts.dispose(); raid.dispose(); pennantWall.dispose();
+      edges.clear(); gifts.dispose(); raid.dispose(); pennantWall.dispose(); party.dispose();
       for (const layer of spectacles) layer.dispose();
       townLayer.dispose(); decree.dispose();
       host.parent.remove(root);

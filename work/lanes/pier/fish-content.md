@@ -46,3 +46,25 @@ Nine focused tests pass. Fish mesh to 328–1,164 triangles each, the rod to 262
 the dusk sheet also measures one shadow draw per model. These are content costs, not the complete fishing layer
 or frame timings. All stills are software-rendered: the real-GPU tunnel returned exit 3. The evidence README lists
 the files and remaining demonstration. No database, shared contract or external hook changed in this checkpoint.
+
+## PI11: twenty-eight fish, four legends and the mounts — 2 November 2026
+
+Sixteen fish join the twelve: still water (`still.ts`: Glimmer Rudd, Thimble Gudgeon, Willow Tench, Starlit Bleak),
+sunlit and cold water (`sunlit.ts`: Ember Sunfish, Pearl Grayling, Hollow Burbot, Saltmarsh Mullet), the sea
+(`sea.ts`: Harbour Mackerel, Driftglass Herring, Inkfin Wrasse, Tidepool Sculpin) and the four legends
+(`legends.ts`). Each was reviewed on its four-view CPU sheet (`preview.test.ts`, run with `PIER_PREVIEW=<ids>`); the
+content test checks that every shape is distinct, connected, meshes and stays inside the avatar lattice.
+
+Decisions:
+
+1. **Legends are rare, weight 1, and never come off a chat line.** Each needs a narrow window: the sturgeon at night
+   in rain on a lake, the emperor at dusk in clear weather, the ray at night at sea, the char at dawn in mist in the
+   highlands. The Almanac shows them in their own chapter.
+2. **Every kingdom's lake has at least fourteen fish; the rest is that kingdom's own.** Fish with a `share` live in
+   that share of kingdoms, fixed per kingdom (`kingdomHoldsFish`), so two kingdoms' Almanacs differ in what is
+   "waiting" and what is "elsewhere". Sea fish and biome fish are caught only where those waters are.
+3. **Riddles, not blanks.** Every species has a riddle distinct from its lore; an unknown page shows the silhouette
+   and the riddle.
+4. **Mounts are the real model on a carved plaque** (`packages/content/src/keepsakes/`), cropped and turned in exact
+   quarter turns so every voxel of the fish is the one you caught. A fish twice as wide as it is tall (the ray, the
+   flounder) shows its back. The sheet is `shots/pier/mounts.png`.

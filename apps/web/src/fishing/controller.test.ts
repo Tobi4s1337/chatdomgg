@@ -148,3 +148,20 @@ it('sends one strike per cast: a second press on the dip reels and never throws 
   expect(events.some(event => event.kind === 'kept')).toBe(true);
   own.dispose(); p.watcher.dispose(); p.staged.dispose();
 });
+
+it('asks the room for your own Almanac marks and gives up politely when it never answers', async () => {
+  const p = pier();
+  p.own.sync(); await settle();
+  const marks = p.own.marks();
+  await settle();
+  await expect(marks).resolves.toEqual([]);
+  const silent = createFishingController({ link: { send() {}, subscribe: () => () => {}, dispose() {} }, selfWalkerId: 'x', now: () => Date.now() });
+  const waiting = silent.marks();
+  const caught = waiting.catch((error: Error) => error.message);
+  await advance(8100);
+  await expect(caught).resolves.toBe('The Almanac did not answer in time.');
+  const closed = silent.marks();
+  silent.dispose();
+  await expect(closed).rejects.toThrow('The pier is closed.');
+  p.own.dispose(); p.watcher.dispose();
+});

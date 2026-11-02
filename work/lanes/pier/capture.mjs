@@ -114,7 +114,7 @@ try {
   }
   if (process.argv.includes('--fish')) {
     const group = process.argv.find(arg => arg.startsWith('--group='))?.slice(8) ?? '0';
-    if (!/^(0|1|2|rod)$/.test(group)) throw new Error('Choose a fish sheet group.');
+    if (!/^([0-6]|rod)$/.test(group)) throw new Error('Choose a fish sheet group.');
     const [width, height] = process.argv.includes('--narrow') ? [390, 844] : [1440, 900];
     await page(`http://localhost:${previewPort}/-/pier?view=fish&group=${group}&hour=18.6&still=1`, width, height, resolve(output, `pi10-fish-${group}-dusk@${width}x${height}.png`));
   } else if (process.argv.includes('--assets')) {

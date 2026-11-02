@@ -12,7 +12,9 @@ import { createPostgresFishingCatchWriter, type FishingCatchAuthority } from './
 import { createPostgresFishingAdmission } from './entry';
 import { createFishingInstallationReader } from './installation';
 import { createPostgresRodRack, isEquippedWillowRod, WILLOW_ROD_ID } from './rod';
+import { readRodHistory } from './rod-history';
 import type { FishingSpecies } from './species';
+import type { RealmPier } from './pier';
 
 export interface DurableFishingChannelOptions {
   readonly pool: Pool; readonly origin: 'live' | 'simulated'; readonly store: ItemStore; readonly items: RealmItems;
@@ -29,6 +31,8 @@ export interface DurableFishingChannelOptions {
   readonly seed?: () => number;
   readonly makeId?: () => string;
   readonly schedule?: FishingRoomChannelOptions['schedule'];
+  /** The kingdom's pier beyond the room: personal Almanac marks and the public feed. */
+  readonly pier?: Pick<RealmPier, 'marks' | 'announce'>;
 }
 
 interface RodFact {
@@ -62,6 +66,8 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
       });
       const installation = () => live() && options.visible(room.kingdomId) ? source() : null;
       const facts = new Map<PersonId, RodFact>();
+      /** Earned reach, read with the rod's history; the cast reads it synchronously. */
+      const reaches = new Map<PersonId, number>();
       const listeners = new Set<(personId: PersonId) => void>();
       const forget = (from: RealmChannelSender) => {
         const fact = facts.get(from.principal.personId);
@@ -80,14 +86,16 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
         facts.set(owner, { itemId: item.id, walkerId: from.walkerId, principal: from.principal, until: now() + 2000, present: from.present, token });
         return item;
       };
-      const casts = createFishingCasts({ kingdomId: room.kingdomId, clock: now, species: options.species, installation,
+      // This kingdom's own water: the same view rolls the bite and audits the catch.
+      const species = options.species.forKingdom(room.kingdomId);
+      const casts = createFishingCasts({ kingdomId: room.kingdomId, clock: now, species, installation,
         makeId: options.makeId ?? randomUUID, seed: options.seed ?? (() => randomBytes(4).readUInt32LE()),
         seat(personId) {
           const from = live() ? room.person(personId) : null, fact = facts.get(personId);
           if (!from || !fact || fact.until <= now() || fact.walkerId !== from.walkerId || fact.principal !== from.principal
             || selected(personId, from.walkerId) !== fact.itemId || !fact.present() || !from.present()) return null;
           const pose = from.pose();
-          return pose ? { token: fact.token, pose, ownsRod: true } : null;
+          return pose ? { token: fact.token, pose, ownsRod: true, reachM: reaches.get(personId) ?? 0 } : null;
         },
       });
       const stopItems = options.items.onChange((personId, kingdomId, items) => {
@@ -98,7 +106,7 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
       const where = options.where?.(room.kingdomId) ?? 'the pier';
       const authority = () => live() ? retained : null;
       const writer = createPostgresFishingCatchWriter({ kingdomId: room.kingdomId, origin: room.origin,
-        store: options.store, items: options.items, catalogue: options.catalogue, species: options.species, where,
+        store: options.store, items: options.items, catalogue: options.catalogue, species, where,
         authority, candidate: personId => casts.candidate(personId), finish: (personId, castId) => casts.finish(personId, castId),
         async admit(from, tx) {
           const admission = await admit(from, tx);
@@ -114,7 +122,24 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
         store: options.store, items: options.items, where, authority, installation, admit, now });
       return {
         casts, now, installation, takeRod,
+        ...(options.pier ? {
+          marks: async (from: RealmChannelSender) => live() && from.present() ? options.pier!.marks(room.kingdomId, from.principal.personId) : [],
+          announce: (kept: Parameters<NonNullable<ReturnType<FishingRoomChannelOptions['bind']>['announce']>>[0]) => {
+            void options.pier!.announce(room.kingdomId, { id: kept.catch.id, ownerId: kept.catch.ownerId,
+              name: kept.item.story.by?.name ?? null, fish: { speciesId: kept.catch.speciesId, lengthMm: kept.catch.fish.lengthMm,
+                weightG: kept.catch.fish.weightG }, kingdomFirst: kept.catch.kingdomFirst, keepsake: kept.keepsake?.number ?? null,
+              at: kept.catch.caughtAt }).catch(() => { /* The stream misses one tag; the catch is kept. */ });
+          },
+        } : {}),
         keep: (from, castId) => writer.keep(from, castId),
+        async rodHistory(from) {
+          const history = await readRodHistory(options.pool, { kingdomId: room.kingdomId, origin: room.origin, ownerId: from.principal.personId, species });
+          if (reaches.size >= 300 && !reaches.has(from.principal.personId)) {
+            for (const person of reaches.keys()) if (!room.person(person)) reaches.delete(person);
+          }
+          if (reaches.size < 300 || reaches.has(from.principal.personId)) reaches.set(from.principal.personId, history.reachM);
+          return history;
+        },
         async refreshRod(from, itemId) {
           if (!live() || !await from.current() || !live() || !from.present()) { forget(from); return null; }
           const item = await options.items.get(itemId);
@@ -122,7 +147,7 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
           return remember(from, item);
         },
         onRodChange(listener) { if (closed) return () => {}; listeners.add(listener); return () => { listeners.delete(listener); }; },
-        dispose() { if (closed) return; closed = true; stopItems(); listeners.clear(); facts.clear(); casts.dispose(); },
+        dispose() { if (closed) return; closed = true; stopItems(); listeners.clear(); facts.clear(); reaches.clear(); casts.dispose(); },
       };
     },
   });

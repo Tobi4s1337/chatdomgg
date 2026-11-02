@@ -18,7 +18,9 @@ describe('environment configuration', () => {
   });
 
   it('serves on 127.0.0.1:5193 unless told otherwise', () => {
-    expect(serveConfigFrom({ ATLAS_DATA_DIR: '/tmp/x' })).toEqual({ dataDir: '/tmp/x', host: '127.0.0.1', port: 5193 });
+    expect(serveConfigFrom({ ATLAS_DATA_DIR: '/tmp/x' })).toEqual({ dataDir: '/tmp/x', host: '127.0.0.1', port: 5193, lookupsPerClientMinute: 6 });
+    expect(serveConfigFrom({ ATLAS_DATA_DIR: '/tmp/x', ATLAS_LOOKUPS_PER_CLIENT_MINUTE: '60' }).lookupsPerClientMinute).toBe(60);
+    expect(() => serveConfigFrom({ ATLAS_DATA_DIR: '/tmp/x', ATLAS_LOOKUPS_PER_CLIENT_MINUTE: '0' })).toThrow(/ATLAS_LOOKUPS_PER_CLIENT_MINUTE/);
     expect(serveConfigFrom({ ATLAS_DATA_DIR: '/tmp/x', ATLAS_PORT: '5199' }).port).toBe(5199);
   });
 });

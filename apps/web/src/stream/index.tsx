@@ -180,6 +180,11 @@ export default function StreamView(props: StreamViewProps = {}) {
       suspendRendering: scene.suspendRendering,
       ...(dockFixture ? { dock: dockFixture.trigger } : {}),
       pose: scene.pose,
+      // Quality checks and evidence: a chosen quality turns the governor off; null hands it back.
+      setQuality: scene.setQuality,
+      quality: scene.quality,
+      pierShot: scene.pierShot,
+      landDetail: scene.setLandDetail,
       seekGrowthCeremony: scene.seekGrowthCeremony,
       seek: (time: number, view?: Shot) => scene.seek(time, view),
       hour: (value: number) => { hour = value; scene.setHour(value); },

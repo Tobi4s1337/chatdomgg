@@ -4,23 +4,85 @@ What this lane offers other lanes and what it needs from them. A seam is frozen 
 the same thing. To change a frozen seam, write the change in both files and add a `needs:` line to progress.
 Shapes below are this lane's proposal until the other lane confirms them; names may change, the meaning should not.
 
-## FW11 recovery core checkpoint (2026-11-02)
+## FW12 the forge remembers (2026-11-02)
 
-`apps/codex/src/wish-queue` now exports the private `FileForgeWishQueue` core. It preserves canonical source
-bindings, attempt IDs, arrival order, spent-call debits and immutable stage snapshots under one filesystem owner.
-Its `get` and `list` projections contain private identities and outcomes; neither is a public queue API.
+Every piece a kingdom's forge has made, newest first, with the piece itself, its title and plaque, and who wished for
+it and when. Built only from the realm's committed Forge facts (`state.attachments`): a refused, held, cold or waiting
+wish never appears, and the words of a wish never leave the realm. Names are the approved name the citizen card shows
+today (the home's attribution), or the name the piece was forged under if the maker has no home here any more.
 
-This module is not mounted by realm boot or the Herald handoff. No new route, configuration or shared contract
-has been activated. The lane owns the remaining adapter in the Forge-only evening path: durable admission before
-202, stable reservation/run recovery, persisted actual provider responses and budgets, uncertain-commit recovery,
-durable moderation revocation, owner-only outcome delivery and ordered single rituals. See [RECOVERY.md](RECOVERY.md).
-Calling the current coordinator on a saved command unchanged would reset its budget and release interrupted
-attempts terminally. Keep that integration closed until the complete recovery path is verified together.
+**Contract** (`packages/shared/src/forge-ledger.ts`, + one export line): `FORGE_LEDGER_ROUTE`, `FORGE_LEDGER_LIMITS`,
+`ForgeLedgerViewSchema` `{ version: 1, kingdomId, total, entries, at }`, `ForgeLedgerEntrySchema`
+`{ id, title, plaque, plan, family, kitRevision, maker: { name }, forgedAt, copies? }`, and
+`compareForgeLedgerEntries`. `copies` stays absent until copying exists (Backlog); then it counts the homes carrying one.
 
-The queue core's process-kill evidence is [fw11-queue-process.json](../../evidence/forge-wish/fw11-queue-process.json).
-It proves private file recovery only; it does not establish served Forge/realm recovery, coal, outbox behavior,
-warm-worker latency or the anvil queue view. Named broadcaster and private maker-position views still need their
-own authorized projections through the existing play host from section 1.
+**Route:** `GET /api/realm/forge/ledger?kingdomId=<id>` → 200 with the view (also for a founded kingdom with no pieces:
+`total: 0, entries: []`), 404 `This kingdom has no forge yet.` for an unfounded kingdom, 400 for any other query,
+503 while the kingdom cannot be read. Public, no session, `Access-Control-Allow-Origin: *`, `Cache-Control:
+public, max-age=10`; the realm answers one kingdom from memory for 10 s, reads an open kingdom directly and holds a
+resting one only for the read. Module: `apps/realm/src/forge-ledger/`. Additive registrations made: `apps/realm/src/main.ts`
+(import + `mountForgeLedgerRoutes(transport.app, forgeLedgerSource(boot.services))`), `apps/api/src/public/routes.ts`
+(front-door's allowlist: `/api/realm/forge/ledger` → realm), `apps/web/vite.config.ts` (one proxy line).
+Deploying it on the live gateway is the integrator's (`needs: deploy`, nothing else to configure).
+
+**Offered to panel-window (section 5, now concrete):** read the route above from the panel; draw `entries` with the
+same words the Esc page uses (`forgeLedgerByline`, `forgeLedgerSummary` in `apps/web/src/forge/ledger/read.ts`, plain
+functions you may import) and the piece with `drawForgeKeepsake(canvas, entry)` from `apps/web/src/forge/ledger/portrait.ts`
+(2D canvas, no WebGL; it needs `@chatdom/forge`, `@chatdom/voxel`, `@chatdom/content/materials`). Poll no faster than
+`FORGE_LEDGER_LIMITS.pollMs` (30 s). forge-wish never edits the panel.
+
+**Offered to play (the Esc ledger page, play's SEAMS section B):** `FORGE_LEDGER_PAGE` from `apps/web/src/forge/play`
+is a `LedgerPageProvider` (`id: 'forged'`, `title: 'The forge remembers'`, `order: 45`, shown while walking or
+watching, never on the stream). It imports nothing of play's. When play's `slots.ts` is on the same branch, the slot
+module is this file, `apps/web/src/forge/play-slot.ts` (forge-wish's), plus play's one line
+`import '../forge/play-slot';` in `apps/web/src/play/providers.ts`:
+
+```ts
+import { registerLedgerPage } from '../play/slots';
+import { FORGE_LEDGER_PAGE } from './play';
+registerLedgerPage(FORGE_LEDGER_PAGE);
+```
+
+The page reads at 390 px inside play's leaf (container query at 360 px), draws portraits a few per frame, and polls
+only while mounted.
+
+**Needs from grand-world (the wall in the world; section 3 foresaw this):** `needs: grand-world` —
+1. Install the frame as a founded fixture, the way `enrichNativeForgeHearth` installs the hearth, so it is drawn as a
+   prop and is solid for walkers: id `forge:ledger-wall:v1`, blueprint `createForgeLedgerWall('hearth')` (exported
+   from `@chatdom/content`; same envelope in every style), ground pivot `FORGE_LEDGER_WALL_PIVOT`, footprint
+   `FORGE_LEDGER_WALL_SIZE` (build cells, 8 per metre). Where: in the forge square across from the smithy, its front
+   (+Z) turned toward the anvil's approach and readable from the street, clear of the anvil keep-clear box, roads and
+   lots. The review bench stands it at `(-6.2, ground, 6.4)` with yaw `0.62` rad beside the old land's anvil at
+   `(0, ground, 8)`; on the grand land the site is grand-world's choice.
+2. Pass that placement to the Forge scene: `createRealmForgeScene({ ..., ledgerWall: { kingdomId, position, yaw,
+   style: 'hearth' } })` (`drawFrame` defaults to false because the fixture draws the frame). Re-render while
+   `realmForge.ledgerRevision` changes, as for other on-demand Forge changes; `setEnvironment` already passes the
+   hour to the wall.
+Until both land, the wall is seen on the review bench (`apps/web/src/forge-ledger-bench/`, `view=wall`) with the real
+ledger the route returned for the FW11 town.
+
+## FW11 the wish line is live in the realm (2026-11-02)
+
+The durable line is now mounted. `RealmEveningBridge` takes `forgeQueue: { directory }` (realm main uses
+`<REALM_FOUNDED_DIRECTORY>/forge-queue`), `await evening.start()` after `boot.readiness.start()`, and Herald's private
+route answers 202 only after the wish or its withdrawal is synced. The old in-memory path remains only for callers
+that do not configure a line. How it works: `apps/realm/src/forge-queue/README.md`. Additive registrations made:
+
+- `packages/shared/src/forge-queue.ts` (+ one export line): `FORGE_QUEUE_ROUTE`, `ForgeQueueViewSchema`, limits.
+- `apps/realm/src/main.ts`: the `forgeQueue` option, `evening.start()`, `mountForgeQueueRoutes(...)`.
+- `apps/api/src/public/routes.ts` (front-door's allowlist): one line, `/api/realm/forge/queue` → realm.
+- `apps/web/vite.config.ts`: one proxy line for the same route.
+
+**Offered to play / grand-world (the anvil card):** `AnvilVisit` accepts an optional `kingdomId` (falls back to
+`forgeHost.kingdomId`) and polls the line only while open. `createAnvilPlace` in `apps/web/src/interactions/places/index.tsx`
+does not pass one yet; whoever owns that file adds `kingdomId` there. The live walk opens the Forge panel at the
+anvil, which already shows the line.
+
+**Offered to panel-window and raid-show:** the same public route serves the panel (counts) and a streamer's dock
+(names, when the broadcaster's session reads it). Nothing else is needed from them.
+
+**Still open with raid-show (section 11):** Herald's own handoff is still post-and-forget. The realm side is now
+durable from its 202 onward; a wish lost between Twitch and that 202 is Herald's to retry.
 
 ## 1. The HUD slot (play offers, forge-wish fills)
 
@@ -123,9 +185,8 @@ blueprint frame, and the scene hides a superseded attachment through the `hideAt
 
 ## 5. The panel (panel-window owns `apps/panel`)
 
-forge-wish serves a public read route from the realm for "The forge remembers" (FW12), for example
-`GET /forge/ledger?kingdom=<id>` returning `{ entries: [{ title, plaque, slot, maker: { name }, at }] }`, newest
-first. It never contains a wish's words, refused, held or cold wishes, or private reasons. panel-window may mount
+forge-wish serves a public read route from the realm for "The forge remembers" (FW12): `GET
+/api/realm/forge/ledger?kingdomId=<id>`, shape and rules in the FW12 section above, newest first. It never contains a wish's words, refused, held or cold wishes, or private reasons. panel-window may mount
 it as a page or tab; forge-wish never edits the panel.
 
 ## 6. Main and the integrator (shared contracts and the reducer)
@@ -401,6 +462,26 @@ not in this lane's folders. Proposal, either is enough:
    `worker_threads` worker and pass the compiled world back as transferable buffers; the room keeps serving walks
    on the current world until adoption.
 
+**It grows with the kingdom (FW11, 2026-11-02).** The fifty-wish proof needs one citizen per wish, so it seeds a
+town (48 homes a quarter) instead of the hamlet. In its zero-call rehearsal (controlled model, load about 8), a
+piece took a median of about 10 s from its approval to its delivery, all of it the commit and this rebuild,
+against about 2 s in the hamlet. Commits are serial, so two wishes in flight wait for each other's rebuild: the
+rehearsal's median submit-to-reveal was 31 s with only about 6 s of (simulated) model time. In a town the rebuild,
+not the Forge, decides how quick a wish is, and it blocks the room for that long on every commit. The real fifty
+in the same town (warm model, two in flight) confirmed it: the Forge's own part had a median of 21.0 s (p95 33.1),
+approval to reveal a median of 16.5 s, so submit to reveal was 35.8 s (p95 71.6) against FW11's 25 s / 60 s bar
+(`work/evidence/forge-wish/fw11-wishes.md`). Either proposal above brings the commit back to a few seconds.
+
 Until one exists, any commit on a busy host can drop the walkers who are standing in the kingdom, not only the
 maker. Section 12 (no reload on a Forge commit) is still needed after this. Without §13, §12's hot adoption would
 keep the session but still get it kicked.
+
+## from launch
+
+- 2 Nov (LA10): the chat-permission callback now returns to the walk, `/?walk=1&kingdom=<id>&forgeChat=<outcome>`
+  (`apps/realm/src/forge-chat/service.ts`), instead of `/kingdom/<id>?forgeChat=…`, which hands a founded kingdom over
+  to its watch-only stream: the visitor lost the anvil. `needs: forge-wish — read `forgeChat` on the walk and reopen
+  the anvil panel with the outcome (connected: ready to wish; denied / expired / wrong-account / unavailable: the
+  calm words); today nothing reads it, so the visitor lands back in the walk and has to walk to the anvil again.`
+- 2 Nov (LA10): `/?forgeChat=expired` (state unknown) now gets the front page from the gateway instead of the staged
+  town (see front-door's `## from launch`).

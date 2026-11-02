@@ -135,33 +135,49 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
   const plan=HousePartPlanSchema.parse(input),kit=ForgeStyleKitSchema.parse(style);
   if(socket.kind!==plan.kind)throw new Error('That part does not fit this house socket.');
   if(kit.id!==`${kit.family}-native`||(kit.revision!==1&&kit.revision!==2)||kit.styleId!==STYLES[kit.family].id)throw new Error('Unregistered style kit.');
-  const native=STYLES[kit.family],motif=plan.motif==='sleeping-dragon'?createAnvilHeroDragon(kit.family):['crescent-moon','watchful-owl'].includes(plan.motif)?createForgeMotif(plan.motif as 'sleeping-dragon'|'crescent-moon'|'watchful-owl',kit.family):createForgeOrnament(plan.motif as 'sleeping-fox'|'sunflower'|'scallop-shell'|'shooting-star',kit.family,plan.version===2?kit.revision:1);
-  if(plan.version===2){
-    const finish=plan.finish==='copper'?MAT.forgeCopper:plan.finish==='ceramic'?MAT.cream:null;
-    // Finish the broad surface; preserve sleeping eyes, horns, paws and wing
-    // ribs so a metal casting keeps the same readable anatomy as native clay.
-    const surfaces=new Set<number>(plan.motif==='sleeping-dragon'?[ANVIL_HERO_DRAGON_SURFACE[kit.family]]:[kit.family==='grove'?MAT.moss:native.roof,MAT.brass,MAT.goldLeaf]);
-    // Retain authored surface boxes before recolouring: merged order says nothing
-    // about anatomy, and a ceramic finish can share the belly/horn material.
-    const surfaceBoxes=motif.boxes.filter(box=>surfaces.has(box.material));
-    if(finish!==null)for(const box of surfaceBoxes)box.material=finish;
-    // Authored enamel inlays sit on existing solid faces, never in empty space.
-    if(plan.accent!=='none'){
-      const step=plan.accent==='stars'?5:plan.accent==='leaves'?4:3;
-      const inlayBoxes=plan.motif==='sleeping-dragon'?surfaceBoxes:motif.boxes.filter(b=>b.material!==MAT.air);
-      for(const box of inlayBoxes.slice(0,24)){
-        const [x,y,z]=box.to;if((box.from[0]+box.from[1]+box.from[2])%step)continue;
-        motif.boxes.push({from:[x-1,y-1,z-1],to:[x,y,z],material:plan.accent==='leaves'?MAT.moss:native.trim});
-      }
+  const motif=plan.motif==='sleeping-dragon'?createAnvilHeroDragon(kit.family):['crescent-moon','watchful-owl'].includes(plan.motif)?createForgeMotif(plan.motif as 'sleeping-dragon'|'crescent-moon'|'watchful-owl',kit.family):createForgeOrnament(plan.motif as 'sleeping-fox'|'sunflower'|'scallop-shell'|'shooting-star',kit.family,plan.version===2?kit.revision:1);
+  return composeHousePart(plan,kit,socket,motif);
+}
+/**
+ * A finish recolours a motif's broad surface and its metal; an accent sets small enamel inlays on solid faces.
+ * Eyes, horns, paws and other anatomy keep their authored materials, so a casting reads like the clay.
+ */
+export function applyForgeFinish(plan:{motif:string;finish:'native'|'copper'|'ceramic';accent:'none'|'stars'|'leaves'|'scales'},family:'hearth'|'tide'|'grove',motif:Pick<HousePartMotif,'boxes'>):void{
+  const native=STYLES[family];
+  const finish=plan.finish==='copper'?MAT.forgeCopper:plan.finish==='ceramic'?MAT.cream:null;
+  // Retain authored surface boxes before recolouring: merged order says nothing
+  // about anatomy, and a ceramic finish can share the belly/horn material.
+  const surfaces=new Set<number>(plan.motif==='sleeping-dragon'?[ANVIL_HERO_DRAGON_SURFACE[family]]:[family==='grove'?MAT.moss:native.roof,MAT.brass,MAT.goldLeaf]);
+  const surfaceBoxes=motif.boxes.filter(box=>surfaces.has(box.material));
+  if(finish!==null)for(const box of surfaceBoxes)box.material=finish;
+  // Authored enamel inlays sit on existing solid faces, never in empty space.
+  if(plan.accent!=='none'){
+    const step=plan.accent==='stars'?5:plan.accent==='leaves'?4:3;
+    const inlayBoxes=plan.motif==='sleeping-dragon'?surfaceBoxes:motif.boxes.filter(b=>b.material!==MAT.air);
+    for(const box of inlayBoxes.slice(0,24)){
+      const [x,y,z]=box.to;if((box.from[0]+box.from[1]+box.from[2])%step)continue;
+      motif.boxes.push({from:[x-1,y-1,z-1],to:[x,y,z],material:plan.accent==='leaves'?MAT.moss:native.trim});
     }
   }
+}
+/** A sculpture the house-part constructions can carry: its own cells, its bottom contact and an anchor. */
+export interface HousePartMotif {size:[number,number,number];boxes:VoxelBlueprint['boxes'];mount:[number,number,number];emitter:[number,number,number]}
+type ComposableHousePart = {version:1|2|3;kind:'chimney'|'lantern'|'weathervane';motif:string;finish?:'native'|'copper'|'ceramic';accent?:'none'|'stars'|'leaves'|'scales'};
+/**
+ * The chimney, lantern and weathervane constructions around any authored motif. Kit revisions 1 and 2 reach it only
+ * through `assembleForge`, with the motif it has always used, so their pieces are unchanged; revision 3 brings the
+ * library. `motif` is consumed (its boxes are recoloured in place).
+ */
+export function composeHousePart(plan:ComposableHousePart,kit:ForgeStyleKit,socket:ForgeHouseSocket,motif:HousePartMotif):AssembledForge{
+  const native=STYLES[kit.family];
+  if(plan.version!==1)applyForgeFinish({motif:plan.motif,finish:plan.finish??'native',accent:plan.accent??'none'},kit.family,motif);
   if(plan.kind==='weathervane'){for(const b of motif.boxes){const z=motif.size[2]-b.to[2];b.to[2]=motif.size[2]-b.from[2];b.from[2]=z;}motif.mount[2]=motif.size[2]-motif.mount[2];motif.emitter[2]=motif.size[2]-motif.emitter[2];}
   const boxes:VoxelBlueprint['boxes']=[];
   const add=(from:[number,number,number],to:[number,number,number],material:number)=>boxes.push({from,to,material});
   let top=4,centreZ=16;
   if(socket.profile==='wall'){
     centreZ=8;add([15,4,0],[17,6,9],MAT.brass);add([14,2,0],[18,8,1],native.trim);
-    if(plan.version===2&&plan.kind==='lantern'&&kit.revision===1){
+    if(plan.version!==1&&plan.kind==='lantern'&&kit.revision===1){
       add([14,2,6],[18,6,10],MAT.glass);
       add([15,4,6],[17,6,9],MAT.brass);
     }
@@ -176,9 +192,9 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
       add([10,top-2,10],[22,top,22],native.stone);
     }else if(top>ridge+2){add([15,ridge+2,15],[17,top,17],MAT.brass);if(top>ridge+4){
       // The wider lantern survey can clear a neighbouring gable above the saddle: its brace must clear it too.
-      const brace=plan.version===2&&plan.kind==='lantern'&&kit.revision===2?Math.max(ridge+3,socket.clearanceHeight-1):ridge+3;
+      const brace=plan.version!==1&&plan.kind==='lantern'&&kit.revision>=2?Math.max(ridge+3,socket.clearanceHeight-1):ridge+3;
       add([12,brace,15],[20,brace+1,17],MAT.brass);
-    }if(plan.version===2&&plan.kind==='lantern'&&kit.revision===1){
+    }if(plan.version!==1&&plan.kind==='lantern'&&kit.revision===1){
       const glassBottom=Math.max(ridge+2,top-3);
       add([14,glassBottom,14],[18,top,18],MAT.glass);
       add([15,glassBottom,15],[17,top,17],MAT.brass);
@@ -187,7 +203,7 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
   // The lantern is a real framed chamber beneath its ornament. Keep its
   // six-cell footprint within the surveyed roof crown / wall bracket, and
   // give the glass an uninterrupted face instead of burying it in a post.
-  const lantern=plan.version===2&&plan.kind==='lantern'&&kit.revision===2;
+  const lantern=plan.version!==1&&plan.kind==='lantern'&&kit.revision>=2;
   if(lantern){
     add([13,top,centreZ-3],[19,top+1,centreZ+3],native.trim);
     add([14,top+1,centreZ-2],[18,top+7,centreZ+2],MAT.glass);
@@ -204,7 +220,7 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
   for(const b of motif.boxes)boxes.push({material:b.material,from:b.from.map((n,i)=>n+offset[i]!) as [number,number,number],to:b.to.map((n,i)=>n+offset[i]!) as [number,number,number]});
   const size:[number,number,number]=[Math.max(32,...boxes.map(b=>b.to[0])),Math.max(32,...boxes.map(b=>b.to[1])),Math.max(32,...boxes.map(b=>b.to[2]))];
   const blueprint:VoxelBlueprint={version:1,id:`forged-${kit.family}-${plan.kind}`,kind:'prop',styleId:kit.styleId,lattice:'build',size,boxes,windows:[]};
-  return {blueprint,emitter:lantern?[16,top+4,centreZ]:motif.emitter.map((n,i)=>n+offset[i]!) as [number,number,number],emitterKind:plan.kind==='chimney'?'smoke':plan.kind==='lantern'?'glow':null,socket,plan,kit};
+  return {blueprint,emitter:lantern?[16,top+4,centreZ]:motif.emitter.map((n,i)=>n+offset[i]!) as [number,number,number],emitterKind:plan.kind==='chimney'?'smoke':plan.kind==='lantern'?'glow':null,socket,plan:plan as HousePartPlan,kit};
 }
 /** Craft/fit checks are deterministic geometry checks, explicitly not moderation verdicts. */
 export function checkForge(result:AssembledForge,home:VoxelBlueprint,hostProfile:ForgeHostProfile='street-home'):{solidCells:number;palette:number[]} {

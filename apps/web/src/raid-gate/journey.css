@@ -1,0 +1,76 @@
+/* The journey over the walking view: the kingdom washes into ink, the map (or the parchment) rises, the road is
+   inked with the torch column on it, and the march call speaks at the foot. Same parchment, walnut and wax family as
+   the gate board and the Atlas; no glass, no spinner, no progress bar. */
+
+.rj-root { display: contents; }
+.rj-layer {
+  --rj-paper: #ead9b2; --rj-ink: #3b2f25; --rj-ease: cubic-bezier(.3, .1, .2, 1);
+  position: fixed; inset: 0; z-index: 60; pointer-events: none; visibility: hidden;
+  font: 400 16px/1.38 Alegreya, Georgia, serif; color: var(--rj-ink);
+}
+.rj-layer:not([data-state='idle']) { visibility: visible; }
+
+/* The world is first inked: its colour drains to sepia and its contrast hardens, as if drawn on the page. */
+.rj-ink { position: absolute; inset: 0; opacity: 0; transition: opacity .7s var(--rj-ease);
+  -webkit-backdrop-filter: grayscale(1) sepia(.6) contrast(1.22) brightness(1.06); backdrop-filter: grayscale(1) sepia(.6) contrast(1.22) brightness(1.06); }
+/* Then the parchment comes up through the ink, mottled and darker at the edges like the Atlas's own sheet. */
+.rj-paper { position: absolute; inset: 0; opacity: 0; transition: opacity .9s .45s var(--rj-ease);
+  background:
+    radial-gradient(ellipse 120% 90% at 50% 45%, transparent 55%, #6b4a2a3a 100%),
+    radial-gradient(circle at 22% 30%, #ffffff1c 0 18%, transparent 40%),
+    radial-gradient(circle at 76% 68%, #8a5a2f14 0 22%, transparent 46%),
+    linear-gradient(#f2e5c6, #e6d3a9); }
+.rj-layer[data-state='road'] .rj-ink, .rj-layer[data-state='through'] .rj-ink, .rj-layer[data-state='arriving'] .rj-ink { opacity: 1; }
+.rj-layer[data-state='road'] .rj-paper, .rj-layer[data-state='through'] .rj-paper, .rj-layer[data-state='arriving'] .rj-paper { opacity: .97; }
+
+/* The Atlas's gate mode draws the rise and the road; it is only seen once the place is held. */
+.rj-map { position: absolute; inset: 0; opacity: 0; transition: opacity .8s .6s var(--rj-ease); }
+.rj-layer[data-map='atlas'][data-state='road'] .rj-map, .rj-layer[data-map='atlas'][data-state='through'] .rj-map { opacity: 1; }
+/* A map that is not riding this journey stays laid out (so it can be drawn ahead of need) but unseen. */
+.rj-layer[data-map='paper'] .rj-map { visibility: hidden; }
+
+/* Without the Atlas: the road inked across the parchment between the two seals. */
+.rj-road { position: absolute; left: 50%; top: 44%; width: min(1000px, 92vw); aspect-ratio: 5 / 2; translate: -50% -50%;
+  opacity: 0; transition: opacity .6s .7s var(--rj-ease), --rj-drawn 1.6s var(--rj-ease); }
+.rj-layer[data-state='road'] .rj-road, .rj-layer[data-state='through'] .rj-road, .rj-layer[data-state='arriving'] .rj-road { opacity: 1; }
+.rj-road svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.rj-road-shadow { fill: none; stroke: #8a5a2f22; stroke-width: 15; stroke-linecap: round; }
+.rj-road-line { fill: none; stroke: var(--rj-ink); stroke-width: 3.2; stroke-linecap: round; stroke-dasharray: 1.4 1.1;
+  /* The road draws itself from the leaving gate as the authority answers. */
+  mask: linear-gradient(90deg, #000 var(--rj-drawn), transparent calc(var(--rj-drawn) + 2%)); -webkit-mask: linear-gradient(90deg, #000 var(--rj-drawn), transparent calc(var(--rj-drawn) + 2%)); }
+@property --rj-drawn { syntax: '<percentage>'; inherits: true; initial-value: 0%; }
+.rj-layer[data-stage='rise'] .rj-road { --rj-drawn: 16%; }
+.rj-layer[data-stage='road'] .rj-road { --rj-drawn: 72%; }
+.rj-layer[data-stage='drawing'] .rj-road, .rj-layer[data-stage='through'] .rj-road { --rj-drawn: 100%; }
+.rj-column { opacity: 0; transition: opacity .5s 1.1s; }
+.rj-layer[data-stage='road'] .rj-column, .rj-layer[data-stage='drawing'] .rj-column, .rj-layer[data-stage='through'] .rj-column { opacity: 1; }
+
+.rj-end { position: absolute; display: grid; justify-items: center; gap: 8px; translate: -50% -50%; }
+.rj-end span { font: 400 26px/1.05 'IM Fell English', Georgia, serif; color: var(--rj-ink); white-space: nowrap; text-shadow: 0 1px 0 #f6ecd3; }
+.rj-from { left: 12%; top: 52.5%; }
+.rj-to { left: 88%; top: 47.5%; }
+.rj-end span:empty { display: none; }
+.rj-to .rg-seal { animation: rj-press 1.1s 1.3s cubic-bezier(.2, .8, .2, 1) both; }
+.rj-layer[data-stage='rise'] .rj-to { opacity: .55; }
+@keyframes rj-press { from { transform: scale(1.12); filter: brightness(1.15); } }
+
+/* The march call speaks at the foot while the world is inked. */
+.rj-words { position: absolute; inset: 0; pointer-events: none; }
+.rj-words .mc-host { display: contents; }
+.rj-words .mc-layer { z-index: 1; }
+
+/* Walking in: the drawing fades into the world at the gate. */
+.rj-layer[data-state='arriving'] .rj-ink, .rj-layer[data-state='arriving'] .rj-paper, .rj-layer[data-state='arriving'] .rj-road {
+  animation: rj-fade-out 1.5s .1s var(--rj-ease) forwards; transition: none; }
+@keyframes rj-fade-out { to { opacity: 0; } }
+.rj-layer[data-state='leaving'] .rj-ink, .rj-layer[data-state='leaving'] .rj-paper, .rj-layer[data-state='leaving'] .rj-road { transition-delay: 0s; transition-duration: .6s; }
+
+.rj-layer[data-reduced] *, .rj-layer[data-reduced] *::before { transition-duration: .15s !important; transition-delay: 0s !important; animation-duration: .2s !important; animation-delay: 0s !important; }
+.rj-layer[data-reduced] .rj-column { display: none; }
+
+@media (max-width: 560px) {
+  /* Narrow enough that each seal, sitting on its end of the road, keeps its name on the screen. */
+  .rj-road { top: 36%; width: 76vw; }
+  /* Names wrap under their seals rather than running off the screen. */
+  .rj-end span { width: 34vw; font-size: 18px; line-height: 1.1; white-space: normal; text-align: center; text-wrap: balance; }
+}
