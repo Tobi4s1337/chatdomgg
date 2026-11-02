@@ -7,7 +7,7 @@ import { TREE_SPECIES, TREE_STRIDE, GRAND_VOXEL_METRES, type GrandLand } from '.
  * below its blurred neighbourhood sits in a hollow (a valley, a forest floor, a street between roofs) and
  * sees less sky. Two RG channels in metres at quarter resolution; the shader compares its own height.
  */
-export function skyOcclusionMap(land: GrandLand, step = 4): { data: Float32Array; size: number } {
+export function skyOcclusionMap(land: Pick<GrandLand, 'size' | 'ground' | 'water' | 'trees' | 'treeCount'>, step = 4): { data: Float32Array; size: number } {
   const size = Math.ceil(land.size / step), top = new Float32Array(size * size);
   for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) {
     let h = 0;

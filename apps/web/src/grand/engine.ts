@@ -5,14 +5,46 @@ import {
   createLandMist, createQuadGeometry, grandGrade, grandPaletteTexture, GrandSea, GrandShadow, seaFloorTexture, type GrandClouds, type GrandPost, type GrandUniforms,
 } from '../../../../packages/render/src/grand';
 import { GRAND_REVEAL_STAGES, grandRevealField, grandRevealMask, grandRevealOpening, grandRevealStage, type GrandRevealField, type GrandRevealOpening } from '../../../../packages/world/src/grand/reveal';
-import { paletteTable } from '../../../../packages/world/src/grand/palette';
-import { landMaterials } from '../../../../packages/world/src/grand/kits';
-import { skyOcclusionMap } from '../../../../packages/world/src/grand/sky-map';
+import { paletteTable, type GrandMaterial } from '../../../../packages/world/src/grand/palette';
 import { GRAND_LEVELS, GRAND_REGION, GRAND_VOXEL_METRES, STRUCTURE_STRIDE, type GrandLand, type GrandLandSeed } from '../../../../packages/world/src/grand/types';
+
+/** What the engine draws a land from: the frame, surface, coast, sites and placed pieces. Raised or baked. */
+export type GrandDrawnLand = Pick<GrandLand, 'seed' | 'size' | 'height' | 'seaLevel' | 'ground' | 'water' | 'coast' | 'trees' | 'treeCount'
+  | 'sites' | 'structures' | 'structureCount'> & { readonly stats: Pick<GrandLand['stats'], 'solidVoxels'> };
 import { balanceLevels, chooseLevel, type LodState } from './lod';
 import type { GrandWorkerReply, GrandWorkerRequest } from './worker';
 
+/**
+ * A land made elsewhere (the realm's baked sketch of a channel's world, GW13): its frame and surface, its palette,
+ * each region's height bounds in land voxels, and a verified mesh for any region at any level. The engine draws it
+ * exactly as it draws a land it raised itself, without a generator or a meshing worker.
+ */
+export interface GrandBakedLand {
+  readonly land: GrandDrawnLand;
+  readonly palette: readonly GrandMaterial[];
+  /** Sky occlusion heights (two RG channels in metres at `size` columns), as `skyOcclusionMap` makes them. */
+  readonly sky: { readonly data: Float32Array; readonly size: number };
+  /** `rx,rz` → [lowest, highest] voxel any level of that region reaches. */
+  readonly bounds: ReadonlyMap<string, readonly [number, number]>;
+  mesh(level: number, rx: number, rz: number, signal: AbortSignal): Promise<{ readonly quads: Uint32Array; readonly offsets: Int32Array; readonly minY: number; readonly maxY: number }>;
+}
+/** Mesh requests in flight from a baked land; each is one verified download and decode. */
+const BAKED_IN_FLIGHT = 6;
+
 export type GrandTier = 'ultra' | 'high' | 'medium' | 'low' | 'software';
+
+/** The tier a browser's GPU earns (spec 56 budgets); software renderers draw on demand. */
+export function detectGrandTier(canvas: HTMLCanvasElement): GrandTier {
+  const gl = canvas.getContext('webgl2');
+  if (!gl) return 'software';
+  const info = gl.getExtension('WEBGL_debug_renderer_info');
+  const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).toLowerCase();
+  if (/swiftshader|llvmpipe|software|basic render/.test(name)) return 'software';
+  if (/apple m\d (max|pro|ultra)|rtx|radeon rx [67-9]|arc a7/.test(name)) return 'ultra';
+  if (/apple|nvidia|geforce|radeon/.test(name)) return 'high';
+  if (/intel|iris|adreno 7|mali-g7/.test(name)) return 'medium';
+  return 'low';
+}
 
 export interface GrandTierSettings {
   /** Terrain screen-error target, px per cell (spec 56: 1 high, 1.5 laptop, 2 phone/software). */
@@ -130,13 +162,13 @@ export class GrandEngine {
   private revealStage = -1;
   private citizens: number | null;
   readonly settings: GrandTierSettings;
-  land: GrandLand | null = null;
+  land: GrandDrawnLand | null = null;
   onChange: (() => void) | null = null;
   onReady: (() => void) | null = null;
-  private failure: ((message: string) => void) | null = null;
-  private landResolve: (() => void) | null = null;
-  private readonly workers: Worker[] = [];
-  private readonly idle: Worker[] = [];
+  protected failure: ((message: string) => void) | null = null;
+  protected landResolve: (() => void) | null = null;
+  protected readonly workers: Worker[] = [];
+  protected readonly idle: Worker[] = [];
   private readonly busy = new Map<Worker, Job>();
   private queue: Job[] = [];
   private installs: Install[] = [];
@@ -153,7 +185,7 @@ export class GrandEngine {
   private shadowAt = 0;
   private reflectionAt = -1e9;
   private dirty = true;
-  private raf = 0;
+  protected raf = 0;
   private lastFrame = 0;
   private frames: number[] = [];
   private workerMillis: number[] = [];
@@ -164,16 +196,19 @@ export class GrandEngine {
   private readonly frozen: boolean;
   private readyFired = false;
   private meshStart = 0;
-  private disposed = false;
+  protected disposed = false;
   private pendingView: GrandView;
   private readonly landBox = new THREE.Box3();
+  private baked: GrandBakedLand | null = null;
+  private bakedBusy = 0;
+  private readonly bakedAbort = new AbortController();
   private readonly frustum = new THREE.Frustum();
   private readonly projScreen = new THREE.Matrix4();
   private readonly scratch = new THREE.Vector3();
   private governor = 1;
   private governedAt = 0;
 
-  constructor(private readonly canvas: HTMLCanvasElement, private readonly seed: GrandLandSeed, options: { tier: GrandTier; capture: boolean; hour: number; view: GrandView; time: number | null; citizens?: number | null }) {
+  constructor(private readonly canvas: HTMLCanvasElement, protected readonly seed: GrandLandSeed, options: { tier: GrandTier; capture: boolean; hour: number; view: GrandView; time: number | null; citizens?: number | null }) {
     this.citizens = options.citizens ?? null;
     this.settings = options.capture && options.tier === 'software' ? { ...GRAND_TIERS[options.tier], ...GRAND_CAPTURE } : GRAND_TIERS[options.tier];
     this.hour = options.hour;
@@ -203,37 +238,31 @@ export class GrandEngine {
 
   set onFailure(handler: (message: string) => void) { this.failure = handler; }
 
-  async start(): Promise<void> {
-    // Spec 56: the pool starts at min(4, max(1, cores − 2)); the land itself is raised by the first worker.
-    const count = Math.min(4, Math.max(1, (navigator.hardwareConcurrency || 4) - 2));
-    for (let i = 0; i < count; i++) {
-      const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module', name: `grand-land-${i}` });
-      worker.onmessage = (event: MessageEvent<GrandWorkerReply>) => this.receive(worker, event.data);
-      worker.onerror = event => this.failure?.(event.message || 'A land worker stopped.');
-      this.workers.push(worker);
-    }
-    this.stats.workers = count;
-    const started = performance.now();
-    this.workers[0]!.postMessage({ type: 'generate', seed: this.seed } satisfies GrandWorkerRequest);
-    await new Promise<void>(resolve => { this.landResolve = resolve; });
-    this.stats.generateMillis = performance.now() - started;
+  /** Draw a land that was made and meshed elsewhere (see `GrandBakedLand`). */
+  async startBaked(baked: GrandBakedLand): Promise<void> {
+    this.baked = baked;
+    this.stats.workers = 0;
+    this.stats.landCached = true;
+    this.adopt(baked.land, baked.palette, baked.sky, baked.bounds);
     this.raf = requestAnimationFrame(this.frame);
   }
 
-  private receive(worker: Worker, reply: GrandWorkerReply): void {
+  /** A raised land arrives from the first worker (`engine-raise.ts`); this core never imports the generator. */
+  protected adoptRaised(_land: GrandLand): void { throw new Error('This engine draws baked land only'); }
+
+  protected receive(worker: Worker | null, reply: GrandWorkerReply): void {
     if (this.disposed) return;
     if (reply.type === 'error') { this.failure?.(reply.message); return; }
     if (reply.type === 'land') {
       this.stats.landCached = reply.cached;
-      this.adopt(reply.land);
-      this.idle.push(worker);
+      this.adoptRaised(reply.land);
+      if (worker) this.idle.push(worker);
       for (const other of this.workers.slice(1)) other.postMessage({ type: 'land', land: reply.land } satisfies GrandWorkerRequest);
       this.landResolve?.();
       return;
     }
-    if (reply.type === 'ready') { this.idle.push(worker); return; }
-    this.busy.delete(worker);
-    this.idle.push(worker);
+    if (reply.type === 'ready') { if (worker) this.idle.push(worker); return; }
+    if (worker) { this.busy.delete(worker); this.idle.push(worker); }
     this.workerMillis.push(reply.millis);
     if (this.workerMillis.length > 200) this.workerMillis.shift();
     const bytes = reply.quads.byteLength;
@@ -263,13 +292,13 @@ export class GrandEngine {
     return level === region.desired || (!region.shown && level >= region.desired);
   }
 
-  private adopt(land: GrandLand): void {
+  protected adopt(land: GrandDrawnLand, materials: readonly GrandMaterial[], sky: { readonly data: Float32Array; readonly size: number }, bakedBounds?: ReadonlyMap<string, readonly [number, number]>): void {
     this.land = land;
     const metres = land.size * M;
     this.landBox.set(new THREE.Vector3(0, 0, 0), new THREE.Vector3(metres, land.height * M, metres));
     this.stats.terrainVoxels = land.stats.solidVoxels;
     this.stats.trees = land.treeCount;
-    const palette = grandPaletteTexture(paletteTable(landMaterials(land)));
+    const palette = grandPaletteTexture(paletteTable([...materials]));
     for (let level = 0; level < GRAND_LEVELS; level++) {
       const material = createGrandTerrainMaterial(this.uniforms, palette, this.mist.uniforms);
       material.uniforms.uLodScale!.value = 1 << level;
@@ -278,7 +307,6 @@ export class GrandEngine {
       depth.uniforms.uLodScale!.value = 1 << level;
       this.depthMaterials.push(depth);
     }
-    const sky = skyOcclusionMap(land);
     const half = new Uint16Array(sky.data.length);
     for (let i = 0; i < half.length; i++) half[i] = THREE.DataUtils.toHalfFloat(sky.data[i]!);
     const skyTexture = new THREE.DataTexture(half, sky.size, sky.size, THREE.RGFormat, THREE.HalfFloatType);
@@ -318,6 +346,8 @@ export class GrandEngine {
         const i = x + z * land.size;
         lo = Math.min(lo, land.ground[i]!); hi = Math.max(hi, land.ground[i]!, land.water[i]!);
       }
+      const stored = bakedBounds?.get(`${rx},${rz}`);
+      if (stored) { lo = Math.min(lo, stored[0]); built = Math.max(built, stored[1]); }
       for (let b = 0; b < land.structureCount; b++) {
         const o = b * STRUCTURE_STRIDE, st = land.structures;
         if (st[o + 3]! > rx * GRAND_REGION && st[o]! < (rx + 1) * GRAND_REGION && st[o + 5]! > rz * GRAND_REGION && st[o + 2]! < (rz + 1) * GRAND_REGION) built = Math.max(built, st[o + 4]!);
@@ -469,6 +499,27 @@ export class GrandEngine {
     for (const dropped of this.queue.splice(QUEUE_LIMIT)) dropped.region.pending.delete(dropped.level);
     let committed = this.installs.reduce((sum, item) => sum + item.mesh.bytes, 0);
     for (const job of this.busy.values()) committed += this.averageBytes[job.level]!;
+    if (this.baked) {
+      const baked = this.baked;
+      while (this.bakedBusy < BAKED_IN_FLIGHT && this.queue.length) {
+        const next = this.queue[0]!;
+        if (committed + this.averageBytes[next.level]! > RESULT_BYTES_LIMIT && committed > 0) break;
+        this.queue.shift();
+        this.bakedBusy++;
+        committed += this.averageBytes[next.level]!;
+        const started = performance.now(), { rx, rz } = next.region;
+        baked.mesh(next.level, rx, rz, this.bakedAbort.signal).then(mesh => {
+          this.bakedBusy--;
+          this.receive(null, { type: 'mesh', id: next.id, level: next.level, rx, rz, quads: mesh.quads, offsets: mesh.offsets,
+            minY: mesh.minY, maxY: mesh.maxY, solid: 0, treeVoxels: 0, millis: performance.now() - started });
+        }, (error: unknown) => {
+          this.bakedBusy--;
+          if (this.disposed) return;
+          if (next.region.pending.get(next.level) === next.id) next.region.pending.delete(next.level);
+          this.failure?.(error instanceof Error ? error.message : 'A piece of the land could not be read.');
+        });
+      }
+    }
     while (this.idle.length && this.queue.length) {
       const next = this.queue[0]!;
       if (committed + this.averageBytes[next.level]! > RESULT_BYTES_LIMIT && committed > 0) break;
@@ -479,7 +530,7 @@ export class GrandEngine {
       worker.postMessage({ type: 'mesh', id: next.id, level: next.level, rx: next.region.rx, rz: next.region.rz } satisfies GrandWorkerRequest);
     }
     this.stats.queued = this.queue.length;
-    this.stats.busyWorkers = this.busy.size;
+    this.stats.busyWorkers = this.busy.size + this.bakedBusy;
     this.stats.queuedResultBytes = committed;
     this.stats.installsPending = this.installs.length;
   }
@@ -526,7 +577,7 @@ export class GrandEngine {
     return { calls: info.calls, triangles: info.triangles };
   }
 
-  private readonly frame = (now: number): void => {
+  protected readonly frame = (now: number): void => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.frame);
     if (!this.land || !this.post) return;
@@ -541,7 +592,7 @@ export class GrandEngine {
     this.select(now);
     this.dispatch();
     this.install(now);
-    const settled = this.queue.length === 0 && this.busy.size === 0 && this.installs.length === 0;
+    const settled = this.queue.length === 0 && this.busy.size === 0 && this.bakedBusy === 0 && this.installs.length === 0;
     if (!this.dirty && settled && !this.shadowDirty) return;
     // A software renderer spends seconds on a frame: it draws once the land has settled, so the workers keep
     // the processor while it streams. The loading plaque is plain DOM and keeps reporting progress.
@@ -733,6 +784,7 @@ export class GrandEngine {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     for (const worker of this.workers) worker.terminate();
+    this.bakedAbort.abort();
     for (const region of this.regions) for (const mesh of [...region.meshes.values()]) this.evict(region, mesh);
     for (const item of this.installs) this.free(item.mesh);
     this.terrainMaterials.forEach(m => m.dispose());

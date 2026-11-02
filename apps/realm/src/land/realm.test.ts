@@ -6,6 +6,7 @@ import type { GrandLandRecipe } from '../../../../packages/world/src/grand/recip
 import { adoptedGrandRecipe } from '../../../../packages/world/src/grand/adopted';
 import { grandLandRecipeHash } from '../../../../packages/world/src/grand/recipe';
 import { artifact, scene } from './fixtures.test-helper';
+import { genesisSketchRecipe } from './sketch';
 import { childLandBake, createRealmLand, realmLandBakeScript, type LandBakeJob, type LandBakeReport } from './realm';
 import { LandArtifactStore } from './store';
 
@@ -94,6 +95,33 @@ describe('the realm land service', () => {
     await land.beforePublication(first.bytes, first.manifest);
     await land.idle();
     expect(lines).toEqual([expect.stringContaining('needs a bake; no bake command is configured')]);
+  });
+
+  it('founds a kingdom on the world its channel was pinned to, and keeps that recipe for ever', async () => {
+    const world = genesisSketchRecipe('63920635', 'The_AGGman');
+    await store.pinWorld(world);
+    const founding = await scene(0, { kingdomId: '63920635' }), grown = await scene(1, { kingdomId: '63920635' });
+    const recipes: GrandLandRecipe[] = [], lines: string[] = [];
+    const bake = async (job: LandBakeJob) => { recipes.push(job.recipe); throw new Error('stopped after choosing its recipe'); };
+    const land = createRealmLand({ directory, recipeFor: () => undefined, bake, log: line => lines.push(line) });
+    await land.beforePublication(founding.bytes, founding.manifest);
+    await land.idle();
+    const [chosen] = recipes;
+    expect(chosen?.generator).toBe('grand-land-2');
+    expect({ ...chosen!.seed, minSize: undefined }).toEqual({ ...world.seed, minSize: undefined });
+    expect(await store.landRecipe('63920635')).toEqual(chosen);
+    expect(lines.some(line => line.startsWith('land: 63920635 founded on its own world ('))).toBe(true);
+    // A restarted realm, a grown plan: the same pinned recipe, never one recomputed from today's homes.
+    const again = createRealmLand({ directory, recipeFor: () => undefined, bake, log: () => {} });
+    await again.beforePublication(grown.bytes, grown.manifest);
+    await again.idle();
+    expect(recipes[1]).toEqual(chosen);
+    // A kingdom whose channel has no world keeps today's land.
+    const other = await scene(0, { kingdomId: '4363967' });
+    await again.beforePublication(other.bytes, other.manifest);
+    await again.idle();
+    expect(recipes).toHaveLength(2);
+    expect(await store.landRecipe('4363967')).toBeNull();
   });
 
   it('pins the adopted Willowmere recipe the lane baked (grader 3)', async () => {

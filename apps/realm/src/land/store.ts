@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, link, unlink, stat } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, link, unlink, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { gzip, gunzip } from 'node:zlib';
 import { canonicalSceneJson } from '../../../../packages/world/src/founded-world/codec';
 import { decodeBakedMetadata } from '../../../../packages/world/src/grand/baked/codec';
+import { freezeGrandLandRecipe, type GrandLandRecipe } from '../../../../packages/world/src/grand/recipe';
+import { decodeSketchRecord, SKETCH_RECIPE_BYTES, SKETCH_RECORD_BYTES, validateSketchRecipe, type GrandSketchRecipe, type GrandSketchRecord } from '../../../../packages/world/src/grand/sketch';
 
 const compress = promisify(gzip), decompress = promisify(gunzip);
 const HASH = /^[a-f0-9]{64}$/;
@@ -145,6 +147,53 @@ export class LandArtifactStore {
     return hash(bytes);
   }
 
+  /** The kingdom's pinned land recipe itself, or null while none is pinned here. */
+  async landRecipe(kingdomId: string): Promise<GrandLandRecipe | null> {
+    requireKingdom(kingdomId);
+    let bytes: Buffer;
+    try {
+      const path = join(this.directory, 'recipes', `${kingdomId}.json`);
+      if ((await stat(path)).size > 64 * 1024) throw new Error('Stored recipe exceeds its byte budget');
+      bytes = await readFile(path);
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes), recipe = freezeGrandLandRecipe(JSON.parse(text) as GrandLandRecipe);
+    if (canonicalSceneJson(recipe) !== text || recipe.seed.kingdomId !== kingdomId) throw new Error('Stored land recipe identity mismatch');
+    return recipe;
+  }
+
+  /**
+   * A channel's world (GW13): the first sketch recipe the realm accepted for it, kept for ever. Later surveys of the
+   * same channel never reroll it, and a founding raises the kingdom's land from it. Returns the hash of the world
+   * the channel has, which differs from the offered recipe's when another was pinned first.
+   */
+  async pinWorld(recipe: GrandSketchRecipe, signal?: AbortSignal): Promise<string> {
+    signal?.throwIfAborted();
+    const value = validateSketchRecipe(recipe), bytes = Buffer.from(canonicalSceneJson(value)), kingdomId = value.seed.kingdomId;
+    const existing = await this.world(kingdomId);
+    if (existing) return existing.hash;
+    try { await createOnce(join(await this.directoryFor('worlds'), `${kingdomId}.json`), bytes, signal); }
+    catch (error) {
+      const winner = await this.world(kingdomId);
+      if (!winner) throw error;
+      return winner.hash;
+    }
+    return hash(bytes);
+  }
+
+  /** The channel's pinned world and its recipe hash, or null while nobody has looked this channel up here. */
+  async world(kingdomId: string): Promise<{ readonly recipe: GrandSketchRecipe; readonly hash: string; readonly bytes: Uint8Array } | null> {
+    requireKingdom(kingdomId);
+    let bytes: Buffer;
+    try {
+      const path = join(this.directory, 'worlds', `${kingdomId}.json`);
+      if ((await stat(path)).size > SKETCH_RECIPE_BYTES) throw new Error('Stored world exceeds its byte budget');
+      bytes = await readFile(path);
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes), recipe = validateSketchRecipe(JSON.parse(text));
+    if (canonicalSceneJson(recipe) !== text || recipe.seed.kingdomId !== kingdomId) throw new Error('Stored world identity mismatch');
+    return { recipe, hash: hash(bytes), bytes };
+  }
+
   async recipeHash(kingdomId: string): Promise<string> {
     requireKingdom(kingdomId);
     const path = join(this.directory, 'recipes', `${kingdomId}.json`);
@@ -203,5 +252,42 @@ export class LandArtifactStore {
       throw new Error('Stored land plan catalogue identity mismatch');
     if (await this.recipeHash(kingdomId) !== value.recipeHash) throw new Error('Stored land catalogue recipe identity mismatch');
     return value;
+  }
+
+  /**
+   * Publish a sketch record once every blob it names is stored. Records are immutable: the same recipe always makes
+   * the same bytes, and different bytes for a stored recipe are refused.
+   */
+  async putSketch(record: GrandSketchRecord, signal?: AbortSignal): Promise<Uint8Array> {
+    signal?.throwIfAborted();
+    const bytes = Buffer.from(canonicalSceneJson(record));
+    const value = decodeSketchRecord(bytes, { kingdomId: record.kingdomId, recipeHash: record.recipeHash });
+    for (const ref of [value.surface, ...value.meshes]) if (!await this.present(ref)) throw new Error('A sketch names a blob the store does not hold');
+    signal?.throwIfAborted();
+    await createOnce(join(await this.directoryFor(`sketches/${value.kingdomId}`), `${value.recipeHash}.json`), bytes, signal);
+    return bytes;
+  }
+
+  /** A stored sketch's canonical record bytes, or null when this recipe has not been raised here. */
+  async sketchBytes(kingdomId: string, recipeHash: string): Promise<Uint8Array | null> {
+    requireKingdom(kingdomId); requireHash(recipeHash);
+    const path = join(this.directory, 'sketches', kingdomId, `${recipeHash}.json`);
+    try { if ((await stat(path)).size > SKETCH_RECORD_BYTES) throw new Error('Stored sketch exceeds its byte budget'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
+    const bytes = await readFile(path);
+    decodeSketchRecord(bytes, { kingdomId, recipeHash });
+    return bytes;
+  }
+
+  async sketch(kingdomId: string, recipeHash: string): Promise<GrandSketchRecord | null> {
+    const bytes = await this.sketchBytes(kingdomId, recipeHash);
+    return bytes ? decodeSketchRecord(bytes, { kingdomId, recipeHash }) : null;
+  }
+
+  /** The recipe hashes of a channel's stored sketches (each a different survey of the same channel). */
+  async sketchHashes(kingdomId: string): Promise<readonly string[]> {
+    requireKingdom(kingdomId);
+    try { return (await readdir(join(this.directory, 'sketches', kingdomId))).flatMap(name => /^[a-f0-9]{64}\.json$/.test(name) ? [name.slice(0, 64)] : []); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
   }
 }

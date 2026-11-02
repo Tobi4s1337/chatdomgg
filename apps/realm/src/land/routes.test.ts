@@ -44,7 +44,7 @@ describe('read-only land route', () => {
     }
     const method = await readLandRoute(store, base, 'POST');
     expect(method?.status).toBe(405);
-    expect(method?.headers.allow).toBe('GET, HEAD');
+    expect(method?.headers.allow).toBe('GET, HEAD, POST');
     expect((await readLandRoute(store, `${base}/${unbound.hash}`))?.status).toBe(404);
   });
 

@@ -48,8 +48,26 @@ describe('a kingdom opening under the sea mist', () => {
     // A later scene at the same count lays the stage without a second ceremony; a smaller count never re-closes it.
     const again = createKingdomReveal('kingdom-a');
     expect(again.lay(surface, seat, 70)!.lifting).toBe(false);
-    expect(again.lay(surface, seat, 9)).toBeNull();
+    const smaller = again.lay(surface, seat, 9)!;
+    expect(smaller.stage).toBe(2);
+    expect(smaller.lifting).toBe(false);
     again.dispose();
+  });
+
+  it('never lays the mist back over land this tab has seen open, even when a later scene counts fewer citizens', () => {
+    const surface = island();
+    const grown = createKingdomReveal('kingdom-shrink');
+    expect(grown.lay(surface, seat, 160)!.stage).toBe(3);
+    const open = Float32Array.from((grown.mist.uniforms.uMistMask.value.image as { data: ArrayLike<number> }).data);
+    grown.dispose();
+    const older = createKingdomReveal('kingdom-shrink');
+    const opening = older.lay(surface, seat, 30)!;
+    expect(opening.stage).toBe(3);
+    expect(opening.lifting).toBe(false);
+    expect(older.mist.lifting).toBe(false);
+    expect(older.inspect()).toMatchObject({ stage: 3, citizens: 30 });
+    expect(Array.from((older.mist.uniforms.uMistMask.value.image as { data: ArrayLike<number> }).data)).toEqual(Array.from(open));
+    older.dispose();
   });
 
   it('feathers the mist edge outward, never over open land, and keeps a clearer mask clearer', () => {

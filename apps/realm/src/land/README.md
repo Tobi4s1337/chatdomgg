@@ -95,9 +95,46 @@ their exact bytes published with the command above.
 
 ## Sketches of unfounded channels
 
-`sketch.ts` raises a channel's land from its full identity and Genesis profile alone (`genesisSketchRecipe`), with
-every region at every level and no installed town, into `sketches/<channel>/<recipeHash>.json` beside the blobs.
-Sketches are private (decision 3): no route serves them. Build with `work/lanes/grand-world/build-sketch.mjs`, run
+A channel that has not founded its kingdom still has its own world: `/-/grand?channel=<login>` shows the land its
+kingdom will stand on (GW13). The browser makes the expected recipe from the channel's Atlas holding
+(`grandSeedForHolding` → `grandSketchRecipe`, `packages/world/src/grand/sketch.ts`: generator `grand-land-2`, every
+region at every level, no installed town) and asks for exactly that recipe hash. It never generates land.
+
+- `GET /api/realm/land/<channel>/<recipeHash>` serves the sketch record (`application/json`, immutable, at most
+  512 KiB) and `GET …/<recipeHash>/<blobHash>` a blob named by that record. A channel with a bound founded land
+  serves only that land; a sketch never stands in for it.
+- `POST /api/realm/land/<channel>/<recipeHash>` with the canonical recipe as the body (at most 8 KiB) asks the realm
+  to raise it: `200 {"state":"ready"}`, `202 {"state":"raising","ahead","stage","done","total"}` with the bake's own
+  counts (poll it; the browser waits 1.5 s), or a refusal: `400 invalid` (not this channel's recipe, not canonical,
+  not this hash, a foreign seed key, a colour outside the banner clay), `409 pinned` (the channel already has another
+  world; the answer carries its `pinnedHash`), `409 founded` (a founded kingdom gets no sketch), `429 busy`,
+  `503 resting` (no bake command installed, or the realm cannot tell whether the channel is founded) or `503 failed`.
+  Every status answer is `no-store`.
+- `GET /api/realm/land/<channel>/world` serves the channel's world: the first sketch recipe the realm accepted for
+  it (`worlds/<channel>.json`, written once, canonical JSON, `max-age=3600`, ETag the recipe hash), 404 while it has
+  none. A later survey whose facts drifted never rerolls it; the browser asks for this first and draws it.
+- **Founding on the world.** When a kingdom that is not adopted (`adopted.ts`) publishes its first live founded scene
+  and its channel has a world, `realm.ts` makes the land recipe from that world's seed and the founding plan's
+  frame (`createGrandLandRecipe`), pins it (`recipes/<channel>.json`, written once) and queues the bake. Every later
+  receipt, after a restart too, reads that pinned recipe; it is never recomputed from today's homes. A kingdom
+  whose channel has no world keeps today's land, exactly as before.
+- `sketches.ts` (`createSketchService`) raises one land at a time in the same serial chain as founded bakes, in a
+  niced child (`dist/land-bake.mjs --sketch-recipe FILE`, priority 19, two threads, 1.5 GB heap). Limits: eight
+  waiting and 240 raised a day; one world per channel. A world is pinned only for a channel the realm's layout heads
+  say is unfounded (`land.knowFounded(...)` in `main.ts`), and only for a request the realm will really raise, so a
+  `busy` refusal pins nothing.
+- Records are content-addressed (`sketches/<channel>/<recipeHash>.json`, written once, every blob checked present
+  first); the gateway's existing `/api/realm/land/<id>/<64hex>(/<64hex>)?` allowlist carries them unchanged.
+
+Decision 3 called sketches private: no one is shown a kingdom that is not founded. We read it as "no people and no
+claim": the page shows the land only, says plainly that it is not founded yet and that its town will be raised on
+this land when the streamer founds it on stream, and draws no homes, citizens or names. A sketch is the promise of
+the land, not a kingdom, and the realm keeps that promise: the world is pinned before anyone is shown it, and the
+founding raises the kingdom on it. The page asks the realm's founded receipt first (`/api/realm/founded/<id>`): a
+founded kingdom is never shown a sketch, only a door into the kingdom; when the realm cannot say, nothing is
+promised and the visitor can try again.
+
+The offline command for one channel stays: build with `work/lanes/grand-world/build-sketch.mjs`, run
 `UV_THREADPOOL_SIZE=2 nice -n 19 node shots/grand-world/sketch-cli/sketch.mjs --channel ID --name NAME --directory DIR --report FILE`.
 
 Evidence: [GW10 offline bake](../../../../work/evidence/grand-world/GW10-bake.md),

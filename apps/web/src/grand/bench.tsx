@@ -1,6 +1,7 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { GRAND_CHANNELS, grandChannel, type GrandChannel } from './channels';
-import { GRAND_TIERS, GRAND_VIEWS, GrandEngine, type GrandStats, type GrandTier, type GrandView } from './engine';
+import { detectGrandTier, GRAND_TIERS, GRAND_VIEWS, type GrandStats, type GrandTier, type GrandView } from './engine';
+import { GrandRaisedEngine } from './engine-raise';
 import { grandHoldingChannel, withLandform } from './holding-world';
 import './grand.css';
 
@@ -10,18 +11,6 @@ const CHARACTER: Record<string, string> = { 'coastal-harbour': 'harbour coast', 
 const HOURS: readonly { label: string; hour: number }[] = [
   { label: 'Dawn', hour: 6.4 }, { label: 'Morning', hour: 9.5 }, { label: 'Noon', hour: 12.5 }, { label: 'Golden hour', hour: 17.6 }, { label: 'Dusk', hour: 19.6 }, { label: 'Night', hour: 22.5 },
 ];
-
-function detectTier(canvas: HTMLCanvasElement): GrandTier {
-  const gl = canvas.getContext('webgl2');
-  if (!gl) return 'software';
-  const info = gl.getExtension('WEBGL_debug_renderer_info');
-  const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).toLowerCase();
-  if (/swiftshader|llvmpipe|software|basic render/.test(name)) return 'software';
-  if (/apple m\d (max|pro|ultra)|rtx|radeon rx [67-9]|arc a7/.test(name)) return 'ultra';
-  if (/apple|nvidia|geforce|radeon/.test(name)) return 'high';
-  if (/intel|iris|adreno 7|mali-g7/.test(name)) return 'medium';
-  return 'low';
-}
 
 const number = (value: string | null): number | null => value === null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
 const formatCount = (n: number): string => n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e8 ? 0 : 1)} M` : n >= 1e3 ? `${Math.round(n / 1e3)} k` : String(n);
@@ -50,12 +39,12 @@ export default function GrandLandBench() {
   const [stats, setStats] = createSignal<GrandStats | null>(null);
   const [failure, setFailure] = createSignal<string | null>(null);
   let canvas: HTMLCanvasElement | undefined;
-  let engine: GrandEngine | null = null;
+  let engine: GrandRaisedEngine | null = null;
 
   onMount(() => {
     const requested = params.get('tier');
     // Tier detection uses a throwaway canvas: a context, once made, fixes the canvas to it.
-    const tier = requested && requested in GRAND_TIERS ? requested as GrandTier : detectTier(document.createElement('canvas'));
+    const tier = requested && requested in GRAND_TIERS ? requested as GrandTier : detectGrandTier(document.createElement('canvas'));
     const time = number(params.get('t'));
     if (!canvas) return;
     const abort = new AbortController();
@@ -66,7 +55,7 @@ export default function GrandLandBench() {
     const seed = withLandform(base, params.get('landform'));
     setChannel({ ...chosen, seed });
     if (!canvas || abort.signal.aborted) return;
-    engine = new GrandEngine(canvas, seed, { tier, capture: params.get('capture') === '1', hour: hour(), view, time: time ?? (tier === 'software' ? 0 : null), citizens: citizens === null ? null : Math.max(0, Math.floor(citizens)) });
+    engine = new GrandRaisedEngine(canvas, seed, { tier, capture: params.get('capture') === '1', hour: hour(), view, time: time ?? (tier === 'software' ? 0 : null), citizens: citizens === null ? null : Math.max(0, Math.floor(citizens)) });
     engine.onFailure = message => setFailure(message);
     let last = 0;
     engine.onChange = () => {

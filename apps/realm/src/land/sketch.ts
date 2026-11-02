@@ -1,42 +1,17 @@
-import { mkdir, open } from 'node:fs/promises';
-import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { compileChannelGenesis } from '../../../../packages/world/src/genesis';
 import { OBSERVED_GENESIS_FIXTURES, OBSERVED_GENESIS_SHOWCASE_CHOICES } from '../../../../packages/world/src/genesis/observed-fixtures';
-import { canonicalSceneJson, sha256Hex, utf8 } from '../../../../packages/world/src/founded-world/codec';
 import { generateGrandLand } from '../../../../packages/world/src/grand/generate';
-import { GRAND_LEVELS, GRAND_REGION, type GrandLandSeed } from '../../../../packages/world/src/grand/types';
+import { landMaterials } from '../../../../packages/world/src/grand/kits';
+import { GRAND_LEVELS, GRAND_REGION } from '../../../../packages/world/src/grand/types';
+import { grandSeedFromGenesis } from '../../../../packages/world/src/grand/world';
+import { grandSketchRecipe, grandSketchRecipeHash, validateSketchRecipe, type GrandSketchRecipe, type GrandSketchRecord } from '../../../../packages/world/src/grand/sketch';
 import { createInstalledRegionMesher } from '../../../../packages/world/src/grand/baked/mesher';
 import { encodeBakedRegion, encodeBakedSurface } from '../../../../packages/world/src/grand/baked/codec';
-import { BAKED_FORMAT, HOSTED_GRAND_COMPILER, type BakedBlobRef, type BakedRegionRef } from '../../../../packages/world/src/grand/baked/types';
+import { BAKED_FORMAT, type BakedRegionRef } from '../../../../packages/world/src/grand/baked/types';
 import type { LandArtifactStore } from './store';
 
-/**
- * A sketch is the land of a channel that has not founded its kingdom (decision 3: an unclaimed kingdom is a private
- * sketch). It is raised from the channel's full identity and Genesis profile alone: there is no installed town to
- * grade to, so every region is baked at every level. It is stored, never served: at founding the realm bakes the
- * founded land against the real plan, and this record is only what the land of that channel costs to keep.
- */
-export interface GrandSketchRecipe {
-  readonly version: 1;
-  readonly kind: 'sketch';
-  readonly generator: 'grand-land-1';
-  readonly kit: 'grand-artisans-1';
-  readonly mesher: typeof HOSTED_GRAND_COMPILER;
-  readonly seed: GrandLandSeed;
-}
-export interface GrandSketchRecord {
-  readonly version: 1;
-  readonly format: number;
-  readonly kingdomId: string;
-  readonly recipeHash: string;
-  readonly recipe: GrandSketchRecipe;
-  readonly size: number;
-  readonly height: number;
-  readonly seaLevel: number;
-  readonly surface: BakedBlobRef;
-  readonly meshes: readonly BakedRegionRef[];
-}
+export type { GrandSketchRecipe, GrandSketchRecord };
 
 /** The Genesis channels the first lands were made for, from their observed Atlas facts and curated landforms. */
 export function genesisSketchRecipe(broadcasterId: string, name: string): GrandSketchRecipe {
@@ -44,19 +19,20 @@ export function genesisSketchRecipe(broadcasterId: string, name: string): GrandS
   if (!facts) throw new Error(`No observed Genesis facts for channel ${broadcasterId}`);
   const genesis = compileChannelGenesis(facts);
   const choice = OBSERVED_GENESIS_SHOWCASE_CHOICES.find(row => row.broadcasterId === broadcasterId);
-  const landscape = genesis.landscapes.find(row => row.id === genesis.recommendedLandscapeId) ?? genesis.landscapes[0]!;
   if (String(genesis.kingdomId) !== broadcasterId || !genesis.seedKey.includes(broadcasterId)) throw new Error('A sketch needs the full channel identity');
-  return { version: 1, kind: 'sketch', generator: 'grand-land-1', kit: 'grand-artisans-1', mesher: HOSTED_GRAND_COMPILER,
-    seed: { seedKey: genesis.seedKey, kingdomId: broadcasterId, name, biome: genesis.identity.biome, tier: genesis.size.tier,
-      character: choice?.character ?? landscape.character } };
+  return grandSketchRecipe(grandSeedFromGenesis(genesis, name, choice ? { character: choice.character } : {}));
 }
 
+/**
+ * Raise a sketch (see `packages/world/src/grand/sketch.ts`): the whole land from its recipe, every region at every
+ * level, each blob stored once by content, then the record under the recipe's hash. The record is written last, so
+ * a killed bake leaves only unreferenced blobs and the sketch stays unpublished.
+ */
 export async function bakeSketchLand(options: { readonly recipe: GrandSketchRecipe; readonly store: LandArtifactStore;
   readonly signal?: AbortSignal; readonly onProgress?: (done: number, total: number) => void }) {
   const wall = performance.now(), cpu = process.cpuUsage(), check = () => options.signal?.throwIfAborted();
-  const recipe = JSON.parse(canonicalSceneJson(options.recipe)) as GrandSketchRecipe;
-  if (recipe.kind !== 'sketch' || recipe.mesher !== HOSTED_GRAND_COMPILER) throw new Error('Not a sketch recipe for this compiler');
-  const recipeHash = await sha256Hex(utf8(canonicalSceneJson(recipe)));
+  const recipe = validateSketchRecipe(options.recipe);
+  const recipeHash = await grandSketchRecipeHash(recipe);
   const generated = performance.now();
   const land = generateGrandLand(recipe.seed);
   const generateSeconds = (performance.now() - generated) / 1000;
@@ -71,12 +47,10 @@ export async function bakeSketchLand(options: { readonly recipe: GrandSketchReci
     options.onProgress?.(meshes.length, total);
     await setImmediate();
   }
-  const record: GrandSketchRecord = { version: 1, format: BAKED_FORMAT, kingdomId: recipe.seed.kingdomId, recipeHash, recipe,
-    size: land.size, height: land.height, seaLevel: land.seaLevel, surface, meshes };
-  const directory = join(options.store.directory, 'sketches', recipe.seed.kingdomId);
-  await mkdir(directory, { recursive: true });
-  const file = await open(join(directory, `${recipeHash}.json`), 'w', 0o600);
-  try { await file.writeFile(canonicalSceneJson(record)); await file.sync(); } finally { await file.close(); }
+  const palette = landMaterials(land).map(material => ({ id: material.id, colour: material.colour, kind: material.kind })).sort((a, b) => a.id - b.id);
+  const record: GrandSketchRecord = { version: 2, format: BAKED_FORMAT, kingdomId: recipe.seed.kingdomId, recipeHash, recipe,
+    size: land.size, height: land.height, seaLevel: land.seaLevel, sites: land.sites, palette, trees: land.treeCount, surface, meshes };
+  await options.store.putSketch(record, options.signal);
   const used = process.cpuUsage(cpu);
   return { kingdomId: recipe.seed.kingdomId, name: recipe.seed.name, character: recipe.seed.character, biome: recipe.seed.biome,
     tier: recipe.seed.tier, recipeHash, size: land.size, regions: per * per, meshes: meshes.length,

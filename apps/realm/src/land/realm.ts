@@ -4,12 +4,15 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { setPriority } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { uWebSocketsTransport } from '@colyseus/uwebsockets-transport';
+import { KingdomIdSchema, type KingdomId } from '@chatdom/shared';
 import { RealmFoundedManifestSchema, type RealmFoundedManifest } from '@chatdom/shared/realm';
 import { adoptedGrandRecipe } from '../../../../packages/world/src/grand/adopted';
-import { grandLandRecipeHash, type GrandLandRecipe } from '../../../../packages/world/src/grand/recipe';
+import { decodeFoundedScene } from '../../../../packages/world/src/founded-world/validate';
+import { createGrandLandRecipe, grandLandRecipeHash, type GrandLandRecipe } from '../../../../packages/world/src/grand/recipe';
 import { LandNeedsBakeError, publishFoundedLand, type LandPublicationResult } from './publication';
 import { LandArtifactStore } from './store';
 import { mountLandRoutes } from './mount';
+import { childSketchBake, createSketchService, type FoundedCheck, type SketchBakeRunner, type SketchLimits, type SketchService } from './sketches';
 
 /** One bake of one exact founded scene, written into `directory` (the realm's land store). */
 export interface LandBakeJob {
@@ -39,10 +42,17 @@ export interface RealmLandOptions {
   /** The longest a publication may hold a founded write; slower disks finish it in the background. */
   readonly rebindTimeoutMs?: number;
   readonly log?: (line: string) => void;
+  /** Raises a channel's sketch (GW13) when a visitor asks for one. Null: only stored sketches are served. */
+  readonly sketch?: SketchBakeRunner | null;
+  readonly sketchLimits?: Partial<SketchLimits>;
+  /** Whether a kingdom is founded (the realm's layout heads). Until one is known, no new sketch is raised. */
+  readonly founded?: FoundedCheck;
 }
 
 export interface RealmLand {
   readonly store: LandArtifactStore;
+  /** The sketch queue behind `POST /api/realm/land/<channel>/<recipe-hash>`. */
+  readonly sketches: SketchService;
   /**
    * The founded store's `beforeFoundedPublication`. It binds the land to the exact receipt before the receipt can
    * become public when the plan's land is already baked (a Forge piece, a claimed home, a new collision revision:
@@ -52,6 +62,8 @@ export interface RealmLand {
    */
   beforePublication(bytes: Uint8Array, receipt: RealmFoundedManifest, signal?: AbortSignal): Promise<void>;
   mount(app: uWebSocketsTransport['app']): void;
+  /** Give the land the realm's own layout heads ("is this kingdom founded?") once the realm's services exist. */
+  knowFounded(currentLayout: (kingdomId: KingdomId) => Promise<object | null>): void;
   /** Resolves once no bake or queued publication remains. */
   idle(): Promise<void>;
   stop(): Promise<void>;
@@ -75,6 +87,37 @@ export function createRealmLand(options: RealmLandOptions): RealmLand {
   const queued = new Map<string, { bytes: Uint8Array; receipt: RealmFoundedManifest; recipe: GrandLandRecipe }>();
   const failed = new Set<string>();
   let worker: Promise<void> | null = null, stopped = false;
+  // One land is raised at a time on this host, founded or sketched: the second waits for the first.
+  let bakeChain: Promise<unknown> = Promise.resolve();
+  const serial = <T>(work: () => Promise<T>): Promise<T> => {
+    const next = bakeChain.then(work, work);
+    bakeChain = next.catch(() => undefined);
+    return next;
+  };
+  let foundedCheck = options.founded ?? null;
+  const sketches = createSketchService({ store, bake: options.sketch ?? null, serial, log, founded: id => foundedCheck ? foundedCheck(id) : Promise.resolve(null),
+    ...(options.sketchLimits ? { limits: options.sketchLimits } : {}) });
+  // A kingdom that is not adopted here has a land only when its channel's world was pinned before it founded.
+  const own = new Map<string, GrandLandRecipe>();
+  async function ownRecipe(bytes: Uint8Array, receipt: RealmFoundedManifest): Promise<GrandLandRecipe | undefined> {
+    const kingdomId = receipt.kingdomId, known = own.get(kingdomId);
+    if (known) return known;
+    // Only a channel whose world was pinned has a land of its own; every other kingdom keeps today's land as before.
+    const world = await store.world(kingdomId);
+    if (!world) return undefined;
+    let recipe = await store.landRecipe(kingdomId);
+    if (!recipe) {
+      // The founding scene seats the town; the world (landform, woods, crest, landmark, size) is the one visitors saw.
+      const scene = await decodeFoundedScene(new Uint8Array(bytes), receipt);
+      recipe = createGrandLandRecipe(scene.plan, world.recipe.seed);
+      await store.pinRecipe(kingdomId, recipe, abort.signal);
+      // Another publication may have pinned first; the store keeps the first and so does this realm.
+      recipe = (await store.landRecipe(kingdomId)) ?? recipe;
+      log(`land: ${kingdomId} founded on its own world (${world.recipe.seed.world.landform}, sketch ${short(world.hash)}); land recipe ${short(await hashOf(recipe))} pinned`);
+    }
+    own.set(kingdomId, recipe);
+    return recipe;
+  }
 
   const publish = async (bytes: Uint8Array, receipt: RealmFoundedManifest, recipe: GrandLandRecipe): Promise<LandPublicationResult> =>
     publishFoundedLand({ sceneBytes: bytes, receipt, recipeHash: await hashOf(recipe), store, verification: 'catalogued', signal: abort.signal });
@@ -102,7 +145,7 @@ export function createRealmLand(options: RealmLandOptions): RealmLand {
         }
         log(`land: baking ${kingdomId} plan ${short(error.sourcePlanHash)} (${error.layoutRevision}) for scene ${short(job.receipt.sceneHash)}`);
         try {
-          const report = await bake({ sceneBytes: job.bytes, receipt: job.receipt, recipe: job.recipe, directory, signal: abort.signal });
+          const report = await serial(() => bake({ sceneBytes: job.bytes, receipt: job.receipt, recipe: job.recipe, directory, signal: abort.signal }));
           log(`land: baked ${kingdomId} in ${report.wallSeconds.toFixed(1)} s (${report.cpuSeconds.toFixed(1)} CPU s, ${(report.peakMemoryKiB / 1024).toFixed(0)} MiB peak), ${report.meshes} meshes, ${(report.storedBytes / 1e6).toFixed(2)} MB stored`);
           // The bake binds its own receipt; newer receipts of the same plan rebind on their turn.
           published(await publish(job.bytes, job.receipt, job.recipe), job.receipt);
@@ -121,28 +164,33 @@ export function createRealmLand(options: RealmLandOptions): RealmLand {
 
   return {
     store,
+    sketches,
     async beforePublication(bytes, receipt, signal) {
       if (stopped) return;
       signal?.throwIfAborted();
       let parsed: RealmFoundedManifest;
       try { parsed = RealmFoundedManifestSchema.parse(receipt); } catch { return; }
-      const recipe = recipeFor(parsed.kingdomId);
-      if (!recipe || parsed.origin !== 'live') return;
-      const owned = new Uint8Array(bytes);
-      const attempt = publish(owned, parsed, recipe).then(result => { published(result, parsed); }, error => {
-        if (stopped) return;
-        if (error instanceof LandNeedsBakeError) { queued.delete(parsed.kingdomId); queued.set(parsed.kingdomId, { bytes: owned, receipt: parsed, recipe }); kick(); }
-        else log(`land: ${parsed.kingdomId} scene ${short(parsed.sceneHash)} publication failed: ${(error as Error).message}`);
-      });
+      if (parsed.origin !== 'live') return;
+      const owned = new Uint8Array(bytes), adopted = recipeFor(parsed.kingdomId);
+      const attempt = (adopted ? Promise.resolve(adopted) : ownRecipe(owned, parsed)).then(async recipe => {
+        if (!recipe || stopped) return;
+        try { published(await publish(owned, parsed, recipe), parsed); }
+        catch (error) {
+          if (stopped) return;
+          if (error instanceof LandNeedsBakeError) { queued.delete(parsed.kingdomId); queued.set(parsed.kingdomId, { bytes: owned, receipt: parsed, recipe }); kick(); }
+          else throw error;
+        }
+      }).catch((error: unknown) => { if (!stopped) log(`land: ${parsed.kingdomId} scene ${short(parsed.sceneHash)} publication failed: ${(error as Error).message}`); });
       let timer: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([attempt, new Promise<void>(done => { timer = setTimeout(done, timeout); })]);
       clearTimeout(timer);
     },
-    mount(app) { mountLandRoutes(app, store); },
-    async idle() { while (worker) await worker; },
+    mount(app) { mountLandRoutes(app, store, sketches); },
+    knowFounded(currentLayout) { foundedCheck = async id => (await currentLayout(KingdomIdSchema.parse(id))) !== null; },
+    async idle() { while (worker) await worker; await sketches.idle(); },
     async stop() {
       stopped = true; queued.clear(); abort.abort(new Error('The realm is stopping'));
-      await worker?.catch(() => undefined);
+      await Promise.all([worker?.catch(() => undefined), sketches.stop()]);
     },
   };
 }
@@ -196,7 +244,7 @@ export function realmLandBakeScript(env: NodeJS.ProcessEnv = process.env, entry 
  * the child bake when its bundle is present. */
 export function openRealmLand(directory: string, log: (line: string) => void): RealmLand {
   const script = realmLandBakeScript();
-  log(script ? `land: serving and baking ${resolve(directory)} (bake command ${script})`
-    : `land: serving ${resolve(directory)}; no land-bake.mjs beside the realm, so a new plan waits for the offline bake command`);
-  return createRealmLand({ directory, bake: script ? childLandBake(script, log) : null, log });
+  log(script ? `land: serving and baking ${resolve(directory)} (bake command ${script}; channel sketches raised on request)`
+    : `land: serving ${resolve(directory)}; no land-bake.mjs beside the realm, so a new plan waits for the offline bake command and only stored sketches are served`);
+  return createRealmLand({ directory, bake: script ? childLandBake(script, log) : null, sketch: script ? childSketchBake(script) : null, log });
 }
