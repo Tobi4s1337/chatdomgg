@@ -55,11 +55,12 @@ export function planNight({ layout, mood, seam, camera, hour }: { layout: Stream
     sky: null, drift: mood === 'calm',
   };
   // A break tours the night so far: only what the world can show, the town and its lit windows.
-  if (seam === 'break') return { beats: tour([{ shot: 'hero', hold: 18 }, { shot: 'window', hold: 12, climax: true }, { shot: 'citizen', hold: 12 }]), cut, sky: null, drift: mood === 'calm' };
+  // On a grand land the tour also widens to the island and to the town against its water; a land without them skips both.
+  if (seam === 'break') return { beats: tour([{ shot: 'island', hold: 14 }, { shot: 'hero', hold: 18 }, { shot: 'window', hold: 12, climax: true }, { shot: 'citizen', hold: 12 }, { shot: 'vista', hold: 14 }]), cut, sky: null, drift: mood === 'calm' };
   // Ending settles on the night town. No Ballad or procession exists to be shown, so none is.
   if (seam === 'ending') return { ...held('hero'), sky: hour >= 12 && hour < 22 ? { from: hour, to: 22, seconds: 90 } : null };
   if (mood === 'calm') return held(camera);
-  const show: Beat[] = [{ shot: 'hero', hold: 16 }, { shot: 'window', hold: 10, climax: true }, { shot: 'citizen', hold: 12 }];
+  const show: Beat[] = [{ shot: 'hero', hold: 16 }, { shot: 'window', hold: 10, climax: true }, { shot: 'citizen', hold: 12 }, { shot: 'vista', hold: 14 }, { shot: 'island', hold: 12 }];
   const first = Math.max(0, show.findIndex(beat => beat.shot === camera));
   return { beats: [...show.slice(first), ...show.slice(0, first)], cut: 'shutter', sky: null, drift: false };
 }

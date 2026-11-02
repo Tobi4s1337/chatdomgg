@@ -63,7 +63,7 @@ You own the how and make the design calls. Be ambitious, think it through end to
   - The cold load's frame sequence (the loader's beats into the first street) at 1920x1080, 1440x900 and 390x844, looked at.
   - The stored size per kingdom, the bake's CPU time and its peak memory are recorded for all four kingdoms.
 
-- [ ] **GW15 — The kingdom is as stunning as the island (Tobias, Mon 2 Nov 15:05).**
+- [x] **GW15 — The kingdom is as stunning as the island (Tobias, Mon 2 Nov 15:05).**
   Outcome: tobi4s_'s kingdom in the stream and the walk is as breathtaking as `/-/grand`. Today the island view shows peaks, waterfalls, the mere, mixed forest and sea in one frame, while the kingdom's shots sit low over a flat lawn grid of homes with the land washed out behind haze; the town reads as a suburb on a cleared meadow, not a village in that land. Fix what the eye sees, never a home's plot or door: (1) the director opens on the island the way `/-/grand` frames it, with the town glowing in its valley, and its shots frame the town against the peaks, the mere and the sea; (2) distance haze and fog are tuned so the ranges and water stay crisp and saturated as on `/-/grand`; (3) the town is dressed into the land: the forest comes up to and between the streets, with gardens, hedges, stone walls, orchards, varied ground and lanes that follow the contours instead of wide bare paths on lawn, and the mere's shore and the hill slopes carry life; (4) the walk's eye-level views show the mountains and water between the houses.
   Quality bar: a still of the stream's opening shot and of his street stand beside the `/-/grand` golden-hour still and lose nothing; no home, door, collider or forged piece moves.
   Done when: stills on the 5080 through pc-lease of the opening, two director shots, his street and the Forge square at golden hour and at night, each beside `/-/grand` and beside today's version, looked at once; the touched tests pass. Then tick.
@@ -147,6 +147,9 @@ Tobias's answers (`context/decisions.md`) override spec 56, AGENTS.md and the ra
 - Trace the cloud of fine white dots over the market and the slope below the castle in the wide stream shots (on today's land too, on the 5080).
 - Diagonal streaks on sunlit plaster at a grazing sun from the shared sun-shadow receiver (`packages/render/src/sun-shadows.ts`; home 0's door at golden hour, on today's land too, on the 5080).
 - The stream sometimes stays at `Opening the wider kingdom` on his Chrome (two leases; in the logged one no land request reached the server and the page never painted); the probe now traces requests and lists other pages on the host.
+- The dotted one-pixel line where the baked water raster meets the open sea, from the island and vista lenses (`gw15-gpu-v6-island-golden`). GW15 ruled out T-junctions and overlap, the bed step and depth ties; next suspects are the post stack's depth fog under the depth-less water and the land volume's outer skirt.
+- Bake the town-ground plan (`grand-land/town-ground/plan.ts`) on the realm beside the land, so the stream no longer waits about 3.6 s for its worker before ready.
+- Town trees from `grand-land/fringe.ts` and the town-ground cover need colliders through GW14's solids query where they stand near the walkable region's edge.
 
 ## Round notes (settled across all eight lanes; these win over anything above)
 

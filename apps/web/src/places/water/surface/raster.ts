@@ -114,3 +114,33 @@ export function rasterGround(ground: WaterGround): WaterGround {
   }
   return { data, width, height, origin: ground.origin, step: ground.step };
 }
+
+/** Bed depth of the open sea under its sea level, metres: deep enough to take the deep body colour. */
+export const OPEN_SEA_DEPTH = 40;
+
+/**
+ * The open sea around a raster: four still quads at sea level out to `reach` metres from the land's centre. Their
+ * inner edge reaches two cells inside the raster and the shader draws them over its outermost cell and beyond
+ * (`uOpenSeaMesh`), so the raster's many edge quads and these long ones never meet in a T-junction.
+ * The shader finds the deep bed beyond the grid, so they read as open water from the first metre past the land.
+ */
+export function openSeaGeometry(seaLevel: number, ground: WaterGround, reach: number): THREE.BufferGeometry {
+  const inset = ground.step * 2;
+  const x0 = ground.origin[0] + inset, z0 = ground.origin[1] + inset;
+  const x1 = ground.origin[0] + ground.width * ground.step - inset, z1 = ground.origin[1] + ground.height * ground.step - inset;
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+  if (!(reach > Math.max(ground.width, ground.height) * ground.step)) throw new RangeError('The open sea must reach well beyond the land');
+  const X0 = cx - reach, X1 = cx + reach, Z0 = cz - reach, Z1 = cz + reach;
+  const quads: [number, number, number, number][] = [[X0, X1, Z0, z0], [X0, X1, z1, Z1], [X0, x0, z0, z1], [x1, X1, z0, z1]];
+  const positions: number[] = [], indices: number[] = [];
+  quads.forEach(([a, b, c, d], q) => {
+    positions.push(a, seaLevel, c, b, seaLevel, c, a, seaLevel, d, b, seaLevel, d);
+    const v = q * 4; indices.push(v, v + 2, v + 1, v + 1, v + 2, v + 3);
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('aFlow', new THREE.Float32BufferAttribute(new Float32Array(positions.length), 3));
+  geometry.setIndex(indices);
+  geometry.computeBoundingBox(); geometry.computeBoundingSphere();
+  return geometry;
+}

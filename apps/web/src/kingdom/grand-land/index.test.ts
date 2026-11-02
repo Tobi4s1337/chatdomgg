@@ -54,7 +54,7 @@ function fixture(exacts: readonly number[] = [1, 3], side = 2) {
   camera.position.set(112, 150, 400); camera.lookAt(112, 0, 90); camera.updateMatrixWorld();
   const material = new THREE.ShaderMaterial(), cleanup = vi.fn(), register = vi.fn(() => cleanup);
   const options = { scene, camera, renderer: { getDrawingBufferSize: (size: THREE.Vector2) => size.set(1440, 900) } as THREE.WebGLRenderer,
-    plan, recipe, receipt, kingdomId: receipt.kingdomId, materialFactory: vi.fn(() => ({ material, bindFade: vi.fn(), dispose: vi.fn(() => material.dispose()) })),
+    plan, recipe, receipt, kingdomId: receipt.kingdomId, materialFactory: vi.fn(() => ({ material, bindFade: vi.fn(), setTownUse: vi.fn(), dispose: vi.fn(() => material.dispose()) })),
     register, onProgress: vi.fn(), onError: vi.fn() };
   async function prepare(extra: Partial<typeof options> & { signal?: AbortSignal } = {}) {
     const owner = await prepareHostedGrandLand({ ...options, ...extra }); owners.push(owner); return owner;

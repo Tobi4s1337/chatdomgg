@@ -719,3 +719,25 @@ For the integrator: publish tobi4s_'s land from the **grader 3, format 2 store**
 (`bake --recipe shots/grand-world/adopted-recipe-g3.json`, 17.63 MB, 92.6 CPU s, 400 MiB peak at nice 19),
 not from the earlier `land-bake-a` or `land-bake-f2` stores; their metadata names grader 2 and the client
 rejects them. The commands in `apps/realm/src/land/README.md` carry the new recipe hash.
+
+## GW15 the kingdom as stunning as the island — 2026-11-02
+
+What GW15 changes on shared surfaces, for workers 1 (GW11) and 2 (GW14) and the integrator:
+
+- `kingdom/scene.ts`: new `CameraName`s `island` and `vista` (offered only on the grand floor, `offers(view)`), an
+  `opening` scene option (hold on the island, then descend to the hero), the forest fringe planted just outside the
+  physical region, and the town ground (fields, meadow, heath, bracken, borders) planned in a worker
+  (`grand-land/town-ground/remote.ts`). The town-ground block sits right after the adopted cover; the fringe sits
+  inside the grand-land task beside `materialFactory`. Nothing touches collision, plots, doors or placements.
+- The grand replacement water now has an **open sea** (`createWaterSurface({ openSea })`): four quads at sea level
+  from the raster's edge to 40 km, and the camera's far plane reaches it. Its far reach takes the sky dome's horizon
+  colour (`domeHorizon` in `places/water/surface/shader.ts`), so a change to the dome's horizon terms in
+  `packages/render/src/atmosphere.ts` should be mirrored there.
+- Ground dressing: `GroundDressing.yieldGround(drop)` permanently drops passive cover (never solids; their
+  collision stays) and a new band family `fields` for `town-*` crops and borders. `pieceRole` treats any `town-*`
+  blueprint as passive cover.
+- The hosted floor material takes the town's land-use mask late (`HostedGrandMaterial.setTownUse`).
+- Stream: `window.__chatdomStream.inspect()` returns the scene's diagnostics for capture probes; the director's
+  break and show tours include `island` and `vista` where the scene offers them; `?opening=0` turns the opening off.
+- **needs (Backlog):** trees inside the walkable town. They need colliders through GW14's solids query; until then
+  the fringe stands only outside the physical region (SEAMS guarantee 4).
