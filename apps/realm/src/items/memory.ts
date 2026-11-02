@@ -19,6 +19,16 @@ export function createMemoryItemStore(): ItemStore {
     .filter(item => item.ownerId === ownerId && item.kingdomId === kingdomId)
     .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
   const receiptKey = (kingdomId: KingdomId, ownerId: PersonId, origin: ItemRecord['origin'], key: string) => JSON.stringify([kingdomId, ownerId, origin, key]);
+  const rawAtPlace = (state: MemoryState, ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin'], place: 'hand' | 'hotbar' | 'shelf') => {
+    const items: ItemRecord[] = [];
+    const maximum = place === 'hand' ? 1 : 64;
+    for (const item of state.items.values()) {
+      if (item.ownerId !== ownerId || item.kingdomId !== kingdomId || item.origin !== origin || item.place !== place) continue;
+      items.push(item);
+      if (items.length > maximum) throw new Error('The item placement exceeds its capacity.');
+    }
+    return items.sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0));
+  };
   const store: ItemStore = {
     async transaction(kingdomId, work) {
       const callbacks: (() => void)[] = [];
@@ -30,6 +40,7 @@ export function createMemoryItemStore(): ItemStore {
           store, kingdomId,
           async get(id) { check(); const item = draft.items.get(id); return item?.kingdomId === kingdomId ? structuredClone(item) : null; },
           async list(ownerId) { check(); return structuredClone(rawList(draft, ownerId, kingdomId)); },
+          async atPlace(ownerId, origin, place) { check(); return structuredClone(rawAtPlace(draft, ownerId, kingdomId, origin, place)); },
           async visible(item) { check(); return structuredClone(redactItem(item, hidden)); },
           async save(item) {
             check();
@@ -81,6 +92,7 @@ export function createMemoryItemStore(): ItemStore {
     },
     async get(id: ItemId) { const item = state.items.get(id); return item ? structuredClone(redactItem(item, hidden)) : null; },
     async list(ownerId, kingdomId) { return rawList(state, ownerId, kingdomId).map(item => structuredClone(redactItem(item, hidden))); },
+    async atPlace(ownerId, kingdomId, origin, place) { return rawAtPlace(state, ownerId, kingdomId, origin, place).map(item => structuredClone(redactItem(item, hidden))); },
     async history(id) { return structuredClone(state.events.get(id) ?? []); },
     async listPage(owner, kingdom, origin, after) {
       return [...state.items.values()].filter(item => item.ownerId === owner && item.kingdomId === kingdom && item.origin === origin

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { KingdomId } from './identity';
 import type { Vec3 } from './voxel';
+import type { ItemRecord } from './items';
 
 /** Absolute metres, on the exact founded plan. Local +Z points from the bank out over the water. */
 export interface FishingPierSite {
@@ -83,3 +84,58 @@ export interface FishingRoll {
   readonly speciesId: string; readonly lengthMm: number; readonly weightG: number;
   readonly fight: FishingProfile; readonly strikeMs: number;
 }
+
+/** Room feature channel. The original controls remain unchanged; this wrapper adds recovery and owned-tool selection. */
+export const FishingChannelRequestSchema = z.union([
+  FishingRequestSchema,
+  z.strictObject({ type: z.literal('pier.sync'), id: requestId }),
+  z.strictObject({ type: z.literal('pier.take'), id: requestId }),
+  z.strictObject({ type: z.literal('pier.equip'), id: requestId, itemId: z.string().uuid().nullable() }),
+  z.strictObject({ type: z.literal('pier.keep'), id: requestId, castId }),
+]);
+export type FishingChannelRequest = z.infer<typeof FishingChannelRequestSchema>;
+export const FISHING_CHANNEL = 'fishing';
+export const FISHING_PRIVATE_BYTES = 96 * 1024;
+export const FISHING_PUBLIC_BYTES = 48 * 1024;
+export const FISHING_CAST_PHASES = ['drawing', 'flying', 'waiting', 'bite', 'fighting', 'landing'] as const;
+export type FishingCastPhase = (typeof FISHING_CAST_PHASES)[number];
+export interface FishingFightView {
+  readonly tick: number; readonly tension: number; readonly progress: number;
+  readonly phase: 'rest' | 'warning' | 'run'; readonly tired: boolean;
+}
+export interface FishingOwnerCast {
+  readonly id: string; readonly phase: FishingCastPhase; readonly anchor: Vec3; readonly float: Vec3 | null;
+  readonly at: number; readonly biteClosesAt?: number; readonly fight?: FishingFightView;
+  readonly environment?: FishingEnvironment;
+}
+/** Explicit public allowlist. Never spread a private domain candidate, item, principal or replay into this. */
+export interface FishingPublicCast {
+  readonly id: string; readonly walkerId: string; readonly phase: FishingCastPhase;
+  readonly anchor: Vec3; readonly float: Vec3 | null; readonly at: number; readonly fight?: FishingFightView;
+}
+export interface FishingPublicRod { readonly walkerId: string; readonly model: 'tool:rod.willow' }
+export interface FishingPublicBeat {
+  readonly castId: string; readonly walkerId: string; readonly at: number;
+  readonly kind: 'draw' | 'cast' | 'float' | 'nibble' | 'bite' | 'hook' | 'pressure' | 'landing' | 'ended';
+  /** Visible end cause only; arbitrary domain refusal text is never copied to observers. */
+  readonly outcome?: 'snapped' | 'escaped' | 'missed' | 'cancelled' | 'unkept';
+}
+export interface FishingCaughtFish { readonly speciesId: string; readonly lengthMm: number; readonly weightG: number }
+export type FishingPrivateReply =
+  | { readonly type: 'pier.state'; readonly id: string; readonly at: number; readonly revision: number;
+      readonly site: FishingPierSite | null; readonly rack: Vec3 | null;
+      readonly water: { readonly hour: number; readonly mood: FishingMood } | null;
+      readonly casts: readonly FishingPublicCast[]; readonly rods: readonly FishingPublicRod[];
+      readonly self: { readonly rod: ItemRecord | null; readonly cast: FishingOwnerCast | null; readonly pendingCastId: string | null } }
+  | { readonly type: 'pier.action'; readonly id: string; readonly cast: FishingOwnerCast | null }
+  | { readonly type: 'pier.refused'; readonly id?: string; readonly castId?: string; readonly message: string }
+  | { readonly type: 'pier.pending'; readonly id?: string; readonly castId: string; readonly message: string }
+  | { readonly type: 'pier.kept'; readonly id?: string; readonly castId: string; readonly item: ItemRecord;
+      readonly fish: FishingCaughtFish; readonly personalFirst: boolean; readonly kingdomFirst: boolean; readonly replayed: boolean };
+export type FishingPublicReply =
+  | { readonly type: 'pier.casts'; readonly at: number; readonly revision: number; readonly casts: readonly FishingPublicCast[] }
+  | { readonly type: 'pier.rod'; readonly at: number; readonly walkerId: string; readonly equipped: boolean }
+  | { readonly type: 'pier.beats'; readonly beats: readonly FishingPublicBeat[] }
+  | { readonly type: 'pier.caught'; readonly at: number; readonly castId: string; readonly walkerId: string;
+      readonly fish: FishingCaughtFish; readonly kingdomFirst: boolean };
+export type FishingChannelReply = FishingPrivateReply | FishingPublicReply;

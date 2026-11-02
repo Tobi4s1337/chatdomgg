@@ -6,6 +6,21 @@ import { ITEM_PAGE_ROWS } from './pages';
 
 const clients = new WeakMap<ItemTransaction, { client: PoolClient; active: boolean; guards: (() => boolean)[] }>();
 
+/** Literal predicates let Postgres use the matching unique partial placement index. */
+function placementQuery(place: 'hand' | 'hotbar' | 'shelf', visible: boolean): string {
+  const predicate = place === 'hand' ? "i.record->>'place'='hand'"
+    : "i.record->>'place' IN ('hotbar', 'shelf') AND i.record->>'place'=$4";
+  return `SELECT i.record${visible ? ', (h.person_id IS NOT NULL) AS hidden' : ''} FROM realm_items i
+    ${visible ? "LEFT JOIN realm_item_hidden_names h ON h.person_id=i.record->'story'->'by'->>'personId'" : ''}
+    WHERE i.kingdom_id=$1 AND i.record->>'ownerId'=$2 AND i.record->>'origin'=$3 AND ${predicate}
+    ${place === 'hand' ? '' : "ORDER BY (i.record->>'slot')::integer"} LIMIT ${place === 'hand' ? 2 : 65}`;
+}
+
+function placementRows<T>(rows: readonly T[], place: 'hand' | 'hotbar' | 'shelf'): readonly T[] {
+  if (rows.length > (place === 'hand' ? 1 : 64)) throw new Error('The item placement exceeds its capacity.');
+  return rows;
+}
+
 /** The caller may use this client only during the item transaction callback. */
 export function postgresItemClient(tx: ItemTransaction): Pick<PoolClient, 'query'> {
   const state = clients.get(tx);
@@ -49,6 +64,11 @@ export function createPostgresItemStore({ pool }: { pool: RealmDatabase }): Item
         },
         async get(id) { check(); const r = await client.query<{ record: ItemRecord }>('SELECT record FROM realm_items WHERE id=$1 AND kingdom_id=$2', [id, kingdomId]); return r.rows[0]?.record ?? null; },
         async list(ownerId) { check(); const r = await client.query<{ record: ItemRecord }>("SELECT record FROM realm_items WHERE kingdom_id=$1 AND record->>'ownerId'=$2 ORDER BY id", [kingdomId, ownerId]); return r.rows.map(row => row.record); },
+        async atPlace(ownerId, origin, place) {
+          check();
+          const r = await client.query<{ record: ItemRecord }>(placementQuery(place, false), [kingdomId, ownerId, origin, ...(place === 'hand' ? [] : [place])]);
+          return placementRows(r.rows, place).map(row => row.record);
+        },
         async save(item) {
           check(); if (item.kingdomId !== kingdomId || item.story.kingdomId !== kingdomId) throw new Error('Item belongs to another kingdom');
           if (item.revision === 0) await client.query('INSERT INTO realm_items (id, kingdom_id, record) VALUES ($1,$2,$3)', [item.id, kingdomId, item]);
@@ -99,6 +119,10 @@ export function createPostgresItemStore({ pool }: { pool: RealmDatabase }): Item
     },
     async get(id) { const r = await pool.query<{ record: ItemRecord; hidden: boolean }>("SELECT i.record, (h.person_id IS NOT NULL) AS hidden FROM realm_items i LEFT JOIN realm_item_hidden_names h ON h.person_id=i.record->'story'->'by'->>'personId' WHERE i.id=$1", [id]); const row = r.rows[0]; return row ? redactItem(row.record, new Set(row.hidden && row.record.story.by ? [row.record.story.by.personId] : [])) : null; },
     async list(ownerId: PersonId, kingdomId: KingdomId) { const r = await pool.query<{ record: ItemRecord; hidden: boolean }>("SELECT i.record, (h.person_id IS NOT NULL) AS hidden FROM realm_items i LEFT JOIN realm_item_hidden_names h ON h.person_id=i.record->'story'->'by'->>'personId' WHERE i.kingdom_id=$1 AND i.record->>'ownerId'=$2 ORDER BY i.id", [kingdomId, ownerId]); return r.rows.map(row => redactItem(row.record, new Set(row.hidden && row.record.story.by ? [row.record.story.by.personId] : []))); },
+    async atPlace(ownerId, kingdomId, origin, place) {
+      const r = await pool.query<{ record: ItemRecord; hidden: boolean }>(placementQuery(place, true), [kingdomId, ownerId, origin, ...(place === 'hand' ? [] : [place])]);
+      return placementRows(r.rows, place).map(row => redactItem(row.record, new Set(row.hidden && row.record.story.by ? [row.record.story.by.personId] : [])));
+    },
     async history(id) { const r = await pool.query<{ event: ItemEvent }>('SELECT event FROM realm_item_events WHERE item_id=$1 ORDER BY sequence', [id]); return r.rows.map(row => row.event); },
     async listPage(ownerId, kingdomId, origin, after) {
       const r = await pool.query<{ record: ItemRecord; hidden: boolean }>(`SELECT i.record, (h.person_id IS NOT NULL) AS hidden FROM realm_items i

@@ -14,6 +14,8 @@ export interface ItemTransaction {
   readonly kingdomId: KingdomId;
   get(id: ItemId): Promise<ItemRecord | null>;
   list(ownerId: PersonId): Promise<readonly ItemRecord[]>;
+  /** Raw placement records, bounded to one hand or 64 slots; corrupt overflow is refused. */
+  atPlace(ownerId: PersonId, origin: ItemRecord['origin'], place: 'hand' | 'hotbar' | 'shelf'): Promise<readonly ItemRecord[]>;
   /** Redacted reply only. Saves and replay always use raw provenance from get/list. */
   visible(item: ItemRecord): Promise<ItemRecord>;
   save(item: ItemRecord): Promise<void>;
@@ -32,6 +34,8 @@ export interface ItemStore {
   transaction<T>(kingdomId: KingdomId, work: (tx: ItemTransaction) => Promise<T>): Promise<T>;
   get(id: ItemId): Promise<ItemRecord | null>;
   list(ownerId: PersonId, kingdomId: KingdomId): Promise<readonly ItemRecord[]>;
+  /** Redacted placement records, bounded to one hand or 64 slots; corrupt overflow is refused. */
+  atPlace(ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin'], place: 'hand' | 'hotbar' | 'shelf'): Promise<readonly ItemRecord[]>;
   history(id: ItemId): Promise<readonly ItemEvent[]>;
   /** Keyset reads, at most 33 rows including one lookahead. Private browser reads never load whole collections. */
   listPage(ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin'], after?: string): Promise<readonly ItemRecord[]>;

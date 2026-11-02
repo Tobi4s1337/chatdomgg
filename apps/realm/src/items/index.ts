@@ -45,6 +45,7 @@ export interface RealmItems {
   move(ownerId: PersonId, itemId: ItemId, to: { place: ItemPlace; slot: number | null }, revision: number, access?: ItemOwnerAccess): Promise<ItemResult>;
   release(ownerId: PersonId, itemId: ItemId, count: number, revision: number, access?: ItemOwnerAccess): Promise<ItemResult>;
   list(ownerId: PersonId, kingdomId: KingdomId, filter?: { readonly place?: ItemPlace }): Promise<readonly ItemRecord[]>;
+  atPlace(ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin'], place: 'hand' | 'hotbar' | 'shelf'): Promise<readonly ItemRecord[]>;
   get(itemId: ItemId): Promise<ItemRecord | null>;
   history(itemId: ItemId): ReturnType<ItemStore['history']>;
   listPage(ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin'], after?: string): Promise<ItemListPage>;
@@ -105,10 +106,13 @@ export function createRealmItems(options: { store: ItemStore; catalogue: ItemCat
     ids.add(item.id); owners.set(item.ownerId, ids);
   };
   const slotFor = async (tx: ItemTransaction, ownerId: PersonId, origin: ItemRecord['origin'], place: ItemPlace) => {
-    const items = await tx.list(ownerId);
-    if (place === 'hand' && items.some(item => item.origin === origin && item.place === 'hand')) refuse('Your hands are full. Put your tool away first.');
-    if (place !== 'shelf' && place !== 'hotbar') return null;
-    const taken = new Set(items.filter(item => item.origin === origin && item.place === place).map(item => item.slot));
+    if (place !== 'hand' && place !== 'shelf' && place !== 'hotbar') return null;
+    const items = await tx.atPlace(ownerId, origin, place);
+    if (place === 'hand') {
+      if (items.length) refuse('Your hands are full. Put your tool away first.');
+      return null;
+    }
+    const taken = new Set(items.map(item => item.slot));
     for (let slot = 0; slot < 64; slot++) if (!taken.has(slot)) return slot;
     return refuse('There is no free place here.');
   };
@@ -233,6 +237,7 @@ export function createRealmItems(options: { store: ItemStore; catalogue: ItemCat
       }, access);
     },
     async list(ownerId, kingdomId, filter) { return (await store.list(ownerId, kingdomId)).filter(item => filter?.place ? item.place === filter.place : item.place !== 'spent'); },
+    atPlace: (ownerId, kingdomId, origin, place) => store.atPlace(ownerId, kingdomId, origin, place),
     get: id => store.get(id), history: id => store.history(id),
     async listPage(owner, kingdom, origin, after) {
       if (after !== undefined) ItemListCursorSchema.parse(after);
