@@ -27,6 +27,34 @@ as a stand-in.
 | raid-show | The incoming raid caravan under the raider's banner (`apps/web/src/twitch-moments/`, raid moments, the arrival director); the Raid Gate gathering and departure in the world (R05); arrival at the destination (R07); benches `/-/raid-gate` and `/-/twitch-moments` | S14 to S20 | The caravan exists on the live bench (`scripts/live/raid.mjs`, needs a realm); the departure is a flat tableau. | Fixture triggers that need no realm: an incoming raid from a named channel with N viewers, and a departure gathering of N walkers with torches behind the streamer, both on the kingdom or stream route. Support for a large column (N of 2,000 or more). No cards or captions in the world when a fixture param asks for a clean plate. |
 | panel-window | The Chatdom panel at 318 px (`/panel`, `apps/panel`), its "Take your place" state and its lit state | S01, S09 | The panel uses the Twitch extension helper (`apps/panel/src/helper.ts`). | A fixture mode that runs without Twitch, or confirmation that a studio shim of `window.Twitch.ext` (onAuthorized, onContext) is enough. A fixture param for the not-joined and joined states. |
 
+## What TS10 read (Sun 1 Nov, main `0e92df4`)
+
+- **grand-world, stream view.** `/stream?source=simulated&layout=stage&seam=starting&hour=19.3` (take `stream-dusk`) and
+  `/stream?source=simulated&layout=stage&mood=show&camera=window&hour=19.6` (take `stream-show`), recorded on the GPU
+  with the virtual clock. The settle signal is `window.__chatdomKingdom.stats.ready && stats.fieldSettled`. The studio
+  hides `.stream-mark.simulated`, `.stream-bench-simulated` and `.stream-seam` in its own frames (recorder `--css`).
+  The curtain ("The gate is opening") still covers the first 1.25 s; shots start after it.
+- **grand-world, the grand land.** The set pieces (`apps/studio/src/set/`) import `GrandEngine`, `GRAND_TIERS` and
+  `grandChannel` read-only and reach into the engine's private fields: `settings` (film settings), `govern` (turned
+  off), `controls`, `camera`, `land.sites`, `clouds.mesh` (hidden for the rise), `frame` (wrapped to place the camera
+  each frame) and `stats` (`phase`, `queued`, `busyWorkers`, `installsPending`, the idle test). These names are the
+  most fragile seam the teaser has; `hooks-check.mjs` checks them. The land has no town yet (GK11), so S04 and S19
+  show land and ships only.
+- **Stills as stand-ins.** `work/evidence/live-twitch/` (homes, homecoming, raid), `work/evidence/forge/dragon`,
+  `work/evidence/raid-road/` (before-departure, after-gate, before-welcome), `work/evidence/atlas/atlas` and
+  `work/evidence/growth/growth-sequence-1280.mp4`. Each is cropped clear of cards, captions and chips; the Atlas still
+  is softened so no channel name is legible.
+- **Sound.** The kingdom's own rendered ambience and hero sounds (see `apps/studio/sound/ambience.json`), rendered
+  from the product's sound modules by read-only import.
+- **Fonts.** `packages/ui/src/kit.css` and `packages/ui/src/fonts` for the cards and the burned-in captions.
+
+## Open asks from TS10
+
+- `needs: grand-world a public film hook on GrandEngine` (settings override, governor off, a camera driver called
+  each frame, a cloud-deck toggle, and an idle test), so the set pieces stop reaching into private fields.
+- `needs: tobias enable sound effects on the teaser's ElevenLabs key` (the key has no `sound_generation` permission and
+  can't read the subscription endpoint, so the spend is tracked from the character counts in `voice-ledger.md`).
+
 ## What the teaser provides
 
 Nothing that other lanes depend on. The studio, its rig and its media are private to this lane.
