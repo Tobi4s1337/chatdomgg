@@ -28,8 +28,8 @@ export { createWalkHud, restingStick, THUMB, thumbSlots } from './input/hud';
 export type { ThumbSlot, WalkHud, WalkHudState } from './input/hud';
 export { createWalkKeys, DEFAULT_WALK_BINDINGS, isEditableTarget, isKeyboardControl } from './input/keyboard';
 export type { WalkBindings } from './input/keyboard';
-export { createSpikeFilter, createWalkLook, LOOK } from './input/look';
-export type { KeyboardLockLike, LockDocument, LockSurface, LookMode, SpikeFilter, WalkLook, WalkLookView } from './input/look';
+export { createWalkLook, LOOK } from './input/look';
+export type { KeyboardLockLike, LockDocument, LockSurface, LookMode, WalkLook, WalkLookView } from './input/look';
 export { CLICK_MS, CLICK_SLOP_PX, createWalkPointer, isClickPress, wheelPixels } from './input/pointer';
 export { createWalkTouch, stickIntent, stickRegion, TOUCH } from './input/touch';
 export type { TouchStick, WalkTouch } from './input/touch';
@@ -115,8 +115,6 @@ export interface WalkDebug {
   input: { moveX: number; moveZ: number; buttons: number; yaw: number; collisionRevision: number };
   /** The captured mouse: idle (click to walk), requesting, locked, cooldown, leased, unavailable; touch on a phone. */
   look: LookMode | 'touch';
-  /** Warps the spike filter has rejected since the walk began. */
-  warps: number;
   /** First or third person, as the camera is placed. */
   person: 'third' | 'first';
   /** The phone stick under the thumb, in surface CSS px, or null. */
@@ -249,7 +247,7 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
   const debug: WalkDebug = {
     ready: false, owner, selfId: realm.selfId, frames: 0, walkers: 0, self: null, authority: null, peers: [],
     input: { moveX: 0, moveZ: 0, buttons: 0, yaw: 0, collisionRevision: realm.room.state.collisionRevision },
-    look: coarse ? 'touch' : look.mode, warps: 0, person: rig.person, stick: null,
+    look: coarse ? 'touch' : look.mode, person: rig.person, stick: null,
     camera: { yaw: rig.view.yaw, pitch: rig.view.pitch, distance: rig.view.distance, zoomDistance: rig.zoomDistance, desiredDistance: rig.desiredDistance, clearance: null, collisionRevision: solids?.revision ?? null, fov: camera.fov, near: camera.near, filmOffset: camera.filmOffset, shift: 0 },
     screen: null, viewport: { width, height }, selfOpacity: 1,
   };
@@ -303,7 +301,6 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
         // Locked mouse look turns a fixed angle per pixel, whatever the window size, scaled by the hand's setting.
         const turn = LOOK.radiansPerPx * setting('sensitivity', 1);
         rig.orbit(locked.dx * turn * height / SHOULDER.orbitYaw, locked.dy * invert * turn * height / SHOULDER.orbitPitch, height);
-        debug.warps = look.rejected;
         rig.zoom(pointer.takeZoom() + touch.takeZoom());
       }
       const move = steering ? walkDirection(clampUnit(keys.forward + touch.forward), clampUnit(keys.right + touch.right), rig.view.yaw) : { moveX: 0, moveZ: 0 };
@@ -336,7 +333,11 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
       if (!placed) { rig.reset(options.heading ?? headingFromByte(self.yaw)); placed = true; }
       debug.self = { x: self.x, y: self.y, z: self.z, yaw: self.yaw, speed: self.speed };
       if (!walking) return poses;
-      rig.update(dt, self.speed > .3 ? headingFromByte(self.yaw) : null, self.speed, pointer.dragging || touch.orbiting);
+      // Auto-follow swings the camera behind the walk, and the walk is camera-relative: strafing or walking a
+      // diagonal while the hand rests turns the camera, which turns the walk, which turns the camera, forever.
+      // That steering suits a thumb on a stick; a mouse (captured or dragging) owns the camera alone.
+      const follow = coarse || touch.used;
+      rig.update(dt, follow && self.speed > .3 ? headingFromByte(self.yaw) : null, self.speed, pointer.dragging || touch.orbiting);
       const world = collision();
       let bodyY = self.y, cameraY: number | undefined;
       const predicted = realm.predicted;

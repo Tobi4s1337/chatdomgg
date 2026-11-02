@@ -4,8 +4,9 @@
  * moved. Escape lets the mouse go into the ledger, and one click comes back.
  *
  * Browsers, as handled here (see apps/web/src/walk/README.md, "The captured mouse"):
- * - Chromium asks for `unadjustedMovement` (raw, unaccelerated input). Platforms without it reject with
- *   NotSupportedError; that one request is retried once, at once, without the option, inside the same click.
+ * - Every request asks for `unadjustedMovement` (raw, unaccelerated input: Chromium, and Firefox 152+ on Windows).
+ *   Platforms without it reject with NotSupportedError (Firefox on Linux does, then also fires pointerlockerror);
+ *   that one request is retried once, at once, without the option, inside the same click.
  * - Chromium refuses a new lock for about a second after the person let one go. That is `cooldown`: calm, and the
  *   next click simply asks again. Firefox and Safari behave the same way with different timing.
  * - Safari has no raw input and may return nothing instead of a promise; its answer comes as
@@ -14,31 +15,23 @@
  *   In fullscreen with keyboard lock the key does reach the page, and the caller treats it as the same request.
  * - Window focus loss ends the lock everywhere; that also opens the ledger, as a paused game would.
  *
- * Movement is filtered against warps, not against speed: some platforms deliver an isolated jump on lock, on a
- * monitor crossing or on focus. A big event is held for at most one following event (or `holdMs`) and dropped
- * only when it stands alone, far larger than what came before and after, or when it flips direction in the middle
- * of a steady motion. Every real flick ramps up and down through its neighbours, so it survives whole.
+ * Movement is summed raw, 1:1, like every PC game and three.js PointerLockControls: each locked `mousemove`'s
+ * movementX/Y adds to the turn, nothing is held, smoothed or dropped. An earlier warp filter judged big events
+ * against their neighbours and dropped the "odd" ones; Firefox on Windows locks by re-centring the hidden cursor
+ * and its stream can carry a large delta with its equal and opposite correction, so dropping either half turned
+ * the world by hundreds of pixels the hand never moved (work/lanes/play/MOUSE-LOOK.md).
  */
 import { isEditableTarget, type KeyEventLike } from './keyboard';
 
 export const LOOK = {
-  /** Radians of turn per locked mouse pixel at sensitivity 1. */
-  radiansPerPx: .0024,
-  /** Smaller events are always real; only larger ones are ever held for judgement. */
-  spikePx: 160,
-  /** A held event is a warp when it is more than this many times larger than both of its neighbours. */
-  spikeRatio: 6,
   /**
-   * ...unless the next event carries on in the same direction at least this fraction of its size: a snap from a
-   * still hand that lands in one coalesced frame and decays over the next is a flick. A warp has no such tail.
+   * Radians of turn per locked mouse count at sensitivity 1. With `unadjustedMovement` movementX/Y are
+   * raw device counts, so the turn per centimetre of hand depends on the mouse's DPI: .001 rad (0.057°) is about
+   * 20 cm per full turn at 800 DPI and 10 cm at 1600, a shipped shooter's default (CS2 at 2.5 is 0.055°/count).
+   * The old .0024 (PointerLockControls' 0.002 per accelerated desktop pixel) was 4 cm per turn on a 1600 DPI
+   * mouse: a nudge spun the world. The ledger's sensitivity (0.25×..4×) covers 5 to 80 cm per turn at 800 DPI.
    */
-  tailFraction: 1 / 12,
-  /** A neighbour this small counts as a still hand when judging direction flips. */
-  stillPx: 6,
-  /** How long a held event waits for its next neighbour before it is judged alone. */
-  holdMs: 24,
-  /** Nothing a hand can do moves this far in one event. */
-  maxPx: 6000,
+  radiansPerPx: .001,
   /** A refusal this soon after the person let the mouse go is the browser's cooldown, not a refusal. */
   cooldownMs: 1600,
   /** Refusals in a row with no cooldown to explain them mean this page cannot capture the mouse. */
@@ -61,69 +54,7 @@ export interface LockDocument extends EventTarget {
 }
 /** `navigator.keyboard` where the browser has it (Chromium desktop). */
 export interface KeyboardLockLike { lock(codes?: readonly string[]): Promise<void>; unlock(): void }
-interface MoveEventLike { readonly movementX: number; readonly movementY: number; readonly timeStamp?: number }
-
-// ---------------------------------------------------------------------------------------------------------------
-// Spike filter
-
-interface Held { readonly dx: number; readonly dy: number; readonly at: number; readonly before: { dx: number; dy: number }; readonly flip: boolean }
-
-export interface SpikeFilter {
-  /** One raw event. Returns what is now certain to be real (possibly an earlier held event too). */
-  push(dx: number, dy: number, at: number): { dx: number; dy: number };
-  /** Judge a held event that waited `holdMs` without a neighbour. Returns what is real now. */
-  flush(at: number): { dx: number; dy: number };
-  /** Forget everything (lock gained or lost). The next event has a still hand before it. */
-  reset(): void;
-  /** Events judged warps since creation, for the debug view. */
-  readonly rejected: number;
-}
-
-const size = (dx: number, dy: number) => Math.hypot(dx, dy);
-const dot = (a: { dx: number; dy: number }, b: { dx: number; dy: number }) => a.dx * b.dx + a.dy * b.dy;
-
-export function createSpikeFilter(): SpikeFilter {
-  let before = { dx: 0, dy: 0 }, held: Held | null = null, rejected = 0;
-  const isWarp = (h: Held, after: { dx: number; dy: number } | null) => {
-    const mag = size(h.dx, h.dy), prev = size(h.before.dx, h.before.dy), next = after ? size(after.dx, after.dy) : 0;
-    const tail = !h.flip && !!after && dot(after, h) > 0 && next >= mag * LOOK.tailFraction;
-    if (mag > prev * LOOK.spikeRatio && mag > next * LOOK.spikeRatio && !tail) return true;
-    // A reversal in the middle of a steady motion that the next event does not continue: the sign-flip warp.
-    if (h.flip && after && next >= LOOK.stillPx && dot(after, h.before) > 0 && dot(after, h) <= 0) return true;
-    return false;
-  };
-  const settle = (after: { dx: number; dy: number } | null) => {
-    const h = held!; held = null;
-    if (isWarp(h, after)) { rejected++; return { dx: 0, dy: 0 }; }
-    before = { dx: h.dx, dy: h.dy };
-    return { dx: h.dx, dy: h.dy };
-  };
-  return {
-    push(rawX, rawY, at) {
-      if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return { dx: 0, dy: 0 };
-      const dx = Math.max(-LOOK.maxPx, Math.min(LOOK.maxPx, rawX)), dy = Math.max(-LOOK.maxPx, Math.min(LOOK.maxPx, rawY));
-      let out = { dx: 0, dy: 0 };
-      if (held) out = settle({ dx, dy });
-      const mag = size(dx, dy), prev = size(before.dx, before.dy);
-      const flip = prev >= LOOK.stillPx * 4 && dot({ dx, dy }, before) < -.5 * mag * prev;
-      if (mag >= LOOK.spikePx && (mag > prev * LOOK.spikeRatio || flip)) {
-        held = { dx, dy, at, before: { ...before }, flip };
-        return out;
-      }
-      before = { dx, dy };
-      return { dx: out.dx + dx, dy: out.dy + dy };
-    },
-    flush(at) {
-      if (!held || !(at - held.at >= LOOK.holdMs)) return { dx: 0, dy: 0 };
-      const out = settle(null);
-      // A hand that stopped after a held event is still now.
-      before = { dx: 0, dy: 0 };
-      return out;
-    },
-    reset() { before = { dx: 0, dy: 0 }; held = null; },
-    get rejected() { return rejected; },
-  };
-}
+interface MoveEventLike { readonly movementX: number; readonly movementY: number }
 
 // ---------------------------------------------------------------------------------------------------------------
 // Capture
@@ -139,8 +70,8 @@ export interface WalkLookView {
 }
 
 export interface WalkLook extends WalkLookView {
-  /** Locked pixels gathered since the last take, already filtered. */
-  takeLook(now?: number): { readonly dx: number; readonly dy: number };
+  /** Locked movement (counts) gathered since the last take, raw. */
+  takeLook(): { readonly dx: number; readonly dy: number };
   /**
    * A trusted press or click asks for the mouse. Synthetic events, keyboard "clicks" and presses while a lease or a
    * disabled walk holds the cursor never capture. Returns true when a request was made.
@@ -162,7 +93,6 @@ export interface WalkLook extends WalkLookView {
    * release, or Escape reaching the page under keyboard lock. The walk opens the ledger.
    */
   onLetGo(listener: (why: 'escape' | 'browser') => void): () => void;
-  readonly rejected: number;
   dispose(): void;
 }
 
@@ -179,7 +109,6 @@ const NAVIGATOR_KEYBOARD = (): KeyboardLockLike | null => {
 export function createWalkLook(surface: LockSurface, doc: LockDocument, keyboard: EventTarget, environment: WalkLookEnvironment = {}): WalkLook {
   const clock = environment.clock ?? (() => performance.now());
   const keys = environment.keyboardLock === undefined ? NAVIGATOR_KEYBOARD() : environment.keyboardLock;
-  const filter = createSpikeFilter();
   let mode: LookMode = surface.requestPointerLock ? 'idle' : 'unavailable';
   let enabled = true, attempt = 0, dx = 0, dy = 0, raw = true, ownExit = false, lastLetGo = -Infinity, refusals = 0;
   /** The attempt whose request returned a promise: its answer comes from the promise, never the error event. */
@@ -201,7 +130,7 @@ export function createWalkLook(surface: LockSurface, doc: LockDocument, keyboard
     for (const listener of [...changeListeners]) listener(next);
   };
   const set = (next: LookMode) => { mode = next; announce(); };
-  const forget = () => { dx = 0; dy = 0; filter.reset(); };
+  const forget = () => { dx = 0; dy = 0; };
   const resting = (): LookMode => mode === 'unavailable' ? 'unavailable' : leases.size ? 'leased' : 'idle';
   const exitOwn = () => {
     attempt++;
@@ -256,9 +185,8 @@ export function createWalkLook(surface: LockSurface, doc: LockDocument, keyboard
   const error = () => { if (promised !== attempt) refuse(attempt); };
   const move = (rawEvent: Event) => {
     if (mode !== 'locked' || !ours()) return;
-    const event = rawEvent as unknown as MoveEventLike;
-    const delta = filter.push(event.movementX, event.movementY, clock());
-    dx += delta.dx; dy += delta.dy;
+    const { movementX, movementY } = rawEvent as unknown as MoveEventLike;
+    if (Number.isFinite(movementX) && Number.isFinite(movementY)) { dx += movementX; dy += movementY; }
   };
   const keydown = (rawEvent: Event) => {
     const event = rawEvent as unknown as KeyEventLike;
@@ -292,9 +220,7 @@ export function createWalkLook(surface: LockSurface, doc: LockDocument, keyboard
     get canFullscreen() { return canFullscreen(); },
     get canLockKeyboard() { return !!keys; },
     get leases() { return [...leases.values()]; },
-    get rejected() { return filter.rejected; },
-    takeLook(now = clock()) {
-      if (mode === 'locked') { const late = filter.flush(now); dx += late.dx; dy += late.dy; }
+    takeLook() {
       const delta = { dx, dy }; dx = 0; dy = 0;
       return delta;
     },
