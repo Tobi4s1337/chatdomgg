@@ -169,3 +169,24 @@ into the shared kit once front-door reviews them. The newer Twitch mark, Watch,
 site footer and How it works exports exist on front-door's branch but are not yet
 in the Atlas checkout's shared package; the Atlas keeps words-only Watch links
 until main adopts those exports. No official mark is copied or redrawn here.
+
+## Strict-CSP host prerequisite — 2 Nov, AM10 final local checks
+
+The web entry imports `@chatdom/shared` schemas before the lazy Atlas. Zod's
+object-JIT capability probe calls `Function` and emits a caught `script-src`
+violation under the public CSP. The traced probe occurs before the Atlas chunk
+loads; the map can still render, but the zero-violation acceptance gate fails.
+
+needs: main/front-door must evaluate a bootstrap module containing
+`import { config } from 'zod'; config({ jitless: true });` before any shared-schema
+module evaluates. Import that side-effect module first in `apps/web/src/main.tsx`,
+or configure Zod before dynamically importing the app entry. Calling config in
+the body below static schema imports is too late. Keep the public CSP unchanged.
+Atlas does not modify the page bootstrap or shared package from this lane.
+
+The default `checks/phone-performance-checks.mjs` retains the real zero-CSP-
+violation gate. Its explicit `ATLAS_TEST_CSP_JITLESS=1` mode supplies this missing
+host prerequisite in the test only and names its evidence `with-bootstrap`;
+that evidence proves the consumer under the required host configuration, never
+production bootstrap completion. Provenance is in
+`work/evidence/atlas-map/am10-phone-final-provenance.json`.

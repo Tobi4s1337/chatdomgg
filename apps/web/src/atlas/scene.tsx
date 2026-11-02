@@ -84,8 +84,6 @@ function webglAvailable(): boolean {
   }
 }
 
-const reduceMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-
 /**
  * The Atlas of Kingdoms: a survey preview of real Twitch channels drawn as draft land. One root element carries
  * `data-chatdom-atlas` and the state; the owning embed is notified when the first coherent frame is drawn. Without WebGL the same survey is drawn as a still.
@@ -97,6 +95,9 @@ export function mountScene(element: HTMLElement, options: AtlasMountOptions, rea
 }
 
 function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReadyState): void; attach(api: Omit<SceneHandle, 'dispose'>): void }) {
+  // Bloom reads this for every live stain. Keep the query, while its matches value follows preference changes.
+  const motionPreference = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+  const reduceMotion = () => motionPreference?.matches ?? false;
   const SOURCE: PreviewSource = { base: props.options.base ?? '/map-data', fetch: (input, init) => fetch(input, init) };
   const [mode, setMode] = createSignal(props.options.mode);
   const ownsUrl = props.options.routing === 'url' && props.options.mode === 'explore';

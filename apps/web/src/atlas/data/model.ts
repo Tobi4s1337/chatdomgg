@@ -145,6 +145,8 @@ export class SettlerStore {
   /** Whether a names projection has ever been applied. */
   named = false;
   version = 0;
+  /** Names/visibility changed on existing holdings. Background chunk arrivals do not re-letter the fixed still. */
+  labelsVersion = 0;
 
   constructor(private readonly world: PreviewWorld, private readonly now: () => number = Date.now, private readonly cell = 24) {
     this.cols = Math.ceil((world.bounds.maxX - world.bounds.minX) / world.coordScale / cell) + 1;
@@ -167,6 +169,7 @@ export class SettlerStore {
     this.byLogin.clear();
     for (const settler of this.all) this.label(settler);
     this.version++;
+    this.labelsVersion++;
   }
 
   /**
@@ -188,7 +191,7 @@ export class SettlerStore {
         next = settler.freshUntil;
       }
     }
-    if (changed) this.version++;
+    if (changed) { this.version++; this.labelsVersion++; }
     return next;
   }
 

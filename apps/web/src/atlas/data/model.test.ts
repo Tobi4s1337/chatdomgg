@@ -269,6 +269,35 @@ describe('SettlerStore', () => {
     expect(store.named).toBe(false);
     expect(store.all.every((s) => s.name === null)).toBe(true);
   });
+
+  it('keeps fixed lettering on chunk arrival but invalidates names, withholding and expiry including lower tiers', () => {
+    const world = makeWorld();
+    const clock = { now: world.asOf + 3_600_000 };
+    const store = namedStore(world, clock);
+    const labels = store.labelsVersion;
+    const version = store.version;
+    store.addChunk(makeChunk(world, 0));
+    store.addChunk(makeChunk(world, 1));
+    expect(store.version).toBeGreaterThan(version);
+    expect(store.labelsVersion).toBe(labels);
+    const selected = store.byId.get('108586685')!;
+    expect(selected.name).toBe('TenzinNiznet');
+    store.applyNames(makeNames(world, { omit: ['108586685'], withheld: ['207813352'] }));
+    expect(store.labelsVersion).toBe(labels + 1);
+    expect(selected.name).toBeNull();
+    expect(store.byId.get('207813352')!.withheld).toBe(true);
+    store.applyNames(makeNames(world));
+    expect(store.labelsVersion).toBe(labels + 2);
+    expect(selected.name).toBe('TenzinNiznet');
+    expect(store.byId.get('207813352')!.withheld).toBe(false);
+    clock.now = world.asOf + DAY;
+    store.expireNames();
+    expect(store.labelsVersion).toBe(labels + 3);
+    expect(selected.name).toBeNull();
+    expect(store.all.every(settler => settler.name === null)).toBe(true);
+    store.expireNames();
+    expect(store.labelsVersion).toBe(labels + 3);
+  });
 });
 
 describe('tierOf', () => {

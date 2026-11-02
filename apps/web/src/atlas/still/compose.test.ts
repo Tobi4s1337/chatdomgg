@@ -1,15 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import stampSheet from '../assets/stamps.json';
-import { columns, HEAD_ROWS, makeNames, makeWorld, type Row } from '../data/fixtures.test-support';
+import { columns, HEAD_ROWS, makeChunk, makeNames, makeWorld, type Row } from '../data/fixtures.test-support';
 import { geographyOf, SettlerStore, type Settler } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
-import { DISTANCE_SCALE, type Box } from '../map/camera';
+import { Camera, DISTANCE_SCALE, type Box } from '../map/camera';
 import { overlaps } from '../map/collide';
 import type { Stamp } from '../map/paint';
 import { levelFor, tileBox, tileKey } from '../map/pyramid';
 import { formatMoment } from '../ui/format';
 import {
-  ancestorCrop, ancestorsOf, DENSITY_CAP, layoutStill, SHIELD_LIMIT, sheetFrame, stillInsets, stillRibbon, stillView, tileRect, washStains,
+  ancestorCrop, ancestorsOf, DENSITY_CAP, layoutStill, layoutStillSelection, SHIELD_LIMIT, sheetFrame, stillInsets, stillRibbon, stillView, tileRect, washStains,
   type LiveSource, type Measure, type StillLayout,
 } from './compose';
 
@@ -232,6 +232,91 @@ describe('layoutStill', () => {
     const result = layout(setup(world));
     expect(result.tiers).toBe(1);
     expect(result.marks.map((mark) => mark.settler.tierRank)).toEqual([0]);
+  });
+});
+
+describe('cached still selection', () => {
+  function selection(scale = 10, x = 0) {
+    const env = setup();
+    const camera = new Camera(env.geo.bounds);
+    camera.x = x; camera.y = 0; camera.scale = scale;
+    const selected = env.store.byId.get(HEAD_ROWS[2]!.id)!;
+    const input = { ...env, camera, view: PHONE, stamps, measure, selected };
+    const base = layoutStill({ ...input, selected: null });
+    return { input, base };
+  }
+
+  it('does no query or lettering work for land outside the padded view', () => {
+    const { input, base } = selection();
+    expect(base.marks.some(mark => mark.id === input.selected.id)).toBe(false);
+    const query = vi.spyOn(input.store, 'query');
+    const lettering = vi.fn(measure);
+    expect(layoutStillSelection(base, { ...input, measure: lettering })).toBe(base);
+    expect(query).not.toHaveBeenCalled();
+    expect(lettering).not.toHaveBeenCalled();
+  });
+
+  it('keeps the same visible layout for a selected stamp wholly offscreen inside the margin', () => {
+    const { input, base } = selection(10, 50);
+    const point = input.camera.worldToScreen(input.selected.x, input.selected.y, PHONE);
+    expect(point.x).toBeGreaterThan(PHONE.width);
+    expect(point.x).toBeLessThan(PHONE.width + 160);
+    const query = vi.spyOn(input.store, 'query');
+    expect(layoutStillSelection(base, input)).toBe(base);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('reuses an already drawn holding and rejects withheld or stale-store selections', () => {
+    const { input, base } = selection(0.2);
+    const drawn = base.marks[0]!.settler;
+    const query = vi.spyOn(input.store, 'query');
+    for (const selected of [drawn, null, { ...input.selected }, { ...input.selected, withheld: true }]) {
+      expect(layoutStillSelection(base, { ...input, selected })).toBe(base);
+    }
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('still gives a lower-tier visible selection first priority with its stamp, shield and name', () => {
+    const { input, base } = selection(0.2);
+    expect(base.marks.some(mark => mark.id === input.selected.id)).toBe(false);
+    const selected = layoutStillSelection(base, input);
+    expect(selected).not.toBe(base);
+    expect(plain(selected)).toEqual(plain(layoutStill(input)));
+    expect(selected.marks[0]!.settler).toBe(input.selected);
+    expect(selected.marks[0]!.stamp).not.toBeNull();
+    expect(selected.marks[0]!.shield).not.toBeNull();
+    expect(selected.marks[0]!.name?.text).toBe(input.selected.name);
+  });
+
+  it('retains a forced stamp reaching into the viewport even when its anchor lies outside', () => {
+    const { input } = selection(0.2);
+    input.camera.x = input.selected.x - (PHONE.width + 4 - PHONE.width / 2) / input.camera.scale;
+    const currentBase = layoutStill({ ...input, selected: null });
+    const result = layoutStillSelection(currentBase, input);
+    expect(result).not.toBe(currentBase);
+    const mark = result.marks.find(mark => mark.id === input.selected.id)!;
+    expect(input.camera.worldToScreen(input.selected.x, input.selected.y, PHONE).x).toBeGreaterThan(PHONE.width);
+    expect(mark.box.x).toBeLessThan(PHONE.width);
+    expect(mark.box.x + mark.box.w).toBeGreaterThan(PHONE.width);
+  });
+
+  it('refreshes the selected lower-tier name and removes its mark when withheld', () => {
+    const world = makeWorld();
+    const env = setup(world);
+    env.store.addChunk(makeChunk(world, 0));
+    const selected = env.store.byId.get('506611431')!;
+    const camera = stillView(env.geo.bounds, PHONE).camera;
+    const input = { ...env, camera, view: PHONE, stamps, measure, selected };
+    const current = () => layoutStillSelection(layoutStill({ ...input, selected: null }), input);
+    expect(current().marks.find(mark => mark.id === selected.id)?.name?.text).toBe('mira004');
+    const renamed = makeNames(world);
+    renamed.names[renamed.ids.indexOf(selected.id)] = 'Mira';
+    env.store.applyNames(renamed);
+    expect(current().marks.find(mark => mark.id === selected.id)?.name?.text).toBe('Mira');
+    env.store.applyNames(makeNames(world, { withheld: [selected.id] }));
+    expect(current().marks.some(mark => mark.id === selected.id)).toBe(false);
+    env.store.applyNames(makeNames(world));
+    expect(current().marks.find(mark => mark.id === selected.id)?.name?.text).toBe('mira004');
   });
 });
 

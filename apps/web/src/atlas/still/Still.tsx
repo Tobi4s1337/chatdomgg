@@ -14,7 +14,7 @@ import { INK, PAPER, PAPER_DEEP, VERMILION } from '../map/theme';
 import { StampIcon } from '../ui/marks';
 import { StillBaker, type Baked } from './bake';
 import {
-  ancestorCrop, ancestorsOf, FACE_CAPS, FACE_ITALIC, FACE_TEXT, layoutStill, LINE, sheetFrame, stillPixelRatio, stillRibbon, stillView, tileRect,
+  ancestorCrop, ancestorsOf, FACE_CAPS, FACE_ITALIC, FACE_TEXT, layoutStill, layoutStillSelection, LINE, sheetFrame, stillPixelRatio, stillRibbon, stillView, tileRect,
   washStains, type Font, type Stain, type StillLayout, type StillMark, type StillText, type StillView,
 } from './compose';
 import './still.css';
@@ -277,7 +277,7 @@ export function Still(props: StillProps): JSX.Element {
   const [view, setView] = createSignal<Viewport | null>(null);
   const [fontsIn, setFontsIn] = createSignal(false);
   const [land, setLand] = createSignal<Land | null>(null);
-  const [storeVersion, setStoreVersion] = createSignal(props.store.version);
+  const [labelsVersion, setLabelsVersion] = createSignal(props.store.labelsVersion);
   const [washTick, setWashTick] = createSignal(0);
   const [washes, setWashes] = createSignal(0);
   const [drawnAt, setDrawnAt] = createSignal<number | null>(null);
@@ -353,7 +353,7 @@ export function Still(props: StillProps): JSX.Element {
   const baseLayout = createMemo<StillLayout | null>(() => {
     const drawn = land();
     if (!drawn || !fontsIn()) return null;
-    void storeVersion();
+    void labelsVersion();
     return layoutStill({ world: props.world, geo: props.geo, store: props.store, camera: drawn.view.camera, view: drawn.view.view, stamps, measure });
   });
   /** The selection is drawn first and always, as on the moving map; a holding already drawn keeps the layout as it is. */
@@ -361,9 +361,9 @@ export function Still(props: StillProps): JSX.Element {
     const base = baseLayout();
     const drawn = land();
     const selected = props.selected;
-    if (!base || !drawn || !selected || selected.withheld || base.marks.some((mark) => mark.settler === selected)) return base;
-    void storeVersion();
-    return layoutStill({ world: props.world, geo: props.geo, store: props.store, camera: drawn.view.camera, view: drawn.view.view, stamps, measure, selected });
+    if (!base || !drawn) return base;
+    void labelsVersion();
+    return layoutStillSelection(base, { world: props.world, geo: props.geo, store: props.store, camera: drawn.view.camera, view: drawn.view.view, stamps, measure, selected });
   });
   const ids = createMemo(() => layout()?.marks.map((mark) => mark.id) ?? []);
   const byId = createMemo(() => new Map(layout()?.marks.map((mark) => [mark.id, mark]) ?? []));
@@ -546,9 +546,9 @@ export function Still(props: StillProps): JSX.Element {
         if (!disposed) setFontsIn(true);
       });
     } else setFontsIn(true);
-    // Names refresh and expire, and chunks arrive, by mutating the store; the still follows its version.
+    // Chunks contain towns/villages, below the still's base tiers. Only changed labels re-letter its fixed head.
     versionTimer = setInterval(() => {
-      if (props.store.version !== storeVersion()) setStoreVersion(props.store.version);
+      if (props.store.labelsVersion !== labelsVersion()) setLabelsVersion(props.store.labelsVersion);
     }, 1_000);
   });
 

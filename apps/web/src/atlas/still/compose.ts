@@ -265,6 +265,40 @@ export interface LayoutInput {
   selected?: Settler | null;
 }
 
+const onScreen = (rect: Rect, view: Viewport) => rect.x < view.width && rect.y < view.height && rect.x + rect.w > 0 && rect.y + rect.h > 0;
+
+/** One projection shared by normal placement and the cheap selection relevance check. */
+function stampPlacement(settler: Settler, point: { x: number; y: number }, radius: number, scale: number, choices: readonly Stamp[]) {
+  if (!choices.length) return null;
+  const w = stampPx(settler.tierRank, radius, scale);
+  const index = hashId(settler.id) % choices.length;
+  const choice = choices[index]!;
+  const aspect = choice.ink.h / choice.ink.w;
+  const h = w * aspect;
+  const drawn = { x: point.x - w * choice.anchor.x, y: point.y - h * choice.anchor.y, w, h };
+  const occupied = { x: drawn.x + w * 0.12, y: drawn.y + h * 0.18, w: w * 0.76, h: h * 0.76 };
+  return { index, choice, drawn, occupied };
+}
+
+/**
+ * A card for land outside this fixed still must not relayout its visible neighbours. Only an actually drawable,
+ * suppressed selection needs the full selected-first collision pass. Reuse also avoids touching the store or
+ * measuring lettering when an already drawn holding is selected.
+ */
+export function layoutStillSelection(base: StillLayout, input: LayoutInput): StillLayout {
+  const selected = input.selected;
+  if (!selected || selected.withheld || input.store.byId.get(selected.id) !== selected || base.marks.some(mark => mark.settler === selected)) return base;
+  const near = input.camera.visibleBox(input.view, 160);
+  if (selected.x < near.minX || selected.x > near.maxX || selected.y < near.minY || selected.y > near.maxY) return base;
+  const point = input.camera.worldToScreen(selected.x, selected.y, input.view);
+  const group = STAMP_GROUPS[selected.tierRank]!;
+  const radius = input.world.tiers.holdingRadius[group];
+  const placement = stampPlacement(selected, point, radius, input.camera.scale, input.stamps.filter(stamp => stamp.group === group));
+  const box = placement?.drawn ?? { x: point.x - 12, y: point.y - 12, w: 24, h: 24 };
+  if (!onScreen(box, input.view)) return base;
+  return layoutStill(input);
+}
+
 /** The accessible name of a holding's button. Withheld holdings never reach this. */
 export function markLabel(settler: Settler, geo: Geography): string {
   const tier = TIER_NAMES[settler.tierRank]!.toLowerCase();
@@ -357,15 +391,10 @@ export function layoutStill(input: LayoutInput): StillLayout {
     const choices = choicesByTier[settler.tierRank] ?? [];
     const label = markLabel(settler, geo);
     if ((forced || stampVisible(settler.tierRank, scale)) && choices.length) {
-      const w = stampPx(settler.tierRank, r, scale);
-      const index = hashId(settler.id) % choices.length;
-      const choice = choices[index]!;
-      const aspect = choice.ink.h / choice.ink.w;
-      const h = w * aspect;
-      const rect: Rect = { x: s.x - w * choice.anchor.x + w * 0.12, y: s.y - h * choice.anchor.y + h * 0.18, w: w * 0.76, h: h * 0.76 };
-      if (forced || grid.free(rect)) {
-        claim(rect);
-        const drawn = { x: s.x - w * choice.anchor.x, y: s.y - h * choice.anchor.y, w, h };
+      const { index, choice, drawn, occupied } = stampPlacement(settler, s, r, scale, choices)!;
+      const { w, h } = drawn;
+      if (forced || grid.free(occupied)) {
+        claim(occupied);
         const plate = placeName(settler, s.x, s.y, w, h * choice.anchor.y, forced);
         marks.push({
           id: settler.id, settler, box: drawn, label,
@@ -392,8 +421,7 @@ export function layoutStill(input: LayoutInput): StillLayout {
   if (!realmsPlaced) placeRealms(geo, camera, view, measure, take, texts);
   // Holdings in the margin are placed (so the screen's own give way to them as the map's do) but are not drawn here:
   // a button for one would sit off screen, reachable by Tab and a screen reader, and scroll the still to it.
-  const onScreen = marks.filter((mark) => mark.box.x < view.width && mark.box.y < view.height && mark.box.x + mark.box.w > 0 && mark.box.y + mark.box.h > 0);
-  return { marks: onScreen, texts, shields, names, tiers, claims };
+  return { marks: marks.filter(mark => onScreen(mark.box, view)), texts, shields, names, tiers, claims };
 }
 
 type Take = (rect: Rect) => boolean;
