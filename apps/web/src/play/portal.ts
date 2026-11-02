@@ -9,6 +9,8 @@ import type { PlayContext } from './slots';
  * Play owns the transfer and its recovery; a destination lane (gather for the tavern) owns the room and its scene.
  * - One walker in exactly one room: the source room is left before the destination is joined, and the destination
  *   is disposed before the source is joined again.
+ * - Leaving a room is awaited to the end. A leave that fails or stays silent strands the curtain with a retry; it never
+ *   lets the next room join early.
  * - Entry is never reported before the destination says it is ready. A destination that fails, times out or is
  *   lost puts you back outside the door; while that way back is not open, the curtain says so and offers a retry.
  * - The session travels, the ticket never does: the destination asks `visit.entry.ticket()` for a fresh one.
@@ -53,7 +55,11 @@ export interface PortalVisit {
 export interface PortalSurface {
   /** Resolves once you stand in the destination room, authoritative state and scene both in; rejects if never. */
   readonly ready: Promise<void>;
-  /** Leave the destination room and free everything. Play awaits it before joining the source again. */
+  /**
+   * Leave the destination room and free everything. Play awaits it before joining the source again, so resolve once
+   * the room has really let you go (a connection that is already gone counts) and reject only while you may still be
+   * in it: play then says so on the curtain and calls dispose again on the person's retry.
+   */
   dispose(): void | Promise<void>;
 }
 
@@ -109,6 +115,8 @@ export interface PortalTransferOptions {
   readonly cue?: (cue: PortalCue) => void;
   /** How long a destination may take to say it is ready. */
   readonly readyMs?: number;
+  /** How long leaving a room or opening the way back may stay silent before the curtain says so. */
+  readonly stepMs?: number;
   /** For tests; defaults to the page's timers. */
   readonly timers?: { set(run: () => void, ms: number): unknown; clear(handle: unknown): void };
 }
@@ -133,6 +141,8 @@ export interface PortalTransfer {
 }
 
 export const PORTAL_READY_MS = 20_000;
+/** How long leaving a room or opening the way back may stay silent before the curtain says so. */
+export const PORTAL_STEP_MS = 12_000;
 const LABEL_IN = 'Through the door', LABEL_OUT = 'Back out the door';
 const NOTE_REFUSED = 'The door would not open just now. You are back outside.';
 const NOTE_LOST = 'The room let you go. You are back outside.';
@@ -150,65 +160,131 @@ export function checkPortal(portal: PortalDescriptor): string | null {
   return null;
 }
 
+/** One run at a time: a call while one is in flight joins it, a failed run may run again, a finished one stays done. */
+function once(run: () => void | Promise<void>): () => Promise<void> {
+  let flight: Promise<void> | null = null;
+  return () => flight ??= (async () => { await run(); })().catch((error: unknown) => { flight = null; throw error; });
+}
+const noop = () => {};
+
+type Settled = { readonly kind: 'ok' } | { readonly kind: 'failed'; readonly error: unknown } | { readonly kind: 'silent' } | { readonly kind: 'ended' };
+
+interface Journey {
+  readonly source: PortalSource;
+  readonly portal: PortalDescriptor;
+  readonly curtain: PortalCurtain;
+  /** The visit generation this journey lent out; a newer generation makes the visit stale. */
+  readonly visit: number;
+  /** Settles once the source room has really been let go (or refused to be); nothing joins it again before. */
+  sourceLeft: Promise<void>;
+  /** The destination's surface until it has really been left. */
+  surface: PortalSurface | null;
+  leaveRoom: (() => Promise<void>) | null;
+  /** A `visit.fail` that came before the ready race began (for example from inside `mount`). */
+  failure: Error | null;
+  failReady: ((error: Error) => void) | null;
+  /** Resolves when the journey is over (home again or the page gone), so no wait outlives it. */
+  readonly ended: Promise<void>;
+  end(): void;
+}
+
 export function createPortalTransfer(options: PortalTransferOptions): PortalTransfer {
   const timers = options.timers ?? { set: (run: () => void, ms: number) => setTimeout(run, ms), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
   const readyMs = options.readyMs ?? PORTAL_READY_MS;
+  const stepMs = options.stepMs ?? PORTAL_STEP_MS;
   const destinations = new Map<string, PortalDestination>();
   const listeners = new Set<(phase: PortalPhase) => void>();
   let phase: PortalPhase = 'idle', disposed = false;
   let bound: PortalSource | null = null;
-  // The journey in progress: the source it left, the door, the destination's surface and its visit's generation.
-  let journey: { source: PortalSource; portal: PortalDescriptor; surface: PortalSurface | null; visit: number; curtain: PortalCurtain } | null = null;
+  let journey: Journey | null = null;
   let generation = 0;
   const set = (next: PortalPhase) => { if (phase === next) return; phase = next; for (const listener of [...listeners]) listener(next); };
   const cue = (name: PortalCue) => { try { options.cue?.(name); } catch { /* a silent door never stops a walk */ } };
+  /** The curtain is drawn for the person; a curtain that stumbles never stops the journey under it. */
+  const draw = async (run: () => Promise<void> | void) => { try { await run(); } catch (error) { console.error('The door curtain stumbled', error); } };
+  const over = (current: Journey) => disposed || journey !== current;
 
   const destinationFor = (portal: PortalDescriptor) => destinations.get(portal.destinationRoom);
 
-  async function disposeSurface(surface: PortalSurface | null) {
-    if (!surface) return;
-    try { await surface.dispose(); } catch (error) { console.error('The room behind the door did not close cleanly', error); }
+  function newJourney(source: PortalSource, portal: PortalDescriptor, curtain: PortalCurtain): Journey {
+    let end = noop;
+    const ended = new Promise<void>(resolve => { end = resolve; });
+    return { source, portal, curtain, visit: ++generation, sourceLeft: Promise.resolve(), surface: null, leaveRoom: null, failure: null, failReady: null, ended, end };
   }
 
-  /** Back to the source door. Keeps trying only when asked: a stranded curtain waits for the person's retry. */
-  async function home(note: string | undefined): Promise<PortalOutcome> {
-    const current = journey!;
-    const { source, portal, curtain } = current;
-    try {
-      await source.rejoin({ portal: portal.id, anchor: portal.returnAnchor });
-    } catch (error) {
-      if (disposed || journey !== current) return 'back-outside';
-      console.error('The way back through the door is not open', error);
+  /** How a step went within `ms`: done, failed, still silent, or the journey ended under it. */
+  function settle(current: Journey, flight: Promise<void>, ms: number): Promise<Settled> {
+    return new Promise<Settled>(resolve => {
+      const timer = timers.set(() => resolve({ kind: 'silent' }), ms);
+      const done = (result: Settled) => { timers.clear(timer); resolve(result); };
+      flight.then(() => done({ kind: 'ok' }), (error: unknown) => done({ kind: 'failed', error }));
+      void current.ended.then(() => done({ kind: 'ended' }));
+    });
+  }
+
+  /**
+   * A step the journey never goes past until it is really done: the room behind you left, the way back open. A step
+   * that fails or stays silent strands the curtain; the person's retry runs it again (or joins the one still going),
+   * and a late success goes on by itself. False when the journey ended meanwhile.
+   */
+  async function must(current: Journey, step: () => Promise<void>, what: string): Promise<boolean> {
+    for (;;) {
+      const flight = step();
+      const result = await settle(current, flight, stepMs);
+      if (over(current) || result.kind === 'ended') return false;
+      if (result.kind === 'ok') return true;
+      console.error(what, result.kind === 'failed' ? result.error : `still not done after ${stepMs} ms`);
       set('stranded');
-      return new Promise<PortalOutcome>(resolve => {
-        curtain.stranded(() => {
-          if (disposed || journey !== current || phase !== 'stranded') return;
-          set('returning');
-          void home(note).then(resolve);
-        });
+      await new Promise<void>(resolve => {
+        current.curtain.stranded(resolve);
+        if (result.kind === 'silent') flight.then(resolve, noop);
+        void current.ended.then(resolve);
       });
+      if (over(current)) return false;
+      set('returning');
     }
-    if (disposed || journey !== current) return 'back-outside';
+  }
+
+  /** Back to the source door, once the source room has really been let go. */
+  async function home(current: Journey, note: string | undefined): Promise<PortalOutcome> {
+    const { source, portal, curtain } = current;
+    const rejoin = once(async () => {
+      await current.sourceLeft.then(noop, noop);
+      await source.rejoin({ portal: portal.id, anchor: portal.returnAnchor });
+    });
+    if (!(await must(current, rejoin, 'The way back through the door is not open'))) return 'back-outside';
     journey = null;
+    current.end();
     set('idle');
     cue('latch');
-    await curtain.open(note);
+    await draw(() => curtain.open(note));
     curtain.dispose();
     return 'back-outside';
   }
 
-  /** Out of the destination (walked out, failed, timed out or lost) and back through the source door. */
-  async function out(note: string | undefined): Promise<PortalOutcome> {
+  /** Out of the destination room, waiting until it has really let you go, then home. */
+  async function back(current: Journey, note: string | undefined, closing: Promise<void>): Promise<PortalOutcome> {
+    if (current.surface) {
+      const surface = current.surface;
+      current.leaveRoom ??= once(() => surface.dispose());
+      const left = await Promise.all([must(current, current.leaveRoom, 'The room behind the door did not let you go'), closing]).then(([ok]) => ok);
+      if (!left) return 'back-outside';
+      current.surface = null;
+      current.leaveRoom = null;
+    } else await closing;
+    if (over(current)) return 'back-outside';
+    cue('threshold');
+    return home(current, note);
+  }
+
+  /** Walked out, failed or lost while inside: the curtain closes as the destination is left. */
+  function out(note: string | undefined): Promise<PortalOutcome> {
     const current = journey;
-    if (!current || disposed) return 'unavailable';
+    if (!current || disposed) return Promise.resolve('unavailable');
     generation++;   // the visit that was is now stale
-    const surface = current.surface;
-    current.surface = null;
     set('returning');
     cue('door');
-    await Promise.all([current.curtain.close({ label: LABEL_OUT, title: current.source.title }), disposeSurface(surface)]);
-    cue('threshold');
-    return home(note);
+    return back(current, note, draw(() => current.curtain.close({ label: LABEL_OUT, title: current.source.title })));
   }
 
   async function enter(portal: PortalDescriptor): Promise<PortalOutcome> {
@@ -219,24 +295,25 @@ export function createPortalTransfer(options: PortalTransferOptions): PortalTran
     const source = bound, destination = destinationFor(portal);
     if (!source || !destination || !sameKingdom(source.kingdomId, portal.kingdomId)) return 'unavailable';
     const curtain = options.curtain();
-    const current = { source, portal, surface: null as PortalSurface | null, visit: ++generation, curtain };
+    const current = newJourney(source, portal, curtain);
     journey = current;
     set('leaving');
     cue('door');
-    try {
-      await Promise.all([curtain.close({ label: LABEL_IN, title: portal.title ?? destination.title }), source.leave()]);
-    } catch (error) {
-      // The source room could not be left cleanly: stay (or be put back) outside rather than be in two rooms.
-      console.error('The kingdom room could not be left for the door', error);
-      if (disposed || journey !== current) return 'back-outside';
+    // The source room must really be let go before another room is joined; the curtain closing never decides that.
+    const closing = draw(() => curtain.close({ label: LABEL_IN, title: portal.title ?? destination.title }));
+    current.sourceLeft = (async () => { await source.leave(); })();
+    const [, left] = await Promise.all([closing, settle(current, current.sourceLeft, stepMs)]);
+    if (over(current) || left.kind === 'ended') return 'unavailable';
+    if (left.kind !== 'ok') {
+      // Refused or silent: stay (or be put back) outside rather than be in two rooms. The way back waits for the leave.
+      console.error('The kingdom room could not be left for the door', left.kind === 'failed' ? left.error : `still not left after ${stepMs} ms`);
       set('returning');
-      return home(NOTE_REFUSED);
+      return home(current, NOTE_REFUSED);
     }
-    if (disposed || journey !== current) return 'unavailable';
     cue('threshold');
     set('joining');
     const visitId = current.visit;
-    const live = () => !disposed && journey === current && current.visit === visitId && generation === visitId;
+    const live = () => !over(current) && generation === visitId;
     const visit: PortalVisit = {
       portal, entry: source.entry, endpoint: source.endpoint, self: source.self,
       get active() { return live() && (phase === 'joining' || phase === 'inside'); },
@@ -244,34 +321,39 @@ export function createPortalTransfer(options: PortalTransferOptions): PortalTran
       fail(reason: string) {
         if (!live() || (phase !== 'joining' && phase !== 'inside')) return;
         console.error(`The room behind the door ${portal.id} gave up: ${reason}`);
-        if (phase === 'inside') void out(NOTE_LOST);
-        else rejectReady?.(new Error(reason));
+        if (phase === 'inside') { void out(NOTE_LOST); return; }
+        // Joining: this may come from inside mount, before the ready race exists. Keep it so the race starts lost.
+        const error = new Error(reason);
+        current.failure ??= error;
+        current.failReady?.(error);
       },
     };
-    let rejectReady: ((error: Error) => void) | undefined;
+    let ready: Settled;
     try {
       const surface = destination.mount(curtain.stage, visit);
+      if (!surface || typeof surface.dispose !== 'function' || typeof surface.ready?.then !== 'function') throw new Error(`The destination ${destination.room} returned no room surface.`);
       current.surface = surface;
-      await new Promise<void>((resolve, reject) => {
-        rejectReady = reject;
-        const timer = timers.set(() => reject(new Error('The room behind the door did not answer in time.')), readyMs);
-        surface.ready.then(() => { timers.clear(timer); resolve(); }, error => { timers.clear(timer); reject(error instanceof Error ? error : new Error(String(error))); });
+      ready = await new Promise<Settled>(resolve => {
+        if (current.failure) { resolve({ kind: 'failed', error: current.failure }); return; }
+        const timer = timers.set(() => resolve({ kind: 'silent' }), readyMs);
+        const done = (result: Settled) => { timers.clear(timer); current.failReady = null; resolve(result); };
+        current.failReady = error => done({ kind: 'failed', error });
+        surface.ready.then(() => done({ kind: 'ok' }), (error: unknown) => done({ kind: 'failed', error }));
+        void current.ended.then(() => done({ kind: 'ended' }));
       });
     } catch (error) {
-      if (disposed || journey !== current) return 'back-outside';
-      console.error(`The door ${portal.id} would not open`, error);
-      generation++;
-      const surface = current.surface;
-      current.surface = null;
-      set('returning');
-      await disposeSurface(surface);
-      return home(NOTE_REFUSED);
+      ready = { kind: 'failed', error };
     }
-    rejectReady = undefined;
-    if (disposed || journey !== current) return 'unavailable';
+    if (over(current) || ready.kind === 'ended') return 'unavailable';
+    if (ready.kind !== 'ok') {
+      console.error(`The door ${portal.id} would not open`, ready.kind === 'failed' ? ready.error : `no answer after ${readyMs} ms`);
+      generation++;
+      set('returning');
+      return back(current, NOTE_REFUSED, Promise.resolve());
+    }
     set('inside');
     cue('latch');
-    await curtain.open();
+    await draw(() => curtain.open());
     return 'arrived';
   }
 
@@ -302,7 +384,12 @@ export function createPortalTransfer(options: PortalTransferOptions): PortalTran
       generation++;
       const current = journey;
       journey = null;
-      if (current) { void disposeSurface(current.surface); current.curtain.dispose(); }
+      if (current) {
+        current.end();
+        const surface = current.surface;
+        if (surface) (current.leaveRoom ?? once(() => surface.dispose()))().catch((error: unknown) => console.error('The room behind the door did not close cleanly', error));
+        current.curtain.dispose();
+      }
       listeners.clear();
       bound = null;
     },

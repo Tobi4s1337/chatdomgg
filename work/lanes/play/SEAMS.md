@@ -220,7 +220,9 @@ How gather mounts the tavern (in its own `apps/web/src/tavern/play-slot.ts`, plu
 - `registerPortalDestination({ room: 'tavern', title: 'The tavern', mount(host, visit) { ... } })`. `mount` renders
   `TavernRoomSurface` into `host` (a full-window layer under the curtain) with `open: () => connectTavern(visit.endpoint,
   visit.entry)`. `ready` resolves once the room has placed you (the same barrier `connectTavern` already waits for);
-  `dispose` leaves the tavern room. A terminal leave or revoked session calls `visit.fail(reason)`; the surface's exit
+  `dispose` leaves the tavern room: resolve once the room has really let you go (a connection already gone counts),
+  reject only while you may still be in it; play awaits it before the kingdom is joined again and, if it fails or stays
+  silent past 12 s, strands the curtain and calls `dispose` again on the person's retry. A terminal leave or revoked session calls `visit.fail(reason)`; the surface's exit
   door calls `visit.leave()`. The destination composes play's HUD in its own walk with `createPlaySession` as the
   kingdom walk does.
 - `registerPortalDoor(descriptor)` puts "Go into the tavern" by the outside anchor, shown only while the door really
@@ -229,6 +231,9 @@ How gather mounts the tavern (in its own `apps/web/src/tavern/play-slot.ts`, plu
 What play guarantees:
 - One walker in exactly one room: the source is left (any seat stood up first, pointer lock let go) before the
   destination is mounted, and the destination is disposed before the source is joined again. One journey at a time.
+  Each leave is awaited to the end, never raced against the curtain: a source leave that fails or stays silent sends
+  you back outside, and the way back waits for that leave to settle; a destination that will not let go strands the
+  curtain with a retry, and a late success goes on by itself. A `visit.fail` from inside `mount` is heard at once.
 - Entry is reported only after `ready`. A refusal, a 20 s silence or a `fail` puts you back outside the door with one
   calm line on parchment. If the way back is not open, the curtain says so and waits for the person's "Try the door
   again"; it never pretends.

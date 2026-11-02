@@ -101,6 +101,8 @@ export function createPortalCurtain(options: PortalCurtainOptions = {}): PortalC
     },
     async open(text) {
       if (disposed) return;
+      // A step that came good on its own while stranded leaves no retry behind on the way out.
+      retry.hidden = true; words.hidden = true; onRetry = null;
       const still = motion();
       root.dataset.state = 'opening';
       if (text) {
