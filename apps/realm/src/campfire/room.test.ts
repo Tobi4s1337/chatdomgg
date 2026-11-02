@@ -121,3 +121,37 @@ it('plays a whole round of Dusk Court over real sockets on the founded clearing,
     reference.campfires.dispose();
   }
 }, 60_000);
+
+it('seats a person who cannot press E through the same authority, and seats a later page of that person again', async () => {
+  const { scene, world, logs } = await foundedClearing('tobi4s_');
+  // The real-GPU round's clock: it stands still, so no grace runs out between one page and the next.
+  const frozen = Date.now(), clock = () => frozen;
+  const reference = campfireReference({ scene, world, clock, tickMs: 0, spawn: () => [...logs[6]!.approach] as Vec3 });
+  const created = createRealmServer(reference.services), url = await listenForTest(created), client = new Client(url), rooms: Kingdom[] = [];
+  const person = { personId: '990000106', name: 'Visitor 6' };
+  try {
+    const page = async () => {
+      const room = await client.joinOrCreate<InstanceType<typeof KingdomRoomState>>('kingdom', reference.issue(person), KingdomRoomState);
+      room.reconnection.enabled = false; rooms.push(room); return listen(room);
+    };
+    expect(await reference.sit('990000199', 6)).toBeNull();
+    const first = await page();
+    await waitFor(() => !!first.frame() && !!first.room.state.walkers.get(first.room.sessionId), 'the first page in the room');
+    const receipt = await reference.sit(person.personId, 6);
+    expect(receipt?.status).toBe('applied');
+    await waitFor(() => !!first.frame()?.seated.some(s => s.seat === 6 && s.name === 'Visitor 6'), 'the fire seeing Visitor 6 on log 6');
+    // The page closes without saying goodbye. The next page of the same person replaces that session, which leaves its
+    // log (the court holds a player who is off their log as away); the operator seats the new page again.
+    first.room.connection.close();
+    const second = await page();
+    await waitFor(() => !!second.frame() && second.room.state.walkers.size === 1, 'the next page as the only Visitor 6');
+    expect(second.frame()!.seated.some(s => s.name === 'Visitor 6')).toBe(false);
+    expect((await reference.sit(person.personId, 6))?.status).toBe('applied');
+    await waitFor(() => !!second.frame()?.seated.some(s => s.seat === 6 && s.name === 'Visitor 6') && second.self()?.seat === 6, 'the next page on log 6');
+    expect(second.frame()!.seated.filter(s => s.name === 'Visitor 6')).toHaveLength(1);
+  } finally {
+    for (const room of rooms) await room.leave().catch(() => {});
+    await created.server.gracefullyShutdown(false).catch(() => {});
+    reference.campfires.dispose();
+  }
+}, 60_000);

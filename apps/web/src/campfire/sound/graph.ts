@@ -6,7 +6,7 @@ import { campfireMaterial, CAMPFIRE_VARIANTS, type CampfireBed, type CampfireCue
  * bed loops; watchdog: seconds a bed may play past its last renewal; near/far: metres from the fire where the beds
  * are at full level and where they have faded out.
  */
-export const CAMPFIRE_SOUND_LIMITS = Object.freeze({ voices: 6, sources: 9, watchdog: .75, near: 4, far: 25 });
+export const CAMPFIRE_SOUND_LIMITS = Object.freeze({ voices: 6, sources: 9, watchdog: .75, near: 4, far: 25, fade: .04 });
 export interface CampfireListener { feet: Vec3; forward: Vec3 }
 export interface CampfirePlace { fire: Vec3 }
 export interface CampfireSoundInspection {
@@ -92,7 +92,25 @@ export function createCampfireSoundGraph(host: Readonly<{ context: BaseAudioCont
     voice.source.onended = null;
     voice.source.disconnect(); voice.gain.disconnect(); voice.pan.disconnect();
   }
-  function stop(voice: Voice) { voice.source.stop(context.currentTime); retire(voice); }
+  // Stopping fades: a voice cut mid-wave clicks, so it ramps out over a few milliseconds, then lets go of its nodes.
+  // A context that no longer runs makes no sound to click, so it lets go at once.
+  const fading = new Set<Voice>();
+  function unplug() { fireBus.disconnect(); bus.disconnect(); }
+  function stop(voice: Voice) {
+    if (!live.has(voice)) return;
+    if (!running()) { voice.source.stop(context.currentTime); retire(voice); return; }
+    live.delete(voice); fading.add(voice);
+    const now = context.currentTime;
+    hold(voice.gain.gain, now);
+    voice.gain.gain.setTargetAtTime(0, now, CAMPFIRE_SOUND_LIMITS.fade / 5);
+    voice.source.onended = () => {
+      voice.source.onended = null;
+      fading.delete(voice);
+      voice.source.disconnect(); voice.gain.disconnect(); voice.pan.disconnect();
+      if (disposed && !fading.size) unplug();
+    };
+    voice.source.stop(now + CAMPFIRE_SOUND_LIMITS.fade);
+  }
   function prune() { for (const voice of live) if (voice.end <= context.currentTime) retire(voice); }
   function buffer(material: CampfireMaterial, variant: number) {
     const key = `${material}:${variant}`;
@@ -189,7 +207,9 @@ export function createCampfireSoundGraph(host: Readonly<{ context: BaseAudioCont
       if (disposed) return;
       quiet(); disposed = true;
       if (!rendering) context.removeEventListener('statechange', onState);
-      fireBus.disconnect(); bus.disconnect();
+      // The last fading voice lets the buses go; with none fading, or a context that no longer plays, they go now.
+      if (context.state !== 'running' && !rendering) for (const voice of [...fading]) voice.source.onended?.(new Event('ended'));
+      if (!fading.size) unplug();
     },
     inspect() {
       prune();

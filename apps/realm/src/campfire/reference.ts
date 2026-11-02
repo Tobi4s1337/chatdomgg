@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PersonIdSchema, type Vec3 } from '@chatdom/shared';
-import type { CollisionWorld, RealmPrincipal, RealmPrivateMessage, RealmTransientMessage } from '@chatdom/shared/realm';
+import type { CollisionWorld, RealmPrincipal, RealmPrivateMessage, RealmReceipt, RealmTransientMessage } from '@chatdom/shared/realm';
 import type { RealmFoundedScene } from '@chatdom/world';
 import { createFoundedInteractionRegistry } from '@chatdom/world/interactions';
 import { composeInteractionHosts, createInteractionAuthority } from '../interactions';
@@ -19,6 +19,13 @@ export interface CampfireReference {
   readonly campfires: Campfires;
   /** A fresh visitor ticket, or one for a named person (the streamer is `REFERENCE_KINGDOM`). */
   issue(person?: { readonly personId: string; readonly name: string }): { ticket: string; kingdomId: string; protocol: 1 };
+  /**
+   * Harness only: the person's current walker asks to sit on a log, through the same interaction authority and seat
+   * host a pressed E reaches, standing where the room has them. For a browser that cannot press keys (the real-GPU
+   * stills); a later page of the same person replaces the session, leaves the log and is seated again. Null while they
+   * are not in the room.
+   */
+  sit(personId: string, seat: number): Promise<RealmReceipt | null>;
 }
 
 export function campfireReference(options: {
@@ -27,7 +34,9 @@ export function campfireReference(options: {
 }): CampfireReference {
   const base = referenceServices(), named = new Map<string, RealmPrincipal>(), sessions = new Map<string, RealmPrincipal>();
   const clock = options.clock ?? Date.now;
-  let spawned = 0;
+  let spawned = 0, sitting = 0;
+  // The walker each person controls now (join and reconnect), so the operator can seat a browser that cannot press E.
+  const present = new Map<string, { readonly principal: RealmPrincipal; readonly walkerId: string; readonly sit: (targetId: string, id: string) => Promise<RealmReceipt | null> }>();
   const campfires = new Campfires({ store: options.store ?? new MemoryFireStore(), clock, ...(options.tickMs !== undefined ? { tickMs: options.tickMs } : {}) });
   const services: RealmRoomServices = {
     auth: {
@@ -73,7 +82,17 @@ export function campfireReference(options: {
           owner?.(principal.personId, { type: 'interaction', requestId: null, writerEpoch: handle.writerEpoch, state: authority.selfState(principal.sessionId) });
           return { ...handle.bootstrap(principal), layoutRevision: scene.layoutRevision, collisionRevision: world.revision };
         },
-        lifecycle: (event, principal, walkerId, now) => { handle.lifecycle(event, principal, walkerId, now); authority.lifecycle(event, principal, walkerId, now); },
+        lifecycle: (event, principal, walkerId, now) => {
+          handle.lifecycle(event, principal, walkerId, now); authority.lifecycle(event, principal, walkerId, now);
+          if (event === 'join' || event === 'reconnect') present.set(principal.personId, { principal, walkerId, sit: async (targetId, id) => {
+            const read = () => { for (const bound of effects) { const walker = bound.readWalker(walkerId); if (walker) return walker; } return null; };
+            const body = read();
+            if (!body) return null;
+            return authority.intent({ principal, walkerId, position: [body.x, body.y, body.z], collisionRevision: body.collisionRevision, current: read },
+              { version: 1, type: 'interact', id, targetId, action: 'sit' });
+          } });
+          else if (present.get(principal.personId)?.walkerId === walkerId) present.delete(principal.personId);
+        },
         bindRoom: bound => { effects.add(bound); const off = handle.bindRoom(bound); return () => { effects.delete(bound); off(); }; },
         bindTransient: (send, privately) => { transient = send; owner = privately; return () => { if (transient === send) { transient = null; owner = null; } }; },
         dispose: async () => { clearTimeout(timer); offChange(); authority.dispose(); await handle.dispose(); },
@@ -83,6 +102,10 @@ export function campfireReference(options: {
   installCampfires(services, campfires);
   return {
     services, campfires,
+    async sit(personId, seat) {
+      const walker = present.get(personId);
+      return walker ? walker.sit(`fire:clearing:seat:${seat}`, `harness-sit-${++sitting}`) : null;
+    },
     issue(person) {
       if (!person) return base.issue();
       const ticket = randomUUID();

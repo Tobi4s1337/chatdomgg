@@ -16,12 +16,14 @@ import type { ClearingLight } from './light';
  * by a suspected player; and Twitch chat rising as small lanterns in the dark beyond the logs.
  *
  * Every pool is sized once. A frame writes instance matrices and colours in place and allocates nothing. Draws: four
- * for the fire, one for the lantern bodies, two for their flames and smoke, one for the Gallery's embers, one for the
- * chat lanterns, one for every halo and one for the marks of a tap. No real lights: warmth is offered as light-field
- * sources (`lightSources()`) to whoever owns the field.
+ * for the fire, one for its glow and one for the warm pool it throws on the ground, one for the lantern bodies, one for
+ * their lit panes, two for their flames and smoke, one for the Gallery's embers, one for the chat lanterns, one for
+ * every halo and one for the marks of a tap. No real lights: warmth is offered as light-field sources
+ * (`lightSources()`) to whoever owns the field; the glow and the pool are what the fire shows on its own, so it reads
+ * as the warmest place in the night even where the field does not reach.
  */
 
-export const EFFECT_DRAWS = 11;
+export const EFFECT_DRAWS = 14;
 const M = VOXEL_METRES.build;
 const SEATS = CAMPFIRE_SEATS + 1;
 const CHAT = CHAT_LANTERNS.capacity;
@@ -104,8 +106,8 @@ export interface CampfireEffectsOptions {
 }
 
 /** A soft round spot, made once in memory (no canvas: the effect also mounts headless). */
-function haloTexture(): THREE.DataTexture {
-  const size = 32, data = new Uint8Array(size * size * 4);
+function haloTexture(size = 32): THREE.DataTexture {
+  const data = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const d = Math.hypot(x + .5 - size / 2, y + .5 - size / 2) / (size / 2), a = Math.max(0, 1 - d) ** 2.2;
     const i = (x + y * size) * 4;
@@ -118,6 +120,11 @@ function haloTexture(): THREE.DataTexture {
 
 const LANTERN_GLOW = new THREE.Color('#ffb85c'), CHAT_GLOW = new THREE.Color('#ffd48a'), CHAT_BODY = new THREE.Color('#f3c27a'), CHAT_RIM = new THREE.Color('#8d5a2b');
 const FOCUS = new THREE.Color('#f4dc9d'), CHOSEN = new THREE.Color('#ff9a4a');
+/** How far past white a burning lantern's glass goes (linear), into the bloom. */
+const PANE_BLOOM = 1.6;
+const PANE_LIT = new THREE.Color('#ffc46e'), PANE_DARK = new THREE.Color('#2b2633'), FIRE_GLOW = new THREE.Color('#ff9440'), POOL = new THREE.Color('#ff8a3a');
+/** How far the fire's warm pool reaches on the ground, metres (past the logs, fading in the grass). */
+export const FIRE_POOL_RADIUS = 4.6;
 
 export function mountCampfireEffects(options: CampfireEffectsOptions): CampfireEffects {
   const { frame } = options, arrangement = frame.arrangement;
@@ -130,13 +137,36 @@ export function mountCampfireEffects(options: CampfireEffectsOptions): CampfireE
 
   const fire = createFire();
   fire.group.position.set(...FLAME_BASE);
+
+  // The fire's own glow round the flame, and the warm pool it throws on the ground: additive, so they only add light.
+  const glowTexture = haloTexture(64);
+  const glowMaterial = new THREE.SpriteMaterial({ map: glowTexture, color: FIRE_GLOW, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  const glow = new THREE.Sprite(glowMaterial);
+  glow.name = 'campfire.fire-glow';
+  glow.position.set(FLAME_BASE[0], FLAME_BASE[1] + .42, FLAME_BASE[2]);
+  const poolGeometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const poolMaterial = new THREE.MeshBasicMaterial({ map: glowTexture, color: POOL, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const pool = new THREE.Mesh(poolGeometry, poolMaterial);
+  pool.name = 'campfire.fire-pool';
+  pool.position.set(FLAME_BASE[0], .02, FLAME_BASE[2]);
+  pool.scale.set(FIRE_POOL_RADIUS * 2, 1, FIRE_POOL_RADIUS * 2);
+  pool.renderOrder = -1;
   const flames = createLanternFlames(SEATS), suspicion = createSuspicionEmbers(SEATS);
-  group.add(fire.group, flames.group, suspicion.group);
+  group.add(fire.group, flames.group, suspicion.group, glow, pool);
 
   // Seats by number, with each seat's lantern and ember spots worked out once.
   const seatAt: ({ lantern: THREE.Vector3; yaw: number; ember: THREE.Vector3 } | null)[] = Array.from({ length: SEATS }, () => null);
   const prop = createGameLantern(61);
-  const flameOffset = new THREE.Vector3(...prop.flame);
+  const flameOffset = new THREE.Vector3(...prop.flame), paneOffset = new THREE.Vector3(...prop.pane.centre);
+
+  // Each lantern's lit glass: one warm box between its posts, dark once its flame is out.
+  const paneGeometry = new THREE.BoxGeometry(...prop.pane.size);
+  const paneMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
+  const panes = new THREE.InstancedMesh(paneGeometry, paneMaterial, SEATS);
+  panes.name = 'campfire.lantern-panes'; panes.count = 0; panes.frustumCulled = false;
+  panes.setColorAt(0, PANE_LIT);
+  group.add(panes);
   for (const seat of arrangement.seats) {
     if (seat.seat < 0 || seat.seat >= SEATS) continue;
     const [lx, lz] = seat.lantern, yaw = Math.atan2(-lx, -lz);
@@ -216,6 +246,10 @@ export function mountCampfireEffects(options: CampfireEffectsOptions): CampfireE
       // Always lit: banked a little by day, comes into its own after dusk.
       fireStrength = .6 + .4 * night;
       fire.update(time, { strength: fireStrength, wind: .05 + .04 * Math.sin(time * .23) });
+      const flicker = .92 + .05 * Math.sin(time * 5.3) * Math.sin(time * 2.1 + 1.3) + .03 * Math.sin(time * 11.7);
+      glow.scale.setScalar((1.9 + 1.1 * fireStrength) * flicker);
+      glowMaterial.color.copy(FIRE_GLOW).multiplyScalar((.32 + .5 * night) * flicker);
+      poolMaterial.color.copy(POOL).multiplyScalar((.1 + .5 * night) * flicker);
 
       // Who plays, and how each lantern stands.
       const court = input.frame?.court ?? null;
@@ -239,6 +273,15 @@ export function mountCampfireEffects(options: CampfireEffectsOptions): CampfireE
           position.copy(spot.lantern); position.y += shown.tip * .06;
           bodies.setMatrixAt(lanterns, matrix.compose(position, rotation, scale));
         }
+        // Its pane, turned and tipped with the body; warm while it burns, the dark glass of a snuffed lantern after.
+        euler.set(-shown.tip * 1.35, spot.yaw, 0, 'YXZ');
+        rotation.setFromEuler(euler);
+        position.copy(paneOffset).applyQuaternion(rotation).add(spot.lantern); position.y += shown.tip * .06;
+        panes.setMatrixAt(lanterns, matrix.compose(position, rotation, scale));
+        // Past 1 when lit, so the kingdom's HDR bloom (threshold ~1) takes the glass and it reads as light, not paint.
+        const lit = shown.level * (.88 + .12 * Math.sin(time * 4.1 + s * 1.7)) * (player.away ? .7 : 1);
+        colour.copy(PANE_DARK).lerp(PANE_LIT, lit).multiplyScalar(1 + PANE_BLOOM * lit);
+        panes.setColorAt(lanterns, colour);
         const slot = flameSlots[lanterns]!;
         slot.flame.copy(flameOffset).applyAxisAngle(THREE.Object3D.DEFAULT_UP, spot.yaw).add(spot.lantern);
         slot.level = shown.level; slot.smoke = shown.smoke; slot.seed = hash(s);
@@ -259,6 +302,7 @@ export function mountCampfireEffects(options: CampfireEffectsOptions): CampfireE
         }
       }
       if (bodies) { bodies.count = lanterns; bodies.instanceMatrix.needsUpdate = true; }
+      panes.count = lanterns; panes.instanceMatrix.needsUpdate = true; if (panes.instanceColor) panes.instanceColor.needsUpdate = true;
       flames.update(time, flameSlots as readonly LanternFlame[], lanterns);
       suspicion.update(time, emberSlots, embers);
       lightView.length = 0;
@@ -341,6 +385,8 @@ export function mountCampfireEffects(options: CampfireEffectsOptions): CampfireE
       disposed = true;
       chat?.clear();
       fire.dispose(); flames.dispose(); suspicion.dispose();
+      glowMaterial.dispose(); glowTexture.dispose(); poolGeometry.dispose(); poolMaterial.dispose();
+      paneGeometry.dispose(); paneMaterial.dispose(); panes.dispose();
       if (bodies) { bodies.geometry.dispose(); bodies.dispose(); }
       chatGeometry.dispose(); chatMaterial.dispose(); chatBodies.dispose();
       haloGeometry.dispose(); haloMaterial.dispose(); halo.dispose();

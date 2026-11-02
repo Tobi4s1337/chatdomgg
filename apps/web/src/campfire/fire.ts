@@ -42,7 +42,7 @@ function pool(count: number, size: number, opacity = 1): Pool {
 export function createFire(): FireEffect {
   const group = new THREE.Group();
   group.name = 'campfire.fire';
-  const flame = pool(64, .085), sparks = pool(18, .028), embers = pool(26, .05), smoke = pool(14, .09, .32);
+  const flame = pool(90, .1), sparks = pool(18, .028), embers = pool(26, .05), smoke = pool(14, .09, .32);
   for (const p of [smoke, flame, sparks, embers]) group.add(p.mesh);
   const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), scale = new THREE.Vector3(), rotation = new THREE.Quaternion(), euler = new THREE.Euler(), colour = new THREE.Color();
   const place = (p: Pool, index: number, x: number, y: number, z: number, s: number, spin: number, c: THREE.Color): void => {
@@ -55,11 +55,11 @@ export function createFire(): FireEffect {
       const strength = Math.max(0, Math.min(1, state.strength));
       // A slow breathing of the whole flame, plus a quicker licking; neither strobes.
       const breathe = .9 + .07 * Math.sin(time * 1.7) + .04 * Math.sin(time * 4.3 + 1.1);
-      const height = (.25 + .5 * strength) * breathe;
+      const height = (.32 + .62 * strength) * breathe;
       for (let i = 0; i < flame.count; i++) {
         const period = .62 + hash(i) * .5, age = ((time + hash(i + 50) * period) / period) % 1;
         const cycle = Math.floor((time + hash(i + 50) * period) / period);
-        const angle = hash(i * 7 + cycle * 13) * Math.PI * 2, radius = (.04 + hash(i * 3 + cycle) * .13) * (1 - age * .75);
+        const angle = hash(i * 7 + cycle * 13) * Math.PI * 2, radius = (.05 + hash(i * 3 + cycle) * .17) * (1 - age * .75);
         const rise = smooth(age) * height * (.55 + hash(i + cycle * 3) * .6);
         const lick = Math.sin(time * 6 + i) * .015 * age;
         const x = Math.cos(angle) * radius + state.wind * rise * rise * 1.4 + lick, z = Math.sin(angle) * radius;

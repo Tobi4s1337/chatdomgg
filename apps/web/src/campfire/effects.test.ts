@@ -20,7 +20,7 @@ function mount() {
 
 const drawn = (root: THREE.Object3D) => {
   let n = 0;
-  root.traverse(o => { if ((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints) n++; });
+  root.traverse(o => { if ((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints || (o as THREE.Sprite).isSprite) n++; });
   return n;
 };
 

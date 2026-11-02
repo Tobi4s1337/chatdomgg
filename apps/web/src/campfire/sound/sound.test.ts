@@ -197,10 +197,15 @@ describe('owned campfire audio graph and host lifecycle', () => {
     expect(s.context.active).toBe(0); expect(s.context.nodes.length).toBe(2);
     s.unmute(); s.update(null);
     expect(s.context.loops).toBe(3);
+    // Muting fades the beds out over a few milliseconds instead of cutting them mid-wave (a click).
     s.mute(); s.update(null);
+    const fading = s.context.nodes.filter(node => 'gain' in node) as (Node & { gain: Param })[];
+    expect(fading.some(node => node.gain.events.at(-1)?.value === 0)).toBe(true);
+    expect([...s.context.sources].every(source => source.end > s.context.currentTime && source.end <= s.context.currentTime + CAMPFIRE_SOUND_LIMITS.fade)).toBe(true);
+    s.context.advance(CAMPFIRE_SOUND_LIMITS.fade + .001);
     expect(s.context.active).toBe(0);
     s.unmute(); s.update(null); expect(s.context.loops).toBe(3);
-    s.sound.quiet(); expect(s.context.active).toBe(0);
+    s.sound.quiet(); s.context.advance(CAMPFIRE_SOUND_LIMITS.fade + .001); expect(s.context.active).toBe(0);
     s.update(null); expect(s.context.loops).toBe(3);
     // A stalled host: no further renewals, no timers. The beds fade and stop on their own.
     s.context.advance(CAMPFIRE_SOUND_LIMITS.watchdog + .01);
@@ -306,6 +311,7 @@ describe('owned campfire audio graph and host lifecycle', () => {
     s.context.setState('running'); s.update(steps[1]!.frame); s.update(steps[2]!.frame);
     expect(s.sound.inspect().played.deal).toBe(1);
     s.sound.dispose(); s.sound.dispose();
+    s.context.advance(CAMPFIRE_SOUND_LIMITS.fade + .001);
     expect(s.context.active).toBe(0); expect(s.context.listeners.size).toBe(0);
     expect(s.destination.disconnected).toBe(0); expect(s.context.destination.disconnected).toBe(0);
     for (const node of s.context.nodes) if (node !== s.destination && node !== s.context.destination) expect(node.connections.size).toBe(0);
@@ -321,9 +327,10 @@ describe('owned campfire audio graph and host lifecycle', () => {
     expect(first.loops).toBe(3);
     host = { context: second as unknown as BaseAudioContext, destination: secondOut as unknown as AudioNode };
     sound.update(null, { now: 16, hour: NIGHT, listener: near });
+    first.advance(CAMPFIRE_SOUND_LIMITS.fade + .001);
     expect(first.active).toBe(0); expect(first.listeners.size).toBe(0); expect(firstOut.disconnected).toBe(0);
     expect(second.loops).toBe(3);
-    sound.dispose(); expect(second.active).toBe(0); expect(second.listeners.size).toBe(0);
+    sound.dispose(); second.advance(CAMPFIRE_SOUND_LIMITS.fade + .001); expect(second.active).toBe(0); expect(second.listeners.size).toBe(0);
   });
   it('materials are finite, bounded and differ between consecutive variants; beds loop without a step', () => {
     const context = new Context();

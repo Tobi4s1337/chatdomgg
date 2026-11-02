@@ -209,23 +209,24 @@ export function createFireRing(seed: number): CampfireProp {
 /* ---------- The game lantern ---------- */
 
 /**
- * A seat lantern on a stake pushed into the ground: brass base and corner posts, glass panes on four sides, a
- * hollow heart for the flame, a stepped peaked cap and its ring. Earth thrown up by the stake varies per seed. The
- * build lattice sets the scale: a pane needs a cell, so the body is three cells across.
+ * A seat lantern set on the ground at the sitter's feet: a brass foot plate on a short peg pushed into the earth,
+ * brass corner posts, a flat cap with its ring. The four sides are open: the lit glass is drawn by the fire's effect as
+ * one warm pane per lantern, so a lantern reads as light at night and goes dark when it is snuffed. Low, so it never
+ * stands between a face and the fire. Three cells across on the build lattice; the seed only names it.
  */
-export function createGameLantern(seed: number): CampfireProp & { readonly flame: Vec3 } {
-  const d = draws(seed, 4), g = 2, base = g + 2, grid = new Grid(3, base + 6, 3);
-  for (let y = 0; y < base; y++) grid.set(1, y, 1, y >= g && d() < .3 ? MAT.bark : MAT.timber);
-  for (const [x, z] of [[0, 1], [2, 1], [1, 0], [1, 2]] as const) { const t = d(); if (t < .55) grid.set(x, g, z, t < .25 ? MAT.earth : t < .42 ? MAT.grass : MAT.moss); }
+export function createGameLantern(seed: number): CampfireProp & { readonly flame: Vec3; readonly pane: { readonly centre: Vec3; readonly size: Vec3 } } {
+  const g = 2, base = g, grid = new Grid(3, base + 5, 3);
+  for (let y = 0; y < g; y++) grid.set(1, y, 1, MAT.timber);
   for (let z = 0; z < 3; z++) for (let x = 0; x < 3; x++) {
-    const corner = x !== 1 && z !== 1, centre = x === 1 && z === 1;
+    const corner = x !== 1 && z !== 1;
     grid.set(x, base, z, MAT.brass);
-    for (const y of [base + 1, base + 2]) grid.set(x, y, z, centre ? MAT.air : corner ? MAT.brass : MAT.glass);
-    if (!corner) grid.set(x, base + 3, z, MAT.brass);
+    for (const y of [base + 1, base + 2]) grid.set(x, y, z, corner ? MAT.brass : MAT.air);
+    grid.set(x, base + 3, z, MAT.brass);
   }
   grid.set(1, base + 4, 1, MAT.brass);
   const prop = finish(`campfire.lantern.s${seed}`, grid, [1.5, g, 1.5]);
-  return { ...prop, flame: [0, (base + 2 - g) * M, 0] };
+  // The glass: the open middle two courses, a hair inside the corner posts' outer faces.
+  return { ...prop, flame: [0, (base + 2 - g) * M, 0], pane: { centre: [0, (base + 2 - g) * M, 0], size: [2.9 * M, 2 * M, 2.9 * M] } };
 }
 
 /* ---------- The Wilds ---------- */
