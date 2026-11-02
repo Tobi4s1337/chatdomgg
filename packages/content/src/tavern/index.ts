@@ -80,14 +80,17 @@ export function createTavernKit(style: CivicStyle): TavernKit {
   for (const [x, z] of [[24, 36], [61, 36], [84, 59]] as const) lantern(room, k, x, z);
 
   bar(room, k); hearth(room, k); notices(room, k);
-  solids.push(solid(7, 1, 5, 44, 12, 15), solid(77, 1, 3, 101, 25, 13), solid(80, 1, 18, 98, 5, 22));
+  solids.push(solid(7, 1, 5, 44, 12, 15), solid(77, 1, 3, 101, 25, 13), solid(80, 1, 16, 98, 5, 19));
   const tables = centres.map(({ id, x, z }) => {
     table(room, k, x, z, id === 'corner');
     const seats = ([-1, 1] as const).map((direction, i): TavernSeat => {
       chair(room, k, x, z + direction * 9, direction < 0 ? 'north' : 'south');
       const cz = z + direction * 9;
-      // Approach just beyond the chair, on the floor; not inside its own collision.
-      return { key: `${id}:${i + 1}`, tableId: id, position: point(x, 5, cz), approach: point(x, 1, cz + direction * 6), facing: direction < 0 ? 0 : Math.PI };
+      // Approach just beyond the chair, on the floor; not inside its own collision. The streamer's chair at the corner
+      // table has its back to the front wall, so it is approached from the open floor at its east side instead.
+      const wallBacked = id === 'corner' && direction > 0;
+      return { key: `${id}:${i + 1}`, tableId: id, position: point(x, 5, cz),
+        approach: wallBacked ? point(x + 7, 1, cz) : point(x, 1, cz + direction * 6), facing: direction < 0 ? 0 : Math.PI };
     });
     if (id === 'hearth') {
       for (const direction of [-1, 1] as const) {
@@ -190,9 +193,10 @@ function hearth(b: Boxes, k: CivicKit): void {
     b.add(x, 4, 9, x + 3, 9, 12, MAT.terracotta);
     b.add(x + 1, 5, 10, x + 3, 10, 12, MAT.brass);
   }
-  // Low bench faces the fire and leaves the hearth-side aisle open.
-  b.add(80, 4, 18, 98, 5, 22, k.trim);
-  for (const x of [81, 94]) b.add(x, 1, 18, x + 2, 4, 22, k.trim);
+  // Low bench faces the fire from the hearthstone's lip. It stays close to the fire so the aisle behind it, where
+  // the east table's first chair is approached, keeps a full body's width (a metre between bench and chair).
+  b.add(80, 4, 16, 98, 5, 19, k.trim);
+  for (const x of [81, 94]) b.add(x, 1, 16, x + 2, 4, 19, k.trim);
 }
 function notices(b: Boxes, k: CivicKit): void {
   // An empty notice board is a place for real notices, never names invented by the asset.

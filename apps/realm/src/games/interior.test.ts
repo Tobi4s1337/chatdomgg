@@ -48,4 +48,31 @@ describe('tavern destination', () => {
       expect(seen.has(key(Math.round(x / step), Math.round(z / step))), target.id).toBe(true);
     }
   });
+
+  it('reaches every chair approach along a real aisle, never a one- or two-cell squeeze', () => {
+    // Feet positions are already inset by the body's radius. Each step keeps three clear feet positions across the
+    // direction of travel (a quarter metre, about 0.85 m wall to wall), so a person, not only an exact test walker,
+    // gets there. The old hearth bench left one position behind the east table and the streamer's chair two.
+    const { registry, world } = createTavernInterior();
+    const step = .125, band = [-1, 0, 1];
+    const clear = (x: number, z: number) => standingClear(world, [x * step, TAVERN_FLOOR, z * step]);
+    const across = (x: number, z: number, dx: number) => dx ? band.every(dz => clear(x, z + dz)) : band.every(d => clear(x + d, z));
+    const key = (x: number, z: number) => `${x},${z}`;
+    const startX = Math.round(TAVERN_ENTRY.feet[0] / step), startZ = Math.round(TAVERN_ENTRY.feet[2] / step);
+    const queue: [number, number][] = [[startX, startZ]], seen = new Set([key(startX, startZ)]);
+    for (let i = 0; i < queue.length; i++) {
+      const [x, z] = queue[i]!;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + dx, nz = z + dz, id = key(nx, nz);
+        if (nx < 0 || nx > 112 || nz < 0 || nz > 80 || seen.has(id) || !across(nx, nz, dx)) continue;
+        seen.add(id); queue.push([nx, nz]);
+      }
+    }
+    const squeezed = registry.targets().filter(target => {
+      const x = Math.round(target.approach[0] / step), z = Math.round(target.approach[2] / step);
+      // The approach itself may sit against its chair; the aisle must reach within a step of it.
+      return ![[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => seen.has(key(x + dx!, z + dz!)));
+    }).map(target => target.id);
+    expect(squeezed).toEqual([]);
+  });
 });

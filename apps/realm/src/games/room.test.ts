@@ -5,7 +5,7 @@ import type { RealmWalkInput } from '@chatdom/shared/realm';
 import { expect, it } from 'vitest';
 import { createRealmServer } from '../server';
 import { REFERENCE_KINGDOM, referenceServices } from '../reference';
-import { createTavernInterior } from './interior';
+import { createTavernInterior, TAVERN_COLLISION_REVISION } from './interior';
 import { seatApproachDriver } from '../../../web/src/games/walker';
 
 const waitFor = async (predicate: () => boolean, timeout = 8_000) => {
@@ -75,13 +75,13 @@ it('accepts separate authenticated walkers in the same tavern and refuses wrong-
     const initialX = first.state.walkers.get(first.sessionId)!.x;
     const input = first.input<RealmWalkInput>({ mode: 'reliable' });
     for (let i = 0; i < 12; i++) {
-      Object.assign(input.data, { moveX: 127, moveZ: 0, buttons: 0, yaw: 64, collisionRevision: 1, placement: 0 });
+      Object.assign(input.data, { moveX: 127, moveZ: 0, buttons: 0, yaw: 64, collisionRevision: TAVERN_COLLISION_REVISION, placement: 0 });
       input.send(); await new Promise(resolve => setTimeout(resolve, 34));
     }
     await waitFor(() => (second.state.walkers.get(first.sessionId)?.x ?? initialX) > initialX + .5);
     expect(second.state.walkers.get(first.sessionId)?.x).toBeGreaterThan(initialX + .5);
     for (let i = 0; i < 8; i++) {
-      Object.assign(input.data, { moveX: 0, moveZ: -127, buttons: 0, yaw: 128, collisionRevision: 1, placement: 0 });
+      Object.assign(input.data, { moveX: 0, moveZ: -127, buttons: 0, yaw: 128, collisionRevision: TAVERN_COLLISION_REVISION, placement: 0 });
       input.send(); await new Promise(resolve => setTimeout(resolve, 34));
     }
     await waitFor(() => (first.state.walkers.get(first.sessionId)?.z ?? 10) < 7.9);

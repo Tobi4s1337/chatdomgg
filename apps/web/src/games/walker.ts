@@ -37,7 +37,15 @@ export function seatApproachDriver(world: CollisionWorld, start: Vec3, goal: Vec
       while (next < route.length && Math.hypot(body.x - route[next]![0], body.z - route[next]![2]) < .10) next++;
       const point = route[next];
       if (!point) return { moveX: 0, moveZ: 0, buttons: 0, yaw: body.yaw, collisionRevision: world.revision };
-      const dx = point[0] - body.x, dz = point[2] - body.z, distance = Math.hypot(dx, dz);
+      // Follow the segment from the last waypoint, not the bare bearing to the next one. A corner is reached up to
+      // ten centimetres off the line; steering straight from there runs a long aisle into the corner of a chair that
+      // the route itself clears. Aim a short way ahead of the body's nearest point on the segment instead.
+      const from = next > 0 ? route[next - 1]! : start, segX = point[0] - from[0], segZ = point[2] - from[2], length = Math.hypot(segX, segZ);
+      const along = length > 1e-6 ? Math.min(length, Math.max(0, ((body.x - from[0]) * segX + (body.z - from[2]) * segZ) / length) + .25) : 0;
+      const aim = length > 1e-6 && along < length ? [from[0] + segX / length * along, from[2] + segZ / length * along] : [point[0], point[2]];
+      const distance = Math.hypot(point[0] - body.x, point[2] - body.z);
+      const ax = aim[0]! - body.x, az = aim[1]! - body.z, reach = Math.hypot(ax, az) || 1;
+      const dx = ax / reach * distance, dz = az / reach * distance;
       // Ease toward a corner over at least a second of held input (4 m/s at full input).
       // This also covers half-second software frames and reconciliation delays without waypoint oscillation.
       // Real visitors retain the existing full-speed walking controller; only the test approach uses this.
