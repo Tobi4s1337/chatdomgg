@@ -1086,15 +1086,50 @@ No round lane owns these, so they were made here as the smallest backward-compat
 
 ## GW13 every channel its own world — the asks (2026-11-02, checkpoint)
 
-- **needs: integrator** — a kingdom founded on its own world needs its `grand-land-2` recipe pinned at founding and
-  bound into the founded receipt, so the realm bakes and serves it and the browser can verify it. Today only adopted
-  `grand-land-1` recipes exist (`adoptedGrandRecipe`); `grandSeedFromGenesis(recipe, name, { character })` in
-  `packages/world/src/grand/world.ts` (or `grandSeedForHolding` in `apps/web/src/grand/holding-world.ts` for an Atlas
-  holding) makes the seed. Grand-world will add the realm's immutable recipe store and the served-recipe check next.
+- **done (realm side): a kingdom founded on its own world** — the realm keeps one world per channel, pinned the first
+  time anyone looks the channel up (`worlds/<channel>.json`, `GET /api/realm/land/<channel>/world`), and only for a
+  channel its layout heads say is unfounded. At the kingdom's first live founded publication `realm.ts` makes the
+  `grand-land-2` recipe from that world and the founding plan's frame, pins it (`recipes/<channel>.json`) and bakes;
+  later receipts read the pin. No founded-store or contract change: it rides `beforeFoundedPublication`. Still open
+  in this lane: the browser's served-recipe check, so the kingdom page and stream draw that land (today they keep
+  today's land for any kingdom outside `adoptedGrandRecipe`).
+- **shared entry lines (one additive line each)** — `apps/realm/src/main.ts`:
+  `land?.knowFounded(kingdomId => boot.allocation.currentLayout(kingdomId));` after `citizens.use(...)`, so the land
+  can tell founded from unfounded (without it, no new sketch is raised: `503 resting`). `apps/api/src/public/routes.ts`
+  (front-door's gateway allowlist): `/api/realm/land/<id>/world` is carried as a realm read, beside the existing land
+  line. front-door: please keep both when you next touch that file.
 - **needs: chronicle** — each opening is offered as a Chronicle page. The opening is a pure function of the baked
   surface, the founded town's columns and the citizen count (`grandRevealField`, `grandRevealStage`,
   `grandRevealOpening` in `packages/world/src/grand/reveal.ts`); the page text is `opening.line`. The realm sees the
   count cross a milestone; it should append one page per crossing, never more than once per stage.
+- **deploy: sketches** — rebuild the realm's bake command (`pnpm --filter @chatdom/realm build:land` after `build`):
+  `land-bake.mjs` now also takes `--sketch-recipe FILE --directory DIR --report FILE`. With `REALM_LAND_DIRECTORY`
+  set and the command installed, the realm answers `POST /api/realm/land/<channel>/<recipeHash>` and serves sketches
+  from `sketches/` and worlds from `worlds/` (see `apps/realm/src/land/README.md`, "Sketches of unfounded channels").
+  Gateway: the existing land line carries the record, blob and POST paths (POST with a JSON body of at most 8 KiB
+  must pass); the new `/world` read needs the gateway built from this branch's `apps/api/src/public/routes.ts`.
+  Without the bake command, or before `knowFounded` is wired, the realm answers `503 resting` and the page says the
+  land cannot be raised just now.
+- **fix: one Content-Length** — `mountLandRoutes` no longer writes its own `content-length`; uWS adds it, and a
+  second header made Node clients (and strict proxies) refuse the answer. HEAD answers with `endWithoutBody(length)`.
+  `mount-http.test.ts` checks it with a real uWS app and Node's http client.
+- **needs: front-door, atlas-map, launch** — an unfounded channel's door, card or search result can link to
+  `/-/grand?channel=<login>` (or `?kingdom=<broadcaster id>`): it opens that channel's own land, raised on first visit
+  (tens of seconds, with the realm's own progress on screen), immutable after. A founded kingdom keeps its own link.
+- **deploy: the realm reads the Atlas itself (GW13, 2026-11-02 evening)** — set `REALM_ATLAS_BASE` for the realm to
+  the Atlas data service's public read root, on chatdom.io `REALM_ATLAS_BASE=http://127.0.0.1:5193/map-data` (the
+  same service the web proxy sends `/map-data` to; only its public `GET /map-data/v1/preview…` reads are used).
+  The realm now makes a channel's world from the channel's own survey facts (`apps/realm/src/land/atlas-world.ts`,
+  the same `readDoorHolding` → `grandSeedForHolding` path the page uses) and never from a request body: a proposal
+  that differs is answered `409 pinned` with the realm's own world, which it pins and raises. Without the setting
+  the realm pins no new world (`503 resting`; the log says so at start), and already pinned worlds are still served.
+  With it, a kingdom that founds (or publishes again) without a world gets the one its Atlas facts give at that
+  publication, so every founded kingdom outside the adopted registry comes to stand on its own land.
+- **deploy: a founded kingdom's land recipe** — `GET /api/realm/land/<kingdom>/recipe` serves the `grand-land-2`
+  recipe the realm pinned at founding (`no-cache`, ETag; 404 while none). The kingdom page, walk and stream read it
+  when the build has no adopted recipe for that kingdom (`readServedLandRecipe`, `kingdom/grand-land/recipes.ts`,
+  4 s, any failure keeps today's land) and then probe the receipt's binding as before. Gateway: one additive line in
+  `apps/api/src/public/routes.ts` carries `/api/realm/land/<id>/recipe` as a realm read; front-door, please keep it.
 
 ## from launch
 

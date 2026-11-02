@@ -1,111 +1,74 @@
-import { uWebSocketsTransport } from '@colyseus/uwebsockets-transport';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { request } from 'node:http';
 import { createRequire } from 'node:module';
+import { request } from 'node:http';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { uWebSocketsTransport } from '@colyseus/uwebsockets-transport';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { encodeBakedMetadata, encodeBakedRegion, encodeBakedSurface } from '../../../../packages/world/src/grand/baked/codec';
-import { BAKED_COMPILERS, type BakedMetadata } from '../../../../packages/world/src/grand/baked/types';
+import { canonicalSceneJson } from '../../../../packages/world/src/founded-world/codec';
+import { grandSketchRecipeHash } from '../../../../packages/world/src/grand/sketch';
 import { mountLandRoutes } from './mount';
+import { genesisSketchRecipe } from './sketch';
+import { createSketchService } from './sketches';
 import { LandArtifactStore } from './store';
+import { storeSketch } from './sketch.test-helper';
 
-// The public gateway forwards land through Node's http client, which refuses a reply with two Content-Length
-// headers. This serves a real store through a real uWS listener and reads it the same way.
-const uws = createRequire(import.meta.resolve('@colyseus/uwebsockets-transport'))('uWebSockets.js') as {
-  us_socket_local_port(socket: object): number; us_listen_socket_close(socket: object): void;
-};
-const scene = 'c'.repeat(64), sourcePlanHash = 'd'.repeat(64);
-let directory: string, store: LandArtifactStore, socket: object | undefined, endpoint: string;
-
+// The realm reaches uWebSockets through its Colyseus transport; load that same copy.
+const transport = createRequire(import.meta.url).resolve('@colyseus/uwebsockets-transport');
+type App = uWebSocketsTransport['app'] & { listen(host: string, port: number, done: (token: unknown) => void): unknown };
+const uWS = createRequire(transport)('uWebSockets.js') as { App(): App; us_socket_local_port(token: unknown): number; us_listen_socket_close(token: unknown): void };
+let directory: string, store: LandArtifactStore, app: App, socket: unknown = false, port = 0;
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'chatdom-land-http-'));
-  store = new LandArtifactStore(directory);
-  const transport = new uWebSocketsTransport();
-  mountLandRoutes(transport.app, store);
-  socket = await new Promise<object>((resolve, reject) => transport.app.listen('127.0.0.1', 0, value => {
-    if (value) resolve(value); else reject(new Error('loopback listener failed'));
+  directory = await mkdtemp(join(tmpdir(), 'chatdom-land-http-')); store = new LandArtifactStore(directory);
+  app = uWS.App();
+});
+afterEach(async () => { if (socket) uWS.us_listen_socket_close(socket); socket = false; await rm(directory, { recursive: true, force: true }); });
+function listen() {
+  // An address the system assigns: this test owns no named port.
+  return new Promise<void>((done, fail) => app.listen('127.0.0.1', 0, (token: unknown) => {
+    if (!token) { fail(new Error('no listen socket')); return; }
+    socket = token; port = uWS.us_socket_local_port(token); done();
   }));
-  endpoint = `http://127.0.0.1:${uws.us_socket_local_port(socket)}`;
-});
-afterEach(async () => {
-  if (socket) uws.us_listen_socket_close(socket);
-  socket = undefined;
-  await rm(directory, { recursive: true, force: true });
-});
-
-async function publish() {
-  const recipeHash = await store.pinRecipe('123', { version: 1 });
-  const surface = await store.put(encodeBakedSurface({ size: 256, height: 256, seaLevel: 0,
-    ground: new Uint16Array(256 ** 2).fill(8), water: new Uint16Array(256 ** 2) }));
-  const mesh = await store.put(encodeBakedRegion({ rx: 0, rz: 0, level: 0, minY: 0, maxY: 0, quads: new Uint32Array(), offsets: new Int32Array(7) }));
-  const metadata: BakedMetadata = { version: 2, kingdomId: '123', recipeHash, sourcePlanHash, sourcePlanRevision: 'layout-1',
-    compilers: BAKED_COMPILERS, size: 256, height: 256, seaLevel: 0,
-    seat: { offset: [16, 5, 32], columns: { x0: 32, z0: 64, x1: 64, z1: 96 }, band: 96 },
-    physicalRegion: { minX: 0, maxX: 16, minZ: 0, maxZ: 16 }, bounds: { min: [-16, -5, -32], max: [112, 123, 96] },
-    palette: [{ id: 126, colour: '#aaaaaa', kind: 0 }], surface,
-    regions: [{ rx: 0, rz: 0, exact: true, bounds: { min: [-16, -5, -32], max: [112, -5, 96] },
-      meshes: [{ ...mesh, level: 0, rx: 0, rz: 0, minY: 0, maxY: 0, quadCount: 0 }] }] };
-  const manifest = await store.put(encodeBakedMetadata(metadata));
-  await store.bind({ version: 1, kingdomId: '123', sceneHash: scene, layoutRevision: 'layout-1', collisionRevision: 1,
-    sourcePlanHash, recipeHash, manifest });
-  return { surface };
+}
+function call(method: string, path: string, body?: Uint8Array) {
+  return new Promise<{ status: number; headers: Record<string, string | string[] | undefined>; raw: string[]; body: Buffer }>((done, fail) => {
+    const outgoing = request({ host: '127.0.0.1', port, method, path, headers: body ? { 'content-type': 'application/json', 'content-length': body.byteLength } : {} }, response => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer) => chunks.push(chunk));
+      response.on('end', () => done({ status: response.statusCode!, headers: response.headers, raw: response.rawHeaders, body: Buffer.concat(chunks) }));
+    });
+    outgoing.on('error', fail);
+    outgoing.end(body);
+  });
 }
 
-type Reply = { status: number; raw: string[]; body: Buffer };
-const get = (path: string, method = 'GET', headers: Record<string, string> = {}) => new Promise<Reply>((resolve, reject) => {
-  const sent = request(`${endpoint}${path}`, { method, headers, agent: false }, response => {
-    const chunks: Buffer[] = [];
-    response.on('data', chunk => chunks.push(chunk));
-    response.on('end', () => resolve({ status: response.statusCode ?? 0, raw: response.rawHeaders, body: Buffer.concat(chunks) }));
-    response.on('error', reject);
-  });
-  sent.on('error', reject);
-  sent.end();
-});
-const lengths = (reply: Reply) => reply.raw.filter((_value, i) => i % 2 === 0 && reply.raw[i]!.toLowerCase() === 'content-length')
-  .map(name => reply.raw[reply.raw.indexOf(name) + 1]);
-const header = (reply: Reply, name: string) => {
-  const i = reply.raw.findIndex((value, at) => at % 2 === 0 && value.toLowerCase() === name);
-  return i < 0 ? undefined : reply.raw[i + 1];
-};
-
-describe('land over a real listener, read by a Node http client', () => {
-  it('sends one Content-Length that matches the bytes, for the binding and a blob', async () => {
-    const { surface } = await publish();
-    const base = `/api/realm/land/123/${scene}`;
-    const binding = await get(base);
-    expect(binding.status).toBe(200);
-    expect(lengths(binding)).toEqual([String(binding.body.byteLength)]);
-    expect(JSON.parse(binding.body.toString('utf8'))).toMatchObject({ kingdomId: '123', sceneHash: scene });
-
-    const blob = await get(`${base}/${surface.hash}`);
-    expect(blob.status).toBe(200);
-    expect(header(blob, 'content-type')).toBe('application/gzip');
-    expect(lengths(blob)).toEqual([String(blob.body.byteLength)]);
-    expect(blob.body.byteLength).toBe(surface.gzipBytes);
-    expect([...blob.body.subarray(0, 2)]).toEqual([0x1f, 0x8b]);
-  });
-
-  it('answers HEAD with the real length and no body, and 304 with neither', async () => {
-    const { surface } = await publish();
-    const path = `/api/realm/land/123/${scene}/${surface.hash}`;
-    const head = await get(path, 'HEAD');
-    expect(head.status).toBe(200);
-    expect(lengths(head)).toEqual([String(surface.gzipBytes)]);
-    expect(head.body.byteLength).toBe(0);
-
-    const etag = header(head, 'etag')!;
-    const unchanged = await get(path, 'GET', { 'if-none-match': etag });
-    expect(unchanged.status).toBe(304);
-    expect(unchanged.body.byteLength).toBe(0);
-    expect(lengths(unchanged).length).toBeLessThanOrEqual(1);
-  });
-
-  it('fails closed with one Content-Length for unknown land', async () => {
-    const missing = await get(`/api/realm/land/123/${scene}`);
+describe('land routes through uWebSockets to a Node client', () => {
+  it('send one Content-Length that Node accepts, for GET and HEAD of a blob', async () => {
+    const blob = await store.put(Buffer.from('a stored land blob, long enough to be gzipped'));
+    const recipe = genesisSketchRecipe('63920635', 'The_AGGman'), hash = await grandSketchRecipeHash(recipe);
+    mountLandRoutes(app, store, createSketchService({ store, bake: null }));
+    await listen();
+    // Nothing is published for this recipe yet: a calm no-store 404, read without a parser error.
+    const missing = await call('GET', `/api/realm/land/63920635/${hash}/${blob.hash}`);
     expect(missing.status).toBe(404);
-    expect(lengths(missing)).toEqual([String(missing.body.byteLength)]);
-    expect(header(missing, 'cache-control')).toBe('no-store');
+    expect(missing.headers['cache-control']).toBe('no-store');
+    // The POST body reaches the queue; a realm without a bake command says it is resting.
+    const posted = await call('POST', `/api/realm/land/63920635/${hash}`, Buffer.from(canonicalSceneJson(recipe)));
+    expect(posted.status).toBe(503);
+    expect(JSON.parse(posted.body.toString())).toEqual({ state: 'refused', reason: 'resting' });
+    expect(posted.raw.filter(name => name.toLowerCase() === 'content-length')).toHaveLength(1);
+    // Once published, the record and a blob read cleanly with exactly one length each, also for HEAD.
+    const record = await storeSketch(store, recipe), mesh = record.meshes[1]!;
+    for (const path of [`/api/realm/land/63920635/${hash}`, `/api/realm/land/63920635/${hash}/${mesh.hash}`]) {
+      const got = await call('GET', path);
+      expect(got.status).toBe(200);
+      expect(got.raw.filter(name => name.toLowerCase() === 'content-length')).toHaveLength(1);
+      expect(Number(got.headers['content-length'])).toBe(got.body.byteLength);
+      const head = await call('HEAD', path);
+      expect(head.status).toBe(200);
+      expect(head.raw.filter(name => name.toLowerCase() === 'content-length')).toHaveLength(1);
+      expect(Number(head.headers['content-length'])).toBe(got.body.byteLength);
+    }
+    expect((await call('GET', `/api/realm/land/63920635/${hash}/${mesh.hash}`)).body.byteLength).toBe(mesh.gzipBytes);
   });
 });

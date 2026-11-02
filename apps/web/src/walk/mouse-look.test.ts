@@ -84,14 +84,15 @@ describe('mouse look end to end', () => {
     });
     expect(turned(start, controller.debug.camera.yaw)).toBeCloseTo(wrapAngle(hand * LOOK.radiansPerPx), 9);
   });
-  for (const hz of [60, 144, 343]) {
-    it(`turns only as far as the hand when Firefox on X11 echoes the hidden cursor after every move (${hz} Hz)`, () => {
+  for (const [hz, from] of [[60, [-978, 105]], [144, [-978, 105]], [343, [-978, 105]], [343, [6, -3]], [144, [-40, 0]]] as const) {
+    it(`turns only as far as the hand when Firefox on X11 echoes the hidden cursor after every move (${hz} Hz, from ${from.join(', ')})`, () => {
       // Tobias's machine: each real count is followed by a fake event, the cursor's offset from the centre, which
-      // drifts with the hand. 2 s of a 500 Hz mouse moving 1 count right and 1 down, then 2 s still.
+      // drifts with the hand (near the centre when the click was). 2 s of a 500 Hz mouse moving 1 count right and
+      // 1 down, then 2 s still.
       const { controller, mouse, run, capture } = setup(false, true);
       controller.frame(0); capture();
       const start = { yaw: controller.debug.camera.yaw, pitch: controller.debug.camera.pitch };
-      let offset = { x: -978, y: 105 }, hand = { x: 0, y: 0 };
+      let offset: { x: number; y: number } = { x: from[0], y: from[1] }, hand = { x: 0, y: 0 };
       const at = run(0, 2000, hz, ms => {
         if (ms % 2) return;
         const real = ms % 4 ? { x: 1, y: 0 } : { x: 0, y: 1 };

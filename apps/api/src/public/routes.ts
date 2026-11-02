@@ -84,6 +84,8 @@ export function classify(pathname: string, search: string): PublicRoute {
   if (/^\/(?:live-realm-data\/)?realm\/(?:raid-roads|raid-pennants\/[1-9][0-9]{0,31})$/.test(pathname)) return { kind: 'realm' };
   if (/^\/(?:live-realm-data\/)?realm\/raid-chat\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'realm' };
   if (/^\/api\/realm\/land\/[1-9][0-9]{0,31}\/[a-f0-9]{64}(?:\/[a-f0-9]{64})?$/.test(pathname)) return { kind: 'realm' };
+  if (/^\/api\/realm\/land\/[1-9][0-9]{0,31}\/world$/.test(pathname)) return { kind: 'realm' };
+  if (/^\/api\/realm\/land\/[1-9][0-9]{0,31}\/recipe$/.test(pathname)) return { kind: 'realm' };
   if (/^\/(?:live-realm-data\/)?realm\/raid-party\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'realm' };
   if (/^\/api\/realm\/looks\/(?:me|lk\.[a-f0-9]{40}|[a-z]{1,16})$/.test(pathname)) return { kind: 'realm' };
   if (pathname === REALM_PREFIX || pathname.startsWith(`${REALM_PREFIX}/`)) {

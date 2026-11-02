@@ -3,7 +3,7 @@ import { classify } from '../../../api/src/public/routes';
 import type { LandResponse } from './routes';
 
 const { read } = vi.hoisted(() => ({ read: vi.fn() }));
-vi.mock('./routes', () => ({ readLandRoute: read }));
+vi.mock('./routes', () => ({ readLandRoute: read, postLandRoute: vi.fn() }));
 vi.mock('./store', () => ({ LandArtifactStore: class {} }));
 import { mountLandRoutes } from './mount';
 
@@ -81,9 +81,9 @@ describe('uWebSockets land mount', () => {
 
   it('preserves method errors and converts unmatched routes to no-store 404', async () => {
     read.mockResolvedValueOnce({ status: 405, headers: { allow: 'GET, HEAD' }, body: new Uint8Array() });
-    const method = mounted(); method.handler(method.res, { ...req(), getMethod: () => 'post' });
+    const method = mounted(); method.handler(method.res, { ...req(), getMethod: () => 'put' });
     await vi.waitFor(() => expect(method.writes).toContainEqual(['status', '405 Method Not Allowed']));
-    expect(read).toHaveBeenLastCalledWith(expect.anything(), path, 'POST', '"etag"');
+    expect(read).toHaveBeenLastCalledWith(expect.anything(), path, 'PUT', '"etag"');
     expect(method.writes).toContainEqual(['header', 'allow', 'GET, HEAD']);
     read.mockResolvedValueOnce(null);
     const missing = mounted(); missing.handler(missing.res, req());

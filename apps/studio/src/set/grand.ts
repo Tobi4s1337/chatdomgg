@@ -7,7 +7,8 @@
 // recorder never captures pop-in.
 import * as THREE from 'three';
 import './contract';
-import { GrandEngine, GRAND_TIERS } from '../../../web/src/grand/engine';
+import { GRAND_TIERS } from '../../../web/src/grand/engine';
+import { GrandRaisedEngine } from '../../../web/src/grand/engine-raise';
 import { grandChannel } from '../../../web/src/grand/channels';
 import { GRAND_VOXEL_METRES as M } from '../../../../packages/world/src/grand/types';
 import { PATHS, samplePath, type PathKey, type SiteName } from './paths';
@@ -31,7 +32,7 @@ export async function start(query: URLSearchParams, canvas: HTMLCanvasElement): 
   const hour = query.has('hour') ? Number(query.get('hour')) : path.hour;
   const offset = Number(query.get('from') ?? 0);
 
-  const engine = new GrandEngine(canvas, channel.seed, { tier: 'ultra', capture: false, hour, view: 'orbit', time: null });
+  const engine = new GrandRaisedEngine(canvas, channel.seed, { tier: 'ultra', capture: false, hour, view: 'orbit', time: null });
   const inside = engine as unknown as EngineInside;
   // Film settings: the ultra tier at the frame's full pixel count, with no per-frame install budget, so a
   // frame waits for its land instead of streaming it in. The resolution governor is off: frame time is virtual.

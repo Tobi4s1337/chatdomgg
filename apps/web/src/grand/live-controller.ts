@@ -13,6 +13,13 @@ export interface GrandLiveState {
   readonly error: string | null;
   readonly source: string | null;
   readonly canRetry: boolean;
+  /** The heading's small line above the name (a founded kingdom's is the default). */
+  readonly eyebrow?: string;
+  /** One sentence under the heading, such as what an unfounded land is waiting for. */
+  readonly note?: string;
+  /** The panel's heading when the view will not open here, and where to go instead (a founded kingdom's door). */
+  readonly heading?: string;
+  readonly door?: { readonly href: string; readonly label: string };
 }
 const unavailable = 'The kingdom could not be reached. Try again, or find another kingdom on the Atlas.';
 
