@@ -64,7 +64,7 @@ Operator details (fetched from https://saartech.de/impressum and /datenschutz on
   Quality bar: sign-in never loses your place, never asks for more than `openid`, and every failure says what happened and what to do next.
   Done when: an end-to-end test (Playwright, your own gateway on your own port and throwaway schema) goes signed out, sign in, returned to the same section of the story and the same Atlas view (the Atlas part once atlas-map's handle exists; if it does not exist by the time the rest is done, write `waiting:` for that part only); stills of signed-out and signed-in states at both sizes, and of every gate state, in `work/evidence/front-door/fd12/`.
 
-- [ ] **FD13 — The living hero, and fast enough to be the front page.**
+- [x] **FD13 — The living hero, and fast enough to be the front page.**
   Outcome: the hero becomes a live in-page 3D kingdom at dusk on the grand land (windows lighting as names appear), streamed in after the first paint, with the captured hero as its poster and its fallback; the whole page meets its speed bar on a laptop and a phone.
   - Mount grand-world's land through the seam in SEAMS.md (`mountLandHero` or its equivalent) when it exists; until then, swap in fresh captures of the final grand land after Monday's merge.
   - The live Atlas section uses atlas-map's hero mode fully: its search, its glow, "Explore the map".

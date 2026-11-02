@@ -2,7 +2,7 @@
 // fades in over), the live hero's frame timing, and the front page's first and largest paint, measured in his Chrome.
 // Run it inside one GPU lease, after building the web app and the site (`node scripts/public/build.mjs --no-panel`):
 //
-//   chatdom-pc-lease -- node scripts/public/hero-gpu.mjs --out work/evidence/front-door/fd13/gpu [--posters] [--timing]
+//   chatdom-pc-lease -- node scripts/public/hero-gpu.mjs --out work/evidence/front-door/fd13/gpu [--posters] [--timing] [--sizes 1440x900]
 //
 // It serves apps/web/dist on 127.0.0.1:5192 (the story at /site/, the grand land at /-/grand, or /-/grand-bench once grand-world moves it), which his tunnel
 // forwards to localhost:5192 on his PC, and drives his Chrome over the tunnel's DevTools port in a fresh browser
@@ -10,7 +10,7 @@
 // 780x1688, from the orbit camera the live land uses (apps/web/src/site/hero/frame.ts). Timing: for 1440x900 and
 // 1920x1080, first contentful paint and largest contentful paint on a cold load, how long the live land took, ten
 // seconds of frame times while it orbits, and a still of it. Everything is written to <out>/hero-gpu.json.
-/* global performance, requestAnimationFrame, PerformanceObserver -- the timing functions run in the page */
+/* global performance, requestAnimationFrame, PerformanceObserver, innerHeight, scrollY, scrollTo -- the timing functions run in the page */
 import { chromium } from '@playwright/test';
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -22,6 +22,8 @@ const out = resolve(option('--out', 'work/evidence/front-door/fd13/gpu'));
 const all = !args.includes('--posters') && !args.includes('--timing');
 const doPosters = all || args.includes('--posters');
 const doTiming = all || args.includes('--timing');
+// Timing sizes, e.g. `--sizes 1440x900`; a timing-only run merges its rows into an existing hero-gpu.json.
+const SIZES = (option('--sizes', '1440x900,1920x1080')).split(',').map(size => size.split('x').map(Number));
 const CDP = process.env.PC_CDP || 'http://127.0.0.1:9333';
 // 5192 is the lease's port; a rehearsal off the lease (scripts/public/hero-gpu-rehearse.mjs) passes a capture port.
 const PORT = Number(process.env.HERO_GPU_PORT || 5192);
@@ -85,16 +87,21 @@ async function page(browser, width, height) {
 
 const FRAME_TIMES = seconds => new Promise(done => {
   const times = [];
+  let inView = 0;
   let last = performance.now();
   const end = last + seconds * 1000;
   const frame = now => {
     times.push(now - last); last = now;
+    // The hero rests out of view (its camera stops and nothing is drawn), so a frame only counts as the live land's
+    // when the hero is on screen; his Chrome is a real window and can be scrolled while the lease runs.
+    const box = document.querySelector('.story-hero')?.getBoundingClientRect();
+    if (box && box.bottom > innerHeight * 0.5 && box.top < innerHeight * 0.5) inView += 1;
     if (now < end) { requestAnimationFrame(frame); return; }
     times.shift();
     const sorted = [...times].sort((a, b) => a - b);
     const q = p => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
     const mean = times.reduce((a, b) => a + b, 0) / times.length;
-    done({ frames: times.length, fps: 1000 / mean, p50: q(0.5), p95: q(0.95), p99: q(0.99), worst: sorted.at(-1), over33: times.filter(t => t > 33.4).length, visible: document.visibilityState });
+    done({ frames: times.length, fps: 1000 / mean, p50: q(0.5), p95: q(0.95), p99: q(0.99), worst: sorted.at(-1), over33: times.filter(t => t > 33.4).length, visible: document.visibilityState, heroInView: inView / (times.length + 1), scrollY: scrollY });
   };
   requestAnimationFrame(frame);
 });
@@ -160,7 +167,7 @@ try {
   }
 
   if (doTiming) {
-    for (const [width, height] of [[1440, 900], [1920, 1080]]) {
+    for (const [width, height] of SIZES) {
       const { context, tab } = await page(browser, width, height);
       const started = Date.now();
       await tab.goto(`${APP}/site/`, { waitUntil: 'load' });
@@ -174,6 +181,7 @@ try {
         .catch(() => undefined);
       const hero = await tab.evaluate(() => ({ state: document.querySelector('.story-hero')?.dataset.heroState ?? 'none', plan: document.querySelector('.story-hero')?.dataset.heroPlan ?? 'none' }));
       const liveAfter = (Date.now() - started) / 1000;
+      await tab.evaluate(() => scrollTo(0, 0));
       await sleep(4_000);
       const frames = await tab.evaluate(FRAME_TIMES, 10);
       const file = join(out, `hero-live@${width}x${height}.png`);
@@ -182,6 +190,15 @@ try {
       report.timing.push(row);
       console.log(JSON.stringify(row));
       await context.close();
+    }
+  }
+  if (!doPosters) {
+    // Keep the pictures and the other sizes from an earlier run; replace only the rows measured now.
+    const earlier = await readFile(join(out, 'hero-gpu.json'), 'utf8').then(JSON.parse).catch(() => null);
+    if (earlier) {
+      const sizes = new Set(report.timing.map(row => row.size));
+      report.posters = earlier.posters ?? [];
+      report.timing = [...(earlier.timing ?? []).filter(row => !sizes.has(row.size)), ...report.timing];
     }
   }
   await writeFile(join(out, 'hero-gpu.json'), `${JSON.stringify(report, null, 2)}\n`);
