@@ -153,7 +153,11 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
           <Match when={tab() === 'kingdom'}>
             <figure class="cw-picture">
               <Show when={picture()} fallback={<div class="cw-absence"><span class="cw-absence-arch" aria-hidden="true"><span>✦</span></span><p>{snap().connection.kind === 'outside-twitch' ? 'Open on Twitch to see the kingdom' : snap().light.kind === 'unfounded' ? 'No kingdom here yet' : 'The kingdom is out of view'}</p></div>}>{picture =>
-                <><img class="cw-picture-image" src={picture().url} alt={picture().alt} onError={() => setFailed(true)} /><figcaption aria-label={picture().provenance.origin === 'realm' ? `Painted at ${picture().provenance.caption}` : picture().provenance.caption}><Show when={picture().provenance.origin === 'realm'}><span class="cw-brush" aria-hidden="true">✎</span></Show>{picture().provenance.caption}</figcaption></>}
+                <><img class="cw-picture-image" src={picture().url} alt={picture().mark ? `${picture().alt} Your lit window is marked.` : picture().alt} onError={() => setFailed(true)}
+                  style={picture().mark ? { 'object-position': `${picture().mark!.x * 100}% ${picture().mark!.y * 100}%` } : {}} />
+                <Show when={picture().mark}>{mark => <span class="cw-yours" aria-hidden="true"
+                  classList={{ low: mark().y < .2, west: mark().x < .2, east: mark().x > .8 }} style={{ left: `${mark().x * 100}%`, top: `${mark().y * 100}%` }}>
+                  <span class="cw-yours-ring" /><span class="cw-yours-tag">Yours</span></span>}</Show><figcaption aria-label={picture().provenance.origin === 'realm' ? `Painted at ${picture().provenance.caption}` : picture().provenance.caption}><Show when={picture().provenance.origin === 'realm'}><span class="cw-brush" aria-hidden="true">✎</span></Show>{picture().provenance.caption}</figcaption></>}
               </Show>
             </figure>
             <Show when={unreached() || footCount() || snap().moment || gate()}>

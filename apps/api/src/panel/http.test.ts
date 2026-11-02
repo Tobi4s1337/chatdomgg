@@ -32,7 +32,7 @@ async function start(extension: { clientId: string; secret: string } | null = { 
       if (path.endsWith('/gift-status') || path.endsWith('/gift-resolve')) return new Response(JSON.stringify({ version: 1, status: 'pending' }));
       if (path.endsWith('/forget')) return new Response(JSON.stringify({ version: 1, status: 'unavailable' }), { status: 503 });
       if (path.endsWith('/privacy') || path.endsWith('/quiet')) return new Response(JSON.stringify({ version: 1, status: path.slice(path.lastIndexOf('/') + 1), quiet: body.quiet ?? false, projection: 'pending', forgetAvailable: false }));
-      const answer = path.endsWith('/claim') ? { version: 1, status: 'deed' } : path.endsWith('/presence') ? { version: 1, status: 'presence', lit: true, stream: 'live', held: false }
+      const answer = path.endsWith('/claim') ? { version: 1, status: 'deed' } : path.endsWith('/presence') ? { version: 1, status: 'presence', lit: true, stream: 'live', held: false, slot: 7 }
         : path.endsWith('/ingress') ? { version: 1, status: 'accepted' } : { version: 1, status: 'kingdom', stream: 'live', lights: 1, moment: null };
       return new Response(JSON.stringify(answer), { status: path.endsWith('/ingress') ? 202 : 200 });
     },
@@ -45,7 +45,13 @@ async function start(extension: { clientId: string; secret: string } | null = { 
     method: 'POST', headers: { authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
   const health = () => fetch(`http://127.0.0.1:${address.port}/api/panel/v1/health`);
-  return { call, requests, health };
+  const base = `http://127.0.0.1:${address.port}/api/panel/v1/`;
+  return { call, requests, health, base };
+}
+function webp(fill = 1) {
+  const bytes = Buffer.alloc(40, fill);
+  bytes.write('RIFF', 0, 'ascii'); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WEBP', 8, 'ascii');
+  return bytes;
 }
 
 describe('verified panel door', () => {
@@ -87,10 +93,25 @@ describe('verified panel door', () => {
   it('uses only JWT identity, approved names and the real ingress envelope; confirms only after realm evidence', async () => {
     const { call, requests } = await start();
     const answer = await call('light', await token());
-    expect(await answer.json()).toMatchObject({ status: 'deed', lit: true });
+    expect(await answer.json()).toMatchObject({ status: 'deed', lit: true, slot: 7 });
     expect(requests.find(r => r.path.endsWith('/claim'))?.body).toEqual({ kingdomId: '1234', personId: '5678', name: 'Wren' });
     expect(requests.find(r => r.path.endsWith('/ingress'))?.body).toMatchObject({ version: 1, observation: { kingdomId: '1234', source: 'panel', people: [{ personId: '5678', disclosure: 'named', displayName: 'Wren' }] } });
     expect((await call('light', await token(), { channelId: '9999', personId: '9999' })).status).toBe(400);
+  });
+  it('keeps each painting with its lit windows and pairs the bytes with their revision', async () => {
+    const { call, base } = await start();
+    const upload = (windows: string | null, revision = 'r1', at = Date.now()) => fetch(`${base}stills`, { method: 'POST', body: webp(),
+      headers: { authorization: `Bearer ${'s'.repeat(40)}`, 'content-type': 'image/webp', 'x-chatdom-kingdom-id': '1234',
+        'x-chatdom-captured-at': String(at), 'x-chatdom-revision': revision, ...(windows === null ? {} : { 'x-chatdom-windows': windows }) } });
+    for (const malformed of ['7:4120', '7:99999:1', '7:1:1,7:2:2', '7:1:1;8:2:2', `${'1:1:1,'.repeat(401)}1:1:1`]) expect((await upload(malformed)).status).toBe(400);
+    expect((await upload('7:4120:6330,65534:5000:3000')).status).toBe(201);
+    const reply = await (await call('kingdom', await token())).json() as { picture: { revision: string; windows: unknown } };
+    expect(reply.picture).toMatchObject({ revision: 'r1', windows: [[7, 4120, 6330], [65534, 5000, 3000]] });
+    const picture = await fetch(`${base}picture`, { headers: { authorization: `Bearer ${await token()}` } });
+    expect(picture.headers.get('x-chatdom-revision')).toBe('r1');
+    expect(picture.headers.get('access-control-expose-headers')).toBe('x-chatdom-revision');
+    expect((await upload(null, 'r2', Date.now() + 1)).status).toBe(201);
+    expect(((await (await call('kingdom', await token())).json()) as { picture: { windows: unknown } }).picture.windows).toEqual([]);
   });
   it('uses the verified subject for privacy and quiet, and refuses unconfirmed or unavailable erasure', async () => {
     const { call, requests } = await start(), jwt = await token();

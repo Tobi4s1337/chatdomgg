@@ -1,3 +1,35 @@
+# PW10 checkpoint — 2 November 2026, morning
+
+PW10 is still unticked. This session closed the doubt from the last checkpoint ("the lit window is hard to distinguish in the painting"). The cause was not the glow: the viewer's window was never in the picture.
+
+## What was wrong
+
+The lane kingdom is a hamlet of 13 homes. The first person to take a place was given slot 11, at the edge of town, where allocation puts newcomers. The renderer's hero shot frames slots 0–9 and the castle; slots 10 and 11 fall below and beside the frame. So the painting made after the tap could not show that person's window, however it was lit. On a real GPU it would have been just as invisible.
+
+## Implemented
+
+- **The painting holds every lit window.** `apps/web/src/panel-painter/windows.ts` `paintingView()` starts from the renderer's own hero view (`captureView()`). When every lit window already sits inside 82% of the frame, the hero shot is kept unchanged, and so is an empty night. Otherwise the painter keeps the hero's direction and field of view, eases its aim halfway toward the lit homes and steps back in 10% steps, up to 3.4 times the distance, until the castle the hero aimed at and every lit window fit. It applies this through the scene's existing `pose()`. The page settles on the hero, re-poses once if needed and waits for a fresh, settled frame. The renderer is unchanged.
+- **The painting knows where its lit windows are.** The page projects the first authored pane of each present house through the frozen frame's camera. That is the same pane `createWindowLights` makes glow, using the same public houses (`foundedContent` plus the royal window). The runner sends the list as `X-Chatdom-Windows: slot:x:y,…` in ten-thousandths of the frame. It is strict, at most 400 entries, with no duplicate slots, and malformed lists are refused at both ends. The evidence directory also gets `kingdom-<id>.windows.txt`.
+- **The API keeps the marks with the picture.** `pictures.ts` stores `windows` beside the WebP. The kingdom reply lists them under `picture.windows`. `/picture` names its bytes' revision in `x-chatdom-revision`, which is exposed to the extension origin. Sketch uploads may not carry windows.
+- **The realm tells the viewer only their own slot, only while lit.** The panel door's presence reply gains `slot` when `lit` is true. The API passes it through on `/light` and `/presence`.
+- **The panel marks "Yours".** The adapter keeps the viewer's slot from the realm's lit answer. It marks a picture only when the light is lit, this painting's reply lists that slot, and the fetched bytes' revision matches that reply. Newer bytes carry no mark until a reply describes them. On the plate, the picture pans to the window (`object-position` at the mark's own fraction, so the point stays in frame at every size) with a 1.4 s ease. A brass ring with a slow warm glow sits on the pane, under a small parchment tag that reads "Yours". The motion stops under reduced motion. The image's alt text adds "Your lit window is marked." The tag flips below or to the side near the frame's edges.
+
+## Verified
+
+- Focused TypeScript over the panel, panel API, painter and realm panel door, and lint on every touched file, are clean.
+- Vitest across `apps/panel`, `apps/api/src/panel` and `apps/web/src/panel-painter`: 154 passed, plus 2 Postgres-gated tests skipped. `node --test` painter policy and runner: 8 passed. The new tests cover the projection (centre, pane rotation, frame and behind-camera culling), keeping the hero shot and widening it for an edge-of-town window at this lane's real coordinates (castle kept, direction kept), the strict header, upload, storage and the reply, the revision header, and the panel's mark rules (no mark before the painting shows it, a mark after, none on mismatched bytes, none while resting, malformed lists refused).
+- Realm panel door against dev Postgres (disposable `panel_window_test_*` schema): 8 of 8, including the new own-slot check.
+- Lane-stack capture, SwiftShader because the GPU tunnel was down again (`chatdom-pc status` exit 3): painting 01 at 0 lights, hero shot, "0 lit windows in frame". Tap to lit took 1522 ms at 318×496 and 1267 ms at 390×844, both confirmed by the realm (an earlier run this session took 1458 and 898 ms). Painting 02 at 1 light reads "1 lit window in frame", `11:3040:9061`, about 23 KB. The open panel replaced its picture and shows the mark at both sizes. I looked at painting 02 and at `lit-kingdom`, `tap-kingdom-before` and the other tap stills at both sizes. The new home is clearly in the foreground, the castle still crowns the picture, and the ring sits on the glowing side pane.
+- Word counts from this capture: lit Kingdom is now 12 (the tag adds "Yours"), walk-in 11, lit You 11, sharing 4, Gifts 10 and card 46. The other states are unchanged from the earlier matrix. No still scrolls, clips or has text under 12 px.
+- `node scripts/public/extension.mjs` still fails only on shared-owner strings: the provenance words in `packages/ui` and the `live|simulated` enum in the shared Passport schema. Nothing added this session appears in the findings.
+
+## Doubts
+
+- Occlusion is not tested. A lit pane hidden behind another house would still be marked. Homes on the hamlet slope do not hide one another in this framing, but a dense town might.
+- The framing jumps between the hero shot and a wider shot from one minute to the next when an edge-of-town window lights or dims. That is honest, and it is quiet at panel size, but a real-GPU look would tell whether it reads as a cut.
+- The mark sits close to the time caption when a home is at the bottom edge (y ≈ 0.91). They do not overlap.
+- Finding for main (outside this lane's scope): vitest's default `fsModuleCache` (`node_modules/.vitest-cache`) keeps the transformed `apps/realm/src/persistence/migrate.ts` with a stale `import.meta.glob`. Freshly added migrations (here 0012b–0012e) are not applied in tests, and every panel door test that reads settings fails with "relation realm_panel_settings does not exist". Running with `--fsModuleCache=false`, or clearing the cache, fixes it. Repository-wide, `fsModuleCache: false` in `vitest.config.ts` (or a cache key including the migration list) would prevent the false red.
+
 # PW10 checkpoint — 2 November 2026
 
 PW10 is still unticked. The browser path from tap to lit window to painting now runs end to end on the lane stack, with stills at both sizes. Four things are still outside this lane: real-GPU stills, the accepted zip, guest windows and the waiting-land painting.

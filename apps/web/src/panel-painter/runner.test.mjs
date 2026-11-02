@@ -20,7 +20,7 @@ function harness({ changedHash = false, sourceMissing = false, rejectUpload = fa
         route: async () => {}, exposeBinding: async (_name, read) => { page.input = await read(); },
         goto: async url => { assert.equal(url, `${config.webOrigin}/-/panel-painter`); assert.equal(locked, true); },
         waitForFunction: async () => {}, screenshot: async () => { assert.equal(locked, true); return Buffer.from('browser PNG'); },
-        evaluate: async (fn, input) => input?.png ? { bytes: [82, 73, 70, 70], width: 636, height: 400 } : fn.toString().includes('.error()') ? null : undefined,
+        evaluate: async (fn, input) => input?.png ? { bytes: [82, 73, 70, 70], width: 636, height: 400 } : fn.toString().includes('.error()') ? null : fn.toString().includes('.windows()') ? [[3, 4120, 6330]] : undefined,
         close: async () => { page.closed = true; },
       }; pages.push(page); return page;
     }, close: async () => {} }), close: async () => { closed = true; } };
@@ -40,6 +40,7 @@ function harness({ changedHash = false, sourceMissing = false, rejectUpload = fa
       assert.equal(init.headers['Content-Type'], 'image/webp');
       assert.match(init.headers['X-Chatdom-Revision'], /^[a-f0-9]{64}$/);
       assert.equal(init.headers['X-Chatdom-Captured-At'], '120000');
+      assert.equal(init.headers['X-Chatdom-Windows'], '3:4120:6330');
       return new globalThis.Response('', { status: rejectUpload ? 503 : 201 });
     }
     throw new Error('Unexpected transport');
@@ -53,6 +54,7 @@ test('runner gives each kingdom its own page, keeps secrets in Node and authenti
   assert.deepEqual(result, { painted: 2, unavailable: 0, unchanged: 0 });
   assert.equal(h.pages.length, 2);
   assert.equal(h.calls.filter(call => call.url.endsWith('/stills')).length, 2);
+  assert.ok(h.reports.every(message => message.endsWith('1 lit window in frame.')));
   for (const page of h.pages) {
     assert.ok(page.input.sceneBytes);
     assert.equal(JSON.stringify(page.input).includes(h.config.ingressSecret), false);

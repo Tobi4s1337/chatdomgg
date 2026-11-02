@@ -85,13 +85,19 @@ interface KingdomWire {
   readonly stream: 'live' | 'resting';
   readonly lights: number | null;
   readonly moment: string | null;
-  readonly picture: { readonly capturedAt: number; readonly revision: string; readonly kind: 'realm' | 'sketch' } | null;
+  readonly picture: { readonly capturedAt: number; readonly revision: string; readonly kind: 'realm' | 'sketch'; readonly windows?: readonly PaintedWindow[] } | null;
   readonly pledges: string | null;
   readonly streamer?: string;
   readonly settings?: PanelSettings;
   readonly settingsRevision?: string;
 }
 type Claim = 'deed' | 'guest' | 'castle' | 'unfounded' | 'held' | 'unavailable';
+/** A lit window in a painting: its public slot, then x and y in ten-thousandths of the frame. */
+type PaintedWindow = readonly [number, number, number];
+const paintedWindows = (value: unknown): value is readonly PaintedWindow[] => Array.isArray(value) && value.length <= 400
+  && value.every(entry => Array.isArray(entry) && entry.length === 3 && entry.every(part => Number.isSafeInteger(part) && part >= 0)
+    && entry[0] <= 65535 && entry[1] <= 10_000 && entry[2] <= 10_000);
+const ownSlotOf = (answer: Record<string, unknown>) => Number.isSafeInteger(answer.slot) && Number(answer.slot) >= 0 && Number(answer.slot) <= 65535 ? Number(answer.slot) : null;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const words = (value: unknown, max: number): value is string => typeof value === 'string' && value.length > 0 && value.length <= max && !/[\p{Cc}\u202a-\u202e\u2066-\u2069]/u.test(value);
 function kingdomWire(value: unknown): KingdomWire | null {
@@ -100,7 +106,7 @@ function kingdomWire(value: unknown): KingdomWire | null {
   if (value.moment !== null && !words(value.moment, 280)) return null;
   if (value.pledges !== null && !words(value.pledges, 120)) return null;
   if (value.streamer !== undefined && (value.status !== 'unfounded' || !words(value.streamer, 25))) return null;
-  if (value.picture !== null && (!object(value.picture) || !Number.isSafeInteger(value.picture.capturedAt) || Number(value.picture.capturedAt) < 0 || Number(value.picture.capturedAt) > 8.64e15 || !words(value.picture.revision, 160) || !['realm', 'sketch'].includes(String(value.picture.kind)))) return null;
+  if (value.picture !== null && (!object(value.picture) || !Number.isSafeInteger(value.picture.capturedAt) || Number(value.picture.capturedAt) < 0 || Number(value.picture.capturedAt) > 8.64e15 || !words(value.picture.revision, 160) || !['realm', 'sketch'].includes(String(value.picture.kind)) || (value.picture.windows !== undefined && !paintedWindows(value.picture.windows)))) return null;
   if (value.settings !== undefined && (!parsePanelSettings(value.settings) || !words(value.settingsRevision, 160))) return null;
   return value as unknown as KingdomWire;
 }
@@ -115,6 +121,8 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
   let kingdom: KingdomWire | null = null, kingdomLost = false, kingdomAt = 0;
   let picture: Picture = { kind: 'unavailable', reason: 'The kingdom’s picture is on its way.' };
   let pictureRevision: string | null = null, pictureUrl: string | null = null;
+  // The lit windows of exactly the painting on show, and the viewer's own window once the realm confirms it lit.
+  let pictureWindows: readonly PaintedWindow[] = [], ownSlot: number | null = null;
   let light: Light | null = null, claimed: Claim | null = null;
   let queued: { token: string | null; authorization: number | undefined } | null = null;
   let readingTimer: ReturnType<typeof setTimeout> | undefined, kingdomTimer: ReturnType<typeof setTimeout> | undefined;
@@ -149,6 +157,12 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     return light ?? lightFor(status);
   };
   const gifts = createGiftTransport({ helper, backend, fetch: send, visible, live: () => kingdom?.stream === 'live' && !kingdomLost, onChange: () => refresh() });
+  /** The painting, with the viewer's own window marked only while the realm confirms it lit and this painting shows it lit. */
+  const markedPicture = (): Picture => {
+    if (picture.kind !== 'still' || ownSlot === null || currentLight().kind !== 'lit') return picture;
+    const own = pictureWindows.find(([slot]) => slot === ownSlot);
+    return own ? { ...picture, mark: { x: own[1] / 10_000, y: own[2] / 10_000 } } : picture;
+  };
   const snapshotFor = (): PanelSnapshot => {
     const status = helper.status(), current = currentReading(), realm = current?.kingdom ?? null;
     const connection = kingdomLost ? kingdomAt ? { kind: 'lost' as const, asOf: timeWords(kingdomAt) } : { kind: 'kingdom-unavailable' as const } : connectionFor(status, patient, reading, Boolean(backend));
@@ -158,7 +172,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       kingdom: realm ? { name: realm.name, tier: realm.tier, motto: realm.motto } : null,
       streamer: kingdom?.status === 'unfounded' ? kingdom.streamer ?? null : null,
       stream: kingdom?.stream ?? 'unknown', kingdomLights: kingdom?.lights ?? null, moment: kingdom?.moment ?? null,
-      picture, light: currentLight(),
+      picture: markedPicture(), light: currentLight(),
       tonight: { kind: 'unavailable', reason: 'Tonight’s chronicle is not reaching the panel yet.' },
       home: forgotten ? { kind: 'unknown', reason: 'Your records were forgotten. Take your place to begin again.' } : homeFor(status, reading, passport),
       tavern: { kind: 'unavailable', reason: 'Walk into the kingdom to visit the tavern.' },
@@ -219,20 +233,22 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
   const loadPicture = async (frame: NonNullable<KingdomWire['picture']>, version: number) => {
     if (pictureRevision === frame.revision) return;
     try {
-      const blob = await request('/api/panel/v1/picture', response => response.blob(), 'GET');
+      const { blob, revision } = await request('/api/panel/v1/picture', async response => ({ blob: await response.blob(), revision: response.headers.get('x-chatdom-revision') }), 'GET');
       if (!['image/webp', 'image/png', 'image/jpeg'].includes(blob.type) || blob.size > 512 * 1024 || blob.size === 0) throw new Error('unreadable');
       if (version !== epoch || !visible()) return;
       const url = URL.createObjectURL(blob);
       if (pictureUrl) URL.revokeObjectURL(pictureUrl);
       pictureUrl = url; pictureRevision = frame.revision;
+      // A painting newer than the reply that announced it shows no marks until the next reply describes it.
+      pictureWindows = revision === frame.revision ? frame.windows ?? [] : [];
       const capturedOn = new Date(frame.capturedAt).toISOString();
       picture = { kind: 'still', url, alt: frame.kind === 'sketch' ? 'The waiting land of this channel.' : 'The kingdom as its people left it.', width: 640, height: 400, portrait: null,
         provenance: { origin: frame.kind, caption: frame.kind === 'sketch' ? 'Waiting land' : timeWords(frame.capturedAt), capturedOn } };
       refresh();
     } catch { /* A previous authenticated painting may stay visible with its captured time. */ }
   };
-  const confirm = (claim: Claim, lit: boolean) => {
-    claimed = claim;
+  const confirm = (claim: Claim, lit: boolean, slot: number | null = null) => {
+    claimed = claim; ownSlot = lit ? slot : null;
     if (claim === 'held') light = { kind: 'held' };
     else if (claim === 'unfounded') light = { kind: 'unfounded', pledged: false, band: kingdom?.pledges ?? null };
     else if (lit && ['deed', 'guest', 'castle'].includes(claim)) light = { kind: 'lit', choice: 'named', as: claim === 'deed' ? 'citizen' : claim as 'guest' | 'castle', by: 'realm' };
@@ -253,7 +269,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       presenceRetry = RETRY_MS;
       if (answer.lit) {
         const claim = claimed ?? (viewer === 'citizen' ? 'deed' : viewer === 'guest' ? 'guest' : viewer === 'monarch' ? 'castle' : null);
-        if (claim) confirm(claim, true);
+        if (claim) confirm(claim, true, ownSlotOf(answer));
       }
     } catch { if (version === epoch && generation === presenceGeneration) presenceRetry = Math.min(presenceRetry * 2, READING_REFRESH_MS); }
     finally { if (version === epoch && generation === presenceGeneration) { presenceBusy = false; if (canContinuePresence()) { presenceTimer = setTimeout(() => { presenceSent = false; void observe(); }, presenceRetry === RETRY_MS ? READING_REFRESH_MS : presenceRetry); } } }
@@ -270,7 +286,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       kingdom = parsed; kingdomLost = false; kingdomAt = Date.now();
       if (parsed.stream !== 'live') { clearTimeout(presenceTimer); presenceGeneration++; presenceRequest?.abort(); presenceBusy = false; presenceSent = false; if (light?.kind === 'lit') light = null; }
       if (parsed.picture) await loadPicture(parsed.picture, version);
-      else if (pictureUrl) { URL.revokeObjectURL(pictureUrl); pictureUrl = null; pictureRevision = null; picture = { kind: 'unavailable', reason: 'No painting has arrived yet.' }; }
+      else if (pictureUrl) { URL.revokeObjectURL(pictureUrl); pictureUrl = null; pictureRevision = null; pictureWindows = []; picture = { kind: 'unavailable', reason: 'No painting has arrived yet.' }; }
       void observe();
       void gifts.refresh();
     } catch { if (version === epoch && visible()) { kingdomLost = true; void gifts.refresh(); clearTimeout(presenceTimer); presenceGeneration++; presenceRequest?.abort(); presenceBusy = false; presenceSent = false; } }
@@ -295,7 +311,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       if (object(answer) && answer.status === 'pledged' && words(answer.band, 120)) light = { kind: 'unfounded', pledged: true, band: answer.band };
       else {
         if (!object(answer) || !['deed', 'guest', 'castle', 'unfounded', 'held', 'unavailable'].includes(String(answer.status)) || typeof answer.lit !== 'boolean') throw new Error('unreadable');
-        confirm(answer.status as Claim, answer.lit);
+        confirm(answer.status as Claim, answer.lit, ownSlotOf(answer));
         presenceSent = false;
       }
       void read(true); void poll();

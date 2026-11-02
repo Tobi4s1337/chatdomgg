@@ -6,6 +6,21 @@
 .cw-main { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #110b07; box-shadow: 0 1px #8c6540, inset 0 0 0 1px #b58c5266; background: #211912; }
 .cw-picture { flex: 1; min-height: 0; position: relative; margin: 0; overflow: hidden; background: #251c17; }
 .cw-picture-image { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* While the realm confirms the viewer's window lit in this painting, the picture leans toward it and marks it. With
+   object-position at the mark's own fraction, that point of the painting sits at the same fraction of the frame. */
+.cw-picture-image { transition: object-position 1.4s cubic-bezier(.3, .1, .2, 1); }
+.cw-yours { position: absolute; width: 0; height: 0; pointer-events: none; }
+.cw-yours-ring { position: absolute; left: -12px; top: -12px; width: 24px; height: 24px; box-sizing: border-box; border-radius: 50%;
+  border: 2px solid #f0cf8e; background: radial-gradient(circle, #ffe4a3cc 0 2px, #ffbf5c55 3px, transparent 9px);
+  box-shadow: 0 0 0 1px #2a170cb0, inset 0 0 0 1px #2a170c80, 0 0 14px 3px #ffb95a70; animation: cw-yours-glow 3.2s ease-in-out infinite; }
+.cw-yours-tag { position: absolute; bottom: 17px; left: 0; transform: translateX(-50%); padding: 1px 7px 2px; white-space: nowrap;
+  border: 1px solid #8f6a44; border-radius: 2px; background: #ead9b8 url('./assets/parchment.svg') center / 200px; color: #5a2f1d;
+  box-shadow: 0 1px 3px #000a, inset 0 1px #fff3d6; font: 700 13px/1.2 Alegreya, Georgia, serif; }
+.cw-yours.low .cw-yours-tag { bottom: auto; top: 17px; }
+.cw-yours.west .cw-yours-tag { transform: translateX(-14px); }
+.cw-yours.east .cw-yours-tag { transform: translateX(calc(-100% + 14px)); }
+@keyframes cw-yours-glow { 50% { box-shadow: 0 0 0 1px #2a170cb0, inset 0 0 0 1px #2a170c80, 0 0 20px 6px #ffc76a90; } }
+@media (prefers-reduced-motion: reduce) { .cw-picture-image { transition: none; } .cw-yours-ring { animation: none; } }
 .cw-picture figcaption { position: absolute; bottom: 0; left: 0; right: 0; padding: 18px 9px 5px; color: #f7e7c9; background: linear-gradient(transparent, #1a110de0); font: 13px/1.15 Alegreya, Georgia, serif; }
 .cw-absence { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 17px; color: #d2b993; background: radial-gradient(ellipse at 50% 55%, #3f3025, #211a16 75%); }
 .cw-absence p { margin: 0; padding: 0 20px; text-align: center; font-size: 14px; }

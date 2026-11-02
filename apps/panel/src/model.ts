@@ -49,6 +49,8 @@ export type Picture =
     /** The same moment framed for a phone held upright, when the source made one. */
     readonly portrait: { readonly url: string; readonly width: number; readonly height: number } | null;
     readonly provenance: PictureProvenance;
+    /** Where the viewer's own window glows in this painting, 0..1 across and down; only while it is lit in it. */
+    readonly mark?: { readonly x: number; readonly y: number };
   }
   | { readonly kind: 'unavailable'; readonly reason: string };
 

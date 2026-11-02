@@ -38,6 +38,13 @@ Chrome takes a PNG screenshot, then Chrome encodes that screenshot to WebP, redu
 60 KiB. The API receives raw `image/webp` and `X-Chatdom-Kingdom-Id`, `X-Chatdom-Captured-At` (realm epoch milliseconds),
 and `X-Chatdom-Revision` headers. Every upload uses `PANEL_PAINTER_SECRET`, never an extension JWT.
 
+Each upload also names the painting's lit windows in `X-Chatdom-Windows` (`slot:x:y`, comma-separated, x and y in
+ten-thousandths of the frame). The page reads them from the frozen frame's own camera (`captureView()`) and the same
+public houses the scene lights. Each position is the first authored pane of a house, which is the glass
+`createWindowLights` makes glow. Windows outside the frame or behind the camera are left out. The panel marks a
+viewer's window only when the realm confirms it lit and this painting lists it, so the mark never runs ahead of the
+picture.
+
 Missing geometry, public presence or shared clock gives no new painting. Unfounded waiting land needs the land owner's
 bare-land composition: the existing kingdom scene adds civic buildings even when homes are empty, so it cannot serve
 as an honest private waiting-land sketch yet.

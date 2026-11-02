@@ -36,16 +36,16 @@ function standIn(status: HelperStatus = AUTHORIZED, token: string | null = 'toke
 }
 function backend() {
   let reading: unknown = READING, kingdom: unknown = KINGDOM_STATE, light: unknown = { status: 'deed', lit: true };
-  let fail = false;
+  let fail = false, painting: string | null = null;
   const send = vi.fn<typeof fetch>(async (input, init) => {
     if (fail) throw new TypeError('offline');
     const path = new URL(String(input)).pathname;
-    if (path.endsWith('/picture')) return new Response(new Blob(['webp'], { type: 'image/webp' }));
+    if (path.endsWith('/picture')) return new Response(new Blob(['webp'], { type: 'image/webp' }), painting ? { headers: { 'x-chatdom-revision': painting } } : {});
     const body = path.endsWith('/reading') ? reading : path.endsWith('/kingdom') ? kingdom : path.endsWith('/light') ? light : path.endsWith('/pledge') ? { status: 'pledged', band: 'A handful of tents' } : path.endsWith('/privacy') ? { version: 1, status: 'privacy', quiet: false, projection: 'pending', forgetAvailable: true } : path.endsWith('/quiet') ? { version: 1, status: 'quiet', quiet: JSON.parse(String(init?.body)).quiet, projection: 'pending', forgetAvailable: true } : path.endsWith('/forget') ? { version: 1, status: 'forgotten', erased: ['home', 'presence'] } : { status: 'accepted', lit: false };
     expect(init?.signal?.aborted).toBe(false);
     return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
   });
-  return { send, reading(value: unknown) { reading = value; }, kingdom(value: unknown) { kingdom = value; }, light(value: unknown) { light = value; }, fail() { fail = true; } };
+  return { send, reading(value: unknown) { reading = value; }, kingdom(value: unknown) { kingdom = value; }, light(value: unknown) { light = value; }, painting(revision: string | null) { painting = revision; }, fail() { fail = true; } };
 }
 const settle = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
 const calls = (server: ReturnType<typeof backend>, suffix: string) => server.send.mock.calls.filter(([url]) => String(url).endsWith(suffix));
@@ -236,6 +236,32 @@ describe('verified panel transport', () => {
     await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS); expect(revoke).toHaveBeenCalledWith('blob:first');
     expect(adapter.get().picture).toMatchObject({ provenance: { origin: 'sketch' } });
     adapter.dispose(); expect(revoke).toHaveBeenCalledWith('blob:second');
+  });
+
+  it('marks the viewer’s own window only in a painting that shows it lit', async () => {
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL: vi.fn((blob: Blob) => `blob:${blob.size}`), revokeObjectURL: vi.fn() }));
+    const server = backend(), before = { capturedAt: 1_793_520_000_000, revision: 'before', kind: 'realm', windows: [[2, 100, 100]] };
+    server.kingdom({ ...KINGDOM_STATE, picture: before }); server.painting('before');
+    const { adapter } = mount(standIn(), server); await settle();
+    server.light({ status: 'deed', lit: true, slot: 7 }); adapter.requestLight('named'); await settle();
+    expect(adapter.get().light.kind).toBe('lit');
+    expect(adapter.get().picture).not.toHaveProperty('mark');
+    // The next painting has the window lit: the panel marks it where the painter found it.
+    server.kingdom({ ...KINGDOM_STATE, picture: { ...before, capturedAt: before.capturedAt + 60_000, revision: 'after', windows: [[2, 100, 100], [7, 4120, 6330]] } }); server.painting('after');
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS);
+    expect(adapter.get().picture).toMatchObject({ kind: 'still', mark: { x: .412, y: .633 } });
+    // Bytes newer than the reply that announced them carry no mark until a reply describes them.
+    server.kingdom({ ...KINGDOM_STATE, picture: { ...before, capturedAt: before.capturedAt + 120_000, revision: 'later', windows: [[7, 4120, 6330]] } }); server.painting('newest');
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS);
+    expect(adapter.get().picture).not.toHaveProperty('mark');
+    // A resting stream puts the light out, and with it the mark.
+    server.kingdom({ ...KINGDOM_STATE, stream: 'resting', picture: { ...before, capturedAt: before.capturedAt + 180_000, revision: 'rest', windows: [[7, 4120, 6330]] } }); server.painting('rest');
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS);
+    expect(adapter.get().light.kind).not.toBe('lit'); expect(adapter.get().picture).not.toHaveProperty('mark');
+    // A malformed window list is refused with the whole reply.
+    server.kingdom({ ...KINGDOM_STATE, picture: { ...before, revision: 'bad', windows: [[7, 20_000, 1]] } });
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS);
+    expect(adapter.get().connection.kind).toBe('lost');
   });
 
   it('shows the next minute’s painting, and polls nothing while the panel is hidden', async () => {

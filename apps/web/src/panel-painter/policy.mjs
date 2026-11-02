@@ -3,6 +3,16 @@ import { createHash } from 'node:crypto';
 export const MAX_STILL_BYTES = 60 * 1024;
 export const LIVE_INTERVAL_MS = 60_000;
 export const RESTING_INTERVAL_MS = 3_600_000;
+export const MAX_PAINTED_WINDOWS = 400;
+
+/** The upload header for a painting's lit windows: `slot:x:y` joined by commas, x and y in ten-thousandths. */
+export function windowsHeader(marks) {
+  const valid = Array.isArray(marks) && marks.length <= MAX_PAINTED_WINDOWS && marks.every(mark => Array.isArray(mark) && mark.length === 3
+    && mark.every(part => Number.isSafeInteger(part) && part >= 0) && mark[0] <= 65535 && mark[1] <= 10_000 && mark[2] <= 10_000)
+    && new Set(marks.map(([slot]) => slot)).size === marks.length;
+  if (!valid) throw new Error('The painting\'s lit windows are unreadable.');
+  return marks.map(mark => mark.join(':')).join(',');
+}
 
 /** Heartbeat timestamps and delivery sequence numbers do not change the visible kingdom. */
 export function paintingRevision(snapshot, clockTime) {

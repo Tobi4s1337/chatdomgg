@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
-import { MAX_STILL_BYTES, paintingDue, paintingRevision, readPainterConfig } from './policy.mjs';
+import { MAX_STILL_BYTES, paintingDue, paintingRevision, readPainterConfig, windowsHeader } from './policy.mjs';
 
 async function boundedBody(response, limit) {
   if (!response.ok) throw new Error(`The painter source answered HTTP ${response.status}.`);
@@ -134,6 +134,8 @@ export async function runPainter(config, { once = false, signal, report = consol
           const refusal = await entry.page.evaluate(() => window.__chatdomPainter.error());
           if (refusal) throw new Error(`The renderer refused the painting. ${String(refusal).slice(0, 200)}${entry.errors?.length ? ` Page: ${entry.errors.join(' | ')}` : ''}`);
           await entry.page.evaluate(() => window.__chatdomPainter.freeze());
+          // Lit windows are read from the frozen frame's camera, so they belong to exactly this picture.
+          const windows = windowsHeader(await entry.page.evaluate(() => window.__chatdomPainter.windows()));
           const png = await entry.page.screenshot({ type: 'png', timeout: 30_000 });
           const image = await encodeScreenshot(entry.page, png);
           entry.sceneHash = snapshot.manifest.sceneHash;
@@ -141,16 +143,18 @@ export async function runPainter(config, { once = false, signal, report = consol
           const upload = await fetcher(`${config.apiOrigin}/api/panel/v1/stills`, { method: 'POST',
             signal: signal ? globalThis.AbortSignal.any([signal, globalThis.AbortSignal.timeout(30_000)]) : globalThis.AbortSignal.timeout(30_000),
             headers: { Authorization: `Bearer ${config.uploadSecret}`, 'Content-Type': 'image/webp',
-              'X-Chatdom-Kingdom-Id': kingdomId, 'X-Chatdom-Captured-At': String(Math.floor(capturedAt)), 'X-Chatdom-Revision': revision }, body: image.bytes });
+              'X-Chatdom-Kingdom-Id': kingdomId, 'X-Chatdom-Captured-At': String(Math.floor(capturedAt)), 'X-Chatdom-Revision': revision,
+              ...(windows ? { 'X-Chatdom-Windows': windows } : {}) }, body: image.bytes });
           if (!upload.ok) throw new Error(`The painting upload answered HTTP ${upload.status}.`);
           painted.set(kingdomId, { revision, capturedAt });
           if (evidenceDirectory) {
             await mkdir(evidenceDirectory, { recursive: true });
             await writeFile(join(evidenceDirectory, `kingdom-${kingdomId}@636x400.png`), png);
             await writeFile(join(evidenceDirectory, `kingdom-${kingdomId}.webp`), image.bytes);
+            await writeFile(join(evidenceDirectory, `kingdom-${kingdomId}.windows.txt`), `${windows}\n`);
           }
           result.painted++;
-          report(`Kingdom ${kingdomId}: painted ${image.width}x${image.height}, ${image.bytes.length} bytes.`);
+          report(`Kingdom ${kingdomId}: painted ${image.width}x${image.height}, ${image.bytes.length} bytes, ${windows ? windows.split(',').length : 0} lit ${windows && !windows.includes(',') ? 'window' : 'windows'} in frame.`);
         } catch (error) {
           result.unavailable++;
           const entry = warm.get(kingdomId), notes = entry?.errors?.length ? ` Page: ${entry.errors.join(' | ')}` : '';
