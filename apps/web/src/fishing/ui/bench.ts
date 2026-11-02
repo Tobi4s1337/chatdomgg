@@ -1,5 +1,6 @@
 import { FISH_SPECIES } from '../../../../../packages/content/src/fish/species';
 import { formatLength, formatWeight } from '../../bag/words';
+import { itemPortrait } from '../../bag/portrait';
 import { mountFishingUiStaged } from './mount';
 import { STAMP_SETTLE_MS, tagTimeline } from './logic';
 import type { CatchTag, FishingBeat, FishingUi, WorldTag } from './types';
@@ -69,13 +70,13 @@ function paintDusk(canvas: HTMLCanvasElement): void {
   }
 }
 
-function catchTag(): CatchTag {
+function catchTag(portrait: Promise<CanvasImageSource | null>): CatchTag {
   const pike = FISH_SPECIES.find(entry => entry.id === 'fish:moonlit-pike');
   return {
     name: pike?.name ?? 'Moonlit Pike',
     lore: pike?.lore ?? 'The old fishers lower their voices when its pale jaw breaks the water.',
     weight: formatWeight(3870), length: formatLength(912), rarity: pike?.rarity ?? 'rare',
-    personalFirst: true, kingdomFirst: true, portrait: null,
+    personalFirst: true, kingdomFirst: true, portrait,
   };
 }
 
@@ -113,7 +114,9 @@ export function mountFishingUiBench(host: HTMLElement, query: URLSearchParams): 
   if (state === 'all' || state === 'prompt') ui.prompt({ label: 'Hold to reel · ease off when it runs', key: compact ? 'Tap' : 'Click' });
   if (state === 'all' || state === 'fight') ui.fight({ tension: 0.7, progress: 0.42, phase: 'run', tired: false });
   if (state === 'all') ui.note('The kingdom is keeping your catch.');
-  if (state === 'all' || state === 'tag') ui.caught(catchTag());
+  // The tag's print is the real voxel fish, drawn as the kingdom draws it, at the size the walking HUD asks for.
+  const portrait = state === 'all' || state === 'tag' ? itemPortrait('fish:moonlit-pike', 288).catch(() => null) : Promise.resolve(null);
+  if (state === 'all' || state === 'tag') ui.caught(catchTag(portrait));
 
   const tags: WorldTag[] = [
     { id: 'bench-saoirse', x: 0, y: 0, text: 'saoirse_k caught a Bell Minnow', first: false, visible: true },
@@ -137,7 +140,7 @@ export function mountFishingUiBench(host: HTMLElement, query: URLSearchParams): 
   let readyTimer = 0, alive = true;
   const fonts = document.fonts?.ready ?? Promise.resolve();
   requestAnimationFrame(() => {
-    void fonts.then(() => {
+    void Promise.all([fonts, portrait]).then(() => {
       if (!alive) return;
       const wait = Math.max(0, settleMs - (performance.now() - started));
       readyTimer = window.setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(() => { if (alive) W.__chatdomReady = true; })), wait);

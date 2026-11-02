@@ -9,7 +9,7 @@ import { createPierFloat } from '../../../../../packages/content/src/pier/float'
 import { formatLength, formatWeight } from '../../bag/words';
 import type { FishingController, FishingEvent } from '../controller';
 import { createPierLanternGlow } from '../lanterns';
-import { createDroplets, createMist, createRings } from './effects';
+import { createDroplets, createFishShadows, createMist, createRings } from './effects';
 import { FLIGHT_S, LANDED_S, LEAP_S, REEL_S, SNAP_S, fishPath, floatPosition, leapPosition, linePoint, lineSag, rodPose,
   type LinePhase, type Vec } from './motion';
 
@@ -68,6 +68,8 @@ export interface PierLayer {
 }
 
 const CELL = .0625, MAX_FISHERS = 48, FISH_SLOTS = 3;
+// Where a landed catch lies beside its fisher, and the half width of the head's deck inside its rails, in metres.
+const LAND_AHEAD = .35, LAND_ACROSS = .85, HEAD_HALF = 3.6;
 // Each upper segment carries one voxel below its joint, so a bend never opens a gap in the rod.
 const SEGMENTS: readonly (readonly [number, number])[] = [[0, 11], [11, 21], [21, 32]];
 const BEND_SHARE = [0, .35, .65];
@@ -82,12 +84,16 @@ interface Fisher {
   position: Vec; yaw: number; posed: boolean;
   tension: number; progress: number; run: number; tired: boolean; reeling: boolean; fightPhase: 'rest' | 'warning' | 'run';
   nibbleAt: number; lastRing: number; seed: number; plopped: boolean;
+  /** Which side of the fisher a catch lands on (+1 right, -1 left), chosen toward this viewer's camera. */
+  landSide: number;
+  /** The hooked fish's heading under the water, radians, and where it was last frame. */
+  heading: number; fishPrev: Vec;
   fish: FishingCaughtFish | null; slot: number; tag: (() => void) | null; tagAt: number; equipped: boolean;
 }
 const blank = (): Fisher => ({ id: '', used: false, self: false, name: '', phase: 'held', since: 0, castId: null,
   target: [0, 0, 0], from: [0, 0, 0], fishAt: [0, 0, 0], near: [0, 0, 0], leapFrom: [0, 0, 0], deck: [0, 0, 0], float: [0, 0, 0], tip: [0, 0, 0], right: [1, 0, 0],
   position: [0, 0, 0], yaw: 0, posed: false, tension: 0, progress: 0, run: 0, tired: false, reeling: false, fightPhase: 'rest',
-  nibbleAt: -10, lastRing: 0, seed: 0, plopped: false, fish: null, slot: -1, tag: null, tagAt: 0, equipped: false });
+  nibbleAt: -10, lastRing: 0, seed: 0, plopped: false, landSide: 1, heading: 0, fishPrev: [0, 0, 0], fish: null, slot: -1, tag: null, tagAt: 0, equipped: false });
 
 function sliceAsset(asset: VoxelAsset, from: number, to: number, id: string): VoxelAsset {
   const [sx, sy, sz] = asset.size, voxels = new Uint16Array(asset.voxels.length);
@@ -144,6 +150,7 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
   // Banks on the water around the head, from the site frame: fixed, so mist never pops.
   const out = site.turn === 0 ? [0, 1] : site.turn === 1 ? [1, 0] : site.turn === 2 ? [0, -1] : [-1, 0];
   const side = [out[1]!, -out[0]!];
+  const acrossAxis = side;
   const head: Vec = [site.root[0] + out[0]! * (site.walk + 2), waterY, site.root[2] + out[1]! * (site.walk + 2)];
   const banks: [number, number, number, number][] = [];
   for (let i = 0; i < 12; i++) {
@@ -151,8 +158,11 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
     banks.push([head[0] + out[0]! * along + side[0]! * across, waterY + .02, head[2] + out[1]! * along + side[1]! * across, 9 + (i * 5.1) % 7]);
   }
   const mist = createMist(banks);
+  // The hooked fish as a dark shape under the surface: one draw for every fight on the pier.
+  const shadows = createFishShadows(MAX_FISHERS);
+  shadows.mesh.position.y = waterY;
   const glow = createPierLanternGlow(host.lights);
-  root.add(lines, rings.mesh, droplets.points, mist.mesh, glow.root);
+  root.add(lines, rings.mesh, droplets.points, mist.mesh, shadows.mesh, glow.root);
   // Leaping fish: a few plain meshes sharing the voxel material, geometry swapped per species.
   const fishGeometry = new Map<string, Promise<{ geometry: THREE.BufferGeometry; size: Vec3; mouth: Vec3 }>>();
   const fishMeshes = Array.from({ length: FISH_SLOTS }, (_, index) => {
@@ -222,16 +232,27 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
     void speciesGeometry(fish.speciesId).then(model => {
       if (disposed || holder.owner !== fishers.indexOf(entry) || entry.fish !== fish) return;
       holder.object.geometry = model.geometry; holder.size = model.size;
-      // The authored model is a mid-size fish; the caught one is drawn at its own length.
-      const authored = model.size[2] * CELL, wanted = fish.lengthMm / 1000;
-      holder.scale = THREE.MathUtils.clamp(wanted / authored, .55, 1.7); holder.ready = true;
+      // The authored model is a mid-size fish; the caught one is drawn at its own length, a little generous as the
+      // kingdom's people are, so a minnow still reads as a fish from the walking camera.
+      const authored = model.size[2] * CELL, wanted = Math.max(.3, fish.lengthMm / 1000 * 1.25);
+      holder.scale = THREE.MathUtils.clamp(wanted / authored, .55, 2.4); holder.ready = true;
     }).catch(() => { /* The leap shows only the splash if the model cannot be meshed. */ });
     if (entry.phase === 'hauling' || entry.phase === 'fighting') {
+      entry.landSide = landingSide(entry);
       entry.leapFrom[0] = entry.fishAt[0]; entry.leapFrom[1] = waterY - .1; entry.leapFrom[2] = entry.fishAt[2];
       enter(entry, 'leaping'); cue(entry, 'leap', .7 + fishSize(fish) * .6);
       droplets.burst(entry.fishAt[0], waterY, entry.fishAt[2], 26, 4.2, .05, now);
       for (let i = 0; i < 3; i++) rings.spawn(entry.fishAt[0], waterY, entry.fishAt[2], 1.2 + i * .7, 1.4 + i * .4, .8, now + i * .12);
     }
+  };
+  /** The catch lands beside the fisher on the side this viewer can see, and never past the head's rails. */
+  const landingSide = (entry: Fisher) => {
+    const camera = host.camera.position;
+    let side = (camera.x - entry.position[0]) * entry.right[0] + (camera.z - entry.position[2]) * entry.right[2] >= 0 ? 1 : -1;
+    const across = (entry.position[0] - site.root[0]) * acrossAxis[0]! + (entry.position[2] - site.root[2]) * acrossAxis[1]!;
+    const sideways = entry.right[0] * acrossAxis[0]! + entry.right[2] * acrossAxis[1]!;
+    if (Math.abs(across + side * sideways * LAND_ACROSS) > HEAD_HALF) side = -side;
+    return side;
   };
   const showTag = (event: Extract<FishingEvent, { kind: 'kept' }>) => {
     const species = SPECIES.get(event.fish.speciesId);
@@ -421,6 +442,7 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
     rings.uniforms.uColor.value.copy(sky).lerp(sun, .25).multiplyScalar(1.15 - grade.night * .45);
     rings.uniforms.uFogColor.value.set(grade.fog); rings.uniforms.uFogDensity.value = grade.fogDensity;
     droplets.uniforms.uColor.value.copy(sky).lerp(new THREE.Color('#ffffff'), .5).multiplyScalar(1 - grade.night * .5);
+    shadows.uniforms.uColor.value.set(grade.fog).lerp(new THREE.Color('#0d1d22'), .82);
     mist.uniforms.uColor.value.set(grade.fog).lerp(new THREE.Color('#e6e8e6'), .35 - grade.night * .2);
     lineMaterial.color.set('#ece6d4').lerp(new THREE.Color('#d9a868'), warmth * .5).multiplyScalar(1 - grade.night * .35);
   };
@@ -454,7 +476,7 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
       entry.self = walker.self; entry.name = walker.name; entry.posed = true;
       entry.position[0] = walker.position[0]; entry.position[1] = walker.position[1]; entry.position[2] = walker.position[2]; entry.yaw = walker.yaw;
     }
-    let rodCount = 0, floatCount = 0, lineSegments = 0;
+    let rodCount = 0, floatCount = 0, lineSegments = 0, shadowCount = 0;
     active = 0;
     for (const entry of fishers) {
       if (!entry.used) continue;
@@ -467,12 +489,24 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
       if (!entry.equipped && !busy) { release(entry); continue; }
       active++;
       // The deck in front of the fisher, where a catch lands.
-      entry.deck[0] = entry.position[0] + Math.sin(entry.yaw) * .9 + entry.right[0] * .25; entry.deck[1] = site.deckY + .1;
-      entry.deck[2] = entry.position[2] + Math.cos(entry.yaw) * .9 + entry.right[2] * .25;
+      // Beside the fisher, half a step forward: in view of the camera behind them and well inside the head's rails.
+      entry.deck[0] = entry.position[0] + Math.sin(entry.yaw) * LAND_AHEAD + entry.right[0] * entry.landSide * LAND_ACROSS; entry.deck[1] = site.deckY + .1;
+      entry.deck[2] = entry.position[2] + Math.cos(entry.yaw) * LAND_AHEAD + entry.right[2] * entry.landSide * LAND_ACROSS;
       entry.near[0] = entry.position[0] + Math.sin(entry.yaw) * 2.2; entry.near[1] = waterY; entry.near[2] = entry.position[2] + Math.cos(entry.yaw) * 2.2;
       writeRod(entry, rodCount++);
       if (entry.phase === 'fighting' || entry.phase === 'hauling') {
         fishPath(now, entry.seed, entry.target, entry.near, entry.right, entry.phase === 'hauling' ? 1 : entry.progress, entry.run, waterY, entry.fishAt);
+        const mx = entry.fishAt[0] - entry.fishPrev[0], mz = entry.fishAt[2] - entry.fishPrev[2];
+        if (age < .05) entry.heading = Math.atan2(entry.position[0] - entry.fishAt[0], entry.position[2] - entry.fishAt[2]);
+        else if (mx * mx + mz * mz > 1e-6) {
+          let turn = Math.atan2(mx, mz) - entry.heading;
+          turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
+          entry.heading += turn * .12;
+        }
+        entry.fishPrev[0] = entry.fishAt[0]; entry.fishPrev[2] = entry.fishAt[2];
+        // Deeper and fainter while it holds, a darker, nearer shape as it runs or is drawn in.
+        const strength = .42 + entry.run * .3 + (entry.phase === 'hauling' ? .2 : entry.progress * .15);
+        shadows.set(shadowCount++, entry.fishAt[0], entry.fishAt[2], entry.heading, strength, .95 + entry.run * .15, now * (4 + entry.run * 6) + entry.seed);
         if (now - entry.lastRing > (entry.run > .5 ? .18 : .36)) {
           entry.lastRing = now; rings.spawn(entry.fishAt[0], waterY, entry.fishAt[2], .5 + entry.run * .5, .9, .7, now);
           if (entry.run > .5 || entry.phase === 'hauling') droplets.burst(entry.fishAt[0], waterY, entry.fishAt[2], 4, 1.6, .028, now);
@@ -517,6 +551,7 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
     for (const entry of fishers) if (entry.used && entry.slot >= 0) writeFish(entry);
     for (const rod of rods) { rod.count = rodCount; if (rodCount) rod.instanceMatrix.needsUpdate = true; }
     floats.count = floatCount; if (floatCount) floats.instanceMatrix.needsUpdate = true;
+    shadows.show(shadowCount);
     lineGeometry.setDrawRange(0, lineSegments * 2); if (lineSegments) { lineAttribute.needsUpdate = true; lineAttribute.clearUpdateRanges(); lineAttribute.addUpdateRange(0, lineSegments * 6); }
     // The person's own fight and hint, and the pier bed.
     const self = fishers.find(entry => entry.used && entry.self);
@@ -562,6 +597,7 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
     for (const rod of rods) if (rod.count) { draws++; triangles += (rod.geometry.index?.count ?? 0) / 3 * rod.count; }
     if (floatCount) { draws++; triangles += (floats.geometry.index?.count ?? 0) / 3 * floatCount; }
     if (lineSegments) draws++;
+    if (shadowCount) { draws++; triangles += shadowCount * 2; }
     draws += (rings.mesh.visible ? 1 : 0) + (droplets.points.visible ? 1 : 0) + (mist.mesh.visible ? 1 : 0) + (host.lights.length ? 1 : 0);
     triangles += (rings.mesh.visible ? 160 * 2 : 0) + (mist.mesh.visible ? banks.length * 2 : 0) + host.lights.length * 8;
     for (const holder of fishMeshes) if (holder.object.visible) { draws++; triangles += (holder.object.geometry.index?.count ?? 0) / 3; }
@@ -588,7 +624,7 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
       if (disposed) return;
       disposed = true; unsubscribe(); host.scene.remove(root);
       for (const rod of rods) rod.dispose();
-      floats.dispose(); lineGeometry.dispose(); lineMaterial.dispose(); rings.dispose(); droplets.dispose(); mist.dispose(); glow.dispose();
+      floats.dispose(); lineGeometry.dispose(); lineMaterial.dispose(); rings.dispose(); droplets.dispose(); mist.dispose(); shadows.dispose(); glow.dispose();
       for (const holder of fishMeshes) holder.object.geometry = new THREE.BufferGeometry();
       for (const dispose of disposers) dispose();
       material.dispose(); pool.dispose();

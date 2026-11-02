@@ -110,12 +110,37 @@ function sourceSize(source: CanvasImageSource): readonly [number, number] {
   return [Number(sized.width) || 0, Number(sized.height) || 0];
 }
 
+/** The rectangle of a picture that is not clear, with a hair of margin; null when it cannot be read or is empty. */
+function opaqueBounds(source: CanvasImageSource, width: number, height: number): { x: number; y: number; width: number; height: number } | null {
+  if (!(width > 0) || !(height > 0) || typeof document === 'undefined') return null;
+  const probe = document.createElement('canvas');
+  probe.width = width; probe.height = height;
+  const ctx = probe.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  let data: Uint8ClampedArray;
+  try { ctx.drawImage(source, 0, 0); data = ctx.getImageData(0, 0, width, height).data; } catch { return null; }
+  let minX = width, minY = height, maxX = -1, maxY = -1;
+  for (let y = 0; y < height; y++) {
+    const row = y * width * 4;
+    for (let x = 0; x < width; x++) {
+      if (data[row + x * 4 + 3]! < 8) continue;
+      if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < minX || maxY < minY) return null;
+  const pad = Math.round(Math.max(maxX - minX, maxY - minY) * .04);
+  minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad); maxX = Math.min(width - 1, maxX + pad); maxY = Math.min(height - 1, maxY + pad);
+  return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+}
+
 /** Draws the fish's own render into the tag's print window. Returns false when there is nothing to draw. */
 function drawPortrait(canvas: HTMLCanvasElement, source: CanvasImageSource): boolean {
   const [sw, sh] = sourceSize(source);
+  // A long fish seen from three-quarters fills a square render only across; the print shows the fish, not the margin.
+  const crop = opaqueBounds(source, sw, sh) ?? { x: 0, y: 0, width: sw, height: sh };
   const cssW = canvas.clientWidth, cssH = canvas.clientHeight;
   const dpr = Math.min(2.5, Math.max(1, globalThis.devicePixelRatio || 1));
-  const fit = containFit(sw, sh, cssW, cssH, 6);
+  const fit = containFit(crop.width, crop.height, cssW, cssH, 10);
   const ctx = fit ? canvas.getContext('2d') : null;
   if (!fit || !ctx) return false;
   canvas.width = Math.round(cssW * dpr);
@@ -126,7 +151,7 @@ function drawPortrait(canvas: HTMLCanvasElement, source: CanvasImageSource): boo
   ctx.shadowColor = 'rgba(28, 22, 44, 0.32)';
   ctx.shadowBlur = 5 * dpr;
   ctx.shadowOffsetY = 2.5 * dpr;
-  try { ctx.drawImage(source, fit.x, fit.y, fit.width, fit.height); } catch { return false; }
+  try { ctx.drawImage(source, crop.x, crop.y, crop.width, crop.height, fit.x, fit.y, fit.width, fit.height); } catch { return false; }
   return true;
 }
 

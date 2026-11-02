@@ -17,6 +17,10 @@ const only = arg('only')?.split(',');
 const extra = arg('query') ?? '';
 const view = arg('view') ?? 'play';
 const hour = arg('hour') ?? '18.6';
+const finished = Symbol('finished');
+// Beats nobody asked to see are stepped without drawing, so a late still holds the shared lock for seconds, not minutes.
+const wants = (...names) => !only || names.some(name => only.includes(name));
+const HIDDEN = 1e9;
 
 async function portFree(port) {
   const probe = createProbe();
@@ -65,23 +69,31 @@ try {
       await page.screenshot({ path });
       const stats = await page.evaluate(() => ({ state: window.__chatdomPier?.play?.state(), layer: window.__chatdomPier?.play?.stats(), calls: window.__chatdomPier?.stats.calls, triangles: window.__chatdomPier?.stats.triangles }));
       console.log(`${path.replace(root + '/', '')} ${JSON.stringify(stats)}`);
+      // Holding the shared lock only as long as the stills asked for: stop once the last one is taken.
+      if (only && name === only.at(-1)) throw finished;
     };
-    if (view !== 'play') { await shoot('still'); await page.close(); continue; }
+    if (view !== 'play') { try { await shoot('still'); } catch (error) { if (error !== finished) throw error; } await page.close(); continue; }
+    try {
     const play = (method, ...args) => page.evaluate(([method, args]) => window.__chatdomPier.play[method](...args), [method, args]);
     const state = () => play('state'), phase = async () => (await play('stats')).phase;
-    const until = async (test, step = 100, limit = 30_000, every = 1) => { for (let spent = 0; spent < limit; spent += step) { if (await test()) return true; await play('advance', step, every); } return false; };
+    // A hidden step still lets real time pass: the bench's room ticks on real 50 ms timers, as the realm does.
+    const advance = async (ms, every) => {
+      if (every !== HIDDEN) return play('advance', ms, every);
+      for (let left = ms; left > 0; left -= 50) { await play('advance', Math.min(50, left), HIDDEN); await page.waitForTimeout(55); }
+    };
+    const until = async (test, step = 100, limit = 30_000, every = 1) => { for (let spent = 0; spent < limit; spent += step) { if (await test()) return true; await advance(step, every); } return false; };
     await play('pause', true);
     await until(async () => (await state()).rod, 50, 3000);
-    await play('advance', 400);
+    await advance(400, wants('rest') ? 1 : HIDDEN);
     await shoot('rest');
-    await play('press'); await play('advance', 900);
+    await play('press'); await advance(900, wants('draw') ? 1 : HIDDEN);
     await shoot('draw');
-    await play('release'); await play('advance', 300);
+    await play('release'); await advance(300, wants('flight') ? 1 : HIDDEN);
     await shoot('flight');
-    await play('advance', 700);
+    await advance(700, wants('float') ? 1 : HIDDEN);
     await shoot('float');
-    await until(async () => (await state()).cast === 'bite', 400, 30_000, 8);
-    await play('advance', 150);
+    await until(async () => (await state()).cast === 'bite', 400, 30_000, wants('float', 'bite') ? 8 : HIDDEN);
+    await advance(150, wants('bite') ? 1 : HIDDEN);
     await shoot('bite');
     await play('press');
     for (let step = 0; step < 900; step++) {
@@ -89,7 +101,7 @@ try {
       if (now.cast !== 'fighting' && step > 4) break;
       const fight = await page.evaluate(() => window.__chatdomPier.play.fight?.());
       if (fight && (fight.phase === 'run' || fight.tension > 6500)) await play('release'); else await play('press');
-      await play('advance', 50, 8);
+      await advance(50, wants('fight', 'fight-side') ? 8 : HIDDEN);
       if (step === 50) { await shoot('fight'); await play('camera', 'side'); await shoot('fight-side'); await play('camera', 'shoulder'); }
     }
     await until(async () => (await phase()) === 'leaping', 50, 6000);
@@ -99,6 +111,7 @@ try {
     // The tag runs on real time; shoot it soon after the fish lands.
     await play('advance', 200);
     await shoot('tag');
+    } catch (error) { if (error !== finished) throw error; }
     if (errors.length) console.error(errors.join('\n'));
     await page.close();
   }

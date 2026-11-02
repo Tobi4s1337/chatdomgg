@@ -42,7 +42,7 @@ export function mountPlayHud(hud: HTMLElement, options: { readonly personId: str
   }, { signal: abort.signal });
   return {
     ui, sound,
-    portrait: (defId: string) => itemPortrait(defId, 192).catch(() => null),
+    portrait: (defId: string) => itemPortrait(defId, 288).catch(() => null),
     onGrant: (item: ItemRecord) => { items.grant(item); },
     /** Joins the belt to the person's controller: the rod in hand is the chosen tool. */
     attach(next: FishingController) {

@@ -81,6 +81,56 @@ export function createDroplets(capacity: number) {
   };
 }
 
+/**
+ * A hooked fish seen through the water: a soft dark body with a working tail, lying on the surface plane along the
+ * fish's heading. The mesh sits at the water height; each instance is x, z, heading, strength, length and tail
+ * phase, written by the layer for the fights in view only.
+ */
+export function createFishShadows(capacity: number) {
+  const geometry = new THREE.InstancedBufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1]), 3));
+  geometry.setIndex([0, 2, 1, 0, 3, 2]);
+  const place = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
+  const shape = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2);
+  place.setUsage(THREE.DynamicDrawUsage); shape.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('aPlace', place); geometry.setAttribute('aShape', shape);
+  geometry.instanceCount = 0;
+  const uniforms = { uColor: { value: new THREE.Color('#10232a') } };
+  const material = new THREE.ShaderMaterial({
+    uniforms, transparent: true, depthWrite: false, depthTest: true,
+    vertexShader: `attribute vec4 aPlace; attribute vec2 aShape; varying vec2 vLocal; varying float vStrength; varying float vTail;
+      void main(){ vLocal=position.xz; vStrength=aPlace.w; vTail=aShape.y;
+        float c=cos(aPlace.z), s=sin(aPlace.z); vec2 p=vec2(position.x*.85, position.z)*aShape.x*.62;
+        vec3 world=vec3(aPlace.x+p.x*c+p.y*s, .006, aPlace.y-p.x*s+p.y*c);
+        gl_Position=projectionMatrix*viewMatrix*modelMatrix*vec4(world,1.); }`,
+    fragmentShader: `uniform vec3 uColor; varying vec2 vLocal; varying float vStrength; varying float vTail;
+      void main(){ vec2 q=vLocal; float bend=sin(vTail-q.y*2.6)*.18*(1.-smoothstep(-.9,.1,q.y)); q.x-=bend;
+        float body=length(vec2(q.x/(.34*(1.-.45*(1.-smoothstep(-.75,-.1,q.y)))), (q.y-.12)/.62));
+        float tail=max(abs(q.x)/(.06+.4*(1.-smoothstep(-.98,-.62,q.y))), abs(q.y+.82)/.16);
+        float d=min(body, tail); float a=(1.-smoothstep(.55,1.,d))*vStrength*.62; if(a<.004)discard;
+        gl_FragColor=vec4(uColor,a); }`,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = 'pier-fish-shadows'; mesh.frustumCulled = false;
+  // After the water surface (transparent, order 4), which would otherwise wash the shape out.
+  mesh.renderOrder = 5; mesh.visible = false;
+  return {
+    mesh, uniforms,
+    /** One fish this frame: world x and z, heading in radians (0 faces +Z), strength 0..1, length in metres, tail phase. */
+    set(slot: number, x: number, z: number, heading: number, strength: number, length: number, tail: number) {
+      if (slot >= capacity) return;
+      place.setXYZW(slot, x, z, heading, Math.min(1, strength)); shape.setXY(slot, length, tail);
+    },
+    /** How many were set this frame; nothing is drawn when none were. */
+    show(count: number) {
+      const n = Math.min(count, capacity);
+      geometry.instanceCount = n; mesh.visible = n > 0;
+      if (n) { place.clearUpdateRanges(); shape.clearUpdateRanges(); place.addUpdateRange(0, n * 4); shape.addUpdateRange(0, n * 2); place.needsUpdate = shape.needsUpdate = true; }
+    },
+    dispose() { geometry.dispose(); material.dispose(); },
+  };
+}
+
 /** Low banks of mist lying on the water around the pier head: soft, drifting, fading near the eye. */
 export function createMist(centres: readonly (readonly [number, number, number, number])[]) {
   const geometry = new THREE.InstancedBufferGeometry();
