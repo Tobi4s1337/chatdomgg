@@ -2,6 +2,8 @@
    book button on touch screens. It draws nothing while the mouse is captured (Quality rule 14). */
 
 .pl-root { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
+/* Walk features draw here (pier's lines, tags and gauges): over the world, under every HUD piece, never taking a click. */
+.pl-features { position: absolute; inset: 0; z-index: 19; pointer-events: none; }
 .pl-hud { position: absolute; inset: 0; pointer-events: none; color: var(--cd-cream); font: var(--cd-type-body)/1.35 var(--cd-face-body); font-synthesis: none;
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .pl-hud *, .pl-hud *::before, .pl-hud *::after { box-sizing: border-box; }

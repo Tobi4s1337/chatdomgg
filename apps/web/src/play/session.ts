@@ -6,6 +6,7 @@ import { sharedPlaySettings, type PlaySettingsStore } from './settings';
 import { actionCode } from './settings';
 import { actionBindings, wantedArrivalSteps, type CursorLease, type InputLease, type PlayContext } from './slots';
 import { createToolRuntime, type PlayWorld, type ToolRuntime } from './tools';
+import { createWalkFeatures, type WalkFeatureRuntime, type WalkFeatureWorld } from './features';
 
 /**
  * One walking session's play layer: the captured mouse meets the ledger here. The walk owns input and camera;
@@ -36,6 +37,8 @@ export interface PlaySessionOptions {
   readonly keyboard?: EventTarget;
   /** What held tools and world prompts need from the walked world. Without it there are no tools or prompts. */
   readonly world?: PlayWorld;
+  /** What walk features read beyond the world (pier's SEAMS 2a). With `world`, every registered walk feature mounts. */
+  readonly features?: WalkFeatureWorld;
 }
 
 export interface PlaySession {
@@ -54,6 +57,8 @@ export interface PlaySession {
   use(): boolean;
   /** Held tools and world prompts; null when the session has no world. */
   readonly tools: ToolRuntime | null;
+  /** Walk features; null when the session has no world or no feature facts. */
+  readonly features: WalkFeatureRuntime | null;
   /** Your own body is hidden from your own camera (a seated table view). */
   readonly selfHidden: boolean;
   dispose(): void;
@@ -152,6 +157,7 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
     usePrompt() { if (!disposed) tools?.use(); },
   };
   const tools: ToolRuntime | null = options.world ? createToolRuntime(ctx, options.world) : null;
+  const features: WalkFeatureRuntime | null = options.world && options.features ? createWalkFeatures(ctx, options.world, options.features) : null;
   const hud = options.mountHud(options.host, play);
   mountedHud.current = hud;
   // The ledger takes the cursor itself through ctx.requestCursor when it opens; here it only holds the walk.
@@ -246,12 +252,13 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
 
   return {
     ctx, play, hud, arrived,
-    tools,
+    tools, features,
     frame(dt = 0) {
       if (disposed) return;
       announce();
       tools?.pause(hud.ledgerOpen || arriving || !!topInput() || controller.owner !== 'walking');
       tools?.frame(dt);
+      features?.frame(dt, performance.now());
     },
     pointer(type, button, buttons) {
       if (disposed || hud.ledgerOpen) return false;
@@ -271,6 +278,7 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
       inputs.length = 0; hidden.clear(); holds.clear();
       controller.divertLook(null);
       stopLedger(); stopCursor(); stopLetGo();
+      features?.dispose();
       tools?.dispose();
       cursorListeners.clear();
       hud.dispose();

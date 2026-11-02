@@ -373,12 +373,19 @@ URL, takes the same pictures: `third`, `first`, `dusk` (bubbles over lit homes, 
 height), and `crowd`, the 5,000-chatter town: Willowmere's 240 homes (the largest town the founding makes) all lit and
 speaking at about 15 lines a second, a Poisson stream from random lit homes, with 120 more walkers that the runner
 joins from Node (not the page, which only draws them) and stands on open spots at least 2.5 m apart, so the nearest
-64 draw in full and the rest as simple figures, seen from above and behind the walker. The hamlet is nine people: three walking and six chatting from home; its street stands in the open nearest a
+64 draw in full and the rest as simple figures, seen from above and behind the walker. (The full detail goes to the
+people in view first, nearest first, with people out of view filling what is left: `walker-figures.ts`
+`createWalkerViewTest`. Ranked by distance alone, half of the 64 stood behind this camera.) The hamlet is nine people: three walking and six chatting from home; its street stands in the open nearest a
 cluster of six homes, because a hamlet's homes sit beyond bubble range of its market. The sole close-up camera is
 chosen in the collision (low beside the feet, on the first side with a clear sight line). A chat still waits for a
 bubble to ease fully in, and a page that fails while setting up ends the run at once, so nothing waits out a timeout
-under the capture lock. Settings the page changes (first or third person) are put back when it closes. Dev only:
-never a route, never built.
+under the capture lock. Settings the page changes (first or third person) are put back when it closes. The runner
+builds the page once with the web app's own Vite config into a scratch folder (about 30 s, before any lock is taken;
+a list of stills shares one build) and serves it as plain files with no proxies, because a software browser fetching
+hundreds of unbundled modules from a dev server under the lock never opened the crowd still inside one hold. A capture port counts as free only if it binds on the wildcard
+addresses: the realm's transport binds every address and fails silently when another lane holds the port on
+127.0.0.2 or above. Dev only:
+never a route, never in the app's build.
 
 ## WC07 founder finish (main, 2026-10-31)
 

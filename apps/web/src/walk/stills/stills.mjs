@@ -5,14 +5,20 @@
 //   SwiftShader, under the shared capture lock, ONE still per lock hold (the shared capture guard stops anything that
 //   holds the lock for 12 minutes, and opening the kingdom in software takes several): several names run one after
 //   another, each in its own process that takes the lock, opens the page, shoots and releases it before the next.
+//   The page is built once, before any lock is taken, and served as plain files: through the dev server a software
+//   browser fetched hundreds of unbundled modules under the lock, and the crowd still never opened inside one hold.
 //     node apps/web/src/walk/stills/stills.mjs [--land town|hamlet] [--only third,first] [--out shots/play/stills]
 //   Real GPU, inside the lease (web on 5192, realm on 5191, each still a fresh load through `chatdom-pc shot`):
 //     chatdom-pc-lease -- node apps/web/src/walk/stills/stills.mjs --target pc [--land town|hamlet]
 //
 // Test identities exist only in the memory room and are never Twitch claims. Dev only: never a route, never built.
 import { chromium } from '@playwright/test';
-import { createServer } from 'vite';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { build, createServer } from 'vite';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer as createHttp } from 'node:http';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createServer as createProbe } from 'node:net';
@@ -23,6 +29,8 @@ import { acquireCaptureLock } from '../../../../../packages/testing/capture-lock
 const { values } = parseArgs({ options: {
   target: { type: 'string', default: 'swiftshader' }, land: { type: 'string', default: 'town' },
   only: { type: 'string' }, out: { type: 'string', default: 'shots/play/stills' }, size: { type: 'string', default: '1440x900' },
+  // A page already built by a parent run (one still per lock hold shares one build).
+  bundle: { type: 'string' },
 } });
 const [width, height] = values.size.split('x').map(Number);
 const pc = values.target === 'pc';
@@ -30,20 +38,59 @@ if (!['town', 'hamlet'].includes(values.land)) throw new Error('--land is town o
 const repo = fileURLToPath(new URL('../../../../../', import.meta.url));
 const ALL = values.land === 'hamlet' ? ['dusk', 'third'] : ['third', 'first', 'dusk', 'crowd', 'slope-before', 'slope-after', 'stairs-before', 'stairs-after', 'floor-before', 'floor-after'];
 const names = values.only ? values.only.split(',') : ALL;
+
+// The stills page (page.tsx in place of main.tsx), built with the web app's own config into a scratch folder.
+async function buildPage() {
+  const outDir = await mkdtemp(join(tmpdir(), 'chatdom-play-stills-'));
+  const swap = { name: 'play-stills', enforce: 'pre',
+    transform(_code, id) { if (id.split('?')[0] === `${repo}apps/web/src/main.tsx`) return { code: "import './walk/stills/page';", map: null }; } };
+  console.log('Stills: building the page (before any lock)');
+  await build({ root: `${repo}apps/web`, configFile: `${repo}apps/web/vite.config.ts`, plugins: [swap], logLevel: 'warn',
+    build: { outDir, emptyOutDir: true, minify: false, sourcemap: false, reportCompressedSize: false, chunkSizeWarningLimit: 1e9 } });
+  return outDir;
+}
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.wasm': 'application/wasm', '.woff2': 'font/woff2',
+  '.woff': 'font/woff', '.ttf': 'font/ttf', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.opus': 'audio/ogg' };
+// Plain files from the build, plus the fixture's scene and facts from memory. No proxies: the page talks only to this
+// run's realm, so a request for another service fails at once instead of waiting on a port it does not own.
+const servePage = (dir, extra) => createHttp((request, response) => {
+  const path = decodeURIComponent(new URL(request.url ?? '/', 'http://stills').pathname);
+  response.setHeader('Cache-Control', 'no-store');
+  if (path in extra) { response.setHeader('Content-Type', 'application/json'); response.end(extra[path]); return; }
+  const file = normalize(join(dir, path === '/' ? 'index.html' : path));
+  if (!file.startsWith(dir + sep)) { response.statusCode = 403; response.end(); return; }
+  readFile(file).then(body => { response.setHeader('Content-Type', TYPES[extname(file)] ?? 'application/octet-stream'); response.end(body); },
+    () => { response.statusCode = 404; response.end(); });
+});
+
+const ownBundle = !values.bundle;
+const bundle = values.bundle ?? await buildPage();
 if (!pc && names.length > 1) {
   // One still per lock hold: run each in its own process and let the queue serve the other lanes in between.
   let failed = 0;
   for (const name of names) {
-    const args = [fileURLToPath(import.meta.url), '--land', values.land, '--only', name, '--out', values.out, '--size', values.size];
+    const args = [fileURLToPath(import.meta.url), '--land', values.land, '--only', name, '--out', values.out, '--size', values.size, '--bundle', bundle];
     const code = await new Promise(resolve => spawn(process.execPath, args, { stdio: 'inherit' }).once('exit', resolve));
     if (code !== 0) failed++;
   }
+  await rm(bundle, { recursive: true, force: true });
   process.exit(failed ? 1 : 0);
 }
 const report = { land: values.land, target: values.target, width, height, stills: [], errors: [] };
+// Colyseus turns any uncaught exception into a quiet process.exit(0) in development, which loses the report and
+// the reason; say both before it does.
+process.prependListener('uncaughtException', error => {
+  report.failure = `uncaught: ${error?.stack ?? error}`;
+  console.error(`Stills: ${report.failure}`);
+  try { writeFileSync(`${values.out}/${values.land}${pc ? '-gpu' : `-${names[0]}`}.json`, JSON.stringify(report, null, 2)); } catch { /* the out folder may not exist yet */ }
+});
 const stamp = name => `${values.out}/${values.land}-${name}${pc ? '-gpu' : ''}@${width}x${height}`;
 
-const free = port => new Promise(resolve => { const probe = createProbe(); probe.once('error', () => resolve(false)); probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true))); });
+// The realm's transport binds every address and fails silently when any of them holds the port (other lanes listen on
+// 127.0.0.2 and up), so a port is free only if the wildcard addresses bind, not just 127.0.0.1.
+const bindable = (port, host) => new Promise(resolve => { const probe = createProbe(); probe.once('error', () => resolve(false)); probe.listen({ port, host, exclusive: true }, () => probe.close(() => resolve(true))); });
+const free = async port => await bindable(port, '0.0.0.0') && await bindable(port, '::');
 async function ports() {
   if (pc) return [5191, 5192]; // the lease checked both are free and forwards them to the GPU machine
   // Two lane captures run beside main's, and other harnesses take the first free ports, so this one draws at random.
@@ -114,9 +161,13 @@ try {
   // that takes minutes), so the still does not pay for 120 joins in a row under the capture lock.
   crowd = [];
   const CROWD = 120;
+  // Eight at a time: one after another, 120 joins on a loaded host outlast a real-GPU shot's four minutes.
+  const CROWD_JOINS_AT_ONCE = 8;
   const joinCrowd = async count => {
     const issue = i => { const join = base.issue(); crowdTickets.set(join.ticket, i); return join; };
-    for (let i = crowd.length; i < Math.min(count, fixture.crowd.length); i++) {
+    const total = Math.min(count, fixture.crowd.length);
+    let next = crowd.length;
+    const joinOne = async i => {
       let client;
       for (let attempt = 1; !client; attempt++) {
         try {
@@ -129,8 +180,9 @@ try {
       }
       crowd.push(client);
       if (!effects?.placeWalker(client.selfId, fixture.crowd[i], fixture.world.revision)) throw new Error(`The realm would not place crowd walker ${i}`);
-      if ((i + 1) % 30 === 0) console.log(`Stills: ${i + 1} crowd walkers in the street`);
-    }
+      if (crowd.length % 30 === 0) console.log(`Stills: ${crowd.length} crowd walkers in the street`);
+    };
+    await Promise.all(Array.from({ length: CROWD_JOINS_AT_ONCE }, async () => { while (next < total) await joinOne(next++); }));
     return crowd.length;
   };
   let crowdJoin = null;
@@ -150,24 +202,15 @@ try {
     crowdJoin = joinCrowd(CROWD);
     crowdJoin.catch(error => console.error(`Stills: the crowd did not join: ${error?.message ?? error}`));
   }
-  const plugin = { name: 'play-stills', enforce: 'pre',
-    transform(_code, id) { if (id.split('?')[0] === `${repo}apps/web/src/main.tsx`) return { code: "import './walk/stills/page';", map: null }; },
-    configureServer(server) { server.middlewares.use((request, response, next) => {
-      const path = request.url?.split('?')[0];
-      if (path !== '/__stills/scene' && path !== '/__stills/fixture') return next();
-      response.setHeader('Cache-Control', 'no-store'); response.setHeader('Content-Type', 'application/json');
-      response.end(path === '/__stills/scene' ? fixture.sceneBytes : info);
-    }); } };
-  web = await createServer({ root: `${repo}apps/web`, configFile: `${repo}apps/web/vite.config.ts`, plugins: [plugin], logLevel: 'error',
-    server: { host: '127.0.0.1', port: webPort, strictPort: true, hmr: false } });
-  await web.listen();
+  web = servePage(bundle, { '/__stills/scene': fixture.sceneBytes, '/__stills/fixture': info });
+  await new Promise((resolve, reject) => { web.once('error', reject); web.listen(webPort, '127.0.0.1', resolve); });
   await ownRealm(`http://127.0.0.1:${realmPort}`);
   const url = name => `http://${pc ? 'localhost' : '127.0.0.1'}:${webPort}/?source=simulated&hour=19.5&still=${name}&realm=${encodeURIComponent(endpoint)}`;
 
   if (pc) {
     for (const name of names) {
       const out = `${stamp(name)}.png`;
-      const code = await new Promise(resolve => spawn('chatdom-pc', ['shot', url(name), out, '--size', `${width}x${height}`, '--timeout', '240', '--settle', '2'], { stdio: 'inherit' }).once('exit', resolve));
+      const code = await new Promise(resolve => spawn('chatdom-pc', ['shot', url(name), out, '--size', `${width}x${height}`, '--timeout', name === 'crowd' ? '360' : '240', '--settle', '2'], { stdio: 'inherit' }).once('exit', resolve));
       report.stills.push({ name, out, ok: code === 0 });
     }
   } else {
@@ -199,7 +242,9 @@ try {
 } finally {
   await writeFile(`${values.out}/${values.land}${pc ? '-gpu' : `-${names[0]}`}.json`, JSON.stringify(report, null, 2)).catch(() => {});
   await browser?.close().catch(() => {});
-  await web?.close().catch(() => {});
+  web?.closeAllConnections?.();
+  await new Promise(resolve => (web?.listening ? web.close(resolve) : resolve()));
+  if (ownBundle) await rm(bundle, { recursive: true, force: true }).catch(() => {});
   await crowd?.reduce((all, client) => all.then(() => client.dispose?.()), Promise.resolve()).catch(() => {});
   await realm?.gracefullyShutdown(false).catch(() => {});
   await loader?.close().catch(() => {});

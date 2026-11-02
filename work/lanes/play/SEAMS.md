@@ -251,6 +251,53 @@ What the source must give (the kingdom entry; `KingdomWalkBinding.portal`, optio
 leave(), rejoin({ portal, anchor }) }`. Without it no door opens. Asked of front-door and of the realm room's owner in
 play's progress (`needs:`), because spawning at the return anchor is the room's decision.
 
+### B1c. Walk features (landed in `slots.ts` and `play/features.ts`, additive; PL10, 2026-11-02)
+
+The shape pier's SEAMS §2a asked for, so the pier, the fishing and anything else that lives for the whole walk mounts
+without play knowing it:
+
+```ts
+// apps/web/src/play/slots.ts
+export interface WalkFeatureContext extends Omit<ToolContext, 'holdPose'> {
+  selfWalkerId(): string | null;                // the room's id for you; null until the room has placed you
+  walkers(): readonly { id; position: Vec3; yaw; self: boolean; name: string }[];  // everyone drawn now, you included
+  hour(): number;                               // the kingdom's hour of day, 0–24
+  readonly kingdomName: string;
+  readonly overlay: HTMLElement;                // a layer of the feature's own, over the world and under the HUD
+  audio(): KingdomAudio | null;                 // the kingdom's mixer, null while sound is off or not yet allowed
+  onFrame(listener: (dt: number, now: number) => void): () => void;
+}
+export interface WalkFeatureProvider { readonly id: string; mount(ctx: WalkFeatureContext): () => void }
+export function registerWalkFeature(provider: WalkFeatureProvider): () => void;
+export function walkFeatures(): readonly WalkFeatureProvider[];
+```
+
+Decisions:
+- A feature is mounted once the room has placed you (so it never reads an empty room), in id order, and disposed when
+  the walk ends, in reverse order. One registered while you walk mounts on the next frame; one unregistered is
+  disposed on the next frame. A walk into a door of its own (B1b) ends this walk, so features mount again outside.
+- A `mount` that throws, or returns no dispose, is logged and left out; a listener that throws in a frame is logged.
+  Neither ever stops the walk or another feature.
+- `onFrame` runs once per drawn frame before the render, with seconds since the last frame and the page's
+  `performance.now()`. A listener added after the feature's own dispose is ignored.
+- `overlay` is one `.pl-features` layer per walk (z 19, under the HUD's z 20, `pointer-events: none`, `aria-hidden`):
+  a feature that wants clicks sets `pointer-events: auto` on its own pieces, and its words go in the HUD (world
+  prompts, HUD pieces) when they must be read by assistive technology.
+- `audio()` follows the same rule as the soul's sound: the kingdom's mixer only while sound is on and the browser
+  allows it. `hour()` is the kingdom's own clock; only a host that lends none gets dusk (19.5).
+- No `holdPose` here: a held tool (B1a) shows a pose, a walk feature does not.
+
+Pier mounts with one line in `play/providers.ts`: `import '../fishing/play-slot';` (pier's own file).
+
+### Changes play made outside its folder (no round lane owns them; main takes no patches this round)
+
+- `packages/audio` (`types.ts`, `families.ts`): `patches/audio-step-grounds.patch` applied as written. A cue's
+  `material` may now be a step ground, and `step:<ground>` families exist for every ground; a ground is accepted only
+  for `step`. Backward compatible: every old cue plays as before.
+- `apps/web/src/kingdom/sound.ts`: one additive accessor, `audio()`, the kingdom's mixer while it may sound (for
+  `WalkFeatureContext.audio`). Nothing else in the file changed.
+- `apps/web/src/kingdom/index.tsx`: the walk binding now lends the kingdom's `hour` and `kingdomName` to play.
+
 ### B2. The look (play provides to panel-window, front-door, atlas-map, raid-show, forge-wish)
 
 ```ts
