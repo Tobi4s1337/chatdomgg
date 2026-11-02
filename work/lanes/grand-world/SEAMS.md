@@ -904,6 +904,10 @@ is merged into this branch. Nothing below changes a home, a door, a placement or
   once, so the stream, a watcher's page, the panel's painter and the walk all get the lanterns with no import cycle.
   A kingdom without `pier:` placements mounts nothing. The realm's adoption already installs the pier
   (`pierFurnishings` in `apps/realm/src/founded/scene.ts`); tobi4s_'s live scene gets it on its next adoption.
+  - **Superseded (GW12, 2026-11-02):** the pier now registers its own layer (`fishing/kingdom-slot.ts`, loaded by
+    `play/providers` through `walk-scene.ts`, which `scene.ts` imports statically). Both registrations threw
+    `Kingdom layer already registered: pier` and no kingdom page opened, so `grand-land/pier-layer.ts` is removed;
+    the lanterns still mount in every scene through the pier's own line.
   - **For the realm owner:** `REALM_PIER_FISHING=1` can now be set wherever this build serves the kingdom view; the
     layer is drawn.
 - **raid-show §8, §9, native sight and the gate shot: the scene side is installed; the forwarding is raid-show's.**
@@ -1038,3 +1042,7 @@ replaying an old receipt shows today's land unless that exact receipt was publis
   21 draws of zero triangles in the main view and 21 more in the reflection at every stream pose (the 5080 count at
   the door and pier shots). Hiding a pool while its alphas are all zero (`points.visible = false`) brings the door
   shot under spec 56's 500-draw frame budget. Nothing else changes; the pools stay allocated.
+  Meanwhile the kingdom host skips them itself (GW12, `kingdom/grand-land/empty-points.ts`, called from `scene.ts`
+  just before each frame is drawn): any `THREE.Points` with an all-zero `aAlpha` attribute is hidden for that frame
+  and shown again as soon as one point has alpha. It never shows a pool its owner hid. If forge adopts the same rule
+  in `forge/emitters`, the host sweep simply finds nothing to hide; nothing needs removing.

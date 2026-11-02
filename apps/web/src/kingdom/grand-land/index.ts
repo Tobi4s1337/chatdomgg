@@ -5,7 +5,7 @@ import { CHUNK_QUADS, createTerrainChunk, runOrdered, visibleRuns, type RunOrder
 import type { RunOrderedRegionMesh } from './baked-client-decode';
 import type { GrandMaterial } from '../../../../../packages/world/src/grand/palette';
 import { GRAND_LEVELS, GRAND_REGION, type GrandLandSeed } from '../../../../../packages/world/src/grand/types';
-import { balanceLevels, chooseLevel, type LodState } from '../../grand/lod';
+import { balanceLevels, chooseLevel, fitLodBudget, type BudgetRegion, type LodBudget, type LodState } from '../../grand/lod';
 import { HOSTED_GRAND_COMPILER, BAKED_REGION_QUAD_BYTES, type BakedMetadata, type BakedRegionRef, type BakedRegionMesh } from '../../../../../packages/world/src/grand/baked/types';
 import { bakedNativeWater, bakedVisualHeight } from '../../../../../packages/world/src/grand/baked/surface';
 import { openBakedLand, type BakedLandSource, type BakedLandStats } from './baked-client';
@@ -20,6 +20,11 @@ const MiB = 1024 * 1024;
 const INSTALL_BYTES = MiB;
 const RESIDENT_BYTES = 128 * MiB;
 const FADE_MS = 400;
+/**
+ * The share of a region's quads one view submits: per-pass selection draws only faces that can face the eye (all
+ * tops from above, one of each side pair), measured at 42 to 47% over the six budget poses on Willowmere.
+ */
+const FACING_SHARE = .47;
 /**
  * The water reflection is drawn at half resolution through moving water, so outside the installed town (exact
  * regions keep their only level, L0) it draws the land no finer than level 2: one 1 m cell is under a pixel of the
@@ -52,6 +57,8 @@ export interface HostedGrandStats {
   initialBudgetBytes: number; initialBudgetExceeded: boolean; fadingRegions: number;
   /** Regions displayed in the main view by level, and quads submitted by the last main and reflection passes. */
   displayedLevels: number[]; mainQuads: number; reflectionQuads: number; reflectionMeshes: number;
+  /** The main-view budget's estimate after the last selection, and how many level steps it took to fit. */
+  budgetQuads: number; budgetCoarsened: number; budgetFits: boolean;
 }
 export interface HostedGrandLand {
   /** All installed physical ground and first visible background coverage has actually installed. */
@@ -73,6 +80,11 @@ export interface HostedGrandLand {
    * finest level is already many pixels wide, never change. `null` restores the width-based default.
    */
   setDetail(pixels: number | null): void;
+  /**
+   * Spec 56's main-view triangle budget for the land, as quads (`null`: none). Over it, the farthest visible land
+   * coarsens first, never past `maxPixels` per cell; the installed town never coarsens.
+   */
+  setBudget(budget: LodBudget | null): void;
   update(now: number): void;
   dispose(): void;
 }
@@ -222,7 +234,7 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
   // an unhandled rejected promise while keeping the original promise rejected for its actual consumer.
   void ready.catch(() => undefined);
   const regions: Region[] = [], installs: Install[] = [];
-  let sequence = 1, lastSelection = -Infinity, lastProgress = -1, detail: number | null = null;
+  let sequence = 1, lastSelection = -Infinity, lastProgress = -1, detail: number | null = null, budget: LodBudget | null = null;
   let startup: StartupCoverage | undefined, bootstrapBytes = 0, presented = false;
   let coverageLevels: readonly number[] = [], wave: RefinementWave | undefined;
   let material: HostedGrandMaterial | undefined;
@@ -238,7 +250,8 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
     startupPhase: 'selecting', initialRequiredRegions: 0, initialCoveredRegions: 0, initialCoverageReady: false,
     initialPlannedBytes: 0, initialActualBytes: 0, initialNetworkBytes: 0,
     initialBudgetBytes: STARTUP_BUDGET_BYTES, initialBudgetExceeded: false, fadingRegions: 0,
-    displayedLevels: [0, 0, 0, 0], mainQuads: 0, reflectionQuads: 0, reflectionMeshes: 0 };
+    displayedLevels: [0, 0, 0, 0], mainQuads: 0, reflectionQuads: 0, reflectionMeshes: 0,
+    budgetQuads: 0, budgetCoarsened: 0, budgetFits: true };
   function free(mesh: RegionMesh) {
     for (const cleanup of mesh.cleanups) cleanup();
     mesh.cleanups.length = 0;
@@ -462,16 +475,23 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
       renderer.getDrawingBufferSize(size);
       const projection = Math.max(1, size.y) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
       const target = Math.max(detail ?? 0, size.x < 650 ? 2 : 1.5);
+      const budgeted: BudgetRegion[] = [];
       for (const region of regions) {
         region.lod.shown = region.shown?.level ?? null;
+        region.box.clampPoint(camera.position, nearest);
+        const depth = Math.max(.5, nearest.distanceTo(camera.position));
+        const pixels = (level: number) => (1 << level) * .5 * projection / depth;
         if (region.exact) region.lod.ideal = 0;
-        else {
-          region.box.clampPoint(camera.position, nearest);
-          const depth = Math.max(.5, nearest.distanceTo(camera.position));
-          chooseLevel(region.lod, level => (1 << level) * .5 * projection / depth, target, GRAND_LEVELS, now);
-        }
+        else chooseLevel(region.lod, pixels, target, GRAND_LEVELS, now);
+        budgeted.push({ state: region.lod, visible: region.visible, pinned: region.exact, pixels,
+          quads: Array.from({ length: GRAND_LEVELS }, (_, level) => (region.refs.get(level)?.quadCount ?? 0) * FACING_SHARE) });
       }
-      balanceLevels(regions.map(r => r.lod), regions.map(r => r.neighbours), GRAND_LEVELS);
+      const neighbours = regions.map(r => r.neighbours);
+      balanceLevels(regions.map(r => r.lod), neighbours, GRAND_LEVELS);
+      if (budget) {
+        const fit = fitLodBudget(budgeted, neighbours, budget, GRAND_LEVELS);
+        stats.budgetQuads = Math.round(fit.estimated); stats.budgetCoarsened = fit.coarsened; stats.budgetFits = fit.fits;
+      } else { stats.budgetQuads = 0; stats.budgetCoarsened = 0; stats.budgetFits = true; }
       for (const region of regions) {
         region.desired = region.exact ? 0 : region.lod.desired;
         for (const [level, mesh] of region.meshes) if (!mesh.displayed && !reflectionOnly(region, mesh) && level !== region.desired
@@ -624,6 +644,11 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
         if (pixels !== null && !(pixels >= 1 && pixels <= 8)) throw new Error(`Land detail must be 1 to 8 pixels, not ${pixels}`);
         if (pixels === detail) return;
         detail = pixels; lastSelection = -Infinity;
+      },
+      setBudget(next) {
+        if (next !== null && !(next.quads > 0 && next.maxPixels >= 1)) throw new Error('A land budget needs quads and a pixel cap of at least one');
+        if (next?.quads === budget?.quads && next?.maxPixels === budget?.maxPixels) return;
+        budget = next ? { quads: next.quads, maxPixels: next.maxPixels } : null; lastSelection = -Infinity;
       },
       update, dispose,
     };

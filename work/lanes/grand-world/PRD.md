@@ -68,7 +68,7 @@ You own the how and make the design calls. Be ambitious, think it through end to
   Quality bar: a still of the stream's opening shot and of his street stand beside the `/-/grand` golden-hour still and lose nothing; no home, door, collider or forged piece moves.
   Done when: stills on the 5080 through pc-lease of the opening, two director shots, his street and the Forge square at golden hour and at night, each beside `/-/grand` and beside today's version, looked at once; the touched tests pass. Then tick.
 
-- [ ] **GW12 — Fast and smooth on real hardware, with no loss of beauty.**
+- [x] **GW12 — Fast and smooth on real hardware, with no loss of beauty.**
   Outcome: the stream view holds 60 fps at 1080p on the RTX 5080 through every director shot, walking feels the same, and a mid laptop with integrated graphics runs both at 30 fps or better. The stream view stays light on the GPU beside a game in OBS. Speed comes from the engine, not from cutting the art: baked distance meshes or impostors for far land, instanced trees and props, error-bounded level of detail, culling per pass, packed vertex formats, fewer draw calls, a quality governor, and reflections and shadows sized to what is on screen (spec 56's shadow owner, one planar reflection at the measured size and rate). On weaker devices view distance and effects scale first; the palette, the light, the near voxel detail and the dusk windows never do.
   Quality bar: spec 56's high budgets (main view at most 3 M triangles, whole frame at most 6 M, at most 500 draws, GPU time at most 10 ms, owned GPU memory at most 512 MiB), no normal frame above twice its interval, no visible popping or shadow swimming, and each optimisation shows no visible loss at the high setting.
   Done when:

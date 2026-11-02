@@ -17,12 +17,25 @@ export interface SceneQualityBudget {
   readonly water: 'full' | 'reduced';
   /** Far land error in pixels for the hosted land (`null`: its own width-based default, 1.5 or 2). */
   readonly landDetail: number | null;
+  /** The land's share of the main-view triangle budget, as quads, and the coarsest cell it may reach for it. */
+  readonly landBudget: { readonly quads: number; readonly maxPixels: number };
 }
 /**
  * Far land coarsens a step per tier: at 3 px level 1 starts at about 370 m on a 1080p stream instead of 740 m. These
  * are rendered pixels: the scene converts them to the drawing buffer when the post stack draws below canvas size.
  */
 const LAND_DETAIL: Readonly<Record<SceneQuality, number | null>> = Object.freeze({ high: null, balanced: 2, low: 3 });
+/**
+ * Spec 56's main-view triangle budgets (3 M at high, 1.5 M on an everyday laptop), less what the homes, trees,
+ * dressing and people take in the fullest views (about 1.2 M at the pier shot, 0.9 M at the laptop tiers): the land
+ * keeps the rest. Over it, only the farthest visible land coarsens, never past the cap (rendered pixels per cell);
+ * the installed town never does. The cap at high keeps the far ranges' strata readable (3 px uniformly did not).
+ */
+const LAND_BUDGET: Readonly<Record<SceneQuality, SceneQualityBudget['landBudget']>> = Object.freeze({
+  high: Object.freeze({ quads: 850_000, maxPixels: 3 }),
+  balanced: Object.freeze({ quads: 400_000, maxPixels: 4.5 }),
+  low: Object.freeze({ quads: 300_000, maxPixels: 6 }),
+});
 
 /** The automatic choice the scene opened with: narrow canvases (phones) start low. */
 export function automaticSceneQuality(cssWidth: number): SceneQuality {
@@ -38,5 +51,6 @@ export function sceneQualityBudget(choice: SceneQuality | null, automatic: Scene
   if (choice !== null && !isSceneQuality(choice)) throw new Error(`Unknown scene quality: ${String(choice)}`);
   const tier = choice ?? automatic;
   return Object.freeze({ choice, post: tier,
-    water: tier === 'low' || (choice === null && cssWidth < 600) ? 'reduced' : 'full', landDetail: LAND_DETAIL[tier] });
+    water: tier === 'low' || (choice === null && cssWidth < 600) ? 'reduced' : 'full', landDetail: LAND_DETAIL[tier],
+    landBudget: LAND_BUDGET[tier] });
 }
