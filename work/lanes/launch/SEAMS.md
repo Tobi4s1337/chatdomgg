@@ -85,6 +85,20 @@ does not exist). In the deploy checkout of `lane/integrator`:
 5. Check: `ls /srv/chatdom/panel-stills` holds a picture for `129634568` within a few minutes, and the panel on
    twitch.tv/tobi4s_ (About) shows Willowmere instead of "The kingdom is out of view".
 
+**5. The Atlas lookup fix (LA10 session 4) lives in `apps/surveyor`.** chatdom.io's Atlas runs atlas-map's own build
+on 127.0.0.1:5200 (cwd `worktrees/atlas-live/apps/surveyor`). Once `lane/integrator` carries this lane's merge,
+rebuild and restart that service from a checkout that has it, exactly as it is started now (same data directory and
+env files). Check: `curl -s -o /dev/null -w '%{http_code}' "https://chatdom.io/map-data/v1/preview/$(curl -s
+https://chatdom.io/map-data/v1/preview | node -pe 'JSON.parse(require("fs").readFileSync(0)).id')/card/999999999999?lookup=1"`
+answers 404 (today 503), and an immediate lookup of `tobi4s_` still answers 200.
+
+**6. The Atlas owner API (`/api/atlas/me`, applied on `lane/launch` from atlas-map's `atlas-owner-api.integrator.patch`).**
+Nothing is needed for the console error: after the deploy that carries this lane, the read answers 200
+`{status:'anonymous'}` for a signed-out visitor. To make a streamer's hide and show real, follow atlas-map
+`SEAMS.md` "On the integrator" steps 2 and 3 (`ATLAS_INGEST_PORT`/`ATLAS_INGEST_TOKEN` on the Atlas service,
+`ATLAS_PRIVATE_URL` and the same token on the gateway), then restart both. Check:
+`curl -s https://chatdom.io/api/atlas/me` answers `{"version":1,"status":"anonymous"}`.
+
 **2. After the next deploy of `lane/integrator`**, nothing else is needed for this lane's fixes: they are in the web
 build, the gateway (`apps/api`) and the realm (`apps/realm`).
 

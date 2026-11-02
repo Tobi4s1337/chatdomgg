@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AppTokenSession, VALIDATE_INTERVAL_MS } from '../../../../packages/twitch/src/app-token';
 import { RequestBudget } from '../../../../packages/twitch/src/budget';
 import { HelixSession } from '../../../../packages/twitch/src/helix';
+import { TwitchRequestError } from '../../../../packages/twitch/src/errors';
 import { Secret } from '../../../../packages/twitch/src/secret';
 import { remainingFromHeaders, resetFromHeaders, type FetchLike } from '../../../../packages/twitch/src/transport';
 import { AvatarUrlSchema } from '../export/schema';
@@ -131,7 +132,11 @@ export function createTwitchLookup(options: TwitchLookupOptions = {}): TwitchLoo
     try {
       const reply = await session.call({ operation: 'atlas channel lookup', path, params, retryRateLimit: false }, { deadline, signal: lifetime.signal });
       return schema.parse(reply.body);
-    } catch {
+    } catch (error) {
+      // Twitch refuses an ID or login that cannot exist with 400 "Bad Identifiers". For a single identity that is an
+      // absent channel, not an outage: it must not back off every visitor's lookup (a stale link would). A batch's 400
+      // does not say which one was bad, so it still counts as a failure.
+      if (path === 'users' && params.length === 1 && error instanceof TwitchRequestError && error.status === 400) return schema.parse({ data: [] });
       const refused = unavailable();
       if (refused) throw refused;
       backoff();

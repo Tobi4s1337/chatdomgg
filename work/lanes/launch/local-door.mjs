@@ -41,7 +41,9 @@ const file = pathname => {
 createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', 'http://local.invalid');
   if (request.method !== 'GET' && request.method !== 'HEAD') { response.writeHead(405).end(); return; }
-  const local = PAGES.test(url.pathname) ? join(dist, 'index.html') : url.pathname.startsWith('/assets/') || /^\/[\w.-]+\.(?:svg|png|ico|webmanifest)$/.test(url.pathname) ? file(url.pathname) : null;
+  // As the gateway does: the app answers `/` only for the walk (`/?walk=1…`); the front page itself comes from chatdom.io.
+  const app = PAGES.test(url.pathname) || (url.pathname === '/' && url.searchParams.get('walk') === '1');
+  const local = app ? join(dist, 'index.html') : url.pathname.startsWith('/assets/') || /^\/[\w.-]+\.(?:svg|png|ico|webmanifest)$/.test(url.pathname) ? file(url.pathname) : null;
   if (local) {
     response.writeHead(200, { 'Content-Type': TYPES[extname(local)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
     if (request.method === 'HEAD') response.end(); else createReadStream(local).pipe(response);

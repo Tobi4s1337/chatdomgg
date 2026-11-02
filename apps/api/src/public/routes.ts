@@ -8,6 +8,7 @@ export type PublicRoute =
   | { readonly kind: 'realm' }
   | { readonly kind: 'panel' }
   | { readonly kind: 'dock' }
+  | { readonly kind: 'atlas-owner' }
   | { readonly kind: 'door-data' }
   | { readonly kind: 'optional'; readonly service: 'herald' | 'map' | 'forge' }
   | { readonly kind: 'site'; readonly page: SitePage }
@@ -77,6 +78,8 @@ export function classify(pathname: string, search: string): PublicRoute {
   if (pathname === '/api/realm/forge/queue') return { kind: 'realm' };
   if (pathname === '/api/realm/forge/ledger') return { kind: 'realm' };
   if (/^\/api\/dock\/(?:status|actions|presentations|witness)$/.test(pathname)) return { kind: 'dock' };
+  // A signed-in streamer's own place on the Atlas: read it, hide it, show it (atlas-map AM13).
+  if (/^\/api\/atlas\/me(?:\/(?:hide|show))?$/.test(pathname)) return { kind: 'atlas-owner' };
   if (REALM_READ.test(pathname)) return { kind: 'realm' };
   if (/^\/(?:live-realm-data\/)?realm\/(?:raid-roads|raid-pennants\/[1-9][0-9]{0,31})$/.test(pathname)) return { kind: 'realm' };
   if (/^\/(?:live-realm-data\/)?realm\/raid-chat\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'realm' };

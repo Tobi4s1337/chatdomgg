@@ -60,7 +60,7 @@ button.ke-way-quiet{border:0;background:none;appearance:none}
 .ke-arch-glow{fill:#ffc86b;stroke:none;opacity:.6;filter:blur(4px);transform-origin:60px 8px}
 .ke-arch[data-state='waiting'] .ke-arch-glow{opacity:.9}
 .ke-arch[data-state='opening'] .ke-arch-glow{animation:ke-glow 1.5s ease-in-out infinite alternate}
-.ke-arch[data-state='lost'] .ke-arch-glow{opacity:.35}
+.ke-arch[data-state='lost'] .ke-arch-glow,.ke-arch[data-state='nowhere'] .ke-arch-glow{opacity:.35}
 .ke-arch[data-state='closed'] .ke-arch-glow{opacity:.3;fill:#d9925a}
 .ke-arch[data-state='refused'] .ke-arch-glow{opacity:0}
 .ke-arch[data-state='refused'] .ke-arch-lantern{stroke:var(--cd-brass-lo)}

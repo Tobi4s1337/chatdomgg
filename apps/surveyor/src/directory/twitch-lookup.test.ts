@@ -149,6 +149,17 @@ describe('public Twitch channel lookup', () => {
     f.fail(0); f.advance(60_001);
     expect(await f.lookup.lookup('simulated_channel')).toHaveLength(1); expect(f.calls).toHaveLength(4);
   });
+  it('reads a single identity Twitch refuses as malformed (400 Bad Identifiers) as absent, without backing off anyone', async () => {
+    const f = fixture(); f.fail(400);
+    expect(await f.lookup.lookup('id:999999999999')).toEqual([]);
+    expect(await f.lookup.lookup('id:999999999999')).toEqual([]);
+    expect(f.calls).toHaveLength(1); // The absence is cached like any other miss.
+    f.fail(0);
+    expect(await f.lookup.lookup('simulated_channel')).toHaveLength(1); // No cooldown: the next visitor is answered at once.
+    // A batch's 400 does not say which identity was bad, so it is still a failure and nobody is reported absent.
+    f.fail(400);
+    await expect(f.lookup.channels!(['555', '777'])).rejects.toMatchObject({ reason: 'upstream' });
+  });
   it('keeps successful cache answers available through upstream backoff', async () => {
     const f = fixture(); await f.lookup.lookup('simulated_channel'); f.fail(500);
     await expect(f.lookup.lookup('another_channel')).rejects.toMatchObject({ reason: 'upstream' });

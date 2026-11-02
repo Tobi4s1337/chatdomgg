@@ -1107,3 +1107,7 @@ No round lane owns these, so they were made here as the smallest backward-compat
   `onError`, the five-minute replacement timeout, a rejected final handoff) shows "The kingdom could not be opened
   just now." (or "…could not refresh just now." for a replacement), is logged, and keeps its raw message in
   `stats.lastCause` for diagnostics. A rejected final handoff is now logged too. Tests in `mount.test.ts`.
+- 2 Nov (LA10, session 4, realm): `GET /api/realm/entry/<id>` for a kingdom with no approved entry name answers **404**
+  "No kingdom with this address is open to visitors." instead of 503 "…no approved entry name configured." (the walk-in
+  gate turns the 404 into its `nowhere` state). Every client of the route already treats any non-OK answer alike
+  (`apps/realm/src/bootstrap/entry.ts`, new `entry.test.ts`).

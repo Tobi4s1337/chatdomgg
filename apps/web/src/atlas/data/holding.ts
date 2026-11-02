@@ -1,6 +1,6 @@
 import { languageName } from '../../../../surveyor/src/cartography/language-labels';
 import { landLabel } from '../../../../surveyor/src/cartography/realm-labels';
-import { fetchCard, type CardReply } from './directory';
+import { DirectoryError, fetchCard, type CardReply } from './directory';
 import { loadPreview, type StorageLike } from './load';
 import { realmWord, SettlerStore, type Settler } from './model';
 import { fetchChunk, fetchNames, type PreviewSource, type PreviewWorld, type RealmKind } from './preview';
@@ -110,7 +110,8 @@ export async function readDoorHolding(source: PreviewSource, storage: StorageLik
       if (waiting) return waiting;
     } catch (error) {
       if ((error as Error).name === 'AbortError') throw error;
-      throw new HoldingError('unavailable', 'The Atlas could not be read just now.');
+      // A channel the register and Twitch do not know is missing, not an Atlas that could not be read.
+      if (!(error instanceof DirectoryError && error.reason === 'not-found')) throw new HoldingError('unavailable', 'The Atlas could not be read just now.');
     }
     throw new HoldingError('missing', world.status === 'edition' ? `This channel has no public entry in ${world.label} of the Atlas.` : 'This channel has no public entry on the current survey of the Atlas.');
   }
