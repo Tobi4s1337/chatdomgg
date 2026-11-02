@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import stampSheet from '../assets/stamps.json';
-import { columns, HEAD_ROWS, makeChunk, makeNames, makeWorld, type Row } from '../data/fixtures.test-support';
+import { columns, FOUNDED_AT, FOUNDING_HAMLET, HEAD_ROWS, LATER_HAMLET, makeChunk, makeEdition, makeNames, makeWorld, type Row } from '../data/fixtures.test-support';
 import { geographyOf, SettlerStore, type Settler } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
 import { Camera, DISTANCE_SCALE, type Box } from '../map/camera';
@@ -10,7 +10,7 @@ import type { Stamp } from '../map/paint';
 import { levelFor, tileBox, tileKey } from '../map/pyramid';
 import { formatMoment } from '../ui/format';
 import {
-  ancestorCrop, ancestorsOf, DENSITY_CAP, layoutStill, layoutStillSelection, SHIELD_LIMIT, sheetFrame, stillInsets, stillRibbon, stillView, tileRect, washStains,
+  ancestorCrop, ancestorsOf, DENSITY_CAP, layoutStill, layoutStillSelection, markLabel, SHIELD_LIMIT, sheetFrame, stillInsets, stillRibbon, stillView, tileRect, washStains,
   type LiveSource, type Measure, type StillLayout,
 } from './compose';
 
@@ -401,6 +401,53 @@ describe('washStains', () => {
   });
 });
 
+describe('an edition’s hamlets on the still', () => {
+  function edition() {
+    const world = makeEdition();
+    const env = setup(world);
+    for (const region of world.regions) env.store.addChunk(makeChunk(world, region.index));
+    env.store.applyNames(makeNames(world));
+    return env;
+  }
+
+  it('never marks a hamlet at the opening view, but draws a selected one with a quieter village stamp, a step smaller', () => {
+    const env = edition();
+    const v = stillView(env.geo.bounds, LAPTOP);
+    expect(layoutStill({ ...env, camera: v.camera, view: LAPTOP, stamps, measure }).marks.some(mark => mark.settler.tier === 'hamlet')).toBe(false);
+    const hamlet = env.store.byId.get(FOUNDING_HAMLET.id)!;
+    const village = env.store.byId.get('558501883')!;
+    expect(hamlet.tierRank).toBe(4);
+    const drawn = (selected: Settler) => layoutStill({ ...env, camera: v.camera, view: LAPTOP, stamps, measure, selected }).marks.find(mark => mark.settler === selected)!;
+    const h = drawn(hamlet);
+    const vi = drawn(village);
+    expect(h.stamp!.group).toBe('village');
+    expect(h.stamp!.alpha).toBeLessThan(1);
+    expect(vi.stamp!.alpha).toBe(1);
+    expect(h.stamp!.w).toBeLessThan(vi.stamp!.w);
+    expect(h.label).toBe(`Emberwick, hamlet in ${village.realmName}`);
+  });
+
+  it('places a hamlet after every village, and names an unnamed one as a hamlet of its edition', () => {
+    const env = edition();
+    const all = env.store.query(-1e6, -1e6, 1e6, 1e6, 4);
+    const ranks = all.map(settler => settler.tierRank).sort((a, b) => a - b);
+    expect(ranks.slice(-2)).toEqual([4, 4]);
+    expect(env.store.query(-1e6, -1e6, 1e6, 1e6, 3).some(settler => settler.tierRank === 4)).toBe(false);
+    const lost = { ...env.store.byId.get(LATER_HAMLET.id)!, name: null, realmName: '', region: 99 };
+    expect(markLabel(lost, env.geo, 'Edition I')).toBe('Unnamed hamlet in Edition I');
+  });
+
+  it('washes a live hamlet like any holding', () => {
+    const env = edition();
+    const v = stillView(env.geo.bounds, LAPTOP);
+    const live: LiveSource = {
+      frame: { asOf: 0 }, liveClass: (settler) => (settler.id === FOUNDING_HAMLET.id ? 5 : 0), startedAt: () => null, bloom: () => 1,
+      dabs: [], dryingWashes: () => [], dryingDabWashes: () => [],
+    };
+    expect(washStains(env.store, live, v.camera, LAPTOP, 0).stains).toHaveLength(1);
+  });
+});
+
 describe('stillRibbon', () => {
   const asOf = Date.UTC(2026, 9, 30, 4, 2);
   const now = Date.UTC(2026, 9, 30, 10, 7);
@@ -410,6 +457,12 @@ describe('stillRibbon', () => {
     expect(text.facts).toEqual([`observed to ${formatMoment(asOf)}`, 'drawn 10:07 UTC']);
     expect(text.live).toBeNull();
     expect(text.why).toMatch(/WebGL is off/);
+  });
+
+  it('titles a still of an edition by its name, and a rehearsal as one', () => {
+    expect(stillRibbon({ asOf, drawnAt: now, liveAsOf: null, now, landMissing: false }).title).toBe('A still of the survey');
+    expect(stillRibbon({ asOf, drawnAt: now, liveAsOf: null, now, landMissing: false, edition: { label: 'Edition I', foundedAt: FOUNDED_AT, rehearsal: false } }).title).toBe('A still of Edition I');
+    expect(stillRibbon({ asOf, drawnAt: now, liveAsOf: null, now, landMissing: true, edition: { label: 'Edition I', foundedAt: FOUNDED_AT, rehearsal: true } }).title).toBe('A still of the Edition I rehearsal');
   });
 
   it('adds the live frame’s own time, and owns up to land it could not ink', () => {

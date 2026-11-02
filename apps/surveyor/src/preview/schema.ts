@@ -15,13 +15,36 @@ import { GameIdSchema, RevisionIdSchema } from '../export/schema';
 export const PREVIEW_KIND = 'chatdom-atlas-survey-preview';
 export const PREVIEW_ALGORITHM = 'survey-preview-5';
 export const PREVIEW_LABEL = 'Survey preview · land awaiting founding';
+export const EDITION_LABELS = ['Edition 0', 'Edition I'] as const;
+
+/**
+ * What an edition publication says about its edition: which one, when it was founded, its frozen world hash and the
+ * content address of its founded files, and the ledger head and survey night this publication draws. `rehearsal` is
+ * true only for a rehearsal staged on a bench with a rehearsal key; it can never verify against the founder key.
+ */
+export const PublishedFoundingSchema = z.strictObject({
+  status: z.literal('founded'),
+  edition: z.enum(['ed-0', 'ed-1']),
+  label: z.enum(EDITION_LABELS),
+  foundedAt: EpochMsSchema,
+  worldHash: Sha256Schema,
+  address: Sha256Schema,
+  rehearsal: z.boolean(),
+  ledger: z.strictObject({ lines: UIntSchema, settlers: UIntSchema, head: Sha256Schema }),
+  night: z.strictObject({ revision: RevisionIdSchema, asOf: EpochMsSchema }),
+});
+export type PublishedFounding = z.infer<typeof PublishedFoundingSchema>;
 export const ISLES_NAME = 'The Isles of Many Tongues';
 export const OUTER_NAME = 'The Outer Isles';
 export const CROSSROADS_NAME = 'The Crossroads';
 export const WILDS_NAME = 'The Wilds';
 export const REALM_KINDS = ['crossroads', 'family', 'wilds', 'isle', 'outer'] as const;
 export const PreviewIdSchema = z.string().regex(/^pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}$/);
-export const TIER_CODES = ['capital', 'city', 'town', 'village'] as const;
+/**
+ * Holding tiers by code. A hamlet (4) is a holding below 25 average viewers: it exists only in an edition, granted by a
+ * raid or by its streamer's claim, and only in region chunks. A survey preview never draws one.
+ */
+export const TIER_CODES = ['capital', 'city', 'town', 'village', 'hamlet'] as const;
 
 const Int = z.number().int().min(-2_000_000_000).max(2_000_000_000);
 const MAX_SETTLERS = 1_000_000;
@@ -29,7 +52,7 @@ const MAX_SETTLERS = 1_000_000;
 export const SettlerColumnsSchema = z.strictObject({
   ids: z.array(KingdomIdSchema).max(MAX_SETTLERS),
   /** Index into TIER_CODES. */
-  tier: z.array(z.number().int().min(0).max(3)).max(MAX_SETTLERS),
+  tier: z.array(z.number().int().min(0).max(4)).max(MAX_SETTLERS),
   x: z.array(Int).max(MAX_SETTLERS),
   y: z.array(Int).max(MAX_SETTLERS),
   /** Observed average viewers, rounded: viewer-minutes over live-minutes, never the current audience. */
@@ -38,8 +61,15 @@ export const SettlerColumnsSchema = z.strictObject({
   game: z.array(z.number().int().min(-1)).max(MAX_SETTLERS),
   region: z.array(z.number().int().min(0).max(65_535)).max(MAX_SETTLERS),
   realm: z.array(z.number().int().min(0).max(65_535)).max(MAX_SETTLERS),
+  /**
+   * Editions only: the first `founded` entries of this file are the edition's founding holdings, the rest were granted
+   * on later nights. Pencil places are computed against founding holdings alone, so a small channel's place stays the
+   * same for the whole edition. Absent on a survey preview, where every holding counts.
+   */
+  founded: UIntSchema.optional(),
 }).superRefine((columns, ctx) => {
   const n = columns.ids.length;
+  if (columns.founded !== undefined && columns.founded > n) ctx.addIssue({ code: 'custom', path: ['founded'], message: 'More founding holdings than holdings.' });
   for (const key of ['tier', 'x', 'y', 'average', 'game', 'region', 'realm'] as const) {
     if (columns[key].length !== n) ctx.addIssue({ code: 'custom', path: [key], message: 'Settler columns must have equal lengths.' });
   }
@@ -114,8 +144,9 @@ export const PreviewWorldSchema = z.strictObject({
   id: PreviewIdSchema,
   // Retained v4 previews keep serving open sessions and their aligned live frames.
   algorithm: z.enum(['survey-preview-4', PREVIEW_ALGORITHM]),
-  label: z.literal(PREVIEW_LABEL),
-  status: z.literal('preview'),
+  label: z.enum([PREVIEW_LABEL, ...EDITION_LABELS]),
+  /** `edition` for a night of a founded edition, published in exactly the survey preview's shape. */
+  status: z.enum(['preview', 'edition']),
   revision: RevisionIdSchema,
   asOf: EpochMsSchema,
   window: z.strictObject({
@@ -127,12 +158,17 @@ export const PreviewWorldSchema = z.strictObject({
     contentLabels: z.literal('not-collected'),
     missing: z.array(z.string().max(300)).max(20),
   }),
-  founding: z.strictObject({ status: z.literal('not-founded'), edition0EligibleAt: EpochMsSchema, editionIEligibleAt: EpochMsSchema }),
+  founding: z.discriminatedUnion('status', [
+    z.strictObject({ status: z.literal('not-founded'), edition0EligibleAt: EpochMsSchema, editionIEligibleAt: EpochMsSchema }),
+    PublishedFoundingSchema,
+  ]),
   /** The visibility policy the land was drawn under, and how many otherwise-mapped candidates it kept off the map. */
   policy: z.strictObject({ gambling: z.literal(GAMBLING_POLICY.version), excludedGambling: UIntSchema }),
   counts: z.strictObject({
     channelsObserved: UIntSchema, mapped: UIntSchema, languages: UIntSchema,
     capital: UIntSchema, city: UIntSchema, town: UIntSchema, village: UIntSchema,
+    /** Editions only: holdings below 25 average viewers, granted by raid or claim. */
+    hamlet: UIntSchema.optional(),
     /** Free hamlet slots on the drawn land: room for later settlers without moving any border. */
     hamletSlots: UIntSchema,
   }),
@@ -140,6 +176,12 @@ export const PreviewWorldSchema = z.strictObject({
   regions: z.array(z.strictObject({ ...RegionFields, chunk: FileRefSchema })).min(1).max(512),
   /** Capitals and cities of every region, so the world view draws before any region chunk arrives. */
   head: SettlerColumnsSchema,
+}).superRefine((world, ctx) => {
+  const edition = world.status === 'edition';
+  if (edition !== (world.founding.status === 'founded')) ctx.addIssue({ code: 'custom', path: ['founding'], message: 'Only an edition is founded.' });
+  if (edition !== (world.label !== PREVIEW_LABEL)) ctx.addIssue({ code: 'custom', path: ['label'], message: 'An edition carries its own label; a preview the preview label.' });
+  if (world.founding.status === 'founded' && world.founding.label !== world.label) ctx.addIssue({ code: 'custom', path: ['label'], message: 'The label differs from the founding.' });
+  if (!edition && (world.counts.hamlet !== undefined || world.head.founded !== undefined)) ctx.addIssue({ code: 'custom', path: ['counts'], message: 'A survey preview has no hamlets or founding holdings.' });
 });
 export type PreviewWorld = z.infer<typeof PreviewWorldSchema>;
 
@@ -167,6 +209,8 @@ export const PreviewNamesSchema = z.strictObject({
   names: z.array(DisplayNameSchema).max(MAX_SETTLERS),
   /** When the source last confirmed each login and name. */
   factsAt: z.array(EpochMsSchema).max(MAX_SETTLERS),
+  /** Editions only: holdings under a ledger tombstone (hidden or gone). Their ground is drawn bare and never named. */
+  tombstoned: z.array(KingdomIdSchema).max(MAX_SETTLERS).optional(),
 }).superRefine((names, ctx) => {
   for (const key of ['logins', 'names', 'factsAt'] as const) {
     if (names[key].length !== names.ids.length) ctx.addIssue({ code: 'custom', path: [key], message: 'Name columns must have equal lengths.' });

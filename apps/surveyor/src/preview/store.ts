@@ -99,6 +99,7 @@ export function verifyPreviewDir(dir: string, expected?: { id: string; revision:
     const points = decodeRing(coast.points, world.coordScale);
     return { points, box: ringBox(points) };
   });
+  const edition = world.status === 'edition';
   const all: { id: string; tier: number; x: number; y: number; region: number; average: number }[] = [];
   const collect = (columns: SettlerColumns, label: string, tiers: readonly number[], region?: number) => {
     columns.ids.forEach((id, i) => {
@@ -106,10 +107,13 @@ export function verifyPreviewDir(dir: string, expected?: { id: string; revision:
       if (!tiers.includes(tier)) add(`${label}: ${id} has tier ${TIER_CODES[tier]} in the wrong file.`);
       if (region !== undefined && columns.region[i] !== region) add(`${label}: ${id} belongs to another region.`);
       const average = columns.average[i]!;
-      const min = world.tiers.minAverage[TIER_CODES[tier]!];
-      const next = tier > 0 ? world.tiers.minAverage[TIER_CODES[tier - 1]!] : Infinity;
-      // Averages are rounded for display; the tier was assigned from the exact value.
-      if (average < Math.floor(min) || average > Math.ceil(next)) add(`${label}: ${id} average ${average} does not fit ${TIER_CODES[tier]}.`);
+      // An edition's holding tier is fixed at its grant while the average moves on; a survey draws today's tier.
+      if (!edition) {
+        const min = world.tiers.minAverage[TIER_CODES[tier]! as Exclude<typeof TIER_CODES[number], 'hamlet'>];
+        const next = tier > 0 ? world.tiers.minAverage[TIER_CODES[tier - 1]! as Exclude<typeof TIER_CODES[number], 'hamlet'>] : Infinity;
+        // Averages are rounded for display; the tier was assigned from the exact value.
+        if (average < Math.floor(min) || average > Math.ceil(next)) add(`${label}: ${id} average ${average} does not fit ${TIER_CODES[tier]}.`);
+      }
       all.push({ id, tier, x: columns.x[i]! / world.coordScale, y: columns.y[i]! / world.coordScale, region: columns.region[i]!, average });
     });
   };
@@ -124,7 +128,7 @@ export function verifyPreviewDir(dir: string, expected?: { id: string; revision:
       const chunk = PreviewChunkSchema.parse(JSON.parse(bytes.toString('utf8')));
       if (chunk.preview !== world.id || chunk.region !== region.index) add(`${region.chunk.path} belongs to another preview or region.`);
       if (chunk.settlers.ids.length !== region.chunk.records) add(`${region.chunk.path} record count differs.`);
-      collect(chunk.settlers, region.chunk.path, [2, 3], region.index);
+      collect(chunk.settlers, region.chunk.path, edition ? [2, 3, 4] : [2, 3], region.index);
     } catch (error) {
       add(`${region.chunk.path} unreadable: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`);
     }
@@ -136,11 +140,11 @@ export function verifyPreviewDir(dir: string, expected?: { id: string; revision:
   }
   if (all.length !== world.counts.mapped) add(`world counts ${world.counts.mapped} mapped channels but ${all.length} are drawn.`);
   for (const [tier, code] of TIER_CODES.entries()) {
-    if (all.filter((s) => s.tier === tier).length !== world.counts[code]) add(`${code} count differs from the drawn holdings.`);
+    if (all.filter((s) => s.tier === tier).length !== (world.counts[code] ?? 0)) add(`${code} count differs from the drawn holdings.`);
   }
 
   // Land: holdings on dry land and never overlapping.
-  const radius = (tier: number) => world.tiers.holdingRadius[TIER_CODES[tier]!];
+  const radius = (tier: number) => tier === 4 ? world.lattice.hamletRadius : world.tiers.holdingRadius[TIER_CODES[tier]! as Exclude<typeof TIER_CODES[number], 'hamlet'>];
   let wet = 0;
   for (const settler of all) if (!insideLand(rings, settler.x, settler.y)) wet++;
   if (wet) add(`${wet} holdings stand in the sea.`);
@@ -177,7 +181,11 @@ export function verifyPreviewDir(dir: string, expected?: { id: string; revision:
       const names = PreviewNamesSchema.parse(JSON.parse(bytes.toString('utf8')));
       if (names.preview !== manifest.id || names.revision !== manifest.revision) add('names.json belongs to another preview.');
       const drawn = [...ids].sort(compareIds);
-      if (names.ids.length !== drawn.length || names.ids.some((id, i) => id !== drawn[i])) add('names.json does not name exactly the drawn holdings in ID order.');
+      if (edition) {
+        if ((names.tombstoned ?? []).some((id) => !ids.has(id) || names.ids.includes(id))) add('names.json tombstones a holding that is not drawn, or names a tombstoned one.');
+        // An edition names every drawn holding the night's survey knows; a holding it no longer lists keeps its shield.
+        if (names.ids.some((id, i) => !ids.has(id) || (i > 0 && compareIds(names.ids[i - 1]!, id) >= 0))) add('names.json names a holding that is not drawn, or is out of ID order.');
+      } else if (names.ids.length !== drawn.length || names.ids.some((id, i) => id !== drawn[i])) add('names.json does not name exactly the drawn holdings in ID order.');
       if (manifest.names.records !== names.ids.length) add('names.json record count differs.');
     }
   } catch (error) {
@@ -230,13 +238,23 @@ export function buildAndWritePreview(dataDir: string, input: PreviewInput): { id
   return { id: preview.id, outcome: writePreview(dataDir, preview) };
 }
 
-/** Removes previews whose observation revision is no longer kept. */
+/**
+ * Removes previews whose observation revision is no longer kept. The edition publication the map currently serves
+ * (`editions/published.json`) is always kept, so a founded map never falls back to anything while a night waits.
+ */
 export function prunePreviews(dataDir: string, keepRevisions: ReadonlySet<string>): string[] {
   const root = previewsRoot(dataDir);
   if (!existsSync(root)) return [];
   const removed: string[] = [];
+  let published: string | null = null;
+  try {
+    const pointer = JSON.parse(readFileSync(join(dataDir, 'editions', 'published.json'), 'utf8')) as { preview?: unknown };
+    if (typeof pointer.preview === 'string') published = pointer.preview;
+  } catch {
+    published = null;
+  }
   for (const name of readdirSync(root).sort()) {
-    if (!PreviewIdSchema.safeParse(name).success) continue;
+    if (!PreviewIdSchema.safeParse(name).success || name === published) continue;
     let revision: string | null;
     try {
       revision = readPreviewManifest(dataDir, name).revision;

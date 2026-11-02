@@ -60,6 +60,19 @@ function shuffle<T>(list: readonly T[], random: () => number): T[] {
   return out;
 }
 
+describe('plan with hamlets', () => {
+  it('gives a contested place to the village before any hamlet, and a hamlet still takes free paper', () => {
+    const box: Rect = { x: 100, y: 100, w: 20, h: 20 };
+    const items: PlacementItem[] = [
+      { key: 'hamlet-loud', tierRank: 4, average: 4_000, id: '1', candidates: [box] },
+      { key: 'village', tierRank: 3, average: 25, id: '99', candidates: [box] },
+      { key: 'hamlet-free', tierRank: 4, average: 3, id: '2', candidates: [{ x: 300, y: 100, w: 12, h: 12 }] },
+    ];
+    const placed = plan(items, new CollisionGrid(800, 600), new Placer());
+    expect([...placed.keys()].sort()).toEqual(['hamlet-free', 'village']);
+  });
+});
+
 describe('plan', () => {
   it('places greedily without overlaps, the stronger holding first', () => {
     const placed = frame(new Placer(), itemsAt(scene(1, 600), identity));

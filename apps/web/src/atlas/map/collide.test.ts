@@ -131,6 +131,21 @@ describe('comparePriority', () => {
     ]);
   });
 
+  it('never lets a hamlet outrank a village, whatever its audience', () => {
+    expect(comparePriority(holding(4, 24, '1'), holding(3, 25, '999999999'))).toBeGreaterThan(0);
+    expect(comparePriority(holding(4, 4_000, '1'), holding(3, 25, '999999999'))).toBeGreaterThan(0);
+    expect([holding(4, 900, '2'), holding(3, 25, '7'), holding(4, 12, '1')].sort(comparePriority))
+      .toEqual([holding(3, 25, '7'), holding(4, 900, '2'), holding(4, 12, '1')]);
+  });
+
+  it('marks a hamlet a step smaller than a village, so it gives way under lettering only where its dot would touch', () => {
+    expect(MARK_PX).toHaveLength(5);
+    expect(MARK_PX[4]).toBeLessThan(MARK_PX[3]);
+    const name: Rect = { x: 300, y: 100, w: 80, h: 30 };
+    expect(underLettering(300 - MARK_PX[4] / 2 - LETTER_CLEARANCE + 0.5, 115, 4, [name])).toBe(true);
+    expect(underLettering(300 - MARK_PX[3] / 2 - LETTER_CLEARANCE + 0.1, 115, 4, [name])).toBe(false);
+  });
+
   it('orders channel IDs numerically, not as text', () => {
     expect(comparePriority(holding(2, 50, '99'), holding(2, 50, '100'))).toBeLessThan(0);
     expect(comparePriority(holding(2, 50, '36926489'), holding(2, 50, '207813352'))).toBeLessThan(0);

@@ -8,6 +8,11 @@ import { hashString } from '../preview/noise';
 import { TIER_MIN_AVERAGE } from '../preview/layout';
 import { EDITIONS, type EditionNumber, type EditionWorld } from './schema';
 import type { LedgerEvent, LedgerState, Tombstone } from './ledger';
+import { PencilPlaces, type PencilRegionPlaces } from '../cartography/pencil-place';
+import { dabHash } from '../live/frame';
+import { realmResolver } from '../live/target';
+import type { AtlasRaid } from '@chatdom/shared';
+import { claimOrder, type Claim } from './claims';
 
 /**
  * Nightly settlement of one edition (Spec 01 R3, R5): new kingdoms receive land in their realm without anything
@@ -61,6 +66,10 @@ export interface EditionContext {
   realms: RealmCircle[];
   regionByLanguage: Map<string, number>;
   outerRealms: number[];
+  /** The realm the map, search and live dabs give a channel without land: the same rule, so claims land where shown. */
+  resolveRealm: (channel: { id: string; language: string; categories: readonly { gameId: string; minutes: number }[] }) => number;
+  /** Pencil places against the founding holdings, built on first use. */
+  pencil?: { places: PencilPlaces; regions: Map<number, PencilRegionPlaces> };
 }
 
 export function editionContext(world: EditionWorld, taxonomy: LoadedTaxonomy): EditionContext {
@@ -76,7 +85,31 @@ export function editionContext(world: EditionWorld, taxonomy: LoadedTaxonomy): E
     realms,
     regionByLanguage,
     outerRealms: world.realms.filter((realm) => realm.kind === 'outer').map((realm) => realm.index),
+    resolveRealm: realmResolver(world, taxonomy),
   };
+}
+
+/**
+ * A channel's pencil place inside the edition: the free hamlet slot nearest its hashed spot in its realm, computed
+ * against the founding holdings only, exactly as search and the live layer compute it. It depends on nothing but the
+ * frozen edition and the channel ID, so it is the same on every night, after every restart, on every service.
+ */
+export function editionPencilPlace(ctx: EditionContext, state: Pick<LedgerState, 'settlers'>, realm: number, kingdomId: string): { x: number; y: number } | null {
+  if (!ctx.pencil) {
+    const places = new PencilPlaces(ctx.world);
+    ctx.pencil = { places, regions: new Map() };
+  }
+  const region = ctx.world.realms[realm]?.region;
+  if (region === undefined) return null;
+  let regionPlaces = ctx.pencil.regions.get(region);
+  if (!regionPlaces) {
+    const holdings = state.settlers
+      .filter((settler) => settler.holdingId.startsWith('f:') && ctx.world.realms[settler.realmIndex]!.region === region)
+      .map((settler) => ({ x: settler.point.x, y: settler.point.y, r: holdingRadius(ctx.world, settler.holdingTier) }));
+    regionPlaces = ctx.pencil.places.forRegion(region, holdings);
+    ctx.pencil.regions.set(region, regionPlaces);
+  }
+  return regionPlaces.place(dabHash(kingdomId), realm);
 }
 
 /** Occupancy of every settled holding (tombstoned land included: it is never given to anyone else). */
@@ -184,11 +217,15 @@ export interface NightInput {
   raidObservations: readonly RaidObservation[];
   /** The withheld list at this run (hidden channels and moderation removals). */
   withheld: ReadonlySet<string>;
+  /** Sign-in and founding claims from the claim log; each is granted once, from Edition I. */
+  claims?: readonly Claim[];
+  /** Witnessed raids from the road ledger beyond the survey's own (raid-show's authority). */
+  roadRaids?: readonly AtlasRaid[];
 }
 
 export interface NightResult {
   events: LedgerEvent[];
-  summary: { settled: number; byRaid: number; outer: number; tombstones: number; restores: number; deferred: number; unseenRaidTargets: number };
+  summary: { settled: number; byRaid: number; byClaim: number; outer: number; tombstones: number; restores: number; deferred: number; unseenRaidTargets: number };
 }
 
 /**
@@ -283,58 +320,88 @@ export function settleNight(input: NightInput): NightResult {
     .sort((a, b) => TIER_ORDER.indexOf(b.tier) - TIER_ORDER.indexOf(a.tier) || b.channel.averageViewers - a.channel.averageViewers || compareIds(a.channel.kingdomId, b.channel.kingdomId));
   for (const { channel, tier } of newcomers) grant(channel, tier, 'candidate');
 
-  // Land by raid (Edition I): a raid from a settled kingdom grants an observed small target the hamlet slot nearest
-  // its pencil place, so the road can stay. A target the sweep never saw (under five viewers) is reached at the edge
-  // of known land and gets nothing. Raids into founded kingdoms wait for the founded-record producer.
+  /**
+   * A claimed channel's grant: the free slot at its own pencil place when that slot is still free, else the nearest
+   * free slot to it, in the realm the map already shows it in; the Outer Isles only when that realm is full.
+   */
+  const claimGrant = (facts: { kingdomId: string; language: string; categories: readonly { gameId: string; minutes: number }[] }, tier: HoldingTier, reason: 'raid' | 'founded' | 'signed-in'): boolean => {
+    const realm = ctx.resolveRealm({ id: facts.kingdomId, language: facts.language, categories: facts.categories });
+    const radius = holdingRadius(ctx.world, tier);
+    const target = editionPencilPlace(ctx, state, realm, facts.kingdomId);
+    const placed = placeHolding(ctx, occupancy, realm, target, radius, facts.kingdomId);
+    if (!placed) {
+      deferred++;
+      return false;
+    }
+    occupancy.add(placed.point.x, placed.point.y, radius);
+    events.push({
+      kind: 'settle',
+      settler: {
+        ordinal: ordinal++,
+        kingdomId: facts.kingdomId as AtlasSettler['kingdomId'],
+        holdingId: slotHoldingId(placed.point.i, placed.point.j),
+        realmIndex: placed.realm,
+        holdingTier: tier,
+        point: { x: placed.point.x, y: placed.point.y },
+        settledAt: manifest.asOf,
+      },
+      reason,
+      path: placed.path,
+      revision,
+    });
+    granted.add(facts.kingdomId);
+    settled++;
+    if (placed.path === 'outer') outer++;
+    return true;
+  };
+  const landByClaim = EDITIONS[number].landByRaid;
+
+  // Claims (Edition I): a streamer who signed in, or a kingdom founded in Chatdom, is granted its pencil place. The
+  // survey's facts win when it observed the channel; otherwise the facts the claim recorded on arrival decide.
+  let byClaim = 0;
+  if (landByClaim) {
+    for (const claim of [...(input.claims ?? [])].sort(claimOrder)) {
+      const id = claim.kingdomId;
+      if (state.owners.has(id) || granted.has(id) || input.withheld.has(id)) continue;
+      const observed = channelById.get(id);
+      // The one visibility gate, on the survey's facts or else on the facts the claim recorded on arrival.
+      const gate = observed ?? { kingdomId: id, categories: claim.categories, goneAt: null, stream: null };
+      if (publicVisibility(gate, input.withheld) !== 'public') continue;
+      const facts = observed
+        ? { kingdomId: id, language: observed.language, categories: observed.categories }
+        : { kingdomId: id, language: claim.language, categories: claim.categories };
+      if (claimGrant(facts, holdingTierFor(observed?.averageViewers ?? 0), claim.cause)) byClaim++;
+    }
+  }
+
+  // Land by raid (Edition I): a raid from a settled kingdom grants an observed small target the slot at its pencil
+  // place, so the road keeps its end. Raids come from the survey's recorder and from raid-show's witnessed feed in
+  // the road ledger; the same raid seen twice grants once. A target the sweep never saw (under five viewers) is
+  // reached at the edge of known land and gets nothing.
   let byRaid = 0;
   const unseen = new Set<string>();
-  if (EDITIONS[number].landByRaid) {
+  if (landByClaim) {
     const since = state.lastNight?.asOf ?? 0;
-    const raids = input.raidObservations
-      .map((observation) => observation.raid)
-      .filter((raid) => raid.observedAt > since && raid.observedAt <= manifest.source.database.openedAt)
-      .sort((a, b) => a.observedAt - b.observedAt || compareIds(a.toKingdomId, b.toKingdomId));
+    const until = Math.max(manifest.source.database.openedAt, ...(input.roadRaids ?? []).map((raid) => raid.observedAt));
+    const raids = [...input.raidObservations.map((observation) => observation.raid), ...(input.roadRaids ?? [])]
+      .filter((raid) => raid.observedAt > since && raid.observedAt <= until)
+      .sort((a, b) => a.observedAt - b.observedAt || compareIds(a.toKingdomId, b.toKingdomId) || compareIds(a.fromKingdomId, b.fromKingdomId));
     for (const raid of raids) {
       const from = state.owners.get(raid.fromKingdomId);
       // A hidden or gone kingdom's raids grant nothing, including one tombstoned this very night.
       if (from === undefined || silenced.has(raid.fromKingdomId)) continue;
       const target = channelById.get(raid.toKingdomId);
       if (!target) {
-        if (!state.owners.has(raid.toKingdomId)) unseen.add(raid.toKingdomId);
+        if (!state.owners.has(raid.toKingdomId) && !granted.has(raid.toKingdomId)) unseen.add(raid.toKingdomId);
         continue;
       }
       if (!eligible(target)) continue;
-      const realm = realmFor(ctx, target);
-      const placed = placeHolding(ctx, occupancy, realm, null, ctx.world.lattice.hamletRadius, target.kingdomId);
-      if (!placed) {
-        deferred++;
-        continue;
-      }
-      occupancy.add(placed.point.x, placed.point.y, ctx.world.lattice.hamletRadius);
-      events.push({
-        kind: 'settle',
-        settler: {
-          ordinal: ordinal++,
-          kingdomId: target.kingdomId as AtlasSettler['kingdomId'],
-          holdingId: slotHoldingId(placed.point.i, placed.point.j),
-          realmIndex: placed.realm,
-          holdingTier: 'hamlet',
-          point: { x: placed.point.x, y: placed.point.y },
-          settledAt: manifest.asOf,
-        },
-        reason: 'raid',
-        path: placed.path,
-        revision,
-      });
-      granted.add(target.kingdomId);
-      settled++;
-      byRaid++;
-      if (placed.path === 'outer') outer++;
+      if (claimGrant({ kingdomId: target.kingdomId, language: target.language, categories: target.categories }, 'hamlet', 'raid')) byRaid++;
     }
   }
 
   events.push({ kind: 'night', revision, asOf: manifest.asOf, settled, byRaid, outer, tombstones, restores, deferred });
-  return { events, summary: { settled, byRaid, outer, tombstones, restores, deferred, unseenRaidTargets: unseen.size } };
+  return { events, summary: { settled, byRaid, byClaim, outer, tombstones, restores, deferred, unseenRaidTargets: unseen.size } };
 }
 
 /**

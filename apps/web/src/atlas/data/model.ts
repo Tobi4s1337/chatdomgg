@@ -17,6 +17,11 @@ export interface Settler {
   withheld: boolean;
   tier: Tier;
   tierRank: number;
+  /**
+   * One of the edition's founding holdings: pencil places are computed against these alone, so a small channel's
+   * place holds for the whole edition. Every holding of a survey preview counts as founding.
+   */
+  foundingHolding: boolean;
   x: number;
   y: number;
   average: number;
@@ -127,7 +132,7 @@ export function decodeDecor(world: PreviewWorld): DecorMark[] {
 
 /**
  * All holdings loaded so far, with a uniform grid for viewport queries. Capitals and cities arrive with the world;
- * towns and villages arrive per region as the camera comes close enough to draw them.
+ * towns, villages and an edition's hamlets arrive per region as the camera comes close enough to draw them.
  */
 export class SettlerStore {
   readonly all: Settler[] = [];
@@ -228,6 +233,7 @@ export class SettlerStore {
 
   private add(columns: SettlerColumns, firstOrdinal: number): void {
     const scale = this.world.coordScale;
+    const founded = columns.founded ?? columns.ids.length;
     for (let i = 0; i < columns.ids.length; i++) {
       const id = columns.ids[i]!;
       if (this.byId.has(id)) continue;
@@ -244,6 +250,7 @@ export class SettlerStore {
         withheld: false,
         tier: TIER_CODES[tierRank]!,
         tierRank,
+        foundingHolding: i < founded,
         x: columns.x[i]! / scale,
         y: columns.y[i]! / scale,
         average: columns.average[i]!,
@@ -264,7 +271,7 @@ export class SettlerStore {
     this.version++;
   }
 
-  /** Holdings inside a world rectangle, at or above a tier (0 = capitals only … 3 = everything). */
+  /** Holdings inside a world rectangle, at or above a tier (0 = capitals only … 3 = through villages, 4 = everything). */
   query(minX: number, minY: number, maxX: number, maxY: number, maxTier: number, out: Settler[] = []): Settler[] {
     out.length = 0;
     const ox = this.world.bounds.minX / this.world.coordScale;

@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Sh
 import stampSheetUrl from '../assets/stamps.webp?url';
 import stampSheet from '../assets/stamps.json';
 import { decodeRings, type Geography, type Settler, type SettlerStore } from '../data/model';
-import type { PreviewWorld } from '../data/preview';
+import { HAMLET_RANK, type PreviewWorld } from '../data/preview';
 import { drawShield, shieldDesign, SHIELD_ASPECT } from '../heraldry';
 import type { LivePaint } from '../live/paint';
 import type { Distance, Viewport } from '../map/camera';
@@ -11,6 +11,7 @@ import type { Stamp } from '../map/paint';
 import { tileKey, type TileKey } from '../map/pyramid';
 import { paintSceneFor } from '../map/scene';
 import { INK, PAPER, PAPER_DEEP, VERMILION } from '../map/theme';
+import { editionOf } from '../ui/edition';
 import { StampIcon } from '../ui/marks';
 import { StillBaker, type Baked } from './bake';
 import {
@@ -254,14 +255,19 @@ function Ring(props: { r: number; x: number; y: number }) {
   );
 }
 
-/** A survey mark: the small ink symbol old maps use for a settlement too small to draw at this distance. */
+/**
+ * A survey mark: the small ink symbol old maps use for a settlement too small to draw at this distance. A hamlet is
+ * a lone quiet dot, as the moving map inks it.
+ */
 function SurveyMark(props: { tierRank: number; size: number }) {
   const r = () => props.size / 2;
   const box = () => props.size + 2;
   return (
     <svg class="atlas-still-survey" aria-hidden="true" width={box()} height={box()} viewBox={`0 0 ${box()} ${box()}`} data-tier={props.tierRank}>
-      <circle class="atlas-still-survey-ring" cx={box() / 2} cy={box() / 2} r={r() - 0.6} stroke-width={props.tierRank < 2 ? 1.1 : 0.9} />
-      <circle class="atlas-still-survey-dot" cx={box() / 2} cy={box() / 2} r={props.tierRank === 0 ? r() * 0.42 : r() * 0.3} />
+      <Show when={props.tierRank < HAMLET_RANK} fallback={<circle class="atlas-still-survey-dot" cx={box() / 2} cy={box() / 2} r={r() * 0.62} opacity={0.72 * 0.6} />}>
+        <circle class="atlas-still-survey-ring" cx={box() / 2} cy={box() / 2} r={r() - 0.6} stroke-width={props.tierRank < 2 ? 1.1 : 0.9} />
+        <circle class="atlas-still-survey-dot" cx={box() / 2} cy={box() / 2} r={props.tierRank === 0 ? r() * 0.42 : r() * 0.3} />
+      </Show>
     </svg>
   );
 }
@@ -286,7 +292,7 @@ function MarkButton(props: { mark: StillMark; z: number; selected: boolean; pixe
       <Ring r={m().ring.r} x={dx(m().ring.x)} y={dy(m().ring.y)} />
       {/* Keyed: a stamp redrawn at another size is a new sprite. */}
       <Show when={m().stamp} keyed>
-        {(stamp) => <span class="atlas-still-stamp"><StampIcon group={stamp.group} index={stamp.index} width={stamp.w} /></span>}
+        {(stamp) => <span class="atlas-still-stamp" style={stamp.alpha < 1 ? { opacity: stamp.alpha } : undefined}><StampIcon group={stamp.group} index={stamp.index} width={stamp.w} /></span>}
       </Show>
       <Show when={m().mark}>{(mark) => <SurveyMark tierRank={m().settler.tierRank} size={mark().size} />}</Show>
       <Show when={m().shield}>
@@ -704,7 +710,7 @@ export function Still(props: StillProps): JSX.Element {
     const at = drawnAt();
     if (at === null) return null;
     void props.liveTick;
-    return stillRibbon({ asOf: props.world.asOf, drawnAt: at, liveAsOf: props.paint?.frame?.asOf ?? null, now: Date.now(), landMissing: (land()?.missing ?? 0) > 0 });
+    return stillRibbon({ asOf: props.world.asOf, drawnAt: at, liveAsOf: props.paint?.frame?.asOf ?? null, now: Date.now(), landMissing: (land()?.missing ?? 0) > 0, edition: editionOf(props.world) });
   });
 
   onMount(() => {

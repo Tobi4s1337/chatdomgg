@@ -479,7 +479,7 @@ export async function loadDirectory(dataDir: string, previewId: string): Promise
   return new Directory(target.previewId, manifest, entries, blocked, pairs, realmRegions, {
     regions, realmFor: facts => target.realmFor({ id: facts.id, language: facts.language, categories: facts.gameId ? [{ gameId: facts.gameId, minutes: 1 }] : [] }),
   }, blockedLogins, {
-    holdings: holdings.map(holding => ({ x: holding.x, y: holding.y })),
+    holdings: target.holdingPoints ?? holdings.map(holding => ({ x: holding.x, y: holding.y })),
     realms: target.world.realms.map(realm => ({ index: realm.index, region: realm.region, x: realm.x, y: realm.y })),
     alignment: target.alignment,
   });

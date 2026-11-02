@@ -45,7 +45,7 @@ describe('atlas:check survey preview', () => {
     rmSync(previewDir(dataDir, id), { recursive: true });
     expect(checkDataDir(dataDir)).toMatchObject({
       ok: false, revision: first.revision,
-      problems: [`Survey preview ${id} for revision ${first.revision} is missing. Run atlas:import to draw it.`],
+      problems: [`Survey preview ${id} for revision ${first.revision} is missing. Run atlas:preview to draw it from the local revision.`],
     });
 
     const again = await importAt(sweepAt(40));
@@ -107,7 +107,7 @@ describe('atlas:check survey preview', () => {
     expect(checkDataDir(dataDir)).toMatchObject({ ok: true, revision: second.revision });
     const older = checkDataDir(dataDir, first.revision);
     expect(older).toMatchObject({ ok: false, revision: first.revision });
-    expect(older.problems).toEqual([`Survey preview ${first.preview.id} for revision ${first.revision} is missing. Run atlas:import to draw it.`]);
+    expect(older.problems).toEqual([`Survey preview ${first.preview.id} for revision ${first.revision} is missing. Run atlas:preview to draw it from the local revision.`]);
     expect(checkPreview(dataDir, readManifest(dataDir, second.revision).manifest)).toEqual([]);
   });
 
@@ -117,7 +117,7 @@ describe('atlas:check survey preview', () => {
     writeFileSync(join(dataDir, 'revisions', first.revision, 'debug-dump.json'), '{}');
     expect(checkDataDir(dataDir).problems).toEqual([
       'Unexpected file debug-dump.json in the revision.',
-      `Survey preview ${first.preview.id} for revision ${first.revision} is missing. Run atlas:import to draw it.`,
+      `Survey preview ${first.preview.id} for revision ${first.revision} is missing. Run atlas:preview to draw it from the local revision.`,
     ]);
   });
 });

@@ -1,6 +1,6 @@
 import { ATLAS_SPECTACLE } from '@chatdom/shared';
 import type { Settler, SettlerStore } from '../data/model';
-import type { PreviewWorld } from '../data/preview';
+import { holdingRadii, type PreviewWorld } from '../data/preview';
 import type { LiveFrame } from './feed';
 import { PencilPlaces, pencilTarget, type PencilRegionPlaces } from '../../../../surveyor/src/cartography/pencil-place';
 import type { RealmCircle } from '../../../../surveyor/src/cartography/slots';
@@ -55,6 +55,15 @@ export function chooseSpectacle(candidates: readonly { ordinal: number; founded:
 
 /** Where an interrupted region placement resumes: the dab index and, mid-search, that dab's stepwise search. */
 interface PencilCursor { region: number; next: number; steps: Generator<void, { x: number; y: number } | null, void> | null }
+
+/** The holdings a region's pencil places keep clear of: its founding holdings, withheld ones included (their ground stays). */
+export function pencilBase(settlers: readonly Settler[], region: number, radii: readonly number[]): { x: number; y: number; r: number }[] {
+  const out: { x: number; y: number; r: number }[] = [];
+  for (const settler of settlers) {
+    if (settler.region === region && settler.foundingHolding) out.push({ x: settler.x, y: settler.y, r: radii[settler.tierRank]! });
+  }
+  return out;
+}
 
 export class LivePaint {
   private classes: Uint8Array;
@@ -192,23 +201,23 @@ export class LivePaint {
     return Infinity;
   }
 
-  /** One coast index per world and one occupancy index per complete immutable region. */
+  /**
+   * One coast index per world and one occupancy index per complete immutable region. In an edition only its founding
+   * holdings are the base, as the service's search uses them: a hamlet granted on a later night never moves a dab.
+   */
   private placesFor(region: number): PencilRegionPlaces | null {
     const cached = this.pencilRegions.get(region);
     if (cached) return cached;
     // Waiting for the chunk avoids both a moving dab and disagreement with server-side search placement.
     if (!this.store.hasRegion(region) && this.world.regions[region]?.chunk.records !== 0) return null;
     this.pencil ??= new PencilPlaces(this.world, this.rings);
-    const radii = this.world.tiers.holdingRadius;
-    const r = [radii.capital, radii.city, radii.town, radii.village];
-    const holdings = this.store.all.filter(settler => settler.region === region)
-      .map(settler => ({ x: settler.x, y: settler.y, r: r[settler.tierRank]! }));
+    const holdings = pencilBase(this.store.all, region, holdingRadii(this.world));
     const places = this.pencil.forRegion(region, holdings);
     this.pencilRegions.set(region, places);
     return places;
   }
 
-  /** A complete region can now be placed once, including its towns, villages and withheld holdings. */
+  /** A complete region can now be placed once, including its towns, villages, founding hamlets and withheld holdings. */
   regionLoaded(region: number): void {
     if (this.pencilRegions.has(region) || !this.dabs.some(dab => dab.region === region)) return;
     if (!this.queue.includes(region)) this.queue.unshift(region);

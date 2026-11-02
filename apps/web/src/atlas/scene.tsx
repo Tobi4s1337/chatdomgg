@@ -28,7 +28,8 @@ import { Card, type NamesState } from './ui/Card';
 import { DoorCartouche } from './ui/Door';
 import { handOffHolding, holdingPlace, type DoorHolding } from './data/holding';
 import { Cartouche, Compass, Controls, Notice, ScaleBar } from './ui/chrome';
-import { formatMoment, watchUrl } from './ui/format';
+import { newerNotice } from './ui/edition';
+import { watchUrl } from './ui/format';
 import { CardHistory } from './ui/history';
 import { LegendBody } from './ui/Legend';
 import { SurveySeal } from './ui/SurveySeal';
@@ -65,7 +66,7 @@ const FACES = ['16px "IM Fell English"', 'italic 16px "IM Fell English"', '16px 
 /** Narrower than this the Atlas is laid out for a phone: the card is a bottom sheet, search sits at the top. */
 const PHONE_WIDTH = 720;
 /** The distance a found holding is shown at, by tier: where its mark and name are drawn (R7), never further out. */
-const TIER_STOP = [DISTANCE_STOP.continent, DISTANCE_STOP.continent, DISTANCE_STOP.realm, DISTANCE_STOP.kingdom] as const;
+const TIER_STOP = [DISTANCE_STOP.continent, DISTANCE_STOP.continent, DISTANCE_STOP.realm, DISTANCE_STOP.kingdom, DISTANCE_STOP.kingdom] as const;
 
 /** A road being opened: its two ends as the reader asked for them (IDs from a card, logins from a route). */
 type RoadAsk = { a: { id: string } | { login: string }; b: { id: string } | { login: string } };
@@ -659,7 +660,10 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     }
     if (route.kind === 'road') return openRoad({ a: { login: route.a }, b: { login: route.b } });
     if (route.kind === 'line') return drop('Train lines are drawn once raid trains are surveyed; until then the map opens at its usual view.');
-    if (route.kind === 'season') return drop('Seasons begin with the first founded edition; until then the map opens at its usual view.');
+    if (route.kind === 'season') {
+      const shown = loaded()?.world;
+      return drop(shown?.status === 'edition' ? 'Seasons are not drawn on the map yet, so it opens at its usual view.' : 'Seasons begin with the first founded edition; until then the map opens at its usual view.');
+    }
     drop('That address is not a place on this map, so it opens at its usual view.');
   };
 
@@ -1002,7 +1006,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
 
   const noticeNewer = (preview: LoadedPreview) => {
     if (!preview.newer) return;
-    setNotice({ text: `A newer survey is ready (observed to ${formatMoment(preview.newer.asOf)}).`, action: { label: 'Open it', run: adoptNewer } });
+    setNotice({ text: newerNotice(preview.world, preview.newer), action: { label: 'Open it', run: adoptNewer } });
   };
 
   const pause = () => {
@@ -1387,6 +1391,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       data-state={state()}
       data-preview={world()?.id}
       data-revision={world()?.revision}
+      data-edition={world()?.status === 'edition' ? world()!.label : undefined}
       data-as-of={asOf()}
       data-distance={distance()}
       data-layout={phone() ? 'phone' : 'laptop'}
@@ -1617,7 +1622,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                 </Match>
                 <Match when={state() === 'invalid'}>
                   <h1 class="atlas-veil-title">This copy failed its seal</h1>
-                  <p class="atlas-veil-text">The survey files did not match the hashes they were published with, so nothing was drawn from them.</p>
+                  <p class="atlas-veil-text">The map files did not match the hashes they were published with, so nothing was drawn from them.</p>
                 </Match>
                 <Match when={state() === 'unsupported'}>
                   <h1 class="atlas-veil-title">This browser cannot draw the map</h1>

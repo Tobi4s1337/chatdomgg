@@ -1,9 +1,9 @@
-import { statSync } from 'node:fs';
+import { statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkDataDir } from './check';
 import { dataDirFrom, founderKeyPemFrom, importConfigFrom, ingestConfigFrom, liveConfigFrom, serveConfigFrom } from './config';
 import { founderKey } from './edition/authorization';
-import { runAuthorize, runFound, runRehearsal, runSettle } from './edition/commands';
+import { checkPublication, prepareFounding, rehearsalAllowed, runAuthorize, runFound, runPublish, runRehearsal, runSettle, runStage } from './edition/commands';
 import { EditionNumberSchema } from './edition/schema';
 import { listEditions, verifyEditionDir } from './edition/store';
 import { asAtlasError } from './errors';
@@ -49,6 +49,16 @@ function editionArg(args: readonly string[], fallback?: '0' | 'I'): '0' | 'I' {
   return parsed.data;
 }
 
+function printSettle(result: ReturnType<typeof runSettle>): void {
+  if (result.outcome === 'no-edition') console.log('atlas:settle no edition is founded; the survey preview is draft land and nothing is settled');
+  else if (result.outcome === 'up-to-date') console.log(`atlas:settle ${result.edition} already settled through ${result.revision}; published ${result.publication}`);
+  else if (result.outcome === 'moderated') console.log(`atlas:settle ${result.edition} no newer survey than ${result.revision}; ${n(result.hidden)} newly withheld holdings now wait under hidden tombstones; ${n(result.settlers)} holdings; published ${result.publication}`);
+  else {
+    const s = result.summary;
+    console.log(`atlas:settle ${result.edition} ← ${result.revision}: ${n(s.settled)} settled (${n(s.byRaid)} by raid, ${n(s.byClaim)} by claim, ${n(s.outer)} on the Outer Isles), ${n(s.tombstones)} tombstones, ${n(s.restores)} restored, ${n(s.deferred)} deferred; ${n(result.settlers)} holdings; published ${result.publication}`);
+  }
+}
+
 function withLock<T>(dataDir: string, run: () => T): T {
   const release = acquireLock(dataDir);
   try {
@@ -66,11 +76,18 @@ function checkEditions(dataDir: string): { lines: string[]; problems: string[] }
   if (editions.length === 0) return { lines: ['  editions: none founded (the survey preview is draft land)'], problems };
   const pem = founderKeyPemFrom(process.env);
   const key = pem ? founderKey(pem) : null;
+  const allowRehearsal = rehearsalAllowed();
+  if (key) lines.push(`  founder key sha256 ${key.fingerprint}`);
   for (const id of editions) {
-    const report = verifyEditionDir(dataDir, id, key);
+    const report = verifyEditionDir(dataDir, id, key, { allowRehearsal });
     if (report.problems.length) problems.push(...report.problems.map((problem) => `${id}: ${problem}`));
     else lines.push(`  ${report.edition!.label}: ${n(report.stats.settlers)} holdings over ${report.stats.nights} nights, ${n(report.stats.tombstoned)} tombstoned, ${n(report.stats.outer)} on the Outer Isles; ${report.stats.heads} heads hold`);
   }
+  // The newest edition is the map: its publication must exist, verify and rebuild byte for byte.
+  const newest = editions[editions.length - 1]!;
+  const published = checkPublication(dataDir, newest, key, allowRehearsal);
+  if (published.length) problems.push(...published);
+  else lines.push(`  ${newest} publication reproduces from the edition files and its night`);
   return { lines, problems };
 }
 
@@ -89,6 +106,18 @@ async function main(argv: string[]): Promise<number> {
     for (const line of summary(result.manifest)) console.log(line);
     console.log(`  survey preview ${result.preview.id} ${result.preview.outcome} (draft land, not an edition)`);
     console.log(`  wrote ${(revisionBytes(config.dataDir, result.manifest) / 1_048_576).toFixed(1)} MB · pruned ${result.pruned.length ? result.pruned.join(', ') : 'none'}`);
+    // Once an edition is founded every new survey is a night of it: settled and published at once, so the map never
+    // waits on a separate job. Settling founds nothing; an edition exists only through atlas:found.
+    if (listEditions(config.dataDir).length) {
+      try {
+        printSettle(withLock(config.dataDir, () => runSettle(config.dataDir, founderKeyPemFrom(process.env), Date.now())));
+      } catch (error) {
+        const failure = asAtlasError(error, 'check');
+        console.error(`atlas:settle after the import failed [${failure.code}] ${failure.message}; the map keeps its last published night`);
+        for (const detail of failure.details) console.error(`  ${detail}`);
+        return 1;
+      }
+    }
     return 0;
   }
   if (command === 'preview') {
@@ -117,31 +146,64 @@ async function main(argv: string[]): Promise<number> {
   if (command === 'found') {
     const dataDir = dataDirFrom(process.env);
     const number = editionArg(rest);
-    const result = withLock(dataDir, () => runFound(dataDir, number, flag(rest, '--authorization'), founderKeyPemFrom(process.env), Date.now()));
+    const revision = flag(rest, '--revision') ?? undefined;
+    if (rest.includes('--prepare')) {
+      // The request the founder signs on their own machine (tools/sign-founding.mjs); nothing is founded here.
+      const by = flag(rest, '--by');
+      if (!by) throw new Error('found --prepare needs --by <the founder\'s twitch login>.');
+      const { request, problems } = prepareFounding(dataDir, number, Date.now(), { revision, by });
+      const out = flag(rest, '--out');
+      if (out) writeFileSync(out, `${JSON.stringify(request, null, 2)}\n`, { flag: 'wx' });
+      console.log(JSON.stringify(request, null, 2));
+      // The founder compares this with their own key before signing: a signature under any other key is refused.
+      const pem = founderKeyPemFrom(process.env);
+      if (pem) console.error(`atlas:found --prepare: this service verifies with the founder key sha256 ${founderKey(pem).fingerprint}`);
+      else problems.push('No founder key is configured (ATLAS_FOUNDER_PUBLIC_KEY): set it before the signature, or the founding will be refused.');
+      if (problems.length) {
+        console.error('atlas:found --prepare: these gates do not pass yet, so a signature now would be refused:');
+        for (const problem of problems) console.error(`  ${problem}`);
+        return 1;
+      }
+      console.error(`atlas:found --prepare: every gate but the signature passes${out ? `; request written to ${out}` : ''}`);
+      return 0;
+    }
+    const result = withLock(dataDir, () => runFound(dataDir, number, flag(rest, '--authorization'), founderKeyPemFrom(process.env), Date.now(), { revision }));
     if (!result.ok) {
       console.error(`atlas:found REFUSED ${result.edition} from ${result.revision ?? 'no revision'}: nothing was founded`);
       for (const problem of result.problems) console.error(`  ${problem}`);
       return 1;
     }
     console.log(`atlas:found ${result.edition} from ${result.revision}: ${n(result.settlers ?? 0)} holdings, world ${result.worldHash}`);
+    console.log(`  content address ${result.address} · published ${result.publication}`);
     return 0;
   }
   if (command === 'settle') {
     const dataDir = dataDirFrom(process.env);
-    const result = withLock(dataDir, () => runSettle(dataDir, founderKeyPemFrom(process.env), Date.now()));
-    if (result.outcome === 'no-edition') console.log('atlas:settle no edition is founded; the survey preview is draft land and nothing is settled');
-    else if (result.outcome === 'up-to-date') console.log(`atlas:settle ${result.edition} already settled through ${result.revision}`);
-    else if (result.outcome === 'moderated') console.log(`atlas:settle ${result.edition} no newer survey than ${result.revision}; ${n(result.hidden)} newly withheld holdings now wait under hidden tombstones; ${n(result.settlers)} holdings`);
-    else {
-      const s = result.summary;
-      console.log(`atlas:settle ${result.edition} ← ${result.revision}: ${n(s.settled)} settled (${n(s.byRaid)} by raid, ${n(s.outer)} on the Outer Isles), ${n(s.tombstones)} tombstones, ${n(s.restores)} restored, ${n(s.deferred)} deferred; ${n(result.settlers)} holdings`);
-    }
+    printSettle(withLock(dataDir, () => runSettle(dataDir, founderKeyPemFrom(process.env), Date.now())));
+    return 0;
+  }
+  if (command === 'publish') {
+    const dataDir = dataDirFrom(process.env);
+    const result = withLock(dataDir, () => runPublish(dataDir, founderKeyPemFrom(process.env)));
+    if (!result) console.log('atlas:publish no edition is founded; the map stays the survey preview');
+    else console.log(`atlas:publish ${result.id} ${result.outcome} (content address ${result.address}); nothing founded or settled`);
     return 0;
   }
   if (command === 'rehearse') {
     const dataDir = dataDirFrom(process.env);
     const number = editionArg(rest, 'I');
     const started = Date.now();
+    const stage = flag(rest, '--stage');
+    if (stage) {
+      const result = runStage(dataDir, stage, number, started);
+      const f = result.founding;
+      console.log(`atlas:rehearse --stage ${result.dataDir}: a rehearsal on a bench, never an edition (served only with ATLAS_REHEARSAL=1)`);
+      console.log(`  founded in rehearsal from ${f.revision}: ${n(f.settlers)} holdings (${n(f.hidden)} withheld), address ${f.address.slice(0, 16)}…, published ${f.publication}`);
+      for (const gate of result.waived) console.log(`  waived for the rehearsal: ${gate}`);
+      for (const night of result.nights) console.log(`  ← ${night.revision}: ${night.outcome}, ${n(night.settled)} settled (${n(night.byRaid)} by raid, ${n(night.byClaim)} by claim), ${night.moved} moved; published ${night.publication}`);
+      console.log(`  bench founder key (public half only): ${result.publicKeyPath}`);
+      return result.nights.some((night) => night.moved) ? 1 : 0;
+    }
     const result = runRehearsal(dataDir, number, started);
     const f = result.founding;
     console.log(`atlas:rehearse ${number === '0' ? 'Edition 0' : 'Edition I'} rules in memory: nothing is founded or written`);
@@ -224,7 +286,7 @@ async function main(argv: string[]): Promise<number> {
     process.once('SIGTERM', stop);
     return await new Promise<number>(() => {});
   }
-  console.error('usage: atlas.mjs import | preview | check [--revision <id>] | serve | live [--once] | found --edition 0|I --authorization <file> | settle | rehearse [--edition 0|I] | authorize --edition 0|I --key <pem> --by <login>');
+  console.error('usage: atlas.mjs import | preview | check [--revision <id>] | serve | live [--once] | found --edition 0|I [--revision <id>] (--prepare --by <login> [--out <file>] | --authorization <file>) | settle | publish | rehearse [--edition 0|I] [--stage <bench dir>] | authorize --edition 0|I --key <pem> --by <login>');
   return 2;
 }
 

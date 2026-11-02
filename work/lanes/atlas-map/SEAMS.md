@@ -150,9 +150,9 @@ Body: one AtlasRaid (packages/shared/src/atlas-raids.ts), version 1
 | front-door | The carved kit and type scale in `packages/ui` (cartouche frame, wax seal, buttons, focus ring, icon family) | Build it in `apps/web/src/atlas/ui`, then `needs:` to move it into the kit |
 | front-door | The official Twitch mark in its painted frame, as a component in `packages/ui` | The Watch button shows its words only |
 | front-door | "How it works" panels to hang from the Atlas's bottom slot (`slots.footer` in explore mode) | The survey seal's one line, nothing more |
-| front-door | New public `/map-data` routes in the gateway allowlist (`apps/api/src/public/routes.ts`): roads, the gate finder, the edition pointer and files. Exact regexes go in a `needs:` line when each route settles | The routes work on the lane's own service and the dev proxy only |
-| front-door (sign-in) and main | A session authority that calls the Atlas service's private endpoints for hide and unhide (`POST /v1/channels/<id>/hide`, `/unhide`) and for a sign-in claim, with the verified broadcaster ID | The card shows no hide button; AM13 waits on it |
-| main | The founded-record producer, so a founding claims its land | Claims by raid only |
+| front-door | New public `/map-data` routes in the gateway allowlist (`apps/api/src/public/routes.ts`): roads and the gate finder. The edition needs none: it is served through the existing preview routes (see "Edition I and claims" below) | The routes work on the lane's own service and the dev proxy only |
+| front-door (sign-in) and main | A session authority that calls the Atlas service's private endpoints for hide and unhide (`POST /v1/channels/<id>/hide`, `/unhide`) and for a sign-in claim (`POST /v1/claims`, cause `signed-in`), with the verified broadcaster ID | The card shows no hide button; AM13 waits on it. Sign-in claims: land by raid only |
+| main (Genesis) | A founding claim (`POST /v1/claims`, cause `founded`) when a kingdom is founded in Chatdom | Land by raid and sign-in only |
 | operator | After the merge: rebuild and restart the live Atlas service with the Twitch env file and the ingest listener, re-import for the new names, adopt the founded edition. Runbook in this folder | The live map keeps the old code |
 
 ## Atlas footer slot clarification — 2 Nov, AM10 carved UI
@@ -264,3 +264,26 @@ this branch through main; the embed half is ready for the front page now.
 Newest request wins (2 Nov, AM10 follow-up): each `restore` or `flyTo` cancels the one before it. A superseded call
 resolves `false` and never opens its card or finishes its flight later, and a card the person opens or closes while a
 call is still fetching stays as they left it. The front page needs no guard of its own.
+
+## Edition I and claims — 2 Nov, AM12
+
+**The edition is served through the existing preview routes.** `GET /map-data/v1/preview` keeps its shape. Once an
+edition is published, it points at the edition's night (an edition publication, `status: 'edition'`) and adds
+`edition: { id: 'ed-1', label: 'Edition I', foundedAt, worldHash, address }`. World, region, names, search, card,
+road and live routes are unchanged, and the gateway needs no new pattern. The browser validates both shapes strictly.
+An embed host that wants to say "Edition I" can read `edition.label` from the pointer; the map's own seal already says
+it. Wire details are in `AM12-edition.md`.
+
+**Claims (private, on the ingest listener).** `POST http://127.0.0.1:$ATLAS_INGEST_PORT/v1/claims` takes
+`Authorization: Bearer $ATLAS_INGEST_TOKEN` and
+`{"version":1,"kingdomId":"<twitch user id>","cause":"signed-in"|"founded","claimedAt":<ms>}`. The reply is
+`202 recorded` or `200 duplicate` (safe to retry; concurrent posts record once). Refusals are `401`, or `422` with
+`json`, `schema` or `unknown-channel`. `503 facts-unavailable` comes with `retry-after: 300`. The claim is durable
+before the reply, and land follows at the next survey night, at the channel's own pencil place (where the map already
+shows it). A producer sends only the verified ID and the cause, never a place, tier or realm.
+
+- front-door's session authority posts `signed-in` after a verified Twitch sign-in of the broadcaster, once per
+  sign-in or once per channel. Duplicates are free.
+- main's Genesis posts `founded` when a kingdom is founded.
+
+Neither producer exists yet; `needs:` lines are in progress.

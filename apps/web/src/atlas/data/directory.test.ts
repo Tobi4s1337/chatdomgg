@@ -51,6 +51,11 @@ describe('register replies', () => {
     expect(() => validateCard(card({ channel: mapped({ name: null }) }), PREVIEW)).toThrow(/together/);
   });
 
+  it('accepts an edition’s hamlet as mapped land, and no tier past it', () => {
+    expect(validateCard(card({ channel: mapped({ tier: 4 }) }), PREVIEW).channel.tier).toBe(4);
+    expect(() => validateCard(card({ channel: mapped({ tier: 5 }) }), PREVIEW)).toThrow();
+  });
+
   it('refuses land facts on a channel without land and a realm on an unseen one', () => {
     expect(() => validateCard(card({ channel: mapped({ place: 'waiting' }) }), PREVIEW)).toThrow(/mapped land/);
     expect(() => validateCard(card({ channel: mapped({ ordinal: null }) }), PREVIEW)).toThrow(/mapped land/);

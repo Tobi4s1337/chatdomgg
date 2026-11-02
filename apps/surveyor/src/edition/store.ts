@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { KeyObject } from 'node:crypto';
 import type { LedgerState } from './ledger';
 import { EditionIdSchema, FoundingSchema, LedgerHeadSchema, type Founding, type LedgerHead } from './schema';
-import { verifyEdition, type EditionFiles, type EditionReport } from './verify';
+import { verifyEdition, type EditionFiles, type EditionReport, type VerifyOptions } from './verify';
 
 /** `<dataDir>/editions/<ed-0|ed-1>/`; see edition/schema.ts for the files. */
 export const editionsRoot = (dataDir: string) => join(dataDir, 'editions');
@@ -48,10 +48,11 @@ export function readEditionFiles(dataDir: string, id: string): EditionFiles {
     ledgerText: read('ledger.ndjson').toString('utf8'),
     heads: headsText.split('\n').filter(Boolean).map((line) => LedgerHeadSchema.parse(JSON.parse(line))),
     founding: existsSync(join(dir, 'founding.json')) ? FoundingSchema.parse(JSON.parse(read('founding.json').toString('utf8'))) : null,
+    ...(existsSync(join(dir, 'founding.json')) ? { foundingBytes: new Uint8Array(read('founding.json')) } : {}),
   };
 }
 
-export function verifyEditionDir(dataDir: string, id: string, founderKey: { key: KeyObject; fingerprint: string } | null): EditionReport {
+export function verifyEditionDir(dataDir: string, id: string, founderKey: { key: KeyObject; fingerprint: string } | null, options: VerifyOptions = {}): EditionReport {
   let files: EditionFiles;
   try {
     files = readEditionFiles(dataDir, id);
@@ -61,7 +62,7 @@ export function verifyEditionDir(dataDir: string, id: string, founderKey: { key:
       edition: null, world: null, state: null, stats: { settlers: 0, byReason: {}, outer: 0, tombstoned: 0, nights: 0, heads: 0 },
     };
   }
-  return verifyEdition(files, founderKey);
+  return verifyEdition(files, founderKey, options);
 }
 
 const headLine = (state: LedgerState, revision: string, at: number): string =>
@@ -75,6 +76,7 @@ export function writeNewEdition(
   dataDir: string,
   input: { id: string; edition: unknown; founding: Founding; worldBytes: Uint8Array; taxonomyText: string; ledgerText: string; state: LedgerState; now: number },
   founderKey: { key: KeyObject; fingerprint: string },
+  options: VerifyOptions = {},
 ): void {
   const target = editionDir(dataDir, input.id);
   if (existsSync(target)) throw new Error(`${input.id} already exists; an edition is founded once.`);
@@ -92,7 +94,7 @@ export function writeNewEdition(
     const report = verifyEdition({
       edition: input.edition, worldBytes: input.worldBytes, taxonomyText: input.taxonomyText, ledgerText: input.ledgerText,
       heads: [LedgerHeadSchema.parse(JSON.parse(headLine(input.state, input.founding.revision, input.now)))], founding: input.founding,
-    }, founderKey);
+    }, founderKey, options);
     if (report.problems.length) throw new Error(`The new edition failed verification: ${report.problems.slice(0, 3).join(' ')}`);
     renameSync(staged, target);
     fsyncDir(root);
@@ -118,14 +120,14 @@ export interface Settlement {
  * torn line; then the new head is acknowledged. A crash between the two leaves an unacknowledged tail that check
  * reports and the next settle acknowledges after re-verifying it.
  */
-export function appendSettlement(dataDir: string, id: string, settlement: Settlement, founderKey: { key: KeyObject; fingerprint: string } | null): void {
+export function appendSettlement(dataDir: string, id: string, settlement: Settlement, founderKey: { key: KeyObject; fingerprint: string } | null, options: VerifyOptions = {}): void {
   const { files, text, next, revision, now } = settlement;
   const dir = editionDir(dataDir, id);
   const ledgerPath = join(dir, 'ledger.ndjson');
   const current = readFileSync(ledgerPath);
   if (!current.equals(Buffer.from(files.ledgerText))) throw new Error('The ledger changed since it was read; settlement abandoned.');
   const head = LedgerHeadSchema.parse(JSON.parse(headLine(next, revision, now)));
-  const report = verifyEdition({ ...files, ledgerText: files.ledgerText + text, heads: [...files.heads, head] }, founderKey);
+  const report = verifyEdition({ ...files, ledgerText: files.ledgerText + text, heads: [...files.heads, head] }, founderKey, options);
   if (report.problems.length || report.state?.head !== next.head || report.state.lines !== next.lines) {
     throw new Error(`The settled edition failed verification, so the ledger was not changed: ${report.problems.slice(0, 3).join(' ') || 'its head differs from the settlement.'}`);
   }

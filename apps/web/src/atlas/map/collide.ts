@@ -61,8 +61,11 @@ export function overlaps(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
-/** Survey marks by tier in CSS px: the small ink symbol for a holding too small to draw at this distance. */
-export const MARK_PX = [9, 7, 5, 3.6] as const;
+/**
+ * Survey marks by tier in CSS px: the small ink symbol for a holding too small to draw at this distance. A hamlet's
+ * dot is a step below a village's.
+ */
+export const MARK_PX = [9, 7, 5, 3.6, 3] as const;
 /** Paper kept between a lettered name and a survey mark, so no dot sits in a word or between its spaced letters. */
 export const LETTER_CLEARANCE = 3;
 
@@ -79,7 +82,10 @@ export function underLettering(x: number, y: number, tierRank: number, lettering
   return false;
 }
 
-/** Stable priority: bigger tier first, then the larger observed average, then the smaller channel ID. */
+/**
+ * Stable priority: bigger tier first, then the larger observed average, then the smaller channel ID. The tier rank
+ * decides first, so a hamlet never outranks a village, whatever its audience.
+ */
 export function comparePriority(a: { tierRank: number; average: number; id: string }, b: { tierRank: number; average: number; id: string }): number {
   if (a.tierRank !== b.tierRank) return a.tierRank - b.tierRank;
   if (a.average !== b.average) return b.average - a.average;

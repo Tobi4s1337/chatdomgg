@@ -9,6 +9,8 @@ import { previewIdFor } from './preview/build';
 import { nameFreshUntil, withheldReader } from './policy/visibility';
 import { PREVIEW_KIND, PreviewIdSchema, PreviewWorldSchema, ServedNamesSchema, type PreviewNames } from './preview/schema';
 import { previewDir, readPreviewManifest, readPreviewNames } from './preview/store';
+import { publishedPath, readPublished } from './edition/publish';
+import { appendClaim, claimKeys, ClaimRequestSchema, readClaims, type Claim } from './edition/claims';
 import { layout, readCurrent, readManifest } from './store/revisions';
 import { LIVE_FILES, liveRoot, liveTargetDir, readFrame, readLiveManifest, readLiveState } from './live/store';
 import { DirectoryFallback } from './directory/fallback';
@@ -74,6 +76,8 @@ const BUSIEST_CACHE_MS = 60_000;
 export const CARAVAN_FRESH_MS = 60_000;
 /** The private road ingest: its one route and its body limit. */
 export const INGEST_PATH = '/v1/roads/observe';
+/** The private claim intake on the same listener: sign-in and founding claims (see edition/claims.ts). */
+export const CLAIMS_PATH = '/v1/claims';
 export const INGEST_MAX_BYTES = 16 * 1024;
 /** Registers held in memory at once: the current preview and one a tab may still be pinned to. */
 const MAX_DIRECTORIES = 2;
@@ -120,6 +124,8 @@ export function projectNames(names: PreviewNames, withheld: ReadonlySet<string>,
     withheld: [] as string[], ids: [] as string[], logins: [] as string[], names: [] as string[], freshUntil: [] as number[],
   };
   let staleAt = Number.POSITIVE_INFINITY;
+  // An edition's tombstoned holdings keep their ground but are drawn bare, exactly like withheld ones.
+  served.withheld.push(...(names.tombstoned ?? []));
   names.ids.forEach((id, i) => {
     if (withheld.has(id)) {
       served.withheld.push(id);
@@ -158,7 +164,7 @@ function fileStamp(path: string): string {
 }
 
 /** Fixed reason codes for a refused ingest body; the payload itself is never echoed. */
-type IngestReason = 'content-type' | 'json' | 'schema' | 'simulation' | 'source' | 'conflict';
+type IngestReason = 'content-type' | 'json' | 'schema' | 'simulation' | 'source' | 'conflict' | 'unknown-channel';
 
 export function createAtlasService(dataDir: string, log: (line: string) => void = () => {}, options: AtlasServiceOptions = {}): AtlasService {
   const paths = layout(dataDir);
@@ -179,12 +185,15 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
   let loaded: Loaded | null = null;
   let lastFailure = '';
 
-  /** Reloads only when current.json changes; a bad swap keeps serving the last good revision. */
+  /**
+   * Reloads only when current.json or the edition's publication pointer changes; a bad swap keeps serving the last
+   * good revision. Once an edition is published the map is that publication, never a survey preview again.
+   */
   function current(): Loaded | null {
     let key: string;
     try {
       const stat = statSync(paths.current);
-      key = `${stat.mtimeMs}:${stat.size}:${stat.ino}`;
+      key = `${stat.mtimeMs}:${stat.size}:${stat.ino}|${fileStamp(publishedPath(dataDir))}`;
     } catch {
       return loaded;
     }
@@ -195,14 +204,45 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
       const { manifest, sha256 } = readManifest(dataDir, pointer.revision);
       if (sha256 !== pointer.manifestSha256) throw new Error('manifest hash does not match current.json');
       const survey = publicSurvey(manifest);
-      loaded = { key, survey, body: JSON.stringify(survey), etag: `"${manifest.revision}"`, preview: previewPointer(manifest.revision, manifest.asOf) };
-      log(`serving ${manifest.revision}`);
+      const edition = editionPointer();
+      const preview = edition === undefined ? previewPointer(manifest.revision, manifest.asOf) : edition;
+      loaded = { key, survey, body: JSON.stringify(survey), etag: `"${manifest.revision}"`, preview };
+      log(`serving ${manifest.revision}${edition ? ` as ${JSON.parse(edition).edition.label}` : ''}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message !== lastFailure) log(`kept ${loaded?.survey.revision ?? 'no revision'}: ${message}`);
       lastFailure = message;
     }
     return loaded;
+  }
+
+  /**
+   * The founded edition's pointer: undefined when none is published, null when one is published but its publication
+   * cannot be read (the map then waits rather than showing draft land), else the pointer body. It names the edition
+   * beside the publication, so a reader learns the edition id without another route.
+   */
+  function editionPointer(): string | null | undefined {
+    let published;
+    try {
+      published = readPublished(dataDir);
+    } catch (error) {
+      log(`edition pointer unreadable: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`);
+      return null;
+    }
+    if (!published) return undefined;
+    // A rehearsal is a bench's: a service not started as one never shows it, and keeps waiting rather than drafting.
+    if (published.rehearsal && process.env.ATLAS_REHEARSAL !== '1') return null;
+    try {
+      const manifest = readPreviewManifest(dataDir, published.preview);
+      if (manifest.revision !== published.revision) return null;
+      return JSON.stringify({
+        version: 1, id: published.preview, revision: manifest.revision, asOf: manifest.asOf,
+        world: { url: `${ROUTE_PREFIX}/v1/preview/${published.preview}/world.json`, sha256: manifest.world.sha256, bytes: manifest.world.bytes },
+        edition: { id: published.edition, label: published.label, foundedAt: published.foundedAt, worldHash: published.worldHash, address: published.address },
+      });
+    } catch {
+      return null;
+    }
   }
 
   function previewPointer(revision: string, asOf: number): string | null {
@@ -571,7 +611,7 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
     if (path === `${ROUTE_PREFIX}/v1/preview`) {
       if (!state?.preview) return send(res, 503, JSON.stringify({ error: 'no-preview' }), { 'retry-after': '60' }, head);
       // A reader is about to open this preview: start reading its register so the first search does not wait.
-      void directory(previewIdFor(state.survey.revision, state.survey.asOf))?.catch(() => undefined);
+      void directory((JSON.parse(state.preview) as { id: string }).id)?.catch(() => undefined);
       return send(res, 200, state.preview, { etag: `"${state.survey.revision}"` }, head);
     }
     const namesMatch = PREVIEW_NAMES.exec(path);
@@ -751,10 +791,53 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
     ingestReply(res, 200, { kind: receipt.kind, raidId: receipt.raidId, road: receipt.road, raids: receipt.raids });
     if (receipt.kind === 'stored') heraldCaravan(raid);
   }
+  let claimed: Set<string> | null = null;
+  /**
+   * One claim in, one durable receipt out. The service attaches the facts that decide the claim's realm: the survey's
+   * when it knows the channel (settlement then reads that night's own observation), else its public Twitch lookup.
+   * Without either it answers `facts-unavailable` so the producer retries; it never guesses a realm. The duplicate
+   * check runs again right before the synchronous append, so concurrent identical posts record once.
+   */
+  async function acceptClaim(res: ServerResponse, raw: Buffer): Promise<void> {
+    let input: unknown;
+    try {
+      input = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw));
+    } catch {
+      return invalid(res, 'json');
+    }
+    const parsed = ClaimRequestSchema.safeParse(input);
+    if (!parsed.success || parsed.data.claimedAt > now() + 60_000) return invalid(res, 'schema');
+    const request = parsed.data;
+    claimed ??= claimKeys(readClaims(dataDir));
+    const key = `${request.kingdomId}:${request.cause}`;
+    const receipt = (kind: 'recorded' | 'duplicate') => ingestReply(res, kind === 'recorded' ? 202 : 200, { kind, kingdomId: request.kingdomId, cause: request.cause, settles: 'next-survey' });
+    if (claimed.has(key)) return receipt('duplicate');
+    const pointer = current()?.preview;
+    const register = pointer ? await directory((JSON.parse(pointer) as { id: string }).id)?.catch(() => null) ?? null : null;
+    let facts: Pick<Claim, 'language' | 'categories' | 'facts'> | null = null;
+    const surveyed = register?.knows(request.kingdomId) ? register.facts(request.kingdomId) : null;
+    if (surveyed?.language) facts = { language: surveyed.language, categories: [], facts: 'survey' };
+    else if (twitch) {
+      try {
+        const found = (await twitch.lookup(`id:${request.kingdomId}`)).find((channel) => channel.id === request.kingdomId);
+        if (!found) return invalid(res, 'unknown-channel');
+        facts = { language: found.language || 'other', categories: found.gameId ? [{ gameId: found.gameId, minutes: 1 }] : [], facts: 'twitch' };
+      } catch {
+        facts = null;
+      }
+    }
+    if (!facts) return ingestReply(res, 503, { kind: 'facts-unavailable' }, { 'retry-after': '300' });
+    if (claimed.has(key)) return receipt('duplicate');
+    const claim: Claim = { version: 1, kind: 'chatdom-atlas-claim', kingdomId: request.kingdomId, cause: request.cause, claimedAt: request.claimedAt, receivedAt: now(), ...facts };
+    const outcome = appendClaim(dataDir, claim, claimed);
+    claimed.add(key);
+    receipt(outcome);
+  }
+
   const ingest = createServer((req, res) => {
     try {
       const path = (req.url ?? '/').split('?')[0];
-      if (path !== INGEST_PATH) return ingestReply(res, 404, { kind: 'not-found' });
+      if (path !== INGEST_PATH && path !== CLAIMS_PATH) return ingestReply(res, 404, { kind: 'not-found' });
       if (req.method !== 'POST') return ingestReply(res, 405, { kind: 'method-not-allowed' }, { allow: 'POST' });
       if (!authorized(req)) return ingestReply(res, 401, { kind: 'unauthorized' });
       if (!/^application\/json\s*(?:;.*)?$/i.test(String(req.headers['content-type'] ?? ''))) return invalid(res, 'content-type');
@@ -780,7 +863,8 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
       req.on('end', () => {
         if (refused || res.writableEnded) return;
         try {
-          accept(res, Buffer.concat(parts));
+          if (path === CLAIMS_PATH) void acceptClaim(res, Buffer.concat(parts)).catch(() => ingestReply(res, 503, { kind: 'unavailable' }, { 'retry-after': '30' }));
+          else accept(res, Buffer.concat(parts));
         } catch {
           ingestReply(res, 503, { kind: 'unavailable' }, { 'retry-after': '30' });
         }

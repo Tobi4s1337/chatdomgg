@@ -111,7 +111,7 @@ export async function readDoorHolding(source: PreviewSource, storage: StorageLik
       if ((error as Error).name === 'AbortError') throw error;
       throw new HoldingError('unavailable', 'The Atlas could not be read just now.');
     }
-    throw new HoldingError('missing', 'This channel has no public entry on the current survey of the Atlas.');
+    throw new HoldingError('missing', world.status === 'edition' ? `This channel has no public entry in ${world.label} of the Atlas.` : 'This channel has no public entry on the current survey of the Atlas.');
   }
   const holding = doorHolding(settler, world);
   if (!holding) throw new HoldingError('withheld', 'This holding is not shown on the Atlas.');
@@ -140,7 +140,7 @@ export function takeHandOff(storage: StorageLike | null, id: string, now = Date.
   }
 }
 
-const TIER_LABEL: Record<Settler['tier'], string> = { capital: 'A capital', city: 'A city', town: 'A town', village: 'A village' };
+const TIER_LABEL: Record<Settler['tier'], string> = { capital: 'A capital', city: 'A city', town: 'A town', village: 'A village', hamlet: 'A hamlet' };
 
 /** Where the holding stands, in a line: "A town in the realm of Shooters", "A village on the isle of Polski". */
 export function holdingPlace(holding: Pick<DoorHolding, 'tier' | 'realm' | 'region'>): string {

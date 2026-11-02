@@ -40,7 +40,7 @@ export function faceName(face: ChannelFace): string {
   if (face.name) return face.name;
   if (face.place === 'mapped') return `Unnamed ${TIER_NAMES[face.tier ?? 3]!.toLowerCase()}`;
   if (face.place === 'waiting') return 'An unnamed small channel';
-  return 'A channel below the survey’s floor';
+  return 'A channel below the sweep’s floor';
 }
 
 /** Realm and land of a face as the map names them ("Shooters · English", "Polski"). */
@@ -396,7 +396,7 @@ export function RoadCard(props: {
           <p class="atlas-card-status">Road</p>
           <h2 id="atlas-card-title">This road is not on the map</h2>
           <p class="atlas-card-note">
-            One of its channels is not in the survey of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} under that name. Names are shown only for
+            One of its channels is not in the {props.world.status === 'edition' ? 'sweeps' : 'survey'} of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} under that name. Names are shown only for
             channels seen live within a day.
           </p>
         </Match>

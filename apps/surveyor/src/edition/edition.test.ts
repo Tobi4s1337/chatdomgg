@@ -242,7 +242,7 @@ describe('nightly settlement is append-only', () => {
 
   it('grants each new public candidate one holding on a free lattice slot in its realm, with shore and gap', () => {
     const { result, chain } = one;
-    expect(result.summary).toEqual({ settled: 15, byRaid: 0, outer: 3, tombstones: 0, restores: 0, deferred: 0, unseenRaidTargets: 0 });
+    expect(result.summary).toEqual({ settled: 15, byRaid: 0, byClaim: 0, outer: 3, tombstones: 0, restores: 0, deferred: 0, unseenRaidTargets: 0 });
     const granted = settles(result);
     expect(granted.map((event) => nOf(event.settler.kingdomId)).sort((a, b) => a - b)).toEqual([...Array.from({ length: 15 }, (_, k) => 1001 + k)]);
     const deRealm = realmOfLanguage(d0.world, 'de');
@@ -553,7 +553,7 @@ describe('when land runs out', () => {
     const ready: Chain = { ...chain, state: filled.next, text: chain.text + filled.text, heads: [...chain.heads, headOf(filled.next, rev1.manifest.revision)] };
     const { result, chain: after } = night(ready, crowd);
     // Two fr and one nl newcomer have nowhere to go; the de newcomer still settles at home.
-    expect(result.summary).toEqual({ settled: 1, byRaid: 0, outer: 0, tombstones: 0, restores: 0, deferred: 3, unseenRaidTargets: 0 });
+    expect(result.summary).toEqual({ settled: 1, byRaid: 0, byClaim: 0, outer: 0, tombstones: 0, restores: 0, deferred: 3, unseenRaidTargets: 0 });
     expect(settles(result).map((event) => nOf(event.settler.kingdomId))).toEqual([3004]);
     expect(result.events.at(-1)).toMatchObject({ kind: 'night', settled: 1, deferred: 3 });
     for (const n of [3001, 3002, 3003]) expect(after.state.owners.has(synthId(n))).toBe(false);
@@ -769,7 +769,7 @@ describe('land by raid', () => {
   it('grants an observed small target a hamlet under Edition I, and counts an unseen one', () => {
     const rev = raidRevision(at(24), ASOF1, RAIDS);
     const { result, chain } = night(start(dI, 'I'), rev);
-    expect(result.summary).toEqual({ settled: 1, byRaid: 1, outer: 0, tombstones: 0, restores: 0, deferred: 0, unseenRaidTargets: 1 });
+    expect(result.summary).toEqual({ settled: 1, byRaid: 1, byClaim: 0, outer: 0, tombstones: 0, restores: 0, deferred: 0, unseenRaidTargets: 1 });
     const [granted] = settles(result);
     expect(granted).toMatchObject({
       reason: 'raid', path: 'realm', revision: rev.manifest.revision,
@@ -827,6 +827,7 @@ describe('founding gates', () => {
     return `${JSON.stringify(taxonomy, null, 2)}\n`;
   })();
   const reviewed = loadTaxonomy(reviewedText).ref;
+  const reviewedNames = { id: 'language-names-1', status: 'reviewed' as const };
 
   const payload = (over: Partial<AuthorizationPayload> = {}): AuthorizationPayload => ({
     kind: 'chatdom-atlas-founding-authorization', edition: '0', revision: m48.revision, taxonomySha256: TAXONOMY_REF.sha256,
@@ -834,7 +835,7 @@ describe('founding gates', () => {
   });
   const signed = (over: Partial<AuthorizationPayload> = {}, pem = keys.privatePem) => signAuthorization(payload(over), pem);
   const gates = (over: Partial<FoundingGateInput> = {}) => foundingGates({
-    number: '0', manifest: m48, taxonomy: TAXONOMY_REF, authorization: signed(), founderKey: key.key, existing: false, now: NOW, ...over,
+    number: '0', manifest: m48, taxonomy: TAXONOMY_REF, names: { id: 'language-names-1', status: 'proposed' }, authorization: signed(), founderKey: key.key, existing: false, now: NOW, ...over,
   });
 
   it('passes Edition 0 at exactly 48 hours with a proposed taxonomy and a valid authorization', () => {
@@ -843,14 +844,15 @@ describe('founding gates', () => {
   });
 
   it('passes Edition I at exactly 7 days with a reviewed taxonomy', () => {
-    expect(gates({ number: 'I', manifest: m7d, taxonomy: reviewed, authorization: signed({ edition: 'I', revision: m7d.revision, taxonomySha256: reviewed.sha256 }) })).toEqual([]);
+    expect(gates({ number: 'I', manifest: m7d, taxonomy: reviewed, names: reviewedNames, authorization: signed({ edition: 'I', revision: m7d.revision, taxonomySha256: reviewed.sha256 }) })).toEqual([]);
   });
 
   it('refuses each missing or mismatched condition on its own', () => {
     const cases: [Partial<FoundingGateInput>, RegExp][] = [
       [{ manifest: m48short, authorization: signed({ revision: m48short.revision }) }, /^Edition 0 needs 48\.0 h of observations/],
-      [{ number: 'I', manifest: m7dShort, taxonomy: reviewed, authorization: signed({ edition: 'I', revision: m7dShort.revision, taxonomySha256: reviewed.sha256 }) }, /^Edition I needs 168\.0 h of observations/],
-      [{ number: 'I', manifest: m7d, authorization: signed({ edition: 'I', revision: m7d.revision }) }, /^Edition I needs a reviewed family taxonomy; families-1 is still a proposal/],
+      [{ number: 'I', manifest: m7dShort, taxonomy: reviewed, names: reviewedNames, authorization: signed({ edition: 'I', revision: m7dShort.revision, taxonomySha256: reviewed.sha256 }) }, /^Edition I needs 168\.0 h of observations/],
+      [{ number: 'I', manifest: m7d, names: reviewedNames, authorization: signed({ edition: 'I', revision: m7d.revision }) }, /^Edition I needs a reviewed family taxonomy; families-1 is still a proposal/],
+      [{ number: 'I', manifest: m7d, taxonomy: reviewed, authorization: signed({ edition: 'I', revision: m7d.revision, taxonomySha256: reviewed.sha256 }) }, /^Edition I needs a reviewed continent name table; language-names-1 is still a proposal/],
       [{ existing: true }, /already founded/],
       [{ founderKey: null }, /^No founder key is configured/],
       [{ authorization: null }, /^No founder authorization was given/],
@@ -873,8 +875,8 @@ describe('founding gates', () => {
       number: 'I', manifest: m48, existing: true,
       authorization: signed({ edition: '0', revision: m7d.revision, taxonomySha256: reviewed.sha256, issuedAt: NOW + DAY }, stranger.privatePem),
     });
-    expect(problems).toHaveLength(8);
-    for (const reason of [/already founded/, /needs 168\.0 h/, /reviewed family taxonomy/, /for Edition 0, not Edition I/, /names revision/, /taxonomy bytes/, /future/, /does not verify/]) {
+    expect(problems).toHaveLength(9);
+    for (const reason of [/already founded/, /needs 168\.0 h/, /reviewed family taxonomy/, /reviewed continent name table/, /for Edition 0, not Edition I/, /names revision/, /taxonomy bytes/, /future/, /does not verify/]) {
       expect(problems.some((problem) => reason.test(problem))).toBe(true);
     }
   });
@@ -987,7 +989,7 @@ describe('atlas:found on a temp data directory', () => {
     expect(founded).toMatchObject({ ok: true, edition: 'ed-0', revision: first.revision, problems: [], settlers: 3 });
     const dir = editionDir(dataDir, 'ed-0');
     expect(readdirSync(dir).sort()).toEqual(['edition.json', 'founding.json', 'heads.ndjson', 'ledger.ndjson', 'taxonomy.json', 'world.json']);
-    expect(readdirSync(join(dataDir, 'editions'))).toEqual(['ed-0']);
+    expect(readdirSync(join(dataDir, 'editions')).sort()).toEqual(['ed-0', 'published.json']);
     expect(readFileSync(join(dir, 'taxonomy.json'), 'utf8')).toBe(TAXONOMY);
     const key = founderKey(keys.publicPem);
     const report = verifyEditionDir(dataDir, 'ed-0', key);
@@ -1041,11 +1043,11 @@ describe('atlas:found on a temp data directory', () => {
     expect(ledgerAfter.subarray(0, ledgerBefore.length).equals(ledgerBefore)).toBe(true);
     expect(readFileSync(join(dir, 'heads.ndjson'), 'utf8').split('\n').filter(Boolean)).toHaveLength(2);
     expect(verifyEditionDir(dataDir, 'ed-0', key).problems).toEqual([]);
-    expect(runSettle(dataDir, keys.publicPem, sweepAt(996))).toEqual({ outcome: 'up-to-date', edition: 'ed-0', revision: second.revision });
+    expect(runSettle(dataDir, keys.publicPem, sweepAt(996))).toMatchObject({ outcome: 'up-to-date', edition: 'ed-0', revision: second.revision, publication: expect.stringMatching(/^pv-/) });
     expect(readFileSync(join(dir, 'ledger.ndjson')).equals(ledgerAfter)).toBe(true);
 
-    // An append is verified as the edition it would make before the swap: land granted by an absent founded-record
-    // producer, off the lattice and on top of a neighbour, is refused and the ledger and heads stay as they were.
+    // An append is verified as the edition it would make before the swap: land granted by claim before Edition I,
+    // off the lattice and on top of a neighbour, is refused and the ledger and heads stay as they were.
     const settledFiles = readEditionFiles(dataDir, 'ed-0');
     const settledState = replayLedger(settledFiles.ledgerText, report.edition!);
     const neighbour = settledState.settlers[3]!;
@@ -1055,7 +1057,7 @@ describe('atlas:found on a temp data directory', () => {
     }]);
     const headsBefore = readFileSync(join(dir, 'heads.ndjson'));
     expect(() => appendSettlement(dataDir, 'ed-0', { files: settledFiles, text: bad.text, next: bad.next, revision: second.revision, now: sweepAt(997) }, key))
-      .toThrow(/failed verification, so the ledger was not changed: .*no founded-record producer/);
+      .toThrow(/failed verification, so the ledger was not changed: .*granted land by claim before Edition I/);
     expect(readFileSync(join(dir, 'ledger.ndjson')).equals(ledgerAfter)).toBe(true);
     expect(readFileSync(join(dir, 'heads.ndjson')).equals(headsBefore)).toBe(true);
     expect(readdirSync(dir).filter((name) => name.startsWith('.'))).toEqual([]);
@@ -1071,7 +1073,7 @@ describe('atlas:found on a temp data directory', () => {
     expect(settledState.owners.has(village) && !settledState.tombstones.has(village)).toBe(true);
     writeFileSync(withheldPath, JSON.stringify({ version: 1, updatedAt: sweepAt(998), kingdomIds: ['900000000000000002', village] }));
     const moderated = runSettle(dataDir, keys.publicPem, sweepAt(1000));
-    expect(moderated).toEqual({ outcome: 'moderated', edition: 'ed-0', revision: second.revision, hidden: 1, settlers: 4 });
+    expect(moderated).toMatchObject({ outcome: 'moderated', edition: 'ed-0', revision: second.revision, hidden: 1, settlers: 4 });
     const ledgerModerated = readFileSync(join(dir, 'ledger.ndjson'));
     expect(ledgerModerated.subarray(0, ledgerAfter.length).equals(ledgerAfter)).toBe(true);
     const afterModeration = verifyEditionDir(dataDir, 'ed-0', key);
@@ -1081,10 +1083,10 @@ describe('atlas:found on a temp data directory', () => {
     expect(afterModeration.state!.lastNight).toEqual(settledState.lastNight);
     expect(readFileSync(join(dir, 'heads.ndjson'), 'utf8').split('\n').filter(Boolean)).toHaveLength(3);
     // Already hidden: the next run has nothing to add.
-    expect(runSettle(dataDir, keys.publicPem, sweepAt(1001))).toEqual({ outcome: 'up-to-date', edition: 'ed-0', revision: second.revision });
+    expect(runSettle(dataDir, keys.publicPem, sweepAt(1001))).toMatchObject({ outcome: 'up-to-date', edition: 'ed-0', revision: second.revision });
     // Taken off the list without a fresh sweep, the land keeps waiting: only an observed revision restores it.
     writeFileSync(withheldPath, JSON.stringify({ version: 1, updatedAt: sweepAt(1002), kingdomIds: ['900000000000000002'] }));
-    expect(runSettle(dataDir, keys.publicPem, sweepAt(1003))).toEqual({ outcome: 'up-to-date', edition: 'ed-0', revision: second.revision });
+    expect(runSettle(dataDir, keys.publicPem, sweepAt(1003))).toMatchObject({ outcome: 'up-to-date', edition: 'ed-0', revision: second.revision });
     expect(verifyEditionDir(dataDir, 'ed-0', key).state!.tombstones.has(village)).toBe(true);
     // An unreadable list refuses the run even without a newer revision; nothing is written.
     writeFileSync(withheldPath, '{"version":1,');

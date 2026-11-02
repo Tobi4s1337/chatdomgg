@@ -2,7 +2,7 @@ import { sha256, toHex, utf8 } from '../heraldry/sha256';
 import { PORTRAIT_MAX_AGE_MS, PORTRAIT_URL, type ChannelPortrait } from './portrait';
 export type { ChannelPortrait } from './portrait';
 import {
-  array, CHANNEL_ID, epoch, fail, int, literal, nullable, oneOf, PREVIEW_ID, REVISION, shape, strict, text, type Check,
+  array, CHANNEL_ID, epoch, fail, int, literal, nullable, oneOf, PREVIEW_ID, REVISION, shape, strict, text, TIER_CODES, type Check,
   type PreviewSource,
 } from './preview';
 
@@ -111,7 +111,8 @@ export const face: Check = (value, path) => {
     freshUntil: nullable(epoch),
     place: oneOf(['mapped', 'waiting', 'unseen']),
     ordinal: nullable(uint),
-    tier: nullable(int(0, 3)),
+    // An edition's hamlets (tier 4) are mapped land too.
+    tier: nullable(int(0, TIER_CODES.length - 1)),
     region: nullable(int(0, 65_535)),
     realm: nullable(int(0, 65_535)),
   }) as unknown as ChannelFace;

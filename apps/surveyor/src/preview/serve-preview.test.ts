@@ -105,8 +105,9 @@ describe('survey preview routes', () => {
     // The fixture's three candidates are drawn; its small stream and its source paths are not.
     const world = PreviewWorldSchema.parse(JSON.parse(worldBytes.toString('utf8')));
     expect(world).toMatchObject({ label: PREVIEW_LABEL, status: 'preview', revision: first.revision, counts: { channelsObserved: 4, mapped: 3, capital: 1, town: 1, village: 1 } });
+    // Land is named by its language code in the immutable files; the reviewed name table labels it at reading time.
     expect(world.regions.map((r) => [r.language, r.kind, r.name])).toEqual(
-      expect.arrayContaining([['en', 'isle', 'English'], ['ja', 'isle', '日本語'], ['de', 'isle', 'Deutsch']]),
+      expect.arrayContaining([['en', 'isle', 'en'], ['ja', 'isle', 'ja'], ['de', 'isle', 'de']]),
     );
     expect(world.head.ids).toEqual(['900000000000000001']);
     // The immutable files carry no raw names at all; those come only from the names projection.

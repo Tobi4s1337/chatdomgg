@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { columns, decorCode, makeChunk, makeNames, makeWorld } from './fixtures.test-support';
+import { columns, decorCode, FOUNDING_HAMLET, LATER_HAMLET, makeChunk, makeEdition, makeNames, makeWorld } from './fixtures.test-support';
 import { decodeDecor, decodeRings, geographyOf, SettlerStore, tierOf, type Settler } from './model';
 import { DECOR_KINDS, TIER_CODES, type PreviewWorld } from './preview';
 
@@ -125,7 +125,7 @@ describe('SettlerStore', () => {
     const zack = store.byLogin.get('zackrawrr')!;
     expect(zack).toEqual<Settler>({
       index: 0, id: '552120296', login: 'zackrawrr', name: 'zackrawrr', freshUntil: world.asOf + DAY, withheld: false,
-      tier: 'capital', tierRank: 0, x: 6, y: -6, average: 33_015, game: 'Just Chatting', region: 0, realm: 1, realmName: 'Just Chatting & IRL', ordinal: 0,
+      tier: 'capital', tierRank: 0, foundingHolding: true, x: 6, y: -6, average: 33_015, game: 'Just Chatting', region: 0, realm: 1, realmName: 'Just Chatting & IRL', ordinal: 0,
     });
     // An isle is one realm, named for its language.
     expect(store.byId.get('36926489')).toMatchObject({ name: 'GRONKH', tier: 'city', game: null, region: 1, realm: 4, realmName: 'German' });
@@ -301,8 +301,36 @@ describe('SettlerStore', () => {
   });
 });
 
+describe('founding holdings', () => {
+  it('counts every holding of a survey preview as founding', () => {
+    const world = makeWorld();
+    const store = new SettlerStore(world, () => world.asOf);
+    for (const region of world.regions) store.addChunk(makeChunk(world, region.index));
+    expect(store.all.every(settler => settler.foundingHolding)).toBe(true);
+  });
+
+  it('marks the first `founded` entries of each edition file as founding, the later grants not', () => {
+    const world = makeEdition();
+    const store = new SettlerStore(world, () => world.asOf);
+    for (const region of world.regions) store.addChunk(makeChunk(world, region.index));
+    const later = store.all.filter(settler => !settler.foundingHolding).map(settler => settler.id);
+    expect(later).toEqual([LATER_HAMLET.id]);
+    expect(store.byId.get(FOUNDING_HAMLET.id)).toMatchObject({ tier: 'hamlet', tierRank: 4, foundingHolding: true });
+    // Ordinals still follow file order, later grants included.
+    expect(store.byId.get(LATER_HAMLET.id)!.ordinal).toBe(world.head.ids.length + 2);
+  });
+
+  it('counts none of an edition file as founding when it says none were', () => {
+    const world = makeEdition();
+    world.head.founded = 0;
+    const store = new SettlerStore(world, () => world.asOf);
+    expect(store.all.some(settler => settler.foundingHolding)).toBe(false);
+  });
+});
+
 describe('tierOf', () => {
-  it('names the four tiers by rank', () => {
-    expect([0, 1, 2, 3].map(tierOf)).toEqual([...TIER_CODES]);
+  it('names the five tiers by rank, the hamlet last', () => {
+    expect([0, 1, 2, 3, 4].map(tierOf)).toEqual([...TIER_CODES]);
+    expect(tierOf(4)).toBe('hamlet');
   });
 });
