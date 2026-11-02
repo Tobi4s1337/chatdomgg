@@ -224,8 +224,9 @@ export interface NightInput {
   roadRaids?: readonly AtlasRaid[];
   /**
    * Twitch's answers for raided channels the survey never saw, checked for this night or earlier (`foundArrivals`):
-   * the facts their land is granted on. An answer checked for this very night also carries its raid, so a raid whose
-   * check failed on an earlier night is granted once the answer arrives.
+   * the facts their land is granted on. Each answer also carries its raid, tried again on every night until its
+   * channel holds land: a raid whose check failed on an earlier night is granted once the answer arrives, and one
+   * deferred for lack of a free slot on the first night with room.
    */
   arrivals?: ReadonlyMap<string, FoundArrival>;
 }
@@ -400,9 +401,13 @@ export function settleNight(input: NightInput): NightResult {
     const until = Math.max(manifest.source.database.openedAt, ...(input.roadRaids ?? []).map((raid) => raid.observedAt));
     const raids: RaidRef[] = [...input.raidObservations.map((observation) => observation.raid), ...(input.roadRaids ?? [])]
       .filter((raid) => raid.observedAt > since && raid.observedAt <= until);
-    // A raid whose target was checked for tonight after an earlier night could not get an answer.
+    // Every answer carries the raid that asked. While its channel still holds no land, that raid is tried again on
+    // each night: one whose check failed on an earlier night is granted once the answer arrives, and one deferred for
+    // lack of a free slot is granted on the first night with room. Twitch is never asked again for it.
+    const inWindow = new Set(raids.map((raid) => raid.id));
     for (const arrival of input.arrivals?.values() ?? []) {
-      if (arrival.night === manifest.asOf && arrival.raid.observedAt <= since) raids.push({ ...arrival.raid, toKingdomId: arrival.kingdomId });
+      if (state.owners.has(arrival.kingdomId) || inWindow.has(arrival.raid.id) || arrival.raid.observedAt > until) continue;
+      raids.push({ ...arrival.raid, toKingdomId: arrival.kingdomId });
     }
     raids.sort(raidOrder);
     for (const raid of raids) {
