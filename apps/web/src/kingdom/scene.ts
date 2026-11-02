@@ -12,7 +12,7 @@ import { MATERIALS } from '@chatdom/content';
 import { createPictureTree, TREE_SPECIES, TREE_STYLES, TREE_VARIANTS, type TreeSpecies, type StyleFamily } from '@chatdom/content/trees';
 import { attachCanopy, createCanopyMaterial, groveBatches, plantGrove, type TreeSite } from './trees';
 import { VoxelWorkerPool, type AssetChunkMesh } from '@chatdom/voxel';
-import { createAtmosphere, getEnvironment, createVoxelMaterial, geometryFromChunks, createWindowLights, createPostStack, type WindowHouse } from '@chatdom/render';
+import { createAtmosphere, getEnvironment, withLandAir, GRAND_LAND_AIR, NATIVE_LAND_AIR, createVoxelMaterial, geometryFromChunks, createWindowLights, createPostStack, type WindowHouse } from '@chatdom/render';
 import { createKingdomLandInterface, grandFloorSurface, type LandSurfaceAt, generateSettlementPlan, terrainHeight, samplePublicGround, randomUnit, seedHash, type KingdomTier, type SettlementPlan, type RealmFoundedScene } from '@chatdom/world';
 import type { KingdomId, KingdomPresenceFrame, Vec3, VoxelBlueprint, PresenceFeed, GrowthSceneFeed } from '@chatdom/shared';
 import { CitizenChatCueSchema, PRESENCE_LEASE_MS } from '@chatdom/shared';
@@ -639,7 +639,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       crowd.clear();arrivalDirector?.clear();frame=undefined;
       lastLightFrameKey='';lastField=-Infinity;
     }
-    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=skyLitEnvironment(getEnvironment(hour),moments?.glow());
+    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=withLandAir(skyLitEnvironment(getEnvironment(hour),moments?.glow()),grandLand?GRAND_LAND_AIR:null);
     // Only the hot casting carries this local fire treatment. The receiving
     // house, ordinary dusk and walking retain their accepted lighting.
     const stageHeat=!walkSelected&&!capturePose?Math.max(forgeCameraDirected?(realmForge?.heat??0):0,forge.status().open?forge.heat:0):0;
@@ -648,7 +648,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       state.material.uniforms.uSmithyPower!.value=forgeShade;
       state.material.uniforms.uSmithyOrigin!.value.set(0,layout.market.elevation+2.3,8);
     }
-    clay.setEnvironment(grade);ground.setEnvironment(grade);forge.setEnvironment(grade);realmForge?.setEnvironment(grade);
+    clay.setEnvironment(grade);ground.setEnvironment(grade);forge.setEnvironment(grade);
+    // The grand land's ranges and sea recede through clearer air than the small native land's painted horizon.
+    const landAir=grandLand?GRAND_LAND_AIR:NATIVE_LAND_AIR;clay.setAir?.(landAir);ground.setAir?.(landAir);realmForge?.setEnvironment(grade);
     crowd.material.setEnvironment({...grade,ambientIntensity:Math.max(.65,grade.ambientIntensity)});
     const presentationMs=ownSimulation?simulation.epochMs+time*1000:Date.now();
     civicLife?.update(time);
