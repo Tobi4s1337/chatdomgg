@@ -54,6 +54,8 @@ export interface StillProps {
   onView?: (state: { scale: number; distance: Distance }) => void;
   /** The page's notice, if any: it hangs from the ribbon's banner so the two stack at every width. */
   notice?: JSX.Element;
+  /** Bakers started before the world arrived (the embed's head start); the still owns them once taken. */
+  warmBakers?: () => Worker[];
 }
 
 interface Land { canvas: HTMLCanvasElement; view: StillView; baked: number; missing: number }
@@ -749,7 +751,7 @@ export function Still(props: StillProps): JSX.Element {
       }));
       return copies.filter((copy): copy is { key: TileKey; image: Baked } => copy !== null);
     });
-    baker = new StillBaker(paintSceneFor(props.world, props.geo, decodeRings(props.world)), stampSheetUrl, stamps, pixelRatio);
+    baker = new StillBaker(paintSceneFor(props.world, props.geo, decodeRings(props.world)), stampSheetUrl, stamps, pixelRatio, props.warmBakers?.() ?? []);
     measureRoot();
     const observer = new ResizeObserver(() => {
       clearTimeout(resizeTimer);

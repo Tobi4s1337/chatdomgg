@@ -1,6 +1,7 @@
 import type { BakeMessage, BakeReply, InitMessage } from '../map/bake.worker';
 import { SOFTWARE, TilePainter, type PaintScene, type Stamp } from '../map/paint';
 import { TILE_PX, type TileKey } from '../map/pyramid';
+import { bakerCount } from '../head-start';
 
 /** A baked land tile: a worker's bitmap, or a canvas painted on the main thread. */
 export type Baked = ImageBitmap | HTMLCanvasElement;
@@ -26,14 +27,17 @@ export class StillBaker {
   private painting = false;
   private disposed = false;
 
-  constructor(private readonly scene: Omit<PaintScene, 'stamps'>, private readonly stampsUrl: string, private readonly stamps: Stamp[], private readonly pixelRatio: number) {
-    if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return;
-    const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 2 : 2;
-    const count = Math.max(1, Math.min(4, cores - 1));
+  /** `warm`: bakers the embed started early (`head-start.ts`), already reading the stamp sheet; this baker owns them. */
+  constructor(private readonly scene: Omit<PaintScene, 'stamps'>, private readonly stampsUrl: string, private readonly stamps: Stamp[], private readonly pixelRatio: number, warm: Worker[] = []) {
+    if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') {
+      for (const worker of warm) worker.terminate();
+      return;
+    }
+    const count = warm.length || bakerCount(typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : undefined);
     for (let i = 0; i < count; i++) {
       let worker: Worker;
       try {
-        worker = new Worker(new URL('../map/bake.worker.ts', import.meta.url), { type: 'module', name: `atlas-still-baker-${i}` });
+        worker = warm[i] ?? new Worker(new URL('../map/bake.worker.ts', import.meta.url), { type: 'module', name: `atlas-still-baker-${i}` });
       } catch {
         continue;
       }

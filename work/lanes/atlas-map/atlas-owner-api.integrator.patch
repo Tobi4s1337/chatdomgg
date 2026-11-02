@@ -1,0 +1,316 @@
+diff --git a/apps/api/src/atlas-owner/index.test.ts b/apps/api/src/atlas-owner/index.test.ts
+new file mode 100644
+index 0000000..d615b6d
+--- /dev/null
++++ b/apps/api/src/atlas-owner/index.test.ts
+@@ -0,0 +1,140 @@
++import { createServer } from 'node:http';
++import type { AddressInfo } from 'node:net';
++import { Readable } from 'node:stream';
++import type { IncomingMessage, ServerResponse } from 'node:http';
++import type { Pool } from 'pg';
++import { afterEach, describe, expect, it, vi } from 'vitest';
++import type { RealmAuthConfig } from '../realm-auth/config';
++import { csrfFor } from '../realm-auth/secrets';
++import { atlasOwnerBackend, handleAtlasOwner, type AtlasOwnerBackend } from './index';
++
++const live = { mode: 'live', secureCookies: false, publicOrigin: 'http://localhost:5170' } as RealmAuthConfig;
++const simulated = { ...live, mode: 'simulated' } as RealmAuthConfig;
++const SESSION = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
++/** The session store: a signed-in Twitch user 129634568 (tobi4s_). Any other cookie is no session. */
++const pool = {
++  query: vi.fn(async (_sql: string, values: unknown[]) => ({ rows: values[1] === 'live' || values[1] === 'simulated' ? [{ person_id: '129634568', session_id: SESSION }] : [] })),
++} as unknown as Pool;
++const anonymousPool = { query: async () => ({ rows: [] }) } as unknown as Pool;
++
++function request(method: string, path: string, overrides: Record<string, string | undefined> = {}) {
++  const req = Readable.from([]) as IncomingMessage;
++  req.method = method; req.url = path;
++  req.headers = Object.fromEntries(Object.entries({ cookie: 'chatdom_session=secret', origin: live.publicOrigin, 'content-type': 'application/json', 'x-csrf-token': csrfFor('secret'), ...overrides }).filter(([, v]) => v !== undefined));
++  let code = 0, output = '';
++  const headers: Record<string, string> = {};
++  const res = {
++    setHeader: vi.fn(),
++    writeHead: vi.fn((status: number, h: Record<string, string>) => { code = status; Object.assign(headers, h); return res; }),
++    end: vi.fn((value: string) => { output = value; return res; }),
++  } as unknown as ServerResponse;
++  return { req, res, result: () => ({ code, headers, body: JSON.parse(output) as Record<string, unknown> }) };
++}
++
++function backend(): AtlasOwnerBackend & { calls: string[] } {
++  let hidden = false;
++  const calls: string[] = [];
++  return {
++    calls,
++    visibility: async (id, preview) => { calls.push(`visibility ${id} ${preview}`); return { kingdomId: id, hidden, onMap: !hidden, card: hidden ? { kind: 'chatdom-atlas-card' } : null, secret: 'never passed on' }; },
++    act: async (id, act) => { calls.push(`${act} ${id}`); hidden = act === 'hide'; return { kind: hidden ? 'hidden' : 'shown', kingdomId: id, changed: true, hidden, onMap: !hidden }; },
++  };
++}
++
++describe('the Atlas owner routes', () => {
++  it('answers anonymous without a session, and refuses changes', async () => {
++    const read = request('GET', '/api/atlas/me', { cookie: undefined });
++    expect(await handleAtlasOwner(read.req, read.res, { pool: anonymousPool, config: live, backend: backend() })).toBe(true);
++    expect(read.result()).toMatchObject({ code: 200, body: { version: 1, status: 'anonymous' } });
++    expect(read.result().headers).toMatchObject({ 'Cache-Control': 'no-store', Vary: 'Cookie' });
++    const hide = request('POST', '/api/atlas/me/hide');
++    await handleAtlasOwner(hide.req, hide.res, { pool: anonymousPool, config: live, backend: backend() });
++    expect(hide.result()).toMatchObject({ code: 401, body: { status: 'anonymous' } });
++  });
++
++  it('hides and shows only the session’s own channel, whatever the address says', async () => {
++    const atlas = backend();
++    const before = request('GET', '/api/atlas/me?preview=pv-20261102T000000Z-0123456789ab');
++    await handleAtlasOwner(before.req, before.res, { pool, config: live, backend: atlas });
++    expect(before.result().body).toEqual({ version: 1, status: 'broadcaster', channelId: '129634568', hidden: false, onMap: true, card: null, csrfToken: csrfFor('secret') });
++    const hide = request('POST', '/api/atlas/me/hide');
++    await handleAtlasOwner(hide.req, hide.res, { pool, config: live, backend: atlas });
++    expect(hide.result()).toMatchObject({ code: 200, body: { status: 'broadcaster', channelId: '129634568', hidden: true, onMap: false } });
++    const after = request('GET', '/api/atlas/me');
++    await handleAtlasOwner(after.req, after.res, { pool, config: live, backend: atlas });
++    expect(after.result().body).toMatchObject({ hidden: true, card: { kind: 'chatdom-atlas-card' } });
++    expect(after.result().body).not.toHaveProperty('secret');
++    const show = request('POST', '/api/atlas/me/show');
++    await handleAtlasOwner(show.req, show.res, { pool, config: live, backend: atlas });
++    expect(show.result().body).toMatchObject({ hidden: false, onMap: true });
++    expect(atlas.calls).toEqual(['visibility 129634568 pv-20261102T000000Z-0123456789ab', 'hide 129634568', 'visibility 129634568 null', 'unhide 129634568']);
++    // Nothing in the request can name another channel: extra query is refused, never forwarded.
++    const other = request('POST', '/api/atlas/me/hide?channel=1');
++    await handleAtlasOwner(other.req, other.res, { pool, config: live, backend: atlas });
++    expect(other.result().code).toBe(400);
++    expect(atlas.calls).toHaveLength(4);
++  });
++
++  it('needs the page’s own origin and the session’s CSRF token to change anything', async () => {
++    const atlas = backend();
++    for (const overrides of [{ 'x-csrf-token': 'forged' }, { 'x-csrf-token': undefined }, { origin: 'https://evil.example' }, { 'sec-fetch-site': 'cross-site' }]) {
++      const f = request('POST', '/api/atlas/me/hide', overrides);
++      await handleAtlasOwner(f.req, f.res, { pool, config: live, backend: atlas });
++      expect(f.result().code).toBe(403);
++    }
++    const get = request('GET', '/api/atlas/me/hide');
++    await handleAtlasOwner(get.req, get.res, { pool, config: live, backend: atlas });
++    expect(get.result().code).toBe(405);
++    expect(atlas.calls).toEqual([]);
++  });
++
++  it('never lets a SIMULATED sign-in reach the real Atlas, and says unavailable without one configured', async () => {
++    const atlas = backend();
++    const sim = request('POST', '/api/atlas/me/hide');
++    await handleAtlasOwner(sim.req, sim.res, { pool, config: simulated, backend: atlas });
++    expect(sim.result()).toMatchObject({ code: 503, body: { status: 'unavailable' } });
++    expect(atlas.calls).toEqual([]);
++    const unset = request('GET', '/api/atlas/me');
++    await handleAtlasOwner(unset.req, unset.res, { pool, config: live, env: {} });
++    expect(unset.result()).toMatchObject({ code: 200, body: { status: 'unavailable', channelId: '129634568' } });
++    expect(unset.result().body).not.toHaveProperty('csrfToken');
++  });
++
++  it('leaves other routes alone and turns a broken Atlas reply into unavailable', async () => {
++    const other = request('GET', '/api/atlas/them');
++    expect(await handleAtlasOwner(other.req, other.res, { pool, config: live, backend: backend() })).toBe(false);
++    const wrong = request('GET', '/api/atlas/me');
++    await handleAtlasOwner(wrong.req, wrong.res, { pool, config: live, backend: { visibility: async () => ({ kingdomId: '1', hidden: true, onMap: false }), act: async () => null } });
++    expect(wrong.result().body).toMatchObject({ status: 'unavailable' });
++    const failing = request('POST', '/api/atlas/me/hide');
++    await handleAtlasOwner(failing.req, failing.res, { pool, config: live, backend: { visibility: async () => null, act: async () => { throw new Error('down'); } } });
++    expect(failing.result()).toMatchObject({ code: 503, body: { status: 'unavailable' } });
++  });
++});
++
++describe('the Atlas private listener client', () => {
++  const servers: { close(): void }[] = [];
++  afterEach(() => { while (servers.length) servers.pop()!.close(); });
++
++  it('sends the bearer token and the act time to the private routes', async () => {
++    const seen: { method: string | undefined; url: string | undefined; auth: string | undefined; body: string }[] = [];
++    const server = createServer((req, res) => {
++      let body = '';
++      req.on('data', (chunk: Buffer) => (body += chunk.toString()));
++      req.on('end', () => {
++        seen.push({ method: req.method, url: req.url, auth: req.headers.authorization, body });
++        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ kingdomId: '7', hidden: true, onMap: false }));
++      });
++    });
++    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
++    servers.push(server);
++    const client = atlasOwnerBackend({ ATLAS_PRIVATE_URL: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, ATLAS_INGEST_TOKEN: 'token-of-the-session-authority' })!;
++    await client.act('7', 'hide');
++    await client.visibility('7', 'pv-20261102T000000Z-0123456789ab');
++    expect(seen[0]).toMatchObject({ method: 'POST', url: '/v1/channels/7/hide', auth: 'Bearer token-of-the-session-authority' });
++    expect(JSON.parse(seen[0]!.body)).toEqual({ version: 1, at: expect.any(Number) });
++    expect(seen[1]).toMatchObject({ method: 'GET', url: '/v1/channels/7/visibility?preview=pv-20261102T000000Z-0123456789ab' });
++    expect(atlasOwnerBackend({ ATLAS_PRIVATE_URL: 'http://127.0.0.1:1' })).toBeNull();
++    expect(atlasOwnerBackend({ ATLAS_PRIVATE_URL: 'file:///etc', ATLAS_INGEST_TOKEN: 'x' })).toBeNull();
++  });
++});
+diff --git a/apps/api/src/atlas-owner/index.ts b/apps/api/src/atlas-owner/index.ts
+new file mode 100644
+index 0000000..3a21dd3
+--- /dev/null
++++ b/apps/api/src/atlas-owner/index.ts
+@@ -0,0 +1,99 @@
++import type { IncomingMessage, ServerResponse } from 'node:http';
++import type { Pool } from 'pg';
++import type { RealmAuthConfig } from '../realm-auth/config';
++import { csrfFor } from '../realm-auth/secrets';
++import { dockMutationAllowed, dockPrincipal } from '../dock/auth';
++
++/**
++ * The session authority for a streamer's own place on the Atlas (decision 39: every channel, with a self-serve hide).
++ *
++ *   GET  /api/atlas/me[?preview=<map id>]   who is signed in, and their own channel's visibility (and, while they hid
++ *                                          it, their own card as the map would draw it)
++ *   POST /api/atlas/me/hide                hide the signed-in broadcaster's own channel
++ *   POST /api/atlas/me/show                show it again
++ *
++ * The channel is always the session's own person: a signed-in Twitch user is the broadcaster of exactly one channel,
++ * their own, so nothing the browser sends can name another. Mutations need the page's exact origin and the
++ * session's CSRF token. Replies are `no-store` and vary on the cookie, so nothing personal enters a shared cache.
++ * Only LIVE sessions reach the Atlas; a SIMULATED sign-in never hides a real channel.
++ *
++ * The Atlas service's private listener does the work (`/v1/channels/<id>/hide|unhide|visibility`, bearer token).
++ * Without `ATLAS_PRIVATE_URL` and `ATLAS_INGEST_TOKEN` the routes answer `unavailable` and the map offers no button.
++ */
++export interface AtlasOwnerBackend {
++  visibility(channelId: string, preview: string | null): Promise<unknown>;
++  act(channelId: string, act: 'hide' | 'unhide'): Promise<unknown>;
++}
++type Options = { pool: Pool; config: RealmAuthConfig; backend?: AtlasOwnerBackend | null; env?: NodeJS.ProcessEnv };
++
++export const ATLAS_OWNER_PATHS = ['/api/atlas/me', '/api/atlas/me/hide', '/api/atlas/me/show'] as const;
++const PREVIEW = /^pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}$/;
++const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', Vary: 'Cookie' };
++function reply(res: ServerResponse, code: number, body: unknown) { res.writeHead(code, headers).end(JSON.stringify(body)); }
++
++/** The Atlas service's private listener, from the environment; null when it is not configured. */
++export function atlasOwnerBackend(env: NodeJS.ProcessEnv = process.env): AtlasOwnerBackend | null {
++  const base = env.ATLAS_PRIVATE_URL;
++  const token = env.ATLAS_INGEST_TOKEN;
++  if (!base || !token) return null;
++  let origin: URL;
++  try { origin = new URL(base); } catch { return null; }
++  if (origin.protocol !== 'http:' && origin.protocol !== 'https:') return null;
++  const call = async (path: string, init: { method: 'GET' | 'POST'; body?: unknown }) => {
++    const response = await fetch(new URL(path, origin), {
++      method: init.method, redirect: 'error', signal: AbortSignal.timeout(5_000),
++      headers: { authorization: `Bearer ${token}`, ...(init.body ? { 'content-type': 'application/json' } : {}) },
++      ...(init.body ? { body: JSON.stringify(init.body) } : {}),
++    });
++    const text = await response.text();
++    if (!response.ok || text.length > 64_000) throw new Error('atlas unavailable');
++    return JSON.parse(text) as unknown;
++  };
++  return {
++    visibility: (id, preview) => call(`/v1/channels/${id}/visibility${preview ? `?preview=${preview}` : ''}`, { method: 'GET' }),
++    act: (id, act) => call(`/v1/channels/${id}/${act}`, { method: 'POST', body: { version: 1, at: Date.now() } }),
++  };
++}
++
++type Visibility = { hidden: boolean; onMap: boolean; card: unknown };
++/** Only the fields the browser needs, checked; anything else from the private side never passes. */
++function visibilityOf(value: unknown, channelId: string): Visibility | null {
++  const v = value as { kingdomId?: unknown; hidden?: unknown; onMap?: unknown; card?: unknown } | null;
++  if (!v || v.kingdomId !== channelId || typeof v.hidden !== 'boolean' || typeof v.onMap !== 'boolean') return null;
++  return { hidden: v.hidden, onMap: v.onMap, card: v.card && typeof v.card === 'object' ? v.card : null };
++}
++
++/** Returns false for routes outside the Atlas owner's own. */
++export async function handleAtlasOwner(req: IncomingMessage, res: ServerResponse, options: Options): Promise<boolean> {
++  const url = new URL(req.url ?? '/', 'http://api.invalid');
++  const route = ATLAS_OWNER_PATHS.find(path => path === url.pathname);
++  if (!route) return false;
++  const isRead = route === '/api/atlas/me';
++  if (req.method !== (isRead ? 'GET' : 'POST')) { res.setHeader('Allow', isRead ? 'GET' : 'POST'); reply(res, 405, { version: 1, status: 'refused' }); return true; }
++  const { config, pool } = options;
++  try {
++    const auth = await dockPrincipal(pool, config.mode, config.secureCookies, req.headers.cookie);
++    if (!auth) { reply(res, isRead ? 200 : 401, { version: 1, status: 'anonymous' }); return true; }
++    const channelId = auth.principal.personId;
++    const csrfToken = csrfFor(auth.handle);
++    const backend = config.mode === 'live' ? options.backend === undefined ? atlasOwnerBackend(options.env) : options.backend : null;
++    if (!backend) { reply(res, isRead ? 200 : 503, { version: 1, status: 'unavailable', channelId }); return true; }
++    if (isRead) {
++      const preview = url.searchParams.get('preview');
++      if ([...url.searchParams.keys()].some(key => key !== 'preview') || (preview !== null && !PREVIEW.test(preview))) { reply(res, 400, { version: 1, status: 'refused' }); return true; }
++      const state = visibilityOf(await backend.visibility(channelId, preview), channelId);
++      if (!state) { reply(res, 200, { version: 1, status: 'unavailable', channelId }); return true; }
++      reply(res, 200, { version: 1, status: 'broadcaster', channelId, ...state, csrfToken });
++      return true;
++    }
++    if (!dockMutationAllowed(req.headers, config.publicOrigin, auth.handle)) { reply(res, 403, { version: 1, status: 'refused' }); return true; }
++    if (url.search) { reply(res, 400, { version: 1, status: 'refused' }); return true; }
++    const state = visibilityOf(await backend.act(channelId, route.endsWith('/hide') ? 'hide' : 'unhide'), channelId);
++    if (!state) { reply(res, 503, { version: 1, status: 'unavailable', channelId }); return true; }
++    reply(res, 200, { version: 1, status: 'broadcaster', channelId, hidden: state.hidden, onMap: state.onMap, card: null, csrfToken });
++    return true;
++  } catch {
++    reply(res, 503, { version: 1, status: 'unavailable' });
++    return true;
++  }
++}
+diff --git a/apps/api/src/main.ts b/apps/api/src/main.ts
+index cc1c6a3..b49489c 100644
+--- a/apps/api/src/main.ts
++++ b/apps/api/src/main.ts
+@@ -47,6 +47,7 @@ const server = createServer((request, response) => {
+       return;
+     }
+     if (await (await import('./dock')).handleDock(request, response, { pool, config })) return;
++    if (await (await import('./atlas-owner')).handleAtlasOwner(request, response, { pool, config })) return;
+     if (await handleRaidCrierSetting(request, response, { pool, config })) return;
+     if (await (await import('./raid-gate/guests-http')).handleRaidGuest(request, response, { pool, config })) return;
+     if (await (await import('./raid-gate/passport-http')).handleRaidPassport(request, response, { pool, config })) return;
+diff --git a/apps/api/src/public/main.ts b/apps/api/src/public/main.ts
+index 863c8fd..e5735ca 100644
+--- a/apps/api/src/public/main.ts
++++ b/apps/api/src/public/main.ts
+@@ -158,6 +158,9 @@ async function route(request: IncomingMessage, response: ServerResponse) {
+     case 'dock':
+       if (!await (await import('../dock')).handleDock(request, response, { pool, config: auth })) unavailableJson(response, 404, 'No such route');
+       return;
++    case 'atlas-owner':
++      if (!await (await import('../atlas-owner')).handleAtlasOwner(request, response, { pool, config: auth })) unavailableJson(response, 404, 'No such route');
++      return;
+     case 'realm': proxyHttp(config.realm.target, request, response, config.proto); return;
+     case 'panel': await panel(request, response, url.pathname); return;
+     case 'door-data': await doorData(response); return;
+diff --git a/apps/api/src/public/routes.test.ts b/apps/api/src/public/routes.test.ts
+index 8f02dd9..2134eb1 100644
+--- a/apps/api/src/public/routes.test.ts
++++ b/apps/api/src/public/routes.test.ts
+@@ -62,6 +62,13 @@ describe('the public origin route table', () => {
+     }
+   });
+ 
++  it('routes a signed-in streamer’s own Atlas visibility to its session-checked handler, and nothing near it', () => {
++    for (const path of ['/api/atlas/me', '/api/atlas/me/hide', '/api/atlas/me/show']) expect(classify(path, '')).toEqual({ kind: 'atlas-owner' });
++    for (const path of ['/api/atlas', '/api/atlas/me/', '/api/atlas/me/unhide', '/api/atlas/me/hide/1', '/api/atlas/129634568/hide', '/v1/channels/1/hide']) {
++      expect(classify(path, '')).not.toEqual({ kind: 'atlas-owner' });
++    }
++  });
++
+   it('keeps the Surveyor public projections and event streams reachable', () => {
+     const preview = 'pv-20261101T120000Z-aaaaaaaaaaaa', frame = 'lf-20261101T120000Z-bbbbbbbbbbbb';
+     for (const path of ['/map-data/v1/health', '/map-data/v1/survey', '/map-data/v1/preview',
+diff --git a/apps/api/src/public/routes.ts b/apps/api/src/public/routes.ts
+index cbd29e4..5937b39 100644
+--- a/apps/api/src/public/routes.ts
++++ b/apps/api/src/public/routes.ts
+@@ -8,6 +8,7 @@ export type PublicRoute =
+   | { readonly kind: 'realm' }
+   | { readonly kind: 'panel' }
+   | { readonly kind: 'dock' }
++  | { readonly kind: 'atlas-owner' }
+   | { readonly kind: 'door-data' }
+   | { readonly kind: 'optional'; readonly service: 'herald' | 'map' | 'forge' }
+   | { readonly kind: 'site'; readonly page: SitePage }
+@@ -77,6 +78,8 @@ export function classify(pathname: string, search: string): PublicRoute {
+   if (pathname === '/api/realm/forge/queue') return { kind: 'realm' };
+   if (pathname === '/api/realm/forge/ledger') return { kind: 'realm' };
+   if (/^\/api\/dock\/(?:status|actions|presentations|witness)$/.test(pathname)) return { kind: 'dock' };
++  // A signed-in streamer's own place on the Atlas: read it, hide it, show it (atlas-map AM13).
++  if (/^\/api\/atlas\/me(?:\/(?:hide|show))?$/.test(pathname)) return { kind: 'atlas-owner' };
+   if (REALM_READ.test(pathname)) return { kind: 'realm' };
+   if (/^\/(?:live-realm-data\/)?realm\/(?:raid-roads|raid-pennants\/[1-9][0-9]{0,31})$/.test(pathname)) return { kind: 'realm' };
+   if (/^\/(?:live-realm-data\/)?realm\/raid-chat\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'realm' };

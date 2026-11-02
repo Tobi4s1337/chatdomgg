@@ -163,9 +163,12 @@ try {
     // A loaded host can deliver the scroll late; wait for it rather than sampling once.
     const scrolled = await page.waitForFunction(() => scrollY > 0, null, { timeout: 3000 }).then(() => true, () => false);
     check('hero wheel scrolls its host page', scrolled, { scrollY: await page.evaluate(() => scrollY) });
-    const before = await page.evaluate(() => { window.__canvasBefore = document.querySelector('[data-chatdom-atlas] canvas'); window.__atlasBench.handle.setMode('explore'); return window.__canvasBefore !== null; });
+    // The moving map is built after the still, so its own canvas (not the still's) is the one that must survive.
+    await page.waitForSelector('[data-chatdom-atlas] .atlas-map canvas', { timeout: 45000, state: 'attached' }).catch(() => undefined);
+    const mapCanvas = () => document.querySelector('[data-chatdom-atlas] .atlas-map canvas') ?? document.querySelector('[data-chatdom-atlas] canvas');
+    const before = await page.evaluate(`(${mapCanvas})() !== null && (window.__canvasBefore = (${mapCanvas})(), window.__atlasBench.handle.setMode('explore'), true)`);
     await sleep(300);
-    check('setMode preserves the canvas', before && await page.evaluate(() => document.querySelector('[data-chatdom-atlas] canvas') === window.__canvasBefore && window.__atlasBench.handle.mode === 'explore'));
+    check('setMode preserves the canvas', before && await page.evaluate(`(${mapCanvas})() === window.__canvasBefore && window.__atlasBench.handle.mode === 'explore'`));
     await page.evaluate(() => { window.__atlasBench.dispose(); window.__atlasBench.dispose(); });
     await sleep(1000);
     const after = await page.evaluate(() => ({ roots: document.querySelectorAll('[data-chatdom-atlas]').length, canvases: document.querySelectorAll('canvas').length, frames: window.__embedCounts.frames.size, workers: window.__embedCounts.workers.size }));
