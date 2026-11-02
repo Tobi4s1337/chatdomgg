@@ -705,3 +705,17 @@ binding falls back the same way instead of stalling. It is no longer a deploy bl
 
 The probe adds up to 6 s to a load only when the realm hangs on the land route. A realm that answers 404 adds one
 round trip.
+
+## GW10 grader 3: in-town lawns keep their turf — 2026-11-02
+
+The grader is now `gk11-grade-3` (`packages/world/src/grand/kingdom/grade.ts`, `TOWN_ROCK_STEP`). Inside the
+installed region a one-metre lawn bank stays turf; only a 1.5 m cut shows stone. Heights, water, paving, the
+seat, collision and every placement are unchanged: only the cover (and so the colour) of about 4,100 town columns
+changes. Because the grader is part of the recipe, tobi4s_'s pinned recipe hash is now
+`71f6888b7ad0b405f949e19203e221520d7a2ee11c2ed2675a7c2ae4eac9d1cd` (was `86e07b05…`), and readers accept only
+grader 3 metadata. Nothing was published, so nothing live moves.
+
+For the integrator: publish tobi4s_'s land from the **grader 3, format 2 store**
+(`bake --recipe shots/grand-world/adopted-recipe-g3.json`, 17.63 MB, 92.6 CPU s, 400 MiB peak at nice 19),
+not from the earlier `land-bake-a` or `land-bake-f2` stores; their metadata names grader 2 and the client
+rejects them. The commands in `apps/realm/src/land/README.md` carry the new recipe hash.

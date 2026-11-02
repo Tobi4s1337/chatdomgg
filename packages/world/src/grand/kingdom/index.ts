@@ -24,7 +24,7 @@ export interface SeatedKingdom {
 }
 
 /** The grading recipe's version; it changes whenever the same land and plan would grade to different columns. */
-export const KINGDOM_GRADER = 'gk11-grade-2' as const;
+export const KINGDOM_GRADER = 'gk11-grade-3' as const;
 
 /**
  * The one call the land worker makes after raising a land: frame the settlement, seat it, write its exact ground,

@@ -11,7 +11,7 @@ import { acquireCaptureLock } from '../../../packages/testing/capture-lock.mjs';
 const width = Number(process.env.GRAND_STARTUP_WIDTH ?? 1920), height = width === 1920 ? 1080 : width === 1440 ? 900 : 844;
 assert.ok([1920, 1440, 390].includes(width));
 const outDir = resolve(`shots/grand-world/startup-land-bench-${width}`), evidence = 'work/evidence/grand-world';
-const store = resolve(process.env.GRAND_LAND_STORE ?? 'shots/grand-world/land-bake-f2');
+const store = resolve(process.env.GRAND_LAND_STORE ?? 'shots/grand-world/land-bake-g3');
 const webRequire = createRequire(resolve('apps/web/package.json'));
 const sceneBytes = await readFile('/tmp/grand-world-scene.json');
 const receipt = JSON.parse(await readFile('/tmp/grand-world-manifest.json', 'utf8'));

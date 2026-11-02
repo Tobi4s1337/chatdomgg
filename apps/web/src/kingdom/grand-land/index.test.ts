@@ -18,7 +18,7 @@ const receipt = RealmFoundedManifestSchema.parse({ version: 1, kingdomId: '12963
 // Only canonical identity is consumed here; settlement geometry belongs to the scene host's tests.
 const plan = { revision: 'test-plan' } as SettlementPlan;
 const recipe: GrandLandRecipe = { version: 1, generator: 'grand-land-1', kit: 'grand-artisans-1',
-  grader: 'gk11-grade-2', mesher: 'hosted-grand-land-2', seed: { kingdomId: receipt.kingdomId,
+  grader: 'gk11-grade-3', mesher: 'hosted-grand-land-2', seed: { kingdomId: receipt.kingdomId,
     seedKey: `kingdom:${receipt.kingdomId}`, name: 'Renderer fixture', biome: 'meadow', tier: 'hamlet', character: 'coastal-harbour' },
   frame: { envelope: { minX: 0, maxX: 16, minZ: 0, maxZ: 16 }, centre: [8, 8], waterLevel: 0,
     seaward: null, castle: { centre: [8, 0, 8], bounds: { minX: 0, maxX: 16, minZ: 0, maxZ: 16 } } } };

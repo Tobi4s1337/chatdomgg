@@ -20,8 +20,8 @@ Build and run from the worktree root:
 nice -n 10 node work/lanes/grand-world/build-bake.mjs
 UV_THREADPOOL_SIZE=2 nice -n 19 node shots/grand-world/bake-cli/bake.mjs \
   --scene /tmp/grand-world-scene.json --receipt /tmp/grand-world-manifest.json \
-  --recipe shots/grand-world/adopted-recipe.json \
-  --directory shots/grand-world/land-bake-a --report shots/grand-world/bake-a-report.json
+  --recipe shots/grand-world/adopted-recipe-g3.json \
+  --directory shots/grand-world/land-bake-g3 --report shots/grand-world/bake-g3-report.json
 ```
 
 Inputs must already exist. The receipt/scene are private local copies of the public founded GET and remain out
@@ -67,8 +67,8 @@ scan, timestamp selection or fallback to an arbitrary bake. Conflicting immutabl
 nice -n 10 node work/lanes/grand-world/build-publication.mjs
 UV_THREADPOOL_SIZE=2 nice -n 19 node shots/grand-world/publication-cli/publish.mjs \
   --scene /tmp/grand-world-scene.json --receipt /tmp/grand-world-manifest.json \
-  --recipe-hash 86e07b05766f3e69994b9418e58a4bfb250bd7874ebe74d339a3b87f09d9b05d \
-  --directory shots/grand-world/land-bake-a --report shots/grand-world/publication-report.json
+  --recipe-hash 71f6888b7ad0b405f949e19203e221520d7a2ee11c2ed2675a7c2ae4eac9d1cd \
+  --directory shots/grand-world/land-bake-g3 --report shots/grand-world/publication-report.json
 ```
 
 The publication executable imports no generator, mesher or artisan registry. Use exact historical scene bytes

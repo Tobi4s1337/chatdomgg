@@ -30,11 +30,14 @@ const HOSTED_NIGHT_GRASS = 'if(kind==2.)base*=mix(vec3(1.),vec3(.55,.52,.95),uNi
  * through the lawns and along the streets. Inside the installed town (easing out over the next 16 m) turf and
  * paving take the native floor's softened occlusion and their banks are lit mostly as the ground above them: the
  * step stays a visible voxel ledge, not a drawn line. Composed structures are cleared from the town's reserve, so
- * there the floor's only stone is its paving. Beyond the town the land keeps its full relief, and rock and soil
- * (the crag's faces) are untouched everywhere.
+ * there the floor's only stone is its paving. The town's few real cuts (rock and soil banks of 1.5 m and more on
+ * the castle mound) get the same light, but only strictly inside the installed region: lit as the ground above
+ * they read as stone outcrops in the lawn, where a bank facing away from a low sun read as a dark hole. Beyond the
+ * town the land keeps its full relief, and the crag's faces outside the region are untouched.
  */
 const NATIVE_AO = 'float ao=mix(.49,1.,vAo);';
-const HOSTED_TURF = 'float hostedTurf=kind==2.||kind==3.?1.-smoothstep(0.,16.,max(max(uHostedTown.x-vWorld.x,vWorld.x-uHostedTown.y),max(uHostedTown.z-vWorld.z,vWorld.z-uHostedTown.w))):0.;'
+const HOSTED_TURF = 'float hostedEdge=max(max(uHostedTown.x-vWorld.x,vWorld.x-uHostedTown.y),max(uHostedTown.z-vWorld.z,vWorld.z-uHostedTown.w));'
+  + 'float hostedTurf=kind==2.||kind==3.?1.-smoothstep(0.,16.,hostedEdge):kind==1.?1.-smoothstep(-1.,0.,hostedEdge):0.;'
   + 'if(hostedTurf>0.&&abs(n.y)<.5)n=normalize(mix(n,vec3(0.,1.,0.),.72*hostedTurf));';
 const HOSTED_AO = 'float ao=mix(.49,1.,mix(vAo,mix(.8,1.,vAo),hostedTurf));';
 /** No town: every term below is the identity. */

@@ -26,8 +26,11 @@ describe('the hosted grand material', () => {
     expect(hosted.material.fragmentShader).not.toBe(native.material.fragmentShader);
     // the night settling of the grass, which is the identity at night 0, and the town's turf, which is the
     // identity outside the installed region (hostedTurf 0 leaves the normal and the occlusion as they were).
-    const turf = hosted.material.fragmentShader.match(/\n {6}float hostedTurf=[^\n]*/)![0];
+    const turf = hosted.material.fragmentShader.match(/\n {6}float hostedEdge=[^\n]*/)![0];
     expect(turf).toContain('uHostedTown');
+    // Turf and paving ease out over 16 m; rock and soil banks only strictly inside the region, so the crag's
+    // faces outside it keep their relief.
+    expect(turf).toContain('float hostedTurf=kind==2.||kind==3.?1.-smoothstep(0.,16.,hostedEdge):kind==1.?1.-smoothstep(-1.,0.,hostedEdge):0.;');
     expect(hosted.material.fragmentShader.replace('float facing=n.y<-.5?.5:.74+.26*max(n.y,0.);', 'float facing=.5+.5*max(n.y,0.);')
       .replace('\n      if(kind==2.)base*=mix(vec3(1.),vec3(.55,.52,.95),uNight);', '').replace(turf, '')
       .replace('float ao=mix(.49,1.,mix(vAo,mix(.8,1.,vAo),hostedTurf));', 'float ao=mix(.49,1.,vAo);')

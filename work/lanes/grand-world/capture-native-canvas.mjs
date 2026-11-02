@@ -55,7 +55,7 @@ async function bindFirst(candidates, taken, bind) {
   }
   throw new Error('No free capture port; nothing was started');
 }
-const directory = resolve(process.env.GRAND_LAND_STORE ?? 'shots/grand-world/land-bake-f2');
+const directory = resolve(process.env.GRAND_LAND_STORE ?? 'shots/grand-world/land-bake-g3');
 const { createLandReadServer } = await import(pathToFileURL(resolve('shots/grand-world/land-server/server.mjs')).href);
 const receipt = JSON.parse(await readFile('/tmp/grand-world-manifest.json', 'utf8'));
 const live = await fetch(`http://127.0.0.1:5197/api/realm/founded/${receipt.kingdomId}`, { signal: globalThis.AbortSignal.timeout(5000) });

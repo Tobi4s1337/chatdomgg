@@ -34,7 +34,7 @@ const willowmere = freezeGrandLandRecipe({
     "waterLevel": -0.5
   },
   "generator": "grand-land-1",
-  "grader": "gk11-grade-2",
+  "grader": "gk11-grade-3",
   "kit": "grand-artisans-1",
   "mesher": "hosted-grand-land-2",
   "seed": {

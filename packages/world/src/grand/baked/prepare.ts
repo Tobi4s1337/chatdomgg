@@ -14,7 +14,7 @@ export interface PreparedGrandLand { readonly land: GrandLand; readonly seated: 
 /** The installed plan is a constraint on the larger recipe, never regenerated or moved. */
 export function prepareInstalledLand(plan: SettlementPlan, recipe: GrandLandRecipe): PreparedGrandLand {
   if (recipe.mesher !== HOSTED_GRAND_COMPILER || recipe.generator !== 'grand-land-1'
-    || recipe.grader !== 'gk11-grade-2' || recipe.kit !== 'grand-artisans-1')
+    || recipe.grader !== 'gk11-grade-3' || recipe.kit !== 'grand-artisans-1')
     throw new Error('This land recipe requires its pinned compiler');
   const land = generateGrandLand(recipe.seed);
   const seated = seatKingdomOnLand(land, plan, recipe.frame);

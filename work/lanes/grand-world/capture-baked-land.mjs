@@ -15,7 +15,7 @@ process.env.CHATDOM_REALM_TARGET = 'http://127.0.0.1:5197';
 process.env.CHATDOM_API_TARGET = 'http://127.0.0.1:5196';
 process.env.CHATDOM_LAND_TARGET = `http://127.0.0.1:${port}`;
 const { createLandReadServer } = await import(pathToFileURL(resolve('shots/grand-world/land-server/server.mjs')).href);
-const directory = resolve(process.env.GRAND_LAND_STORE ?? 'shots/grand-world/land-bake-f2');
+const directory = resolve(process.env.GRAND_LAND_STORE ?? 'shots/grand-world/land-bake-g3');
 const output = `work/evidence/grand-world/gw10-baked-stream-golden@${width}x${height}.png`;
 const reportPath = `work/evidence/grand-world/gw10-baked-stream${width === 1920 ? '' : '-720'}.json`;
 await mkdir('work/evidence/grand-world', { recursive: true });

@@ -6,7 +6,7 @@
 // - a realm (the real createRealmServer and KingdomRoom) whose room world is compileFoundedScene of the real
 //   founded scene, with the receipt and scene bytes read once from the live realm's public GET routes;
 // - a session and ticket endpoint standing in for Twitch sign-in (the API's OIDC flow is not what this checks);
-// - the land read server over this lane's format 2 store.
+// - the land read server over this lane's current store (grader 3, format 2).
 // Nothing is written to any live service. The walker is a bench principal in this process only.
 //
 //   node work/lanes/grand-world/capture-walk.mjs --pc        inside chatdom-pc-lease (preview 5192, realm 5191)
@@ -57,7 +57,12 @@ const prefix = `gw10-${pc ? 'gpu-' : ''}${today ? 'today-' : ''}${unpublished ? 
 const sleep = ms => new Promise(done => setTimeout(done, ms));
 const host = '127.0.0.1', kingdomId = '129634568';
 const live = 'http://127.0.0.1:5197';
-const readLive = (path, init = {}) => fetch(`${live}${path}`, init).catch(error => { throw new Error(`Reading ${path} from the live realm failed: ${error.cause?.message ?? error.message}`); });
+// GET only. A pooled keep-alive socket the live server has already closed fails as "other side closed"; a GET is
+// safe to repeat once on a fresh connection.
+const readLive = (path, init = {}, retry = true) => fetch(`${live}${path}`, init).catch(error => {
+  if (retry && !init.signal?.aborted && /other side closed|ECONNRESET|socket/i.test(String(error.cause?.message ?? error.cause?.code ?? ''))) return sleep(250).then(() => readLive(path, init, false));
+  throw new Error(`Reading ${path} from the live realm failed: ${error.cause?.message ?? error.message}`);
+});
 
 const report = { started: new Date().toISOString(), renderer: pc ? 'his Chrome, RTX 5080, through chatdom-pc' : 'Chrome SwiftShader',
   entry: 'production walk route /?walk=1&kingdom= with a bench session, ticket and realm', hour, runs: [], errors: [] };
@@ -253,7 +258,7 @@ try {
   const { createLandReadServer } = await import(pathToFileURL(resolve('shots/grand-world/land-server/server.mjs')).href);
   // Unpublished: the land routes hang like the live realm's unknown routes do, so only the probe's timeout ends them.
   land = unpublished ? createHttpServer(req => { report.heldLandRequests = (report.heldLandRequests ?? 0) + 1; req.socket.setTimeout(0); })
-    : createLandReadServer(resolve('shots/grand-world/land-bake-f2'));
+    : createLandReadServer(resolve('shots/grand-world/land-bake-g3'));
   own(land);
   const landPort = await listenFirst(land, CAPTURE_PORTS.filter(p => p !== report.realmPort && p !== apiPort));
 

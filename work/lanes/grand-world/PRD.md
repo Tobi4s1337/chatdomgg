@@ -40,7 +40,7 @@ You own the how and make the design calls. Be ambitious, think it through end to
 
 ## Goals
 
-- [ ] **GW10 — tobi4s_'s real kingdom lives on the grand land.**
+- [x] **GW10 — tobi4s_'s real kingdom lives on the grand land.**
   Outcome: kingdom 129634568 runs on its grand land in the stream view (`/stream?source=realm&kingdom=129634568`) and in the walk (`/?walk=1&kingdom=129634568`): one scene, one renderer, one render loop, the accepted light, dusk and post stack, and the real Willowmere homes, castle and Forge square standing on the island with its mountains, mere, forests and sea. Start by merging main and reconciling this branch with the stable reservation seating (00e888e), so the land's seat, size and identity are a pure function of the founded kingdom and its reserved future, never of today's homes. Freeze the recipe inputs (no tier or home style read from the live plan) and give the land a recipe hash that growth does not change. The grand floor is on for a kingdom only when that kingdom has a grand recipe; for now that is tobi4s_ alone, and every other kingdom renders exactly as it does today. Nothing that works today breaks: every home keeps its plot and door, every forged piece stays where it was placed, walking collides with the floor it sees, and nothing that looks solid inside the walkable region lacks a collider (the castle rock, walls, trees and bridges either compile into the collision world under a new revision or stay outside walkable space). The Forge, the moments (plaza and castle gate), the raid road arrivals, the growth and homecoming ceremonies and the dock all work on the grand floor. If generating the land in the browser keeps the stream from a loaded frame, pull GW11's baked, served land forward: it is part of making this goal true.
   Quality bar: a still of his stream stands next to `/-/grand` at its best and next to the Eldermere reference; the town sits naturally in the land (no seams, cliffs or water slabs at the region edge, no floating or buried homes, no doubled castle, trees or water); the dusk windows and the beacon read as clearly as on today's land.
   Done when:
@@ -135,7 +135,6 @@ Tobias's answers (`context/decisions.md`) override spec 56, AGENTS.md and the ra
 - Straight coasts where an island is cut by its region bounds.
 - The town walls' box count (about 258 k) against meshing time.
 - Trace the cloud of fine white dots over the market and the slope below the castle in the wide stream shots (on today's land too, on the 5080).
-- The crag inside the physical region dressed as rock rather than soil terraces (a new grader version and a rebake before publication).
 - Diagonal streaks on sunlit plaster at a grazing sun from the shared sun-shadow receiver (`packages/render/src/sun-shadows.ts`; home 0's door at golden hour, on today's land too, on the 5080).
 - The stream sometimes stays at `Opening the wider kingdom` on his Chrome (two leases; in the logged one no land request reached the server and the page never painted); the probe now traces requests and lists other pages on the host.
 

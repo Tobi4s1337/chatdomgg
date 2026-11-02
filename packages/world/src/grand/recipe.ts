@@ -10,7 +10,7 @@ export interface GrandLandRecipe {
   readonly version: 1;
   readonly generator: 'grand-land-1';
   readonly kit: 'grand-artisans-1';
-  readonly grader: 'gk11-grade-2';
+  readonly grader: 'gk11-grade-3';
   readonly mesher: 'hosted-grand-land-2';
   readonly seed: GrandLandSeed;
   readonly frame: Pick<SettlementFrame, 'envelope' | 'centre' | 'waterLevel' | 'seaward' | 'castle'>;
@@ -21,7 +21,7 @@ export function createGrandLandRecipe(plan: SettlementPlan, profile: Omit<GrandL
   if (!profile.kingdomId || !profile.seedKey.includes(profile.kingdomId)) throw new Error('The land recipe needs its full kingdom identity');
   const frame = frameSettlement(plan);
   return freezeGrandLandRecipe({ version: 1, generator: 'grand-land-1', kit: 'grand-artisans-1',
-    grader: 'gk11-grade-2', mesher: 'hosted-grand-land-2',
+    grader: 'gk11-grade-3', mesher: 'hosted-grand-land-2',
     seed: { ...profile, minSize: landColumnsFor(frame) },
     frame: { envelope: frame.envelope, centre: frame.centre, waterLevel: frame.waterLevel,
       seaward: frame.seaward, castle: frame.castle } });

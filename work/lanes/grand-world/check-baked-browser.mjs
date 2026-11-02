@@ -19,7 +19,7 @@ const { kingdomId, sceneHash, layoutRevision, collisionRevision, sourcePlanHash,
 const expected = { kingdomId, sceneHash, layoutRevision, collisionRevision, sourcePlanHash, recipeHash };
 const base = `/api/realm/land/${kingdomId}/${sceneHash}`;
 const { createLandReadServer } = await import(pathToFileURL(resolve('shots/grand-world/land-server/server.mjs')).href);
-const server = createLandReadServer(resolve(process.env.GRAND_LAND_STORE ?? 'shots/grand-world/land-bake-f2'));
+const server = createLandReadServer(resolve(process.env.GRAND_LAND_STORE ?? 'shots/grand-world/land-bake-g3'));
 const landHandler = server.listeners('request')[0];
 server.removeAllListeners('request');
 server.on('request', (request, response) => {

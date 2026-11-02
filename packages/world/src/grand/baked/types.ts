@@ -15,7 +15,7 @@ export const BAKED_SURFACE_HEADER_BYTES = 32;
 export type BakedFormat = 1 | 2;
 export const BAKED_FORMAT: BakedFormat = 2;
 export const BAKED_COMPILERS = Object.freeze({ generator: 'grand-land-1', kit: 'grand-artisans-1',
-  grader: 'gk11-grade-2', mesher: 'hosted-grand-land-2' } as const);
+  grader: 'gk11-grade-3', mesher: 'hosted-grand-land-2' } as const);
 export const HOSTED_GRAND_COMPILER = BAKED_COMPILERS.mesher;
 export const HOSTED_PAVING = 126;
 
