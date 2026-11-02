@@ -40,7 +40,7 @@ const bake = (): SketchBakeRunner => async job => {
 describe('a channel’s own land in the browser', () => {
   it('asks the realm for exactly its recipe, follows the bake, then reads and verifies the land', async () => {
     const recipe = genesisSketchRecipe('63920635', 'The_AGGman'), seen: string[] = [], states: SketchSourceState[] = [];
-    const sketches = createSketchService({ store, founded: async () => false, bake: bake() });
+    const sketches = createSketchService({ store, founded: async () => false, trusted: async id => id === '63920635' ? genesisSketchRecipe(id, 'The_AGGman') : null, bake: bake() });
     const land = await openSketchLand({ recipe, fetch: realmFetch(sketches, seen), cache: null, pollMs: 5, onState: state => states.push(state) });
     expect(seen[0]).toMatch(/^GET \/api\/realm\/land\/63920635\/[a-f0-9]{6}$/);
     expect(seen[1]).toMatch(/^POST /);
@@ -67,7 +67,7 @@ describe('a channel’s own land in the browser', () => {
 
   it('asks the realm first: a founded kingdom gets no sketch, and a channel keeps the world it was first given', async () => {
     const first = genesisSketchRecipe('63920635', 'The_AGGman'), drifted = genesisSketchRecipe('63920635', 'The AGGman');
-    const sketches = createSketchService({ store, founded: async () => false, bake: bake() });
+    const sketches = createSketchService({ store, founded: async () => false, trusted: async id => id === '63920635' ? genesisSketchRecipe(id, 'The_AGGman') : null, bake: bake() });
     expect(await resolveChannelWorld({ proposed: first, fetch: realmFetch(sketches, [], new Set(['63920635'])) })).toEqual({ kind: 'founded' });
     expect(await resolveChannelWorld({ proposed: first, fetch: realmFetch(sketches) })).toEqual({ kind: 'world', recipe: first, pinned: false });
     (await openSketchLand({ recipe: first, fetch: realmFetch(sketches), cache: null, pollMs: 5 })).dispose();

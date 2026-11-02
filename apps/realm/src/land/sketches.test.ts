@@ -6,7 +6,7 @@ import { canonicalSceneJson } from '../../../../packages/world/src/founded-world
 import { decodeSketchRecord, grandSketchRecipeHash, type GrandSketchRecipe } from '../../../../packages/world/src/grand/sketch';
 import { storeSketch } from './sketch.test-helper';
 import { genesisSketchRecipe } from './sketch';
-import { createSketchService, type SketchBakeRunner } from './sketches';
+import { createSketchService, type SketchBakeRunner, type TrustedWorld } from './sketches';
 import { postLandRoute, readLandRoute } from './routes';
 import { LandArtifactStore } from './store';
 
@@ -28,6 +28,9 @@ const recipeOf = (id: string, name: string): GrandSketchRecipe => genesisSketchR
 const body = (recipe: GrandSketchRecipe) => Buffer.from(canonicalSceneJson(recipe));
 const aggman = () => recipeOf('63920635', 'The_AGGman');
 const unfounded = async () => false;
+/** The worlds the realm itself reads from the Atlas for the three Genesis channels; any other channel has no holding. */
+const GENESIS: Record<string, string> = { '63920635': 'The_AGGman', '4363967': 'PinkKittyRose', '154972160': 'MashaD4' };
+const trusted: TrustedWorld = async id => GENESIS[id] ? recipeOf(id, GENESIS[id]!) : null;
 
 describe('channel sketches', () => {
   it('are each channel’s own grand-land-2 world, keyed by its full identity', async () => {
@@ -40,7 +43,7 @@ describe('channel sketches', () => {
   it('raise a requested world once, report the bake’s own counts, then serve it', async () => {
     const counts = { runs: 0 };
     let open!: () => void;
-    const service = createSketchService({ store, founded: unfounded, bake: fakeBake(counts, new Promise(done => { open = done; })) });
+    const service = createSketchService({ store, founded: unfounded, trusted, bake: fakeBake(counts, new Promise(done => { open = done; })) });
     const recipe = aggman(), hash = await grandSketchRecipeHash(recipe);
     expect(await service.request('63920635', hash, body(recipe))).toEqual({ state: 'raising', ahead: 0, stage: 'raising', done: 0, total: 0 });
     // Asking again follows the same bake; it never starts another.
@@ -63,7 +66,7 @@ describe('channel sketches', () => {
   });
 
   it('refuse anything that is not exactly the channel world it names', async () => {
-    const service = createSketchService({ store, founded: unfounded, bake: fakeBake({ runs: 0 }) });
+    const service = createSketchService({ store, founded: unfounded, trusted, bake: fakeBake({ runs: 0 }) });
     const recipe = aggman(), hash = await grandSketchRecipeHash(recipe);
     const refused = { state: 'refused', reason: 'invalid' };
     expect(await service.request('4363967', hash, body(recipe))).toEqual(refused);
@@ -78,7 +81,7 @@ describe('channel sketches', () => {
   });
 
   it('give each channel one world, the first one asked for, and none to a founded kingdom', async () => {
-    const service = createSketchService({ store, founded: unfounded, bake: fakeBake({ runs: 0 }) });
+    const service = createSketchService({ store, founded: unfounded, trusted, bake: fakeBake({ runs: 0 }) });
     const first = aggman(), drifted = recipeOf('63920635', 'The AGGman');
     const firstHash = await grandSketchRecipeHash(first), driftedHash = await grandSketchRecipeHash(drifted);
     expect((await readLandRoute(store, '/api/realm/land/63920635/world'))?.status).toBe(404);
@@ -93,17 +96,42 @@ describe('channel sketches', () => {
     expect(await service.request('63920635', firstHash, body(first))).toEqual({ state: 'ready' });
     // A founded kingdom gets no sketch, and when the realm cannot tell, nothing is raised or pinned.
     const pink = recipeOf('4363967', 'PinkKittyRose'), pinkHash = await grandSketchRecipeHash(pink);
-    const founded = createSketchService({ store, founded: async () => true, bake: fakeBake({ runs: 0 }) });
+    const founded = createSketchService({ store, founded: async () => true, trusted, bake: fakeBake({ runs: 0 }) });
     expect(await founded.request('4363967', pinkHash, body(pink))).toEqual({ state: 'refused', reason: 'founded' });
-    const unsure = createSketchService({ store, founded: async () => { throw new Error('database away'); }, bake: fakeBake({ runs: 0 }) });
+    const unsure = createSketchService({ store, founded: async () => { throw new Error('database away'); }, trusted, bake: fakeBake({ runs: 0 }) });
     expect(await unsure.request('4363967', pinkHash, body(pink))).toEqual({ state: 'refused', reason: 'resting' });
     expect(await createSketchService({ store, bake: fakeBake({ runs: 0 }) }).request('4363967', pinkHash, body(pink))).toEqual({ state: 'refused', reason: 'resting' });
     expect(await store.world('4363967')).toBeNull();
   });
 
+  it('never let a caller choose a channel’s world: the realm reads the channel’s facts and raises its own', async () => {
+    const counts = { runs: 0 };
+    const service = createSketchService({ store, founded: unfounded, trusted, bake: fakeBake(counts) });
+    const own = aggman(), ownHash = await grandSketchRecipeHash(own);
+    // Another channel's traits, or a name of the caller's choosing, under The_AGGman's id.
+    const pink = recipeOf('4363967', 'PinkKittyRose');
+    const forged = { ...own, seed: { ...own.seed, name: 'Somebody else', world: pink.seed.world } } as GrandSketchRecipe;
+    const forgedHash = await grandSketchRecipeHash(forged);
+    expect(forgedHash).not.toBe(ownHash);
+    expect(await service.request('63920635', forgedHash, body(forged))).toEqual({ state: 'refused', reason: 'pinned', pinnedHash: ownHash });
+    expect((await store.world('63920635'))?.hash).toBe(ownHash);
+    await service.idle();
+    expect(counts.runs).toBe(1);
+    expect(await store.sketchBytes('63920635', forgedHash)).toBeFalsy();
+    expect(await service.request('63920635', ownHash, body(own))).toEqual({ state: 'ready' });
+    // A channel the Atlas has no public holding for gets no world; an Atlas that cannot be read pins nothing.
+    const stranger = { ...own, seed: { ...own.seed, kingdomId: '999', seedKey: 'channel-genesis-1/broadcaster/999' } } as GrandSketchRecipe;
+    expect(await service.request('999', await grandSketchRecipeHash(stranger), body(stranger))).toEqual({ state: 'refused', reason: 'invalid' });
+    const away = createSketchService({ store, founded: unfounded, trusted: async () => undefined, bake: fakeBake(counts) });
+    const masha = recipeOf('154972160', 'MashaD4');
+    expect(await away.request('154972160', await grandSketchRecipeHash(masha), body(masha))).toEqual({ state: 'refused', reason: 'resting' });
+    expect(await createSketchService({ store, founded: unfounded, bake: fakeBake(counts) }).request('154972160', await grandSketchRecipeHash(masha), body(masha))).toEqual({ state: 'refused', reason: 'resting' });
+    expect(await store.world('154972160')).toBeNull();
+  });
+
   it('bound the work a flood of lookups can ask of the host, without pinning what it refuses', async () => {
     let open!: () => void;
-    const service = createSketchService({ store, founded: unfounded, bake: fakeBake({ runs: 0 }, new Promise(done => { open = done; })), limits: { queue: 1, perDay: 3 } });
+    const service = createSketchService({ store, founded: unfounded, trusted, bake: fakeBake({ runs: 0 }, new Promise(done => { open = done; })), limits: { queue: 1, perDay: 3 } });
     const [agg, pink, masha] = await Promise.all([['63920635', 'The_AGGman'], ['4363967', 'PinkKittyRose'], ['154972160', 'MashaD4']].map(async ([id, name]) => {
       const recipe = recipeOf(id!, name!); return { id: id!, recipe, hash: await grandSketchRecipeHash(recipe) };
     }));
@@ -119,7 +147,7 @@ describe('channel sketches', () => {
   it('answer over HTTP with the status a visitor can act on', async () => {
     const recipe = aggman(), hash = await grandSketchRecipeHash(recipe), path = `/api/realm/land/63920635/${hash}`;
     expect((await postLandRoute(null, path, body(recipe)))?.status).toBe(503);
-    const service = createSketchService({ store, founded: unfounded, bake: fakeBake({ runs: 0 }) });
+    const service = createSketchService({ store, founded: unfounded, trusted, bake: fakeBake({ runs: 0 }) });
     const first = await postLandRoute(service, path, body(recipe));
     expect(first?.status).toBe(202);
     expect(first?.headers['cache-control']).toBe('no-store');
@@ -131,7 +159,7 @@ describe('channel sketches', () => {
     // The channel has its world now: another recipe is answered with that, before its body is even read.
     expect((await postLandRoute(service, `/api/realm/land/63920635/${'0'.repeat(64)}`, Buffer.from('{}')))?.status).toBe(409);
     expect((await postLandRoute(service, `/api/realm/land/4363967/${'0'.repeat(64)}`, Buffer.from('{}')))?.status).toBe(400);
-    const idle = createSketchService({ store, founded: unfounded, bake: null });
+    const idle = createSketchService({ store, founded: unfounded, trusted, bake: null });
     expect((await postLandRoute(idle, `/api/realm/land/4363967/${'0'.repeat(64)}`, Buffer.from('{}')))?.status).toBe(400);
   });
 });

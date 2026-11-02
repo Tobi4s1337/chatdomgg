@@ -124,6 +124,33 @@ describe('the realm land service', () => {
     expect(await store.landRecipe('4363967')).toBeNull();
   });
 
+  it('gives a kingdom nobody looked up first the world its Atlas facts give, read by the realm itself', async () => {
+    const world = genesisSketchRecipe('4363967', 'PinkKittyRose'), asked: string[] = [], recipes: GrandLandRecipe[] = [];
+    let away = true;
+    const trusted = async (id: string) => { asked.push(id); return away ? undefined : id === '4363967' ? world : null; };
+    const bake = async (job: LandBakeJob) => { recipes.push(job.recipe); throw new Error('stopped after choosing its recipe'); };
+    const land = createRealmLand({ directory, recipeFor: () => undefined, bake, trusted, log: () => {} });
+    const founding = await scene(0, { kingdomId: '4363967' });
+    // The Atlas away: today's land, nothing pinned, and the next publication asks again.
+    await land.beforePublication(founding.bytes, founding.manifest);
+    await land.idle();
+    expect(recipes).toHaveLength(0);
+    expect(await store.world('4363967')).toBeNull();
+    away = false;
+    await land.beforePublication(founding.bytes, founding.manifest);
+    await land.idle();
+    expect((await store.world('4363967'))?.recipe).toEqual(world);
+    expect(recipes[0]?.generator).toBe('grand-land-2');
+    expect({ ...recipes[0]!.seed, minSize: undefined }).toEqual({ ...world.seed, minSize: undefined });
+    // A channel the Atlas does not list keeps today's land.
+    const stranger = await scene(0, { kingdomId: '777' });
+    await land.beforePublication(stranger.bytes, stranger.manifest);
+    await land.idle();
+    expect(await store.world('777')).toBeNull();
+    expect(asked).toEqual(['4363967', '4363967', '777']);
+    await land.stop();
+  });
+
   it('pins the adopted Willowmere recipe the lane baked (grader 3)', async () => {
     const willowmere = adoptedGrandRecipe('129634568');
     expect(willowmere && await grandLandRecipeHash(willowmere)).toBe('71f6888b7ad0b405f949e19203e221520d7a2ee11c2ed2675a7c2ae4eac9d1cd');

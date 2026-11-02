@@ -248,7 +248,7 @@ export class GrandEngine {
   }
 
   /** A raised land arrives from the first worker (`engine-raise.ts`); this core never imports the generator. */
-  protected adoptRaised(_land: GrandLand): void { throw new Error('This engine draws baked land only'); }
+  protected adoptRaised(land: GrandLand): void { void land; throw new Error('This engine draws baked land only'); }
 
   protected receive(worker: Worker | null, reply: GrandWorkerReply): void {
     if (this.disposed) return;
@@ -726,10 +726,13 @@ export class GrandEngine {
     const across = Math.tan(THREE.MathUtils.degToRad(19)) * 1.6 / (Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * aspect);
     const fit = Math.min(2.6, Math.max(1, Math.pow(across, 0.75)));
     const ceiling = this.cloudHeight - 30;
-    const place = (tx: number, ty: number, tz: number, bearing: number, reach: number, steep: number) => {
+    const place = (tx: number, ty: number, tz: number, bearing: number, reach: number, steep: number, above = false) => {
       const distance = reach * fit;
-      // Views composed above the deck (high) keep their 16:10 height; only the portrait pull-back is capped.
-      const limit = Math.max(ceiling, ty + Math.sin(steep) * reach);
+      // The high view is composed above the deck and keeps its 16:10 height; only its portrait pull-back is capped.
+      // Every other view stays under the deck: a capital's land is wide enough that its 16:10 orbit would rise into
+      // the clouds and look down through them.
+      const composed = ty + Math.sin(steep) * reach;
+      const limit = Math.max(ceiling, above ? composed : Math.min(composed, this.cloudHeight - 12));
       const pitch = ty + Math.sin(steep) * distance > limit ? Math.asin(Math.max(0.05, (limit - ty) / distance)) : steep;
       this.controls.target.set(tx, ty, tz);
       this.camera.position.set(tx + Math.cos(bearing) * Math.cos(pitch) * distance, ty + Math.sin(pitch) * distance, tz + Math.sin(bearing) * Math.cos(pitch) * distance);
@@ -740,7 +743,7 @@ export class GrandEngine {
     const toward = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.atan2(b.z - a.z, b.x - a.x);
     switch (view) {
       case 'orbit': place(c, 30, c, front, land.size * M * 0.95, deg(15)); break;
-      case 'high': place(c, 20, c, front + 0.35, land.size * M * 1.02, deg(44)); break;
+      case 'high': place(c, 20, c, front + 0.35, land.size * M * 1.02, deg(44), true); break;
       case 'castle': place(s.castle.x * M, s.castle.top * M, s.castle.z * M, toward(s.castle, s.town) + 0.3, 230, deg(20)); break;
       case 'harbour': place(s.harbour.x * M, land.seaLevel * M + 4, s.harbour.z * M, s.harbour.facing + 0.35, 260, deg(17)); break;
       case 'summit': place(s.summit.x * M, s.summit.y * M * 0.8, s.summit.z * M, toward(s.summit, s.castle) + 0.4, 360, deg(18)); break;

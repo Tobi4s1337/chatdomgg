@@ -100,6 +100,14 @@ kingdom will stand on (GW13). The browser makes the expected recipe from the cha
 (`grandSeedForHolding` → `grandSketchRecipe`, `packages/world/src/grand/sketch.ts`: generator `grand-land-2`, every
 region at every level, no installed town) and asks for exactly that recipe hash. It never generates land.
 
+The realm never takes a channel's world from a request. Before it pins one it reads the channel's facts from the
+Atlas itself (`atlas-world.ts`, `REALM_ATLAS_BASE`, the same `readDoorHolding` → `grandSeedForHolding` path, answers
+kept ten minutes) and makes the recipe: a proposal that matches is raised; one that does not (forged traits or name,
+or a survey that drifted between the page's read and the realm's) is answered `409 pinned` with the realm's own
+world, which the realm pins and raises, and the page then draws that one. A channel the Atlas does not list publicly
+gets no world (`400 invalid`); when the Atlas cannot be read, or `REALM_ATLAS_BASE` is unset, nothing new is pinned
+(`503 resting`).
+
 - `GET /api/realm/land/<channel>/<recipeHash>` serves the sketch record (`application/json`, immutable, at most
   512 KiB) and `GET …/<recipeHash>/<blobHash>` a blob named by that record. A channel with a bound founded land
   serves only that land; a sketch never stands in for it.
@@ -116,8 +124,12 @@ region at every level, no installed town) and asks for exactly that recipe hash.
 - **Founding on the world.** When a kingdom that is not adopted (`adopted.ts`) publishes its first live founded scene
   and its channel has a world, `realm.ts` makes the land recipe from that world's seed and the founding plan's
   frame (`createGrandLandRecipe`), pins it (`recipes/<channel>.json`, written once) and queues the bake. Every later
-  receipt, after a restart too, reads that pinned recipe; it is never recomputed from today's homes. A kingdom
-  whose channel has no world keeps today's land, exactly as before.
+  receipt, after a restart too, reads that pinned recipe; it is never recomputed from today's homes. A kingdom whose
+  channel nobody looked up first gets the world its Atlas facts give at that publication (read by the realm; an Atlas
+  that cannot be read is asked again at the next one). Only a channel the Atlas does not list keeps today's land.
+- `GET /api/realm/land/<kingdom>/recipe` serves that pinned `grand-land-2` land recipe (`no-cache`, ETag, 404 while
+  none), so the kingdom page, walk and stream of a kingdom outside the build's adopted registry know which land to
+  draw; the land itself stays bound to each receipt by this recipe's hash.
 - `sketches.ts` (`createSketchService`) raises one land at a time in the same serial chain as founded bakes, in a
   niced child (`dist/land-bake.mjs --sketch-recipe FILE`, priority 19, two threads, 1.5 GB heap). Limits: eight
   waiting and 240 raised a day; one world per channel. A world is pinned only for a channel the realm's layout heads

@@ -1014,3 +1014,17 @@ replaying an old receipt shows today's land unless that exact receipt was publis
 - **needs: front-door, atlas-map, launch** — an unfounded channel's door, card or search result can link to
   `/-/grand?channel=<login>` (or `?kingdom=<broadcaster id>`): it opens that channel's own land, raised on first visit
   (tens of seconds, with the realm's own progress on screen), immutable after. A founded kingdom keeps its own link.
+- **deploy: the realm reads the Atlas itself (GW13, 2026-11-02 evening)** — set `REALM_ATLAS_BASE` for the realm to
+  the Atlas data service's public read root, on chatdom.io `REALM_ATLAS_BASE=http://127.0.0.1:5193/map-data` (the
+  same service the web proxy sends `/map-data` to; only its public `GET /map-data/v1/preview…` reads are used).
+  The realm now makes a channel's world from the channel's own survey facts (`apps/realm/src/land/atlas-world.ts`,
+  the same `readDoorHolding` → `grandSeedForHolding` path the page uses) and never from a request body: a proposal
+  that differs is answered `409 pinned` with the realm's own world, which it pins and raises. Without the setting
+  the realm pins no new world (`503 resting`; the log says so at start), and already pinned worlds are still served.
+  With it, a kingdom that founds (or publishes again) without a world gets the one its Atlas facts give at that
+  publication, so every founded kingdom outside the adopted registry comes to stand on its own land.
+- **deploy: a founded kingdom's land recipe** — `GET /api/realm/land/<kingdom>/recipe` serves the `grand-land-2`
+  recipe the realm pinned at founding (`no-cache`, ETag; 404 while none). The kingdom page, walk and stream read it
+  when the build has no adopted recipe for that kingdom (`readServedLandRecipe`, `kingdom/grand-land/recipes.ts`,
+  4 s, any failure keeps today's land) and then probe the receipt's binding as before. Gateway: one additive line in
+  `apps/api/src/public/routes.ts` carries `/api/realm/land/<id>/recipe` as a realm read; front-door, please keep it.

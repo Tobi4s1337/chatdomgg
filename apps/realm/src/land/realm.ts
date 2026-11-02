@@ -12,7 +12,8 @@ import { createGrandLandRecipe, grandLandRecipeHash, type GrandLandRecipe } from
 import { LandNeedsBakeError, publishFoundedLand, type LandPublicationResult } from './publication';
 import { LandArtifactStore } from './store';
 import { mountLandRoutes } from './mount';
-import { childSketchBake, createSketchService, type FoundedCheck, type SketchBakeRunner, type SketchLimits, type SketchService } from './sketches';
+import { childSketchBake, createSketchService, type FoundedCheck, type SketchBakeRunner, type SketchLimits, type SketchService, type TrustedWorld } from './sketches';
+import { atlasTrustedWorld } from './atlas-world';
 
 /** One bake of one exact founded scene, written into `directory` (the realm's land store). */
 export interface LandBakeJob {
@@ -47,6 +48,8 @@ export interface RealmLandOptions {
   readonly sketchLimits?: Partial<SketchLimits>;
   /** Whether a kingdom is founded (the realm's layout heads). Until one is known, no new sketch is raised. */
   readonly founded?: FoundedCheck;
+  /** The world a channel's own Atlas facts give, read by the realm. Absent: no new world is pinned. */
+  readonly trusted?: TrustedWorld | null;
 }
 
 export interface RealmLand {
@@ -96,14 +99,25 @@ export function createRealmLand(options: RealmLandOptions): RealmLand {
   };
   let foundedCheck = options.founded ?? null;
   const sketches = createSketchService({ store, bake: options.sketch ?? null, serial, log, founded: id => foundedCheck ? foundedCheck(id) : Promise.resolve(null),
+    ...(options.trusted ? { trusted: options.trusted } : {}),
     ...(options.sketchLimits ? { limits: options.sketchLimits } : {}) });
-  // A kingdom that is not adopted here has a land only when its channel's world was pinned before it founded.
+  // Every kingdom that is not adopted here stands on its channel's own world: the one visitors were shown before it
+  // founded, or, when nobody looked it up first, the one its Atlas facts give at its first live publication after this.
   const own = new Map<string, GrandLandRecipe>();
   async function ownRecipe(bytes: Uint8Array, receipt: RealmFoundedManifest): Promise<GrandLandRecipe | undefined> {
     const kingdomId = receipt.kingdomId, known = own.get(kingdomId);
     if (known) return known;
-    // Only a channel whose world was pinned has a land of its own; every other kingdom keeps today's land as before.
-    const world = await store.world(kingdomId);
+    let world = await store.world(kingdomId);
+    if (!world && options.trusted) {
+      // Read by the realm itself; an Atlas that cannot be read now is asked again at the next publication.
+      const trusted = await options.trusted(kingdomId).catch(() => undefined);
+      if (trusted && trusted.seed.kingdomId === kingdomId) {
+        await store.pinWorld(trusted, abort.signal);
+        world = await store.world(kingdomId);
+        if (world) log(`land: ${kingdomId} has its world from its Atlas facts: ${world.recipe.seed.world.landform}, ${world.recipe.seed.world.forest.join(' and ')} (${short(world.hash)})`);
+      }
+    }
+    // A channel without a world (not on the Atlas, or the Atlas away) keeps today's land for now.
     if (!world) return undefined;
     let recipe = await store.landRecipe(kingdomId);
     if (!recipe) {
@@ -242,9 +256,11 @@ export function realmLandBakeScript(env: NodeJS.ProcessEnv = process.env, entry 
 
 /** The realm host's composition: the store directory from `REALM_LAND_DIRECTORY`, the adopted recipes, and
  * the child bake when its bundle is present. */
-export function openRealmLand(directory: string, log: (line: string) => void): RealmLand {
-  const script = realmLandBakeScript();
+export function openRealmLand(directory: string, log: (line: string) => void, env: NodeJS.ProcessEnv = process.env): RealmLand {
+  const script = realmLandBakeScript(env), atlas = env.REALM_ATLAS_BASE?.trim();
+  if (!atlas) log('land: REALM_ATLAS_BASE is not set, so no channel is given a new world (pinned worlds are still served)');
   log(script ? `land: serving and baking ${resolve(directory)} (bake command ${script}; channel sketches raised on request)`
     : `land: serving ${resolve(directory)}; no land-bake.mjs beside the realm, so a new plan waits for the offline bake command and only stored sketches are served`);
-  return createRealmLand({ directory, bake: script ? childLandBake(script, log) : null, sketch: script ? childSketchBake(script) : null, log });
+  return createRealmLand({ directory, bake: script ? childLandBake(script, log) : null, sketch: script ? childSketchBake(script) : null, log,
+    trusted: atlas ? atlasTrustedWorld({ base: atlas }) : null });
 }

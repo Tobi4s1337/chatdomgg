@@ -17,6 +17,8 @@ export async function readLandRoute(store: LandArtifactStore, pathname: string, 
   if (method !== 'GET' && method !== 'HEAD') return { ...failure(405), headers: { ...failure(405).headers, allow: 'GET, HEAD, POST' } };
   const world = /^\/api\/realm\/land\/([1-9][0-9]{0,31})\/world$/.exec(pathname);
   if (world) return readWorld(store, world[1]!, method, ifNoneMatch);
+  const recipe = /^\/api\/realm\/land\/([1-9][0-9]{0,31})\/recipe$/.exec(pathname);
+  if (recipe) return readRecipe(store, recipe[1]!, method, ifNoneMatch);
   const match = /^\/api\/realm\/land\/([1-9][0-9]{0,31})\/([a-f0-9]{64})(?:\/([a-f0-9]{64}))?$/.exec(pathname);
   if (!match) return failure(404);
   try {
@@ -72,6 +74,24 @@ async function readWorld(store: LandArtifactStore, kingdomId: string, method: st
       'x-content-type-options': 'nosniff', 'content-length': String(pinned.bytes.byteLength) };
     if (ifNoneMatch === headers.etag) return { status: 304, headers, body: empty };
     return { status: 200, headers, body: method === 'HEAD' ? empty : pinned.bytes };
+  } catch { return failure(503); }
+}
+
+/**
+ * `GET /api/realm/land/<kingdom>/recipe`: the land recipe a kingdom founded on its own world was pinned to (GW13), so
+ * its page, walk and stream know which land to draw without a build that names it. The land itself is bound to the
+ * receipt by this recipe's hash; the browser checks both. 404 while none is pinned. Revalidated on every use, because
+ * a kingdom founded a minute ago has one where it had none.
+ */
+async function readRecipe(store: LandArtifactStore, kingdomId: string, method: string, ifNoneMatch?: string): Promise<LandResponse> {
+  try {
+    const recipe = await store.landRecipe(kingdomId);
+    if (!recipe || recipe.generator !== 'grand-land-2') return failure(404);
+    const bytes = Buffer.from(canonicalSceneJson(recipe)), digest = createHash('sha256').update(bytes).digest('hex');
+    const headers = { 'cache-control': 'no-cache', 'content-type': 'application/json', etag: `"${digest}"`,
+      'x-content-type-options': 'nosniff', 'content-length': String(bytes.byteLength) };
+    if (ifNoneMatch === headers.etag) return { status: 304, headers, body: empty };
+    return { status: 200, headers, body: method === 'HEAD' ? empty : bytes };
   } catch { return failure(503); }
 }
 

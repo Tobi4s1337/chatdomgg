@@ -42,6 +42,12 @@ export const SKETCH_LIMITS: SketchLimits = Object.freeze({ queue: 8, perDay: 240
 /** Whether a kingdom is founded: true, false, or null when the realm cannot tell just now. */
 export type FoundedCheck = (kingdomId: string) => Promise<boolean | null>;
 
+/**
+ * The world a channel's own survey facts give, as the realm itself reads them (`atlas-world.ts`): the recipe, null
+ * when the Atlas has no public holding for the channel, or undefined when the Atlas cannot be read just now.
+ */
+export type TrustedWorld = (kingdomId: string) => Promise<GrandSketchRecipe | null | undefined>;
+
 export interface SketchService {
   /** Ask for a channel's world by its recipe: ready, being raised (with real progress) or refused, never generated here. */
   request(kingdomId: string, recipeHash: string, body: Uint8Array): Promise<SketchStatus>;
@@ -57,15 +63,19 @@ const short = (hash: string) => hash.slice(0, 8);
  * bakes through `serial`), stores it by content and serves it forever. Nothing a request carries can move another
  * channel's land: the record lives under the recipe's own hash and names the channel it was made for.
  *
- * The first recipe accepted for a channel becomes its world (`store.pinWorld`): a later survey whose facts drifted
- * is answered with `pinned` and the world's hash, so every visitor sees the same land, and a founding raises the
- * kingdom on it (`realm.ts`). Only an unfounded channel gets a sketch; when the realm cannot tell, it refuses.
+ * A channel's world is never the caller's choice. Before it pins one, the realm reads the channel's facts from the
+ * Atlas itself (`trusted`) and makes the recipe from them: a proposal that matches is raised, one that does not
+ * (forged traits or name, or a survey that drifted) is answered `pinned` with the realm's own world, which it pins
+ * and raises instead. The pinned world (`store.pinWorld`) is the one every visitor sees and the one a founding raises
+ * the kingdom on (`realm.ts`). Only an unfounded channel gets a sketch; when the realm cannot tell, it refuses.
  */
 export function createSketchService(options: {
   readonly store: LandArtifactStore;
   readonly bake: SketchBakeRunner | null;
   /** Absent: the realm cannot tell who is founded, so it raises nothing new. */
   readonly founded?: FoundedCheck;
+  /** Absent: the realm cannot read the channel's facts itself, so it pins no new world. */
+  readonly trusted?: TrustedWorld;
   readonly serial?: <T>(work: () => Promise<T>) => Promise<T>;
   readonly limits?: Partial<SketchLimits>;
   readonly log?: (line: string) => void;
@@ -97,6 +107,36 @@ export function createSketchService(options: {
   }
   const kick = () => { if (!worker && !stopped) worker = drain().finally(() => { worker = null; if (queue.length && !stopped) kick(); }); };
   const raising = (job: Job, ahead: number): SketchStatus => ({ state: 'raising', ahead, ...job.progress });
+  const known = (kingdomId: string, hash: string) =>
+    (current?.hash === hash && current.kingdomId === kingdomId) || queue.some(job => job.hash === hash && job.kingdomId === kingdomId);
+  function enqueue(kingdomId: string, hash: string, recipe: GrandSketchRecipe): Job {
+    started.push(now());
+    const job: Job = { kingdomId, hash, recipe, progress: { stage: 'raising', done: 0, total: 0 } };
+    queue.push(job);
+    log(`land: queued the sketch of ${kingdomId} (${recipe.seed.world.landform}, ${short(hash)}), ${queue.length + (current ? 1 : 0) - 1} ahead`);
+    kick();
+    return job;
+  }
+  // One read of the Atlas at a time, and one per channel in flight: a burst of lookups never fans out into reads.
+  let reading: Promise<unknown> = Promise.resolve();
+  const inflight = new Map<string, Promise<{ recipe: GrandSketchRecipe; hash: string } | null | undefined>>();
+  function trustedOnce(kingdomId: string) {
+    let pending = inflight.get(kingdomId);
+    if (!pending) {
+      const read = async () => {
+        if (!options.trusted) return undefined;
+        const recipe = await options.trusted(kingdomId).catch(() => undefined);
+        if (!recipe) return recipe;
+        if (recipe.seed.kingdomId !== kingdomId) return undefined;
+        return { recipe, hash: await grandSketchRecipeHash(recipe) };
+      };
+      pending = reading.then(read, read);
+      reading = pending.catch(() => undefined);
+      inflight.set(kingdomId, pending);
+      void pending.finally(() => inflight.delete(kingdomId)).catch(() => undefined);
+    }
+    return pending;
+  }
 
   return {
     async request(kingdomId, recipeHash, body) {
@@ -118,26 +158,37 @@ export function createSketchService(options: {
       if (failed.has(recipeHash)) return { state: 'refused', reason: 'failed' };
       const day = now() - 86_400_000;
       while (started.length && started[0]! < day) started.shift();
+      let hash = recipeHash, have = stored;
       if (!world) {
-        // A world is pinned only for a channel that has not founded, and only for work the realm will really do.
+        // A world is pinned only for a channel that has not founded, only for work the realm will really do, and only
+        // as the realm itself reads the channel's facts.
         const founded = options.founded ? await options.founded(kingdomId).catch(() => null) : null;
         if (founded === null) return { state: 'refused', reason: 'resting' };
         if (founded) return { state: 'refused', reason: 'founded' };
         if (!stored && !options.bake) return { state: 'refused', reason: 'resting' };
         if (!stored && (queue.length >= limits.queue || started.length >= limits.perDay)) return { state: 'refused', reason: 'busy' };
+        const own = await trustedOnce(kingdomId);
+        if (own === undefined) return { state: 'refused', reason: 'resting' };
+        if (own === null) return { state: 'refused', reason: 'invalid' };
+        if (own.hash !== recipeHash) {
+          recipe = own.recipe; hash = own.hash; have = !!await options.store.sketchBytes(kingdomId, hash);
+          if (failed.has(hash)) return { state: 'refused', reason: 'failed' };
+          if (!have && !options.bake) return { state: 'refused', reason: 'resting' };
+          if (!have && !known(kingdomId, hash) && (queue.length >= limits.queue || started.length >= limits.perDay)) return { state: 'refused', reason: 'busy' };
+        }
         const pinned = await options.store.pinWorld(recipe);
-        if (pinned !== recipeHash) return { state: 'refused', reason: 'pinned', pinnedHash: pinned };
-        log(`land: ${kingdomId} has its world: ${recipe.seed.world.landform}, ${recipe.seed.world.forest.join(' and ')} (${short(recipeHash)})`);
-        if (stored) return { state: 'ready' };
+        if (pinned !== hash) return { state: 'refused', reason: 'pinned', pinnedHash: pinned };
+        log(`land: ${kingdomId} has its world: ${recipe.seed.world.landform}, ${recipe.seed.world.forest.join(' and ')} (${short(hash)})`);
+        if (hash !== recipeHash) {
+          // The caller's proposal is not the channel's world: the realm's own is pinned and raised, and named back.
+          if (!have && !known(kingdomId, hash)) enqueue(kingdomId, hash, recipe);
+          return { state: 'refused', reason: 'pinned', pinnedHash: hash };
+        }
+        if (have) return { state: 'ready' };
       }
       if (!options.bake) return { state: 'refused', reason: 'resting' };
       if (queue.length >= limits.queue || started.length >= limits.perDay) return { state: 'refused', reason: 'busy' };
-      started.push(now());
-      const job: Job = { kingdomId, hash: recipeHash, recipe, progress: { stage: 'raising', done: 0, total: 0 } };
-      queue.push(job);
-      log(`land: queued the sketch of ${kingdomId} (${recipe.seed.world.landform}, ${short(recipeHash)}), ${queue.length + (current ? 1 : 0) - 1} ahead`);
-      kick();
-      return raising(job, queue.length - 1 + (current ? 1 : 0));
+      return raising(enqueue(kingdomId, hash, recipe), queue.length - 1 + (current ? 1 : 0));
     },
     async idle() { while (worker) await worker; },
     async stop() { stopped = true; queue.length = 0; abort.abort(new Error('The realm is stopping')); await worker?.catch(() => undefined); },
