@@ -32,7 +32,7 @@ function pass(image: boolean, subject: ForgeWishSubject = { motif: 'sleeping-dra
 }
 
 /** Controlled SIMULATED repository; the production bridge, coordinator, gates and registry run unchanged. */
-async function fixture(royal = false, { writerHold, ...options }: { forgeChatObserver?: ForgeChatObserver; evidenceWaitMs?: number; writerHold?: () => string | null } = {}) {
+async function fixture(royal = false, { writerHold, ...options }: { forgeChatObserver?: ForgeChatObserver; evidenceWaitMs?: number; writerHold?: () => string | null; forgeLog?: (event: unknown) => void } = {}) {
   const now = Date.now(), blueprint = createHearthHome('house', 0), gate = new ForgeWriteGate();
   const ownerId = royal ? PersonIdSchema.parse(kingdomId) : personId;
   const guards = gate.install({ origin: 'simulated' as const }).guards;
@@ -192,6 +192,39 @@ it('lets a wish wait while a busy writer has not yet committed its chat witness,
     expect(never.providers.judgeWords).not.toHaveBeenCalled();
     expect(never.state().coals[personId]).toBe(1);
   } finally { now.mockRestore(); }
+});
+
+it('reads the chat witness again after a failed database read, and names an unreachable kingdom when no read succeeds', async () => {
+  const flaky = await fixture(), loadIngress = flaky.kingdom.loadIngress.bind(flaky.kingdom);
+  let reads = 0;
+  vi.spyOn(flaky.kingdom, 'loadIngress').mockImplementation(async () => {
+    if (++reads <= 2) throw new Error('SIMULATED database unavailable');
+    return loadIngress();
+  });
+  expect(await flaky.bridge.run(flaky.command)).toMatchObject({ kind: 'committed' });
+  expect(reads).toBeGreaterThan(2);
+  expect(flaky.state().coals[personId]).toBe(0);
+
+  const log = vi.fn();
+  const down = await fixture(false, { evidenceWaitMs: 300, forgeLog: log });
+  vi.spyOn(down.kingdom, 'loadIngress').mockRejectedValue(new Error('SIMULATED database unavailable'));
+  expect(await down.bridge.run(down.command)).toMatchObject({ kind: 'cold', privateMessage: expect.stringContaining('could not reach the kingdom') });
+  expect(down.privateReply).toHaveBeenCalledExactlyOnceWith(personId, expect.objectContaining({ receipt: expect.objectContaining({ status: 'unavailable',
+    message: expect.stringContaining('Nothing was spent') }) }));
+  expect(log).toHaveBeenCalledWith({ kind: 'forge-fault', kingdomId, step: 'intake', cause: 'dependency' });
+  expect(JSON.stringify(log.mock.calls)).not.toContain(personId);
+  expect(down.providers.judgeWords).not.toHaveBeenCalled();
+  expect(down.state().coals[personId]).toBe(1);
+});
+
+it('never answers a wish with a bare cold: a failure before the run names its cause privately', async () => {
+  const observed: unknown[] = [];
+  const f = await fixture(false, { forgeChatObserver: async observation => { observed.push(observation); } });
+  vi.spyOn(f.kingdom, 'databaseNow').mockImplementation(() => { throw new Error('SIMULATED clock unavailable'); });
+  expect(await f.bridge.run(f.command)).toMatchObject({ kind: 'cold', privateMessage: expect.stringContaining('could not reach the kingdom') });
+  expect(observed.at(-1)).toMatchObject({ status: 'cold', message: expect.stringContaining('Nothing was spent') });
+  expect(JSON.stringify(observed)).not.toContain('cold tonight');
+  expect(f.state().coals[personId]).toBe(1);
 });
 
 it('explains a fresh offline wish privately without a model call or coal spent', async () => {

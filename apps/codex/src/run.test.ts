@@ -27,8 +27,11 @@ const read = (subject: ForgeSubjectReading, outcome: JudgeVerdict['outcome'] = '
 const words = read(dragon);
 const sockets = [{ kind: 'chimney' as const }, { kind: 'weathervane' as const }, { kind: 'lantern' as const }];
 /** What the host stores for a result read: the raw safety verdict plus the deterministic measure and score. */
-const scored = (verdict: JudgeVerdict, piece: ForgeDraft, wordSubject: ForgeSubjectReading = dragon, family: 'hearth' | 'grove' = 'hearth') =>
-  withForgeQuality(verdict, forgeResultMeasure({ words: wordSubject, result: verdict.subject, draft: piece, styleKit: forgeStyleKit(family), sockets }));
+const scored = (verdict: JudgeVerdict, piece: ForgeDraft, wordSubject: ForgeSubjectReading = dragon, family: 'hearth' | 'grove' = 'hearth', revision?: number) =>
+  withForgeQuality(verdict, forgeResultMeasure({ words: wordSubject, result: verdict.subject, draft: piece, styleKit: forgeStyleKit(family, revision), sockets }));
+/** Kit revision one, whose blind certificate leaves the copper owl and the grove sleeping fox unread (CERTIFICATION.md).
+ * Revision two reads both, so the unread-certificate paths are exercised on the revision where they occur. */
+const revisionOne = (family: 'hearth' | 'grove' = 'hearth') => ({ safetyIdentifier: 'trusted-citizen-opaque-hash-0001', styleKit: forgeStyleKit(family, 1) });
 const stages = (events: ForgeRunEvent[]) => events.map(e => e.type === 'stage' ? e.stage : e.type);
 function setup(wordVerdict: JudgeVerdict = words) {
   const events: ForgeRunEvent[] = [], records: ForgeRunRecord[] = [];
@@ -120,7 +123,7 @@ describe('Forge run: quietly retried', () => {
     const copperOwl = { ...owlDraft, plan: plan('watchful-owl', 'copper') };
     const s = setup(read(owl)); vi.mocked(s.providers.judgeResult).mockResolvedValue(read(owl));
     vi.mocked(s.providers.draft).mockResolvedValueOnce(copperOwl).mockResolvedValueOnce(owlDraft);
-    const selection = await runForge(request, s.providers, s.emit, s.record);
+    const selection = await runForge(request, s.providers, s.emit, s.record, undefined, revisionOne());
     expect(selection).toEqual({ verdict: 2, attempt: 2, delivery: 'retried', shared: 'subject' });
     const retryInput = vi.mocked(s.providers.draft).mock.calls[1]![0];
     expect(retryInput.readableFinishes?.['watchful-owl']).toEqual(['native']);
@@ -153,12 +156,12 @@ describe('Forge run: softened', () => {
     const foxDraft: ForgeDraft = { plan: plan('sleeping-fox'), title: 'The curled sleeper', plaque: 'A fox dreams beside the chimney.' };
     const s = setup(read(fox)); vi.mocked(s.providers.draft).mockResolvedValue(foxDraft);
     vi.mocked(s.providers.judgeResult).mockResolvedValue(read(fox));
-    const selection = await runForge({ ...request, family: 'grove', home: grove }, s.providers, s.emit, s.record);
+    const selection = await runForge({ ...request, family: 'grove', home: grove }, s.providers, s.emit, s.record, undefined, revisionOne('grove'));
     // No grove fox finish reads in the blind certificate, so another draft cannot do better.
     expect(s.providers.draft).toHaveBeenCalledTimes(1);
     expect(s.providers.judgeResult).toHaveBeenCalledTimes(1);
     expect(selection).toEqual({ verdict: 1, attempt: 1, delivery: 'softened', reason: 'quality', shared: 'subject' });
-    expect(s.records[0]).toMatchObject({ outcome: 'approved', verdicts: [read(fox), scored(read(fox), foxDraft, fox, 'grove')] });
+    expect(s.records[0]).toMatchObject({ outcome: 'approved', verdicts: [read(fox), scored(read(fox), foxDraft, fox, 'grove', 1)] });
     expect(s.records[0]!.verdicts[1]).toMatchObject({ detailMatch: 'adapted', measure: { certificate: 'unread' } });
     expect(s.events.some(e => e.type === 'stopped')).toBe(false);
   });
@@ -172,7 +175,7 @@ describe('Forge run: softened', () => {
     vi.mocked(s.providers.draft).mockResolvedValueOnce(attempt === 2 ? copperOwl : owlDraft).mockResolvedValueOnce(attempt === 2 ? owlDraft : copperOwl);
     vi.mocked(s.providers.judgeResult).mockResolvedValueOnce(attempt === 2 ? read(owl) : read({ motif: 'none', slot: 'chimney' })).mockResolvedValueOnce(retryRead);
     charged(s);
-    const selection = await runForge(request, s.providers, s.emit, s.record);
+    const selection = await runForge(request, s.providers, s.emit, s.record, undefined, revisionOne());
     expect(s.providers.judgeResult).toHaveBeenCalledTimes(2);
     expect(selection).toMatchObject({ verdict: attempt, attempt, delivery: 'softened', reason: 'quality' });
     expect(s.records[0]).toMatchObject({ outcome: 'approved', modelCalls: 5 });

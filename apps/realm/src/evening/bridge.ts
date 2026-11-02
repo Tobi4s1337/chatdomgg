@@ -16,6 +16,13 @@ const RUN_LEASE_MS = 600_000;
  */
 const EVIDENCE_WAIT_MS = 30_000;
 const UNHEARD = 'The forge could not hear your wish in chat just now. Nothing was spent; your coal stays yours. Please say it again.';
+/** The kingdom's records could not be read or written before the wish began. */
+const UNREACHABLE = 'The forge could not reach the kingdom\'s records just now, so your wish did not begin. Nothing was spent; your coal stays yours. Please send it again in a moment.';
+const LATE = 'The forge heard your wish too late to begin it. Nothing was spent; your coal stays yours. Please say it again.';
+/** The witness is re-read at this pace: often enough to start promptly, rarely enough not to crowd a busy database. */
+const EVIDENCE_POLL_MS = 250;
+/** Herald and the database keep separate clocks; a chat observation this far ahead of the database still counts. */
+const CLOCK_SKEW_MS = 2_000;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
 export interface RealmEveningOptions {
@@ -133,16 +140,27 @@ export class RealmEveningBridge {
       try {
         if (!this.contexts.has(command.kingdomId)) this.attach(kingdom);
         const context = this.contexts.get(command.kingdomId);
-        if (!context || context.kingdom !== kingdom) return { kind: 'cold' };
+        if (!context || context.kingdom !== kingdom) {
+          this.fault(command.kingdomId, 'dependency');
+          const unreachable: KingdomForgeResult = { kind: 'cold', privateMessage: UNREACHABLE };
+          return unreachable;
+        }
         const started = kingdom.databaseNow();
-        if (command.observedAt > started || started - command.observedAt >= PRESENCE_LEASE_MS) return { kind: 'cold' };
+        if (command.observedAt > started + CLOCK_SKEW_MS || started - command.observedAt >= PRESENCE_LEASE_MS) {
+          this.fault(command.kingdomId, 'time-budget');
+          const late: KingdomForgeResult = { kind: 'cold', privateMessage: LATE };
+          this.privateOutcome(kingdom, command, late);
+          return late;
+        }
         const baseCurrent = () => !this.stopped && !signal.aborted && kingdom.current && (incoming?.current() ?? true);
         if (!baseCurrent()) return { kind: 'canceled' };
         // Ingress acknowledges durable acceptance before the writer drains its inbox. Wait for actual
         // committed chat evidence, rather than racing a stream/home decision against queued Herald input.
-        if (!await this.witnessed(kingdom, command, baseCurrent)) {
+        const witness = await this.witnessed(kingdom, command, baseCurrent);
+        if (witness !== 'heard') {
           if (!baseCurrent()) return { kind: 'canceled' };
-          const unheard: KingdomForgeResult = { kind: 'cold', privateMessage: UNHEARD };
+          if (witness === 'unreachable') this.fault(command.kingdomId, 'dependency');
+          const unheard: KingdomForgeResult = { kind: 'cold', privateMessage: witness === 'unreachable' ? UNREACHABLE : UNHEARD };
           this.privateOutcome(kingdom, command, unheard);
           return unheard;
         }
@@ -166,7 +184,13 @@ export class RealmEveningBridge {
           return outcome;
         } finally { clearTimeout(timer); }
       } finally { await hold.release(); }
-    }).catch((): KingdomForgeOutcome => ({ kind: signal.aborted ? 'canceled' : 'cold' }))
+    }).catch((): KingdomForgeOutcome => {
+      if (signal.aborted) return { kind: 'canceled' };
+      // A failure before or around the run (opening the kingdom, its records): the maker hears the cause, never a bare cold.
+      this.fault(command.kingdomId, 'dependency');
+      const unreachable: KingdomForgeResult = { kind: 'cold', privateMessage: UNREACHABLE };
+      return unreachable;
+    })
       .then(async outcome => { await this.observeOutcome(command, outcome); return outcome; })
       .finally(() => { if (this.pending.get(key)?.abort === abort) this.pending.delete(key); });
     this.pending.set(key, { command, abort, promise });
@@ -326,19 +350,33 @@ export class RealmEveningBridge {
     else if (input.kind === 'remove') this.cancel(input.kingdomId, { personId: input.personId });
   }
 
-  private async witnessed(kingdom: DurableKingdom, command: KingdomForgeCommand, current: () => boolean): Promise<boolean> {
+  /**
+   * Waits for the wish's own chat message to be committed as presence. A read that fails (a busy or briefly unreachable
+   * database) is tried again until the wait ends; only a wait in which no read succeeded is reported as unreachable.
+   */
+  private async witnessed(kingdom: DurableKingdom, command: KingdomForgeCommand, current: () => boolean): Promise<'heard' | 'unheard' | 'unreachable'> {
     const until = performance.now() + (this.options.evidenceWaitMs ?? EVIDENCE_WAIT_MS);
-    while (current() && performance.now() < until) {
-      const checkpoint = await kingdom.loadIngress();
-      if (checkpoint) {
-        const { presence } = decodeIngressCheckpoint(checkpoint, command.kingdomId, kingdom.origin);
-        const person = presencePerson(presence, command.personId);
-        const observed = person?.leases.chat?.observedAt;
-        if (observed !== undefined && observed >= command.observedAt && observed + PRESENCE_LEASE_MS > kingdom.databaseNow()) return true;
-      }
-      await new Promise<void>(resolve => setTimeout(resolve, 25));
+    let read = false, first = true;
+    while (current() && (first || performance.now() < until)) {
+      first = false;
+      try {
+        const checkpoint = await kingdom.loadIngress();
+        read = true;
+        if (checkpoint) {
+          const { presence } = decodeIngressCheckpoint(checkpoint, command.kingdomId, kingdom.origin);
+          const person = presencePerson(presence, command.personId);
+          const observed = person?.leases.chat?.observedAt;
+          if (observed !== undefined && observed >= command.observedAt && observed + PRESENCE_LEASE_MS > kingdom.databaseNow()) return 'heard';
+        }
+      } catch { /* a transient read failure: read again until the wait ends */ }
+      await new Promise<void>(resolve => setTimeout(resolve, EVIDENCE_POLL_MS));
     }
-    return false;
+    return read ? 'unheard' : 'unreachable';
+  }
+
+  /** A word-free operational code for a wish that went cold before its run began. */
+  private fault(kingdomId: KingdomId, cause: KingdomForgeFault['cause']): void {
+    this.options.forgeLog?.({ kind: 'forge-fault', kingdomId, step: 'intake', cause });
   }
 
   /**

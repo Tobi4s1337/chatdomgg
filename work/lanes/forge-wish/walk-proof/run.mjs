@@ -3,9 +3,10 @@
 // SIMULATED: sign-in (the realm-auth SIMULATED provider) and Twitch chat (the Forge chat service's fetch). See README.md.
 //
 // REALM_DATABASE_SCHEMA=realm_forge_wish nice -n 10 node --env-file=/srv/chatdom/chatdomgg/.env \
-//   work/lanes/forge-wish/walk-proof/run.mjs [--controlled | --real] [fw10-01 fw10-08 fw10-15]
+//   work/lanes/forge-wish/walk-proof/run.mjs [--controlled | --real] [--gpu] [fw10-01 fw10-08 fw10-15]
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import { createServer as createPortProbe } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,12 +31,18 @@ const STATUS_TITLES = { 'Sending your wish': 'sending', 'Still checking': 'unkno
   'The Forge is resting': 'cold', 'Wish closed': 'canceled' };
 const FINAL = new Set(['delivered', 'held', 'refused', 'cold', 'canceled', 'not-sent']);
 const DEFAULT_WISHES = ['fw10-01', 'fw10-08', 'fw10-15'];
+// --gpu: the browser is an isolated context in Tobias's real-GPU Chrome (its DevTools port, forwarded by his tunnel), held
+// through chatdom-pc-lease instead of the capture lock. His tunnel forwards localhost:5190-5192 to this host, and the
+// lease frees 5191/5192, so the build is served on 5192 and the page opens http://localhost:5192. One lease per wish,
+// each well inside the lease's 10-minute limit. Each wish has its own hour: dusk, day, dusk.
+const GPU_CDP = 'http://127.0.0.1:9333', GPU_PORT = 5192, GPU_HOLD_MS = 9 * 60_000, GPU_HOURS = [19.5, 13, 19.5];
 
 const args = process.argv.slice(2);
-const unknown = args.filter(arg => arg.startsWith('--') && !['--controlled', '--real', '--landed-still'].includes(arg));
+const unknown = args.filter(arg => arg.startsWith('--') && !['--controlled', '--real', '--landed-still', '--gpu'].includes(arg));
 if (unknown.length || (args.includes('--controlled') && args.includes('--real'))) throw new Error('Use --controlled (default) or --real, then optional fw10 wish ids.');
 const mode = args.includes('--real') ? 'real' : 'controlled';
-const landedStills = args.includes('--landed-still');
+const gpu = args.includes('--gpu');
+const landedStills = args.includes('--landed-still') || gpu;
 const wishIds = args.filter(arg => !arg.startsWith('--'));
 if (!process.env.DATABASE_URL || process.env.REALM_DATABASE_SCHEMA !== SCHEMA) {
   throw new Error(`Load DATABASE_URL privately with node --env-file and set REALM_DATABASE_SCHEMA=${SCHEMA}.`);
@@ -55,9 +62,9 @@ const runId = randomUUID();
 const directory = join('/tmp/chatdom-forge-wish', `walk-proof-${runId}`);
 await mkdir('/tmp/chatdom-forge-wish', { recursive: true });
 await mkdir(directory, { mode: 0o700 }); await chmod(directory, 0o700);
-const summary = { version: 1, run: runId, mode, origin: 'simulated', schema: SCHEMA, started: new Date().toISOString(), stage: 'start',
+const summary = { version: 1, run: runId, mode, gpu, origin: 'simulated', schema: SCHEMA, started: new Date().toISOString(), stage: 'start',
   wishes: [], cycles: [], pageErrors: 0, ok: false };
-let loader, realm, release, webPort, browser, web, page, finished = false, closing;
+let loader, realm, release, webPort, browser, context, web, page, finished = false, closing;
 const writePrivate = (name, value) => writeFile(join(directory, name), typeof value === 'string' ? value : JSON.stringify(value, null, 2), { mode: 0o600 });
 const say = line => console.log(`[walk-proof] ${line}`);
 let heldSince = null; // inside a lock hold, progress lines carry the seconds since the lock was acquired
@@ -66,6 +73,8 @@ const redact = text => realm?.redact(text) ?? String(text);
 
 const closeCycle = async () => {
   page = undefined;
+  // A browser reached over the DevTools port is only disconnected; its own windows stay. Close this run's context first.
+  await context?.close().catch(() => {}); context = undefined;
   await browser?.close().catch(() => {}); browser = undefined;
   await web?.close().catch(() => {}); web = undefined;
   const unlock = release; release = undefined; await unlock?.();
@@ -96,7 +105,10 @@ async function waitForPort(until) {
 }
 // SwiftShader on a loaded host renders a frame in seconds at 1440x900. The walk runs at the 390x844 target size, so
 // the per-wish still needs no resize; only the first wish's optional 1440x900 still resizes (and lays out again).
-const WALK_VIEWPORT = { width: 390, height: 844 };
+// On the real GPU the walk runs at 1440x900 and each still at 390x844 is one resize away.
+const WALK_VIEWPORT = gpu ? { width: 1440, height: 900 } : { width: 390, height: 844 };
+const NARROW = { width: 390, height: 844 };
+const sizeName = size => `${size.width}x${size.height}`;
 const frames = page => page.evaluate(() => window.__chatdomWalk?.frames ?? 0);
 /** Wait until the walk has stepped `count` more frames, so input sent before this call has been applied and read. */
 async function afterFrames(page, count, timeout = 90_000) {
@@ -113,8 +125,31 @@ const shot = async (page, name, size = WALK_VIEWPORT) => {
   return name;
 };
 
-/** One capture-lock hold: the web port, served build and Chrome exist only inside it. */
+/** The real-GPU lease, through chatdom-pc-lease itself: its leased command holds until this process removes the
+ * marker (or exits), so the lease's own lock, port check, 10-minute limit and cleanup all apply. */
+async function acquireGpuLease() {
+  const marker = join(directory, `gpu-lease-${randomUUID()}`);
+  await writeFile(marker, '', { mode: 0o600 });
+  const child = spawn('chatdom-pc-lease', ['--wait', '30', '--max', '10', '--', 'sh', '-c',
+    'echo held; while [ -e "$1" ] && kill -0 "$2" 2>/dev/null; do sleep 1; done', 'gpu-lease', marker, String(process.pid)],
+  { stdio: ['ignore', 'pipe', 'pipe'] });
+  let errors = '';
+  child.stderr.on('data', data => { errors = (errors + data).slice(-400); });
+  const exited = new Promise(resolve => child.once('close', code => resolve(code)));
+  const held = await new Promise(resolve => {
+    child.stdout.on('data', data => { if (String(data).includes('held')) resolve(true); });
+    void exited.then(() => resolve(false));
+  });
+  if (!held) {
+    await rm(marker, { force: true });
+    throw new Error(`Walk proof: the real-GPU lease was not granted (exit ${await exited}: ${errors.trim().split('\n').at(-1) ?? ''}).`);
+  }
+  return async () => { await rm(marker, { force: true }); await exited; };
+}
+
+/** One capture-lock hold (or, with --gpu, one real-GPU lease): the web port, served build and browser exist only inside it. */
 async function cycle(label, work) {
+  if (gpu) return gpuCycle(label, work);
   for (let attempt = 1; ; attempt++) {
     stage(`${label}: waiting for the capture lock`);
     let queuedAt;
@@ -161,6 +196,42 @@ async function cycle(label, work) {
   }
 }
 
+async function gpuCycle(label, work) {
+  stage(`${label}: waiting for the real-GPU lease`);
+  const queuedAt = Date.now();
+  release = await acquireGpuLease();
+  const lockedAt = heldSince = Date.now(), record = { label, port: GPU_PORT, gpu: true, seconds: null, queued: Math.round((lockedAt - queuedAt) / 1000) };
+  summary.cycles.push(record);
+  let timer;
+  try {
+    webPort = GPU_PORT;
+    const origin = `http://localhost:${GPU_PORT}`;
+    webState.auth = await realm.open(origin);
+    web = await serveWeb(repo, plugin, outDir, cacheDir, GPU_PORT);
+    browser = await chromium.connectOverCDP(GPU_CDP, { timeout: 20_000 });
+    const deadline = lockedAt + GPU_HOLD_MS;
+    const working = work({ origin, deadline });
+    working.catch(() => {});
+    try {
+      return await Promise.race([working, new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Walk proof: ${label} reached the real-GPU lease budget.`)), Math.max(1000, deadline - Date.now()));
+      })]);
+    } catch (error) {
+      await diagnose(label.replace(/[^a-z0-9-]+/gi, '-')).catch(() => {});
+      throw error;
+    }
+  } finally {
+    clearTimeout(timer);
+    if (page && !page.isClosed()) {
+      const sockets = await page.evaluate(() => ({ closes: window.__walkProofSockets ?? [], busy: window.__walkProofSends ?? [] })).catch(() => null);
+      await writePrivate(`trail-${label.replace(/[^a-z0-9-]+/gi, '-')}.json`, { sockets, trail: pageTrail }).catch(() => {});
+    }
+    await closeCycle();
+    record.seconds = Math.round((Date.now() - lockedAt) / 1000); heldSince = null;
+    say(`${label}: released the real-GPU lease after ${record.seconds} s`);
+  }
+}
+
 /** On a failed cycle: one screenshot and the page's state, in the private directory (wish words redacted). */
 async function diagnose(name) {
   if (!page || page.isClosed()) return;
@@ -176,11 +247,43 @@ async function diagnose(name) {
   say(`${name}: failure state written to the private directory`);
 }
 let pageTrail = [];
-async function openPage(origin, person) {
-  const context = await browser.newContext({ viewport: WALK_VIEWPORT, deviceScaleFactor: 1 });
+async function openPage(origin, person, hour = null) {
+  context = await browser.newContext({ viewport: WALK_VIEWPORT, deviceScaleFactor: 1 });
   await context.route(/^https?:\/\/([^/]+\.)?twitch\.tv(\/|$)/, route => route.abort());
   await context.routeWebSocket(/\/(?:realm-data|forge-data|map-data|presence-data)(?:\/|$)/, ws => ws.close());
+  // Close codes and reasons of the page's sockets, read into the private trail when a lease ends.
+  await context.addInitScript(() => {
+    const Native = window.WebSocket, closes = (window.__walkProofSockets = []);
+    window.WebSocket = class extends Native {
+      constructor(...args) {
+        super(...args);
+        const opened = performance.now(), path = (() => { try { return new URL(args[0], location.href).pathname; } catch { return '?'; } })();
+        // Outgoing frames per second, with a byte sample of the frames in any second over 45 (the realm allows 90).
+        const send = this.send.bind(this), windows = (window.__walkProofSends ??= []);
+        let second = -1, count = 0, samples = {};
+        this.send = data => {
+          const now = Math.floor(performance.now() / 1000);
+          if (now !== second) { if (count > 45 && windows.length < 30) windows.push({ second, count, path, samples }); second = now; count = 0; samples = {}; }
+          count++;
+          const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : null;
+          const key = bytes ? Array.from(bytes.slice(0, 14), b => b >= 32 && b < 127 ? String.fromCharCode(b) : '.').join('') : String(data).slice(0, 14);
+          samples[key] = (samples[key] ?? 0) + 1;
+          // The last 200 outgoing frames (time and a printable prefix), read when the socket closes.
+          const recent = (window.__walkProofRecent ??= []);
+          const text = bytes ? Array.from(bytes.slice(0, 90), b => b >= 32 && b < 127 ? String.fromCharCode(b) : '.').join('') : String(data).slice(0, 90);
+          recent.push({ ms: Math.round(performance.now()), size: bytes?.length ?? String(data).length, text });
+          if (recent.length > 200) recent.shift();
+          return send(data);
+        };
+        this.addEventListener('close', event => { if (closes.length < 40) closes.push({ path, code: event.code, reason: String(event.reason).slice(0, 160),
+          clean: event.wasClean, openedMs: Math.round(opened), closedMs: Math.round(performance.now()),
+          lastSent: (window.__walkProofRecent ?? []).slice(-25),
+          sentCount: (window.__walkProofRecent ?? []).length }); });
+      }
+    };
+  });
   page = await context.newPage();
+  if (gpu) await page.bringToFront(); // an occluded window would throttle its frames
   pageTrail = [];
   const note = item => { if (pageTrail.length < 120) pageTrail.push({ at: Math.round(performance.now()), ...item }); };
   const pathOf = url => { try { return new URL(url).pathname; } catch { return '?'; } };
@@ -199,7 +302,8 @@ async function openPage(origin, person) {
   await page.evaluate(personId => { document.querySelector('button[name="person"]').value = personId; }, person.personId);
   await Promise.all([page.waitForURL(url => url.pathname === '/' && url.searchParams.get('walk') === '1', { timeout: 60_000 }),
     page.locator('button[name="person"]').first().click()]);
-  stage('signed in; waiting for the kingdom walk');
+  if (hour !== null) await page.goto(`${origin}/?walk=1&kingdom=${realm.kingdomId}&hour=${hour}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  stage(`signed in; waiting for the kingdom walk${hour === null ? '' : ` at hour ${hour}`}`);
   await page.waitForFunction(() => window.__chatdomReady === true && window.__chatdomWalk?.ready === true && window.__chatdomWalk.owner === 'walking',
     null, { timeout: 200_000, polling: 500 });
   const before = await frames(page), at = Date.now();
@@ -283,7 +387,7 @@ const boxStatus = page => page.evaluate(titles => {
 
 /** After the outcome: close the box and stand the walker out in front of the citizen's home, turned to the door, where the
  * new piece sits. The kingdom's own placement seam, as at the anvil. */
-async function standAtHome(page, person) {
+async function standAtHome(page, person, row = {}) {
   const door = realm.door(person.personId);
   if (!door) throw new Error('Walk proof: the citizen has no home door target.');
   if ((await boxStatus(page)).open) await page.getByRole('button', { name: 'Close' }).click();
@@ -291,9 +395,14 @@ async function standAtHome(page, person) {
   const now = await walk(page);
   const out = [door.approach[0] - door.position[0], door.approach[2] - door.position[2]], length = Math.hypot(...out) || 1;
   let spot = null;
-  for (const distance of [9, 7.5, 6, 4.5, 3, 1.5, 0]) {
-    const candidate = [door.approach[0] + out[0] / length * distance, door.approach[1], door.approach[2] + out[1] / length * distance];
-    if (realm.place(now.selfId, candidate)) { spot = candidate; break; }
+  // Street distance first, so a roof piece stays in frame; a little to either side when the straight line is blocked.
+  const side = [-out[1] / length, out[0] / length];
+  search: for (const distance of [14, 12.5, 11, 9.5, 8, 6.5, 5, 3.5, 2, 0]) {
+    for (const offset of [0, 1.5, -1.5, 3, -3]) {
+      const candidate = [door.approach[0] + out[0] / length * distance + side[0] * offset, door.approach[1],
+        door.approach[2] + out[1] / length * distance + side[1] * offset];
+      if (realm.place(now.selfId, candidate)) { spot = candidate; row.homeDistance = distance; break search; }
+    }
   }
   if (!spot) throw new Error('Walk proof: the kingdom did not place the walker before the home.');
   stage('placed before the citizen\'s home');
@@ -308,13 +417,22 @@ async function standAtHome(page, person) {
     await drag(page, -error * here.height / 2.6);
     await afterFrames(page, 3);
   }
+  // Tilt the view up from the default gentle downward look (pitch .18 to about -.12), so roof pieces stay in frame:
+  // a real vertical drag, pitch += dy / height * 1.7 (apps/web/src/walk/camera/shoulder.ts).
+  const box = await page.locator('canvas').first().boundingBox();
+  const x = box.x + box.width * .5, y = box.y + box.height * .62, lift = box.height * .3 / 1.7;
+  await page.mouse.move(x, y); await page.mouse.down();
+  await page.mouse.move(x, y - lift, { steps: 3 }); await page.mouse.up();
+  await afterFrames(page, 3);
 }
 
 /** Sign in as the wish's citizen, walk to the anvil, press E, type the words, take the still, send, and follow the box
  * until its outcome or the end of the hold. The lock is released as soon as the send has settled and time is up. */
-async function typeWish(row, person, wish, first) {
+async function typeWish(row, person, wish, first, index) {
   return cycle(`wish ${row.id}`, async ({ origin, deadline }) => {
-    const page = await openPage(origin, person);
+    const hour = gpu ? GPU_HOURS[index % GPU_HOURS.length] : null;
+    if (hour !== null) row.hour = hour;
+    const page = await openPage(origin, person, hour);
     await toAnvil(page);
     const field = page.getByLabel('What would you like to make?');
     await field.waitFor({ timeout: 90_000 });
@@ -323,9 +441,12 @@ async function typeWish(row, person, wish, first) {
     if (await field.inputValue() !== wish.words) throw new Error('Walk proof: the typed words did not reach the wish box.');
     row.typed = true;
     stage(`wish ${row.id}: typed into the wish box`);
-    row.shots.push(await shot(page, `wish-${row.id}-typed@390x844.png`));
+    if (gpu) {
+      row.shots.push(await shot(page, `wish-${row.id}-typed@${sizeName(WALK_VIEWPORT)}.png`));
+      row.shots.push(await shot(page, `wish-${row.id}-typed@${sizeName(NARROW)}.png`, NARROW));
+    } else row.shots.push(await shot(page, `wish-${row.id}-typed@390x844.png`));
     // The first wish also at 1440x900, when the hold can afford one large SwiftShader frame and still send.
-    if (first) {
+    if (first && !gpu) {
       if (deadline - Date.now() > 130_000) row.shots.push(await shot(page, `wish-${row.id}-typed@1440x900.png`, { width: 1440, height: 900 }));
       else row.skipped = 'wide still: too little of the hold left';
     }
@@ -335,9 +456,53 @@ async function typeWish(row, person, wish, first) {
     if (deadline - Date.now() < 40_000) throw new Error('Walk proof: too little of the hold was left to send the wish.');
     await send.click();
     row.sentAt = Date.now();
+    pageTrail.push({ at: Math.round(performance.now()), mark: 'sent' });
     stage(`wish ${row.id}: sent from the wish box`);
+    if (gpu) await followRitual(page, row, person, deadline);
     await followBox(page, row, deadline);
+    if (gpu && realm.outcome(person.personId)?.status === 'delivered' && deadline - Date.now() > 90_000) {
+      await standAtHome(page, person, row);
+      row.shots.push(await shot(page, `wish-${row.id}-home@${sizeName(WALK_VIEWPORT)}.png`));
+      row.shots.push(await shot(page, `wish-${row.id}-home@${sizeName(NARROW)}.png`, NARROW));
+      row.homeStill = true;
+    }
   });
+}
+
+/** --gpu: stills of what the citizen sees at the anvil. While the gates work, the anvil breathes with no candidate shown;
+ * once the piece is committed the ritual runs FORGE_STAGE_TIMING (pour 5-11 s, cool 12.7-15.5 s, flight 15.5-19 s,
+ * landed 19-21 s), timed here from the owner's delivered outcome. */
+async function followRitual(page, row, person, deadline) {
+  let forging = false;
+  for (;;) {
+    if (realm.outcome(person.personId)) break;
+    if (Date.now() > deadline - 90_000) return;
+    const lost = await page.evaluate(() => /CONNECTION LOST/i.test(document.body.innerText)).catch(() => false);
+    if (lost && !row.lostAfter) { row.lostAfter = Math.round((Date.now() - row.sentAt) / 100) / 10; pageTrail.push({ at: Math.round(performance.now()), mark: 'connection lost seen' }); }
+    if (!forging && Date.now() - row.sentAt > 9_000) {
+      forging = true;
+      row.shots.push(await shot(page, `wish-${row.id}-forging@${sizeName(WALK_VIEWPORT)}.png`));
+      stage(`wish ${row.id}: still of the anvil while the gates work`);
+    }
+    await page.waitForTimeout(400);
+  }
+  const outcome = realm.outcome(person.personId);
+  pageTrail.push({ at: Math.round(performance.now()), mark: `outcome ${outcome.status}` });
+  if (outcome.status !== 'delivered') return;
+  // Plain timed grabs, not frame-gated: a scene reload in the page would stall the walk's frame counter, and what the
+  // citizen sees through it is exactly what these stills record.
+  row.ritual = [];
+  for (const second of [2, 5, 7.5, 10, 13, 16, 19, 23, 28]) {
+    const wait = outcome.at + second * 1000 - Date.now();
+    if (wait > 0) await page.waitForTimeout(wait);
+    const name = `wish-${row.id}-ritual-${String(second).replace('.', '_')}s@${sizeName(WALK_VIEWPORT)}.png`;
+    const taken = Math.round((Date.now() - outcome.at) / 100) / 10;
+    const state = await page.evaluate(() => ({ frames: window.__chatdomWalk?.frames ?? null, ready: window.__chatdomReady ?? null,
+      box: !!document.querySelector('.forge-wish-panel'), lost: /CONNECTION LOST/i.test(document.body.innerText) })).catch(() => null);
+    await page.screenshot({ path: join(directory, name), timeout: 20_000 }).then(() => row.shots.push(name), () => {});
+    row.ritual.push({ second: taken, ...state });
+  }
+  stage(`wish ${row.id}: ritual stills taken`);
 }
 
 /** Read the box until it shows an outcome, or until the hold ends once the send has settled. */
@@ -381,9 +546,10 @@ async function revisit(row, person) {
 /** Optional (--landed-still): a hold that stands the citizen before the home and takes one still of the new piece. */
 async function landedStill(row, person) {
   return cycle(`landed ${row.id}`, async ({ origin }) => {
-    const page = await openPage(origin, person);
-    await standAtHome(page, person);
-    row.shots.push(await shot(page, `wish-${row.id}-landed@390x844.png`));
+    const page = await openPage(origin, person, row.hour ?? null);
+    await standAtHome(page, person, row);
+    row.shots.push(await shot(page, `wish-${row.id}-landed@${sizeName(WALK_VIEWPORT)}.png`));
+    if (gpu) row.shots.push(await shot(page, `wish-${row.id}-landed@${sizeName(NARROW)}.png`, NARROW));
   });
 }
 
@@ -418,7 +584,7 @@ try {
   for (const [index, wish] of wishes.entries()) {
     const row = summary.wishes[index], person = realm.people[index];
     try {
-      await typeWish(row, person, wish, index === 0);
+      await typeWish(row, person, wish, index === 0, index);
     } catch (error) {
       row.error = redact(error?.message ?? error).slice(0, 400);
       say(`wish ${row.id}: ${row.error}`);
@@ -436,7 +602,7 @@ try {
         catch (error) { row.revisitError = redact(error?.message ?? error).slice(0, 400); }
       }
     }
-    if (landedStills && row.box?.status === 'delivered') {
+    if (landedStills && row.box?.status === 'delivered' && !row.homeStill) {
       try { await landedStill(row, person); }
       catch (error) { row.landedStillError = redact(error?.message ?? error).slice(0, 400); }
     }

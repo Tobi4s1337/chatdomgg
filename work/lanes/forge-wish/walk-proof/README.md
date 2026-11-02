@@ -55,11 +55,15 @@ SIMULATED:
   chimney, as in `runtime/coordinator-proof.ts`. No model is called. `--real` uses
   `createForgeProviders({ runCodex: runCodexDraft })`, as `runtime/proof.ts` does, and spends real model calls.
 
+- **The writer lease.** The proof's realm holds its kingdom on a 60 s writer lease instead of the realm's 15 s
+  (`REALM_LEASE_MS`). On this shared host at load 25 to 35, with the build and the browser driver in the same process,
+  a 15 s lease lapsed with no fault in the realm. Production keeps 15 s.
+
 ## What it does not prove
 
 - Wish quality or recognisability. Controlled runs always make the same chimney.
 - The OAuth consent step, a real Twitch post, or the actual Herald process reading chat.
-- A real-GPU look, or frame timing. Chrome renders through SwiftShader.
+- Frame timing. Without `--gpu`, Chrome renders through SwiftShader; with it, stills come from a real GPU.
 - Walking to the anvil through the streets.
 - `forgeChat.start()`'s grant sweep. It is deliberately not run, because it would validate (and could forget)
   other simulated grants in the shared lane schema.
@@ -86,6 +90,31 @@ REALM_DATABASE_SCHEMA=realm_forge_wish nice -n 10 node --env-file=/srv/chatdom/c
   - The realm observed `delivered`.
   - Exactly one attachment landed and exactly one coal was spent.
   - No wish words reached a public delivery.
+
+## On the real GPU (`--gpu`)
+
+`--gpu` runs the same proof in Tobias's real-GPU Chrome instead of headless SwiftShader. It never takes the capture
+lock (nothing renders on this host). Instead each wish holds the real-GPU lease through `chatdom-pc-lease` itself: the
+leased command waits until the proof removes its marker file (or exits), so the lease's own lock, its check that 5191
+and 5192 are free, its 10-minute limit and its cleanup all apply. Inside the lease:
+
+- the build is served on 127.0.0.1:5192, which his tunnel forwards, and the page opens `http://localhost:5192`;
+- Playwright connects to his Chrome's DevTools port (127.0.0.1:9333, also forwarded) and opens a fresh, isolated
+  browser context, which it closes before disconnecting; his own windows and profile are untouched;
+- the walk runs at 1440x900; each still is also taken at 390x844;
+- each wish has its own hour (`hour=` on the kingdom page): dusk (19.5), day (13), dusk;
+- after the box is typed and sent, it takes a still while the gates work, then timed stills 2 to 28 s after the
+  owner's delivered outcome (the ritual runs words, blueprint, pour, seal, strike, cool, flight and landed over
+  21 s), then stands the citizen 5 to 14 m out from the home, turned to the door and tilted up by a real drag, for the
+  landed piece at street distance (1440x900 and 390x844).
+
+Each lease writes `trail-<label>.json`: the page's socket close codes and reasons, its outgoing frame rate, the last
+outgoing frames before a close (time and size only in practice: walk inputs are one byte), and send/outcome marks.
+
+```sh
+REALM_DATABASE_SCHEMA=realm_forge_wish nice -n 10 node --env-file=/srv/chatdom/chatdomgg/.env \
+  work/lanes/forge-wish/walk-proof/run.mjs --real --gpu fw10-01 fw10-08 fw10-15
+```
 
 ## Flow and the capture lock
 

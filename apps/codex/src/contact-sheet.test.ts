@@ -2,7 +2,7 @@ import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { MAT, MATERIALS } from '@chatdom/content/materials';
 import { VoxelBlueprintSchema, type VoxelBlueprint } from '@chatdom/shared';
-import { renderForgeContactSheet } from './contact-sheet';
+import { renderForgeContactSheet, renderForgeContactSheetCooperatively } from './contact-sheet';
 
 const colouredBlocks = VoxelBlueprintSchema.parse({
   version: 1, id: 'contact-sheet-test', styleId: 'hearth', kind: 'prop', lattice: 'build',
@@ -162,6 +162,24 @@ describe('trusted Forge contact sheet', () => {
     expect(renderForgeContactSheet(part, { ...context, home: alteredHome })).not.toBe(sheet);
     expect(() => renderForgeContactSheet(part, { home, origin: [10000, 0, 0] })).toThrow('composition budget');
     expect(() => renderForgeContactSheet(part, { home, origin: [0.5, 0, 0] })).toThrow('origin');
+  });
+
+  it('draws the identical sheet in slices that give the event loop turns, and stops when its run is cancelled', async () => {
+    const home = VoxelBlueprintSchema.parse({ ...colouredBlocks, id: 'sliced-home', size: [6, 3, 4], boxes: [
+      { from: [0, 0, 0], to: [6, 1, 4], material: MAT.stone },
+    ] });
+    const context = { home, origin: [1, 1, 1] as const };
+    let turns = 0;
+    const ticking = setInterval(() => { turns++; }, 0);
+    try {
+      // A zero slice yields at every step, so other work runs between the slices of every view.
+      const sliced = await renderForgeContactSheetCooperatively(colouredBlocks, context, undefined, 0);
+      expect(sliced).toBe(renderForgeContactSheet(colouredBlocks, context));
+      expect(await renderForgeContactSheetCooperatively(colouredBlocks)).toBe(renderForgeContactSheet(colouredBlocks));
+    } finally { clearInterval(ticking); }
+    expect(turns).toBeGreaterThan(10);
+    const cancelled = new AbortController(); cancelled.abort();
+    await expect(renderForgeContactSheetCooperatively(colouredBlocks, context, cancelled.signal, 0)).rejects.toThrow();
   });
 
   it('rejects unknown final materials, empty geometry, invalid bounds and excessive raster work', () => {

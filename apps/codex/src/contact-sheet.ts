@@ -40,8 +40,19 @@ function canvas(width: number, height: number): Uint8Array {
   return pixels;
 }
 
+/** Rows of one view between two chances to yield; a slice of the largest view is a few milliseconds. */
+const ROWS_PER_SLICE = 6;
+/** Runs a stepwise raster to completion on the caller's stack: the synchronous path is the same pixels, unchanged. */
+function drain<T>(steps: Generator<void, T>): T {
+  for (;;) { const step = steps.next(); if (step.done) return step.value; }
+}
+
 /** Front is +Z; the street camera sees +X, +Y and +Z without lighting or perspective. */
 function renderView(asset: VoxelAsset, min: Vector, max: Vector, view: View, width = 232, height = 184, shaded = false): Uint8Array {
+  return drain(renderViewSteps(asset, min, max, view, width, height, shaded));
+}
+
+function* renderViewSteps(asset: VoxelAsset, min: Vector, max: Vector, view: View, width = 232, height = 184, shaded = false): Generator<void, Uint8Array> {
   const pixels = canvas(width, height);
   const centre = min.map((n, axis) => (n + max[axis]!) / 2);
   const extent = max.map((n, axis) => n - min[axis]!);
@@ -51,7 +62,9 @@ function renderView(asset: VoxelAsset, min: Vector, max: Vector, view: View, wid
   const direction = view.camera.map(n => -n);
   const stride = [1, asset.size[0], asset.size[0] * asset.size[1]];
   const maxSteps = extent.reduce((sum, n) => sum + n, 3);
-  for (let py = 0; py < height; py++) for (let px = 0; px < width; px++) {
+  for (let py = 0; py < height; py++) {
+    if (py && py % ROWS_PER_SLICE === 0) yield;
+    for (let px = 0; px < width; px++) {
     const horizontal = (px + 0.5 - width / 2) / scale;
     const vertical = (height / 2 - py - 0.5) / scale;
     const origin = centre.map((n, axis) => n + horizontal * view.right[axis]! + vertical * view.up[axis]! + distance * view.camera[axis]!);
@@ -89,6 +102,7 @@ function renderView(asset: VoxelAsset, min: Vector, max: Vector, view: View, wid
         cells[axis]! += steps[axis]!;
         crossing[axis]! += delta[axis]!;
       }
+    }
     }
   }
   return pixels;
@@ -213,6 +227,30 @@ function solidBounds(asset: VoxelAsset): [Vector, Vector] {
 
 /** Trusted bounded CPU raster. With context, show the complete part and its actual placement. */
 export function renderForgeContactSheet(input: VoxelBlueprint, context?: ForgeContactSheetContext): string {
+  return drain(contactSheetSteps(input, context));
+}
+
+/**
+ * The same sheet, rendered in slices that give the event loop back every few milliseconds. The realm forges inside
+ * its own process: a sheet drawn in one piece (about two seconds of CPU on a loaded host) would hold every room of
+ * every kingdom still, and a walker's queued inputs would then arrive as one burst over the room's message limit.
+ */
+export async function renderForgeContactSheetCooperatively(input: VoxelBlueprint, context?: ForgeContactSheetContext,
+  signal?: AbortSignal, sliceMs = 8): Promise<string> {
+  const steps = contactSheetSteps(input, context);
+  let since = performance.now();
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+    if (performance.now() - since >= sliceMs) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      signal?.throwIfAborted();
+      since = performance.now();
+    }
+  }
+}
+
+function* contactSheetSteps(input: VoxelBlueprint, context?: ForgeContactSheetContext): Generator<void, string> {
   const blueprint = VoxelBlueprintSchema.parse(input);
   const writes = checkWrites(blueprint);
   if (writes > MAX_RASTER_WRITES) throw new RangeError('Forge contact sheet exceeds the raster work budget.');
@@ -221,44 +259,47 @@ export function renderForgeContactSheet(input: VoxelBlueprint, context?: ForgeCo
   const height = context ? 1260 : HEIGHT;
   const pixels = canvas(WIDTH, height);
   if (context) {
+    yield;
     const placed = placedAsset(asset, context, MAX_RASTER_WRITES - writes);
+    yield;
     const [placedMin, placedMax] = solidBounds(placed);
     label(pixels, 'PIECE LEFT FRONT', 16, 10);
-    paste(pixels, renderView(asset, min, max, HERO, 360, 306, true), 360, 306, 12, 28);
+    paste(pixels, (yield* renderViewSteps(asset, min, max, HERO, 360, 306, true)), 360, 306, 12, 28);
     label(pixels, 'PIECE FRONT', 400, 10);
-    paste(pixels, renderView(asset, min, max, VIEWS[1]!, 360, 306, true), 360, 306, 396, 28);
+    paste(pixels, (yield* renderViewSteps(asset, min, max, VIEWS[1]!, 360, 306, true)), 360, 306, 396, 28);
     label(pixels, 'PIECE LEFT', 16, 350);
-    paste(pixels, renderView(asset, min, max, VIEWS[3]!, 360, 280, true), 360, 280, 12, 370);
+    paste(pixels, (yield* renderViewSteps(asset, min, max, VIEWS[3]!, 360, 280, true)), 360, 280, 12, 370);
     label(pixels, 'PIECE RIGHT', 400, 350);
-    paste(pixels, renderView(asset, min, max, VIEWS[4]!, 360, 280, true), 360, 280, 396, 370);
+    paste(pixels, (yield* renderViewSteps(asset, min, max, VIEWS[4]!, 360, 280, true)), 360, 280, 396, 370);
     label(pixels, 'ON HOME', 16, 666);
     // Look from the side of the home carrying the piece, including front-wall sockets.
     const [homeMin, homeMax] = solidBounds(rasterizeBlueprint(context.home));
+    yield;
     const sx = context.origin[0] + (min[0] + max[0]) / 2 < (homeMin[0] + homeMax[0]) / 2 ? -1 : 1;
     const wallHeight = context.origin[1] + (min[1] + max[1]) / 2 < (homeMin[1] + homeMax[1]) / 2;
     const sz = wallHeight ? 1 : context.origin[2] + (min[2] + max[2]) / 2 < (homeMin[2] + homeMax[2]) / 2 ? -1 : 1;
     const homeView: View = wallHeight
       ? { name: 'ON HOME', right: [1, 0, 0], up: [0, 0.98, -0.2], camera: [0, 0.2, 0.98] }
       : { name: 'ON HOME', right: [sz * a, 0, -sx * a], up: [-sx * b, 2 * b, -sz * b], camera: [sx * c, c, sz * c] };
-    paste(pixels, renderView(placed, placedMin, placedMax, homeView, 736, 420, true), 736, 420, 16, 686);
+    paste(pixels, (yield* renderViewSteps(placed, placedMin, placedMax, homeView, 736, 420, true)), 736, 420, 16, 686);
     // Keep the diagnostic angles, plus the underside: a larger front view must not hide other marks.
     const diagnostics: readonly View[] = [...VIEWS, { name: 'BOTTOM', right: [1, 0, 0], up: [0, 0, 1], camera: [0, -1, 0] }];
     for (const [i, view] of diagnostics.entries()) {
       const x = i * 108;
       label(pixels, view.name, x + 8, 1122);
-      paste(pixels, renderView(asset, min, max, view, 108, 112, true), 108, 112, x, 1140);
+      paste(pixels, (yield* renderViewSteps(asset, min, max, view, 108, 112, true)), 108, 112, x, 1140);
     }
   } else {
     for (const [i, view] of VIEWS.entries()) {
       const x = i % 3 * 256, y = Math.floor(i / 3) * 224;
-      const tile = renderView(asset, min, max, view);
+      const tile = (yield* renderViewSteps(asset, min, max, view));
       label(pixels, view.name, x + 12, y + 8);
       paste(pixels, tile, 232, 184, x + 12, y + 28);
       if (view.name === 'STREET') paste(pixels, distanceTile(tile), 64, 64, 696, 448);
     }
     label(pixels, 'DISTANCE 64PX', 584, 472);
     label(pixels, HERO.name, 16, 520);
-    paste(pixels, renderView(asset, min, max, HERO, 736, 256, true), 736, 256, 16, 540);
+    paste(pixels, (yield* renderViewSteps(asset, min, max, HERO, 736, 256, true)), 736, 256, 16, 540);
   }
   return encodePng(pixels, WIDTH, height);
 }

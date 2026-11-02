@@ -23,4 +23,15 @@
 .forge-wish-footnote { margin: 10px 0 0; }
 .forge-wish-fallback { margin: 20px 0 1px; padding-top: 14px; border-top: 1px solid #caa66a55; }
 .forge-wish-error { color: #fff1d1; border-left: 3px solid #e4a75f; padding-left: 10px; }
+.forge-wish-veil { transition: background-color .45s ease; }
+.forge-wish-veil--watching { place-items: end start; padding: 28px; background: transparent; }
+.forge-wish-veil--watching .forge-wish-panel { width: min(380px, 100%); padding: 16px 18px 6px; box-shadow: 0 10px 26px #0a050890; }
+.forge-wish-veil--watching .forge-wish-head { padding-bottom: 11px; }
+.forge-wish-veil--watching .forge-wish-head h2 { font-size: 22px; }
+.forge-wish-veil--watching .forge-wish-result { margin: 12px 0; padding: 13px 15px; }
+.forge-wish-veil--watching .forge-wish-result h3 { font-size: 21px; }
+.forge-wish-veil--watching .forge-wish-result .forge-wish-kicker::before { content: ''; display: inline-block; width: 7px; height: 7px; margin: 0 7px 1px 0; border-radius: 50%; background: #e8742c; box-shadow: 0 0 6px #ff9a3c; animation: forge-wish-ember 1.6s ease-in-out infinite; }
+@keyframes forge-wish-ember { 50% { opacity: .35; box-shadow: 0 0 2px #ff9a3c; } }
+@media (prefers-reduced-motion: reduce) { .forge-wish-veil { transition: none; } .forge-wish-veil--watching .forge-wish-result .forge-wish-kicker::before { animation: none; } }
+@media (max-width: 480px) { .forge-wish-veil--watching { place-items: end stretch; padding: 10px; } .forge-wish-veil--watching .forge-wish-panel { width: 100%; padding: 13px 15px 3px; } .forge-wish-veil--watching .forge-wish-head h2 { font-size: 20px; } .forge-wish-veil--watching .forge-wish-result p:not(.forge-wish-kicker) { margin: 5px 0 8px; } }
 @media (max-width: 480px) { .forge-wish-veil { padding: 12px; align-items: center; } .forge-wish-panel { max-height: calc(100dvh - 24px); padding: 20px; } .forge-wish-head h2 { font-size: 27px; } .forge-wish-body { font-size: 16px; } }

@@ -81,7 +81,8 @@ export interface KingdomForgeOptions {
   readonly fault?: (fault: KingdomForgeFault) => void;
 }
 
-export type KingdomForgeStep = 'reserve' | 'bind' | 'gates' | 'revalidate' | 'assemble' | 'prepare' | 'commit';
+/** `intake` is the realm's own step before a run begins (opening the kingdom, the chat witness). */
+export type KingdomForgeStep = 'intake' | 'reserve' | 'bind' | 'gates' | 'revalidate' | 'assemble' | 'prepare' | 'commit';
 export interface KingdomForgeFault {
   readonly step: KingdomForgeStep;
   readonly cause: 'time-budget' | 'interrupted' | 'dependency' | 'invalid';
