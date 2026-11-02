@@ -62,6 +62,20 @@ Also asked of grand-world:
    placements, so `compileFoundedScene` (realm and client) stops a walker. Use the drawn anvil's footprint (main's
    brief in `work/lanes/kingdom-look-owners.md`: the anvil stays with `anvil-hero`). Copy forge-wish, which owns the
    forge realm modules.
+   **Written out, ready to apply:** `work/lanes/play/patches/founded-anvil-solid.patch` (applies cleanly on HEAD,
+   lane/grand-world and lane/integrator). It puts the solid in the compiler, not in the placements, because every
+   placement is drawn as a prop (`kingdom/founded-content.ts`) and a placement would draw a second, plain anvil inside
+   the hero. `compileFoundedScene` adds one collision-only asset and placement (`forge:anvil`) of two boxes on the hero's
+   0.0625 m lattice (the stone block and the iron up to the 1.43 m face), so the realm and every walking client get the
+   same solid. `FOUNDED_PHYSICS_VERSION` gains `/founded-anvil:1`, which changes the geometry digest and so gives a
+   new collision revision. The position is restated as `[0, market.elevation, 8]` rather than imported: importing
+   `interactions/founded` into the compiler pulled the interaction graph into every compiler user and roughly doubled
+   the realm founded tests' time. It also drops the anvil from `ABSENT_PLACE_DEPENDENCIES` (the committed
+   `simulated-town.evidence.json` keeps the old line until the artifact is next written) and turns play's
+   `it.fails('stops a walker at the anvil')` into `it`. Checked with it applied: solids-old and solids-grand 20 of 20
+   on both lands, the world package's founded-world, interactions, land-interface, grand and movement tests 191 of 191,
+   realm founded, portals and kingdom-room green run one file at a time (the timeouts seen in parallel runs are the
+   host's load: the original compiler times out the same tests at the same load), root tsc and eslint clean.
 2. **No silent drops.** A civic or forge fixture that fails to place is a build error with its id and reason, never an
    unchanged town (`enrichNativeForgeHearth`, `enrichNativeForgeWorkshop` and the civic placements).
 3. **A quality control.** A typed quality setting on the scene (`'high' | 'balanced' | 'low'`) that play's ledger can
@@ -72,7 +86,8 @@ Play's fallbacks until A2 lands, all honest and read-only:
   draw the body, eased and clamped to the physics gap.
 - Footsteps: paving gives cobble or stone, trails give an earth path, the home's installed floor wins, and other
   public and open ground gives grass.
-- Solids: the PL10 collision test stays red for the anvil, and the goal is not ticked, until item 1 lands.
+- Solids: the PL10 collision test keeps the anvil as an expected fail until item 1 lands (the patch above). PL10 is
+  ticked under the 13:55 pace rule, with a follow-up to turn the case into an ordinary `it` once the patch is in.
 
 ## B. Provided: the HUD shell, the Esc ledger, the cursor and the look
 
