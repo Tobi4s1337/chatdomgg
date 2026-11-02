@@ -220,14 +220,20 @@ export interface NightInput {
   withheld: ReadonlySet<string>;
   /** Sign-in and founding claims from the claim log; each is granted once, from Edition I. */
   claims?: readonly Claim[];
-  /** Witnessed raids from the road ledger beyond the survey's own (raid-show's authority). */
+  /**
+   * Witnessed raids from the road ledger beyond the survey's own (raid-show's authority): every raid of the edition
+   * the ledger holds, not only tonight's, so a raid that could not be granted on its own night is tried again.
+   */
   roadRaids?: readonly AtlasRaid[];
   /**
    * Twitch's answers for raided channels the survey never saw, checked for this night or earlier (`foundArrivals`):
-   * the facts their land is granted on. An answer checked for this very night also carries its raid, so a raid whose
-   * check failed on an earlier night is granted once the answer arrives.
+   * the facts their land is granted on. Each answer also carries its raid, tried again on every night until its
+   * channel holds land: a raid whose check failed on an earlier night is granted once the answer arrives, and one
+   * deferred for lack of a free slot on the first night with room.
    */
   arrivals?: ReadonlyMap<string, FoundArrival>;
+  /** When Twitch last said a raided channel does not exist (`absentArrivals`): its older raids are owed nothing. */
+  absent?: ReadonlyMap<string, number>;
 }
 
 export interface NightResult {
@@ -392,17 +398,27 @@ export function settleNight(input: NightInput): NightResult {
   // ledger; the same raid seen twice grants once. A target the sweep observed is placed on the survey's facts; one
   // it never saw (under five viewers) on the facts Twitch gave settlement for it (raid arrivals), and waits for them
   // when there are none yet.
+  //
+  // A witnessed raid's claim stands until its target holds land. Every raid of the edition the night's sources hold
+  // is read, not only those since the last night: a grant deferred for lack of a free slot (its realm and the Outer
+  // Isles full), or refused by a gate that has since lifted, is tried again on each night, judged by that night's
+  // gates, and lands at the same pencil place on the first night with room. A target that already holds land skips
+  // its raids at once, so a night only ever does work for land still owed.
   let byRaid = 0;
   let byRaidArrival = 0;
   const unseen = new Set<string>();
   if (landByClaim) {
-    const since = state.lastNight?.asOf ?? 0;
+    const since = ctx.world.asOf;
     const until = Math.max(manifest.source.database.openedAt, ...(input.roadRaids ?? []).map((raid) => raid.observedAt));
     const raids: RaidRef[] = [...input.raidObservations.map((observation) => observation.raid), ...(input.roadRaids ?? [])]
-      .filter((raid) => raid.observedAt > since && raid.observedAt <= until);
-    // A raid whose target was checked for tonight after an earlier night could not get an answer.
+      .filter((raid) => raid.observedAt > since && raid.observedAt <= until && !state.owners.has(raid.toKingdomId as KingdomId));
+    // Every answer also carries the raid that asked, so its land is owed even once the sources no longer hold that
+    // raid: one whose check failed on an earlier night is granted once the answer arrives, and one deferred for lack of
+    // room on the first night with room. Twitch is never asked again for it.
+    const known = new Set(raids.map((raid) => raid.id));
     for (const arrival of input.arrivals?.values() ?? []) {
-      if (arrival.night === manifest.asOf && arrival.raid.observedAt <= since) raids.push({ ...arrival.raid, toKingdomId: arrival.kingdomId });
+      if (state.owners.has(arrival.kingdomId) || known.has(arrival.raid.id) || arrival.raid.observedAt > until) continue;
+      raids.push({ ...arrival.raid, toKingdomId: arrival.kingdomId });
     }
     raids.sort(raidOrder);
     for (const raid of raids) {
@@ -419,7 +435,7 @@ export function settleNight(input: NightInput): NightResult {
       if (state.owners.has(id) || granted.has(id)) continue;
       const arrival = input.arrivals?.get(id);
       if (!arrival) {
-        unseen.add(id);
+        if ((input.absent?.get(id) ?? -1) < raid.observedAt) unseen.add(id);
         continue;
       }
       // The one visibility gate, on the facts Twitch gave: withheld and gambling channels are never granted land.

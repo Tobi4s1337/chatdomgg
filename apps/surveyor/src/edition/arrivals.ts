@@ -103,6 +103,16 @@ export function foundArrivals(arrivals: readonly Arrival[], asOf: number): Map<s
   return found;
 }
 
+/**
+ * When Twitch last said a channel does not exist, per channel, among arrivals checked for nights up to `asOf`. A raid
+ * into it from before that answer is owed nothing; a newer raid asks again.
+ */
+export function absentArrivals(arrivals: readonly Arrival[], asOf: number): Map<string, number> {
+  const absent = new Map<string, number>();
+  for (const arrival of arrivals) if (arrival.status === 'absent' && arrival.night <= asOf) absent.set(arrival.kingdomId, Math.max(absent.get(arrival.kingdomId) ?? 0, arrival.checkedAt));
+  return absent;
+}
+
 /** A raid as far as land by raid needs it. */
 export interface RaidRef { id: string; fromKingdomId: string; toKingdomId: string; observedAt: number }
 

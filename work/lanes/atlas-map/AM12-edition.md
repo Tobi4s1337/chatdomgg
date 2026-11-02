@@ -121,6 +121,16 @@ answer. The rule is the same as for any raid: a hamlet at the channel's pencil p
 5. A raid whose answer could not be had tonight (no credentials, budget, Twitch down) is asked again at the next
    night, while the survey still holds the raid. Its answer then carries the raid, so the land is granted on that
    night. An `absent` channel is asked again only after a newer raid into it.
+   A `found` answer's raid is tried again on every night until its channel holds land, without asking Twitch again.
+   So a grant deferred for lack of a free slot (its realm and the Outer Isles full) lands on the first night with
+   room, at the same pencil place. It still passes that night's gates: a channel withheld since, or a raider hidden
+   since, gets nothing that night. The same raid seen in the night's window and in its answer counts once.
+   The same holds for a raid into a stream the survey did observe. Settlement reads every raid of the edition its
+   sources hold (the recorder's raids in the night's revision and the road ledger), not only those since the last
+   night, and skips any whose target already holds land. A witnessed raid's land is therefore owed until it is
+   granted: deferred for lack of room, or refused by a gate that has since lifted, it lands at the same pencil place
+   on the first night that allows it. A raid from before the founding is never owed. A channel Twitch answered as
+   `absent` is not counted as waiting for raids older than that answer.
 6. The publication names such a holding from its answer (`names.json`). The survey's own name always wins. A claim's
    Twitch lookup now records `login` and `name` too, for the same purpose. Only answers recorded by the time the
    night's head was acknowledged count, so `atlas:check` rebuilds the publication byte for byte however the logs grow.
