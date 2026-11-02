@@ -45,19 +45,19 @@ describe('the ledger pages', () => {
     const ledger = createLedger(play);
     cleanups.push(() => ledger.dispose());
     ledger.open();
-    expect(ledger.state.tabs.map(tab => tab.id)).toEqual(['settings', 'way-home', 'build', 'help']);
+    expect(ledger.state.tabs.map(tab => tab.id)).toEqual(['settings', 'card', 'way-home', 'build', 'help']);
     expect(ledger.state.tabs.some(tab => tab.id === 'look')).toBe(false);
 
     const offLook = registerLedgerPage(page('look', 15));
     const offRaid = registerLedgerPage(page('raid-gate', 40));
     cleanups.push(offLook, offRaid);
-    expect(ledger.state.tabs.map(tab => tab.id)).toEqual(['settings', 'look', 'way-home', 'build', 'raid-gate', 'help']);
+    expect(ledger.state.tabs.map(tab => tab.id)).toEqual(['settings', 'card', 'look', 'way-home', 'build', 'raid-gate', 'help']);
 
     ledger.select('look');
     offLook();
-    expect(ledger.state.tabs.map(tab => tab.id)).toEqual(['settings', 'way-home', 'build', 'raid-gate', 'help']);
+    expect(ledger.state.tabs.map(tab => tab.id)).toEqual(['settings', 'card', 'way-home', 'build', 'raid-gate', 'help']);
     // The page in view went away: the reader lands on the nearest earlier page, never on a blank.
-    expect(ledger.state.page).toBe('settings');
+    expect(ledger.state.page).toBe('card');
   });
 
   it('leaves out a page that says it is not available, and one that may not replace a page of its own', () => {
@@ -69,7 +69,7 @@ describe('the ledger pages', () => {
     const ledger = createLedger(play);
     cleanups.push(() => ledger.dispose());
     ledger.open();
-    expect(ledger.state.tabs.map(tab => tab.id)).toEqual(['settings', 'way-home', 'build', 'help']);
+    expect(ledger.state.tabs.map(tab => tab.id)).toEqual(['settings', 'card', 'way-home', 'build', 'help']);
     expect(ledger.state.tabs[0]!.provider).toBeNull();
     live = true;
     ledger.refresh();
@@ -171,13 +171,39 @@ describe('opening, closing and the cursor', () => {
   });
 });
 
+describe('the card and the map', () => {
+  it('shows your card to a signed-in walker and the map only where the walk lends one, never as a stand-in', () => {
+    const { play } = fakePlay();
+    const withMap = { ...play, map: () => null };
+    const ledger = createLedger(withMap);
+    cleanups.push(() => ledger.dispose());
+    ledger.open('map');
+    expect(ledger.state.tabs.map(tab => tab.id)).toEqual(['settings', 'card', 'way-home', 'map', 'build', 'help']);
+    expect(ledger.state.page).toBe('map');
+    const visitor = createLedger({ ...play, ctx: { ...play.ctx, self: null } });
+    cleanups.push(() => visitor.dispose());
+    visitor.open('card');
+    expect(visitor.state.tabs.map(tab => tab.id)).toEqual(['settings', 'way-home', 'build', 'help']);
+    expect(visitor.state.page).toBe('settings');
+  });
+
+  it('never lets another lane take the card or the map', () => {
+    cleanups.push(registerLedgerPage(page('map', 1)), registerLedgerPage(page('card', 2)));
+    const { play } = fakePlay();
+    const ledger = createLedger({ ...play, map: () => null });
+    cleanups.push(() => ledger.dispose());
+    ledger.open();
+    expect(ledger.state.tabs.filter(tab => tab.id === 'map' || tab.id === 'card').every(tab => tab.provider === null)).toBe(true);
+  });
+});
+
 describe('keyboard roaming between tabs', () => {
   it('moves with the arrows (wrapping), Home and End, and ignores other keys', () => {
     const { play } = fakePlay();
     const ledger = createLedger(play);
     ledger.open();
-    expect(ledger.step('settings', 'ArrowDown')).toBe('way-home');
-    expect(ledger.step('settings', 'ArrowRight')).toBe('way-home');
+    expect(ledger.step('settings', 'ArrowDown')).toBe('card');
+    expect(ledger.step('settings', 'ArrowRight')).toBe('card');
     expect(ledger.step('settings', 'ArrowUp')).toBe('help');
     expect(ledger.step('help', 'ArrowDown')).toBe('settings');
     expect(ledger.step('build', 'Home')).toBe('settings');
@@ -267,18 +293,18 @@ describe('settings written from the ledger', () => {
 
   it('rebinds another lane\'s key, refuses one of play\'s own, and leaves a displaced binding needing a key', () => {
     cleanups.push(registerActionBinding({ id: 'bag', label: 'Open your bag', defaultCode: 'KeyB', onPress() {} }));
-    cleanups.push(registerActionBinding({ id: 'map', label: 'Unfold the map', defaultCode: 'KeyM', onPress() {} }));
+    cleanups.push(registerActionBinding({ id: 'chart', label: 'Unroll the chart', defaultCode: 'KeyN', onPress() {} }));
     const { play, settings } = fakePlay();
     const ledger = createLedger(play);
     ledger.open('settings');
     ledger.beginCapture(bindingTarget('bag'));
     expect(ledger.pressKey('KeyW')).toEqual({ kind: 'taken', target: 'binding:bag', code: 'KeyW', holder: 'forward' });
     expect(ledger.state.capture).toBe('binding:bag');
-    expect(ledger.pressKey('KeyM')).toEqual({ kind: 'bound', target: 'binding:bag', code: 'KeyM', moved: 'binding:map' });
-    expect(settings.current.actionKeys).toMatchObject({ bag: 'KeyM', map: '' });
+    expect(ledger.pressKey('KeyN')).toEqual({ kind: 'bound', target: 'binding:bag', code: 'KeyN', moved: 'binding:chart' });
+    expect(settings.current.actionKeys).toMatchObject({ bag: 'KeyN', chart: '' });
     // A play action taking a binding's key leaves that binding without one.
     ledger.beginCapture('use');
-    expect(ledger.pressKey('KeyM')).toEqual({ kind: 'bound', target: 'use', code: 'KeyM', moved: 'binding:bag' });
+    expect(ledger.pressKey('KeyN')).toEqual({ kind: 'bound', target: 'use', code: 'KeyN', moved: 'binding:bag' });
     ledger.restoreKeys();
     expect(settings.current.actionKeys).toEqual({});
     ledger.beginCapture(bindingTarget('nobody'));

@@ -16,6 +16,13 @@ const LEDGER = [
   ['build', 'index.html?page=build'], ['build-closed', 'index.html?page=build&build=closed'], ['help', 'index.html?page=help&slots=1'],
   ['slots', 'index.html?page=look&slots=1'], ['portal-closed', 'portal.html?state=closed'], ['portal-stranded', 'portal.html?state=stranded'],
 ];
+// PL12: your card with what you forged, the minimap and the big map on both lands (paths from src/play/).
+const PL12 = [
+  ['card', '../card/bench.html?state=ready&forged=1'], ['card-plain', '../card/bench.html?state=ready'],
+  ['minimap-old', '../map/bench.html?view=mini'], ['minimap-grand', '../map/bench.html?view=mini&land=grand'],
+  ['map-old', '../map/bench.html?view=page'], ['map-grand', '../map/bench.html?view=page&land=grand'],
+];
+LEDGER.push(...PL12);
 const SIZES = ['1440x900', '390x844'];
 const wanted = values.only ? new Set(values.only.split(',')) : null;
 await mkdir(values.out, { recursive: true });

@@ -1,6 +1,7 @@
 import type { Camera, Matrix4, Object3D, Scene } from 'three';
 import type { KingdomAudio } from '@chatdom/audio';
 import type { KingdomId, Vec3 } from '@chatdom/shared';
+import type { CollisionWorld } from '@chatdom/shared/realm';
 import type { PlaceOpener } from '../interactions/places/openers';
 
 /**
@@ -79,7 +80,7 @@ export interface PlaySettings {
   /** The person's own keys for other lanes' bindings (`registerActionBinding`), by binding id. Unset: its default. */
   readonly actionKeys: Readonly<Record<string, string>>;
 }
-export type PlayAction = 'forward' | 'back' | 'left' | 'right' | 'jump' | 'sprint' | 'use' | 'view' | 'ledger' | 'fullscreen';
+export type PlayAction = 'forward' | 'back' | 'left' | 'right' | 'jump' | 'sprint' | 'use' | 'view' | 'ledger' | 'fullscreen' | 'map';
 
 /** A page in the Esc ledger. Shown only while available(ctx) is true; never a disabled stand-in. */
 export interface LedgerPageProvider {
@@ -172,6 +173,31 @@ export interface WalkFeatureContext extends Omit<ToolContext, 'holdPose'> {
   audio(): KingdomAudio | null;
   /** Each drawn frame, before the render: seconds since the last frame, and `performance.now()`. */
   onFrame(listener: (dt: number, now: number) => void): () => void;
+  /**
+   * Your own home while the room says you are inside it: its plot, the zone's box, its street door and the inside
+   * threshold, in world metres, and the collision world it stands in (read only). Null anywhere else, and on a walk that cannot say.
+   */
+  ownHome?(): OwnHomeInside | null;
+  /**
+   * Take the drawn camera for a moment (the wardrobe's mirror). While held, `set` places the camera for this frame
+   * after the walk has placed it, and your own body is drawn whole even in first person. Walking stays held by
+   * whoever holds input; release gives the camera straight back.
+   */
+  holdCamera?(reason: string): CameraHold;
+}
+export interface OwnHomeInside {
+  readonly plotId: string;
+  readonly interior: { readonly min: Vec3; readonly max: Vec3 };
+  /** The doorway's look point on the front face. */
+  readonly door: Vec3;
+  /** Where you stand once through the door: the inside threshold, on the floor. */
+  readonly inside: Vec3;
+  readonly world: CollisionWorld;
+}
+export interface CameraHold {
+  /** `fov` in degrees (vertical) for this frame only; the walk puts its own back on the next frame. */
+  set(eye: Vec3, target: Vec3, fov?: number): void;
+  release(): void;
 }
 export interface WalkFeatureProvider { readonly id: string; mount(ctx: WalkFeatureContext): () => void }
 
@@ -309,5 +335,50 @@ export function wantedArrivalSteps(ctx: PlayContext): readonly ArrivalStepProvid
 export function forgeEntry(ctx: PlayContext): ForgeEntry | null {
   return forge && safely(() => forge!.available(ctx)) ? forge : null;
 }
+/**
+ * The friend authority (PL12): which walkers drawn now are your mutual friends. A friend is mutual (you both walked
+ * together, or both added each other), never made from a Twitch follow. One may be registered; without one the map
+ * shows no one but you. `mutual` receives walker ids and names and returns the ids of mutual friends.
+ */
+export interface FriendSource {
+  readonly id: string;
+  mutual(walkers: readonly { readonly id: string; readonly name: string }[], ctx: PlayContext): ReadonlySet<string>;
+}
+let friendSource: FriendSource | null = null;
+export function registerFriendSource(source: FriendSource): () => void {
+  if (!source || typeof source.id !== 'string' || !source.id || typeof source.mutual !== 'function') throw new Error('A friend source needs an id and mutual().');
+  if (friendSource) throw new Error('The friend source is already registered.');
+  friendSource = source; changed();
+  return () => { if (friendSource === source) { friendSource = null; changed(); } };
+}
+export function registeredFriendSource(): FriendSource | null { return friendSource; }
+
+/** One thing you forged, as the Forge's own records say (PL12, the card's shelf). */
+export interface ForgedThing {
+  readonly id: string;
+  readonly title: string;
+  /** The plaque's words, as forged. */
+  readonly plaque: string;
+  readonly forgedAt: number;
+  /** Paint the piece into a canvas the card gives (square, device pixels set); omitted: the card shows its plaque only. */
+  paint?(canvas: HTMLCanvasElement): void;
+}
+/**
+ * The Forge's records of what you forged in this kingdom. forge-wish registers it; the card shows its shelf only
+ * while one is registered and it answers with real pieces. `mine` resolves to the signed-in person's own pieces.
+ */
+export interface ForgedSource {
+  readonly id: string;
+  mine(ctx: PlayContext, signal: AbortSignal): Promise<readonly ForgedThing[]>;
+}
+let forgedSource: ForgedSource | null = null;
+export function registerForgedSource(source: ForgedSource): () => void {
+  if (!source || typeof source.id !== 'string' || !source.id || typeof source.mine !== 'function') throw new Error('A forged source needs an id and mine().');
+  if (forgedSource) throw new Error('The forged source is already registered.');
+  forgedSource = source; changed();
+  return () => { if (forgedSource === source) { forgedSource = null; changed(); } };
+}
+export function registeredForgedSource(): ForgedSource | null { return forgedSource; }
+
 /** Called after any registration change, so an open ledger can add or drop a tab. */
 export function onSlotsChanged(listener: () => void): () => void { listeners.add(listener); return () => listeners.delete(listener); }

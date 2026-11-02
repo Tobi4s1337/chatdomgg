@@ -26,7 +26,20 @@ export const OWN_PAGES: readonly LedgerTab[] = Object.freeze([
   { id: 'build', title: 'Build', order: 30, provider: null },
   { id: 'help', title: 'Help', order: 90, provider: null },
 ]);
-const OWN_IDS = new Set(OWN_PAGES.map(page => page.id));
+/**
+ * Own pages shown only where they have something real to show (PL12): your card for a signed-in walker, the map
+ * where the walk lends one. Never a disabled stand-in.
+ */
+export const CARD_PAGE: LedgerTab = Object.freeze({ id: 'card', title: 'Your card', order: 15, provider: null });
+export const MAP_PAGE: LedgerTab = Object.freeze({ id: 'map', title: 'Map', order: 22, provider: null });
+const OWN_IDS = new Set([...OWN_PAGES, CARD_PAGE, MAP_PAGE].map(page => page.id));
+/** The ledger's own pages for this walk. */
+export function ownPages(play: Pick<PlayHost, 'ctx' | 'map'>): readonly LedgerTab[] {
+  const pages = [...OWN_PAGES];
+  if (play.ctx.self && play.ctx.mode !== 'stream') pages.push(CARD_PAGE);
+  if (play.map) pages.push(MAP_PAGE);
+  return pages;
+}
 
 /**
  * A key plate: one of play's own actions ('forward', 'jump', ...) or another lane's registered binding, written
@@ -94,7 +107,7 @@ export function createLedger(play: PlayHost): Ledger {
   let lease: CursorLease | null = null;
   let remembered = 'settings';
   const listeners = new Set<(state: LedgerState) => void>();
-  let state: LedgerState = { open: false, page: 'settings', tabs: OWN_PAGES, forge: null, capture: null, note: null, turn: { dir: 1, n: 0 } };
+  let state: LedgerState = { open: false, page: 'settings', tabs: ownPages(play), forge: null, capture: null, note: null, turn: { dir: 1, n: 0 } };
 
   const emit = () => { for (const listener of [...listeners]) listener(state); };
   const put = (patch: Partial<LedgerState>) => { state = { ...state, ...patch }; emit(); };
@@ -104,7 +117,7 @@ export function createLedger(play: PlayHost): Ledger {
     const registered = availableLedgerPages(play.ctx).filter(page => !OWN_IDS.has(page.id))
       .map(provider => ({ id: provider.id, title: provider.title, order: provider.order, provider }));
     // Own pages first on an equal order, so a page from another lane never pushes Settings out of first place.
-    const tabs = [...OWN_PAGES, ...registered].sort((a, b) => a.order - b.order || (a.provider ? 1 : 0) - (b.provider ? 1 : 0));
+    const tabs = [...ownPages(play), ...registered].sort((a, b) => a.order - b.order || (a.provider ? 1 : 0) - (b.provider ? 1 : 0));
     const entry = forgeEntry(play.ctx);
     return { tabs, forge: entry && !tabs.some(tab => tab.id === 'forge') ? entry : null };
   }
