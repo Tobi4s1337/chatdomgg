@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KingdomIdSchema, RAID_PENNANT_FRAME_MAX_BYTES, type RaidPennantArchivePage, type RaidPennantFrame } from '@chatdom/shared';
-import type { RaidPennantBrowserState } from './pennant-browser';
+import { raidPennantTriggerTop, type RaidPennantBrowserState } from './pennant-browser';
 import { createRaidPennantArchiveReader, createRaidPennantBrowser } from '../kingdom/moments/raid-pennant-browser';
 
 const kingdomId = KingdomIdSchema.parse('1'), now = 100_000;
@@ -112,5 +112,19 @@ describe('archive HTTP reader', () => {
     const fetcher = vi.fn().mockResolvedValueOnce(new Response(body(), { headers: { 'content-length': String(RAID_PENNANT_FRAME_MAX_BYTES + 1) } })).mockResolvedValueOnce(new Response(body())); vi.stubGlobal('fetch', fetcher);
     const reader = createRaidPennantArchiveReader(kingdomId, 'live', () => now);
     await expect(reader.read(null, new AbortController().signal)).rejects.toThrow(); await expect(reader.read(null, new AbortController().signal)).rejects.toThrow(); expect(cancel).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the trigger beside the page controls', () => {
+  // A Chronicle button at the top right of a 1440 by 900 page.
+  const chronicle = { left: 1300, right: 1420, top: 96, bottom: 134 };
+  const coverAt = (x: number, y: number) => x >= chronicle.left && x <= chronicle.right && y >= chronicle.top && y <= chronicle.bottom ? chronicle : null;
+  it('steps below a control it would cover, and stays where it is when nothing is there', () => {
+    expect(raidPennantTriggerTop({ left: 1176, top: 66, width: 154, height: 42 }, 900, coverAt)).toBe(chronicle.bottom + 8);
+    expect(raidPennantTriggerTop({ left: 600, top: 66, width: 154, height: 42 }, 900, coverAt)).toBe(66);
+  });
+  it('keeps its place rather than leave the canvas, and ignores a trigger not laid out yet', () => {
+    expect(raidPennantTriggerTop({ left: 1176, top: 66, width: 154, height: 42 }, 160, coverAt)).toBe(66);
+    expect(raidPennantTriggerTop({ left: 1176, top: 66, width: 0, height: 0 }, 900, coverAt)).toBe(66);
   });
 });

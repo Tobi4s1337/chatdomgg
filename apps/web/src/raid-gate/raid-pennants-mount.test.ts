@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { KingdomIdSchema, type KingdomId, type RaidPennantFeed, type RaidPennantFrame } from '@chatdom/shared';
 import type { TwitchMomentFeed } from '../twitch-moments/contracts';
-import { mountKingdomRaidPennants, type KingdomRaidPennantOptions } from '../kingdom/moments/raid-pennants';
+import { isBroadcastSurface, mountKingdomRaidPennants, type KingdomRaidPennantOptions } from '../kingdom/moments/raid-pennants';
 
 const now = 1_800_000_000_000, kingdomId = KingdomIdSchema.parse('202'), neighbourId = KingdomIdSchema.parse('303');
 const frame: RaidPennantFrame = { version: 1, origin: 'live', kingdomId, asOf: now,
@@ -48,6 +48,13 @@ function mount(view: ReturnType<typeof fakeView>, source: RaidPennantFeed, signa
 }
 
 describe('injected pennant history mount', () => {
+  it('keeps the reading control off the stream view, a broadcast nobody can press', () => {
+    const surface = (classes: string[]) => ({ ownerDocument: { documentElement: { classList: { contains: (name: string) => classes.includes(name) } } } }) as unknown as HTMLCanvasElement;
+    expect(isBroadcastSurface(surface(['stream-document']))).toBe(true);
+    expect(isBroadcastSurface(surface([]))).toBe(false);
+    expect(isBroadcastSurface(undefined)).toBe(false);
+  });
+
   it.each([false, true])('releases a typed reading host even when its disposer throws: %s', throws => {
     const view = fakeView(), source = fakeSource(), controller = new AbortController();
     const sites = vi.fn(() => []), release = vi.fn(() => { if (throws) throw new Error('retired host'); });

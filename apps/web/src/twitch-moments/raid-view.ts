@@ -12,7 +12,7 @@ import {
 import { Pool } from './train-view';
 import { createRaidChatLanternLayer, type RaidChatLantern } from './raid-chat-lantern';
 import { raidFittedShots, type RaidShotClear } from './raid-shot';
-import { RAID_BEAT, RAID_LIMITS, gatePose, wagonElapsed, wagonKind, wagonPose, type RaidFrame } from './raid-beat';
+import { RAID_APPROACH, RAID_BEAT, RAID_LIMITS, approachLead, gatePose, raidRoadFade, wagonElapsed, wagonKind, wagonPose, type RaidFrame } from './raid-beat';
 
 /** Hard caps for one view: instances per part, lit cores, glows and light pools on the ground. */
 export const RAID_VIEW_LIMITS = {
@@ -50,8 +50,12 @@ const TAU = Math.PI * 2;
 const v3 = (p: Vec3) => new THREE.Vector3(p[0], p[1], p[2]);
 const cells = (x: number, y: number, z: number, out = new THREE.Vector3()) => out.set(x * CELL, y * CELL, z * CELL);
 
-/** The pole stands this far to one side of the road at the gate line; the braziers flank the road a little inside it. */
-const POLE_ASIDE = 2.4, BRAZIER_ASIDE = 2.0, BRAZIER_IN = 1.2;
+/**
+ * The pole stands this far to one side of the road at the gate line; the braziers flank the road a little inside it.
+ * The realm keeps arriving raid guests out of this furniture (apps/realm/src/raid-gate/guest-spawn.ts mirrors it).
+ */
+export const RAID_GATE_LAYOUT = { poleAside: 2.4, brazierAside: 2.0, brazierIn: 1.2 } as const;
+const { poleAside: POLE_ASIDE, brazierAside: BRAZIER_ASIDE, brazierIn: BRAZIER_IN } = RAID_GATE_LAYOUT;
 
 /** Soft light: a round glow facing the camera, or a pool of light lying on the ground. Additive, HDR, unfogged. */
 const glowVertex = /* glsl */ `
@@ -69,7 +73,11 @@ const glowVertex = /* glsl */ `
     #else
       vSpot = position.xy * 2.0;
       vec4 centre = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-      gl_Position = projectionMatrix * (centre + vec4(position.xy * length(instanceMatrix[0].xyz), 0.0, 0.0));
+      float nearScale = 1.0;
+      #ifdef NEAR_FROM
+        nearScale = smoothstep(NEAR_FROM, NEAR_TO, length(centre.xyz));
+      #endif
+      gl_Position = projectionMatrix * (centre + vec4(position.xy * length(instanceMatrix[0].xyz) * nearScale, 0.0, 0.0));
     #endif
   }
 `;
@@ -91,10 +99,12 @@ class Glows {
   private readonly matrix = new THREE.Matrix4();
   private readonly scratch = new THREE.Color();
   count = 0;
-  constructor(parent: THREE.Group, readonly capacity: number, flat: boolean, name: string) {
+  /** `near` (m): a camera-facing glow shrinks away between these distances from whichever eye draws it. */
+  constructor(parent: THREE.Group, readonly capacity: number, flat: boolean, name: string, near?: NearFade) {
     const geometry = new THREE.PlaneGeometry(1, 1);
     if (flat) geometry.rotateX(-Math.PI / 2);
-    this.material = new THREE.ShaderMaterial({ vertexShader: glowVertex, fragmentShader: glowFragment, defines: flat ? { FLAT: '' } : {},
+    this.material = new THREE.ShaderMaterial({ vertexShader: glowVertex, fragmentShader: glowFragment,
+      defines: { ...(flat ? { FLAT: '' } : {}), ...(near ? nearDefines(near) : {}) },
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false, side: THREE.DoubleSide });
     this.mesh = new THREE.InstancedMesh(geometry, this.material, capacity);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -117,6 +127,15 @@ class Glows {
   dispose(): void { this.mesh.removeFromParent(); this.mesh.geometry.dispose(); this.mesh.dispose(); this.material.dispose(); }
 }
 
+/**
+ * Lights that drift free of the column (sky lanterns) can rise straight past whichever eye draws them: the gate shot
+ * stands over the street, a walking guest stands in it. Within `[from, to]` metres of that eye they shrink away on the
+ * GPU, so a lantern never fills the lens as a giant block, whatever camera the scene picked.
+ */
+type NearFade = readonly [from: number, to: number];
+const nearDefines = ([from, to]: NearFade) => ({ NEAR_FROM: from.toFixed(2), NEAR_TO: to.toFixed(2) });
+export const RAID_SKY_NEAR: NearFade = [3, 8];
+
 /** Fire and lamp flames: small cubes of plain HDR light (they feed the bloom), coloured per instance. */
 class Cores {
   readonly mesh: THREE.InstancedMesh;
@@ -127,7 +146,17 @@ class Cores {
   private readonly scale = new THREE.Vector3();
   private readonly scratch = new THREE.Color();
   count = 0;
-  constructor(parent: THREE.Group, readonly capacity: number) {
+  constructor(parent: THREE.Group, readonly capacity: number, near?: NearFade) {
+    if (near) {
+      this.material.defines = nearDefines(near);
+      this.material.onBeforeCompile = shader => {
+        shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', /* glsl */ `
+          vec3 nearCentre = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+          transformed *= smoothstep(NEAR_FROM, NEAR_TO, distance(nearCentre, cameraPosition));
+          #include <project_vertex>`);
+      };
+      this.material.customProgramCacheKey = () => `raid-near-${near[0]}-${near[1]}`;
+    }
     this.mesh = new THREE.InstancedMesh(this.geometry, this.material, capacity);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
@@ -140,6 +169,14 @@ class Cores {
     this.mesh.setMatrixAt(this.count, this.matrix.compose(at, this.turn.setFromAxisAngle(UP, yaw), this.scale.set(size, size * tall, size)));
     this.mesh.setColorAt(this.count, this.scratch.copy(colour).multiplyScalar(strength));
     this.count++;
+  }
+  /**
+   * A flame or lamp going out. These cores are unlit and opaque, so darkening one leaves a black block in the air
+   * (a fading sky lantern read as a black cube); a fading light shrinks instead and stays warm until it is gone.
+   */
+  fade(at: THREE.Vector3, size: number, yaw: number, colour: THREE.Color, strength: number, fade: number, tall = 1): void {
+    const f = Math.max(0, Math.min(1, fade));
+    this.push(at, size * f, yaw, colour, strength * (0.8 + 0.2 * f), tall);
   }
   flush(): void {
     this.mesh.count = this.count; this.mesh.visible = this.count > 0;
@@ -157,6 +194,57 @@ const EMBERS = 6;
 const SKY_LANTERN = new THREE.Color('#ffcf7a'), SKY_GLOW = new THREE.Color('#ff9c4a');
 /** A sky lantern: released this long after its wagon is through the gate, every `every` ms, and how long it rises. */
 const SKY = { from: 1600, every: 850, life: 11_000, rise: 0.62 } as const;
+
+/**
+ * The road a column rides: `approach` metres of open land outside the gate, then the town's own road in from the
+ * gate. Distances count from the gate, as they always have; negative ones lie out on the approach.
+ */
+class RaidRoad extends Path {
+  constructor(points: readonly Vec3[], readonly approach: number) { super(points); }
+  override get length(): number { return super.length - this.approach; }
+  override at(distance: number): { position: THREE.Vector3; tangent: THREE.Vector3 } { return super.at(distance + this.approach); }
+}
+const approachOf = (line: Path): number => (line instanceof RaidRoad ? line.approach : 0);
+
+/**
+ * The open road in front of the gate, walked out from it in strides over ground the host clears, nearest the gate
+ * last. Given the gate's `side` (where its standard stands), it leaves the gate straight and bends away from the
+ * standard, or the other way, or runs straight on, whichever reaches furthest first. Empty when the host has no such
+ * ground or it is too short to be seen as a road (RAID_APPROACH).
+ */
+export function raidApproachPoints(gate: { readonly position: THREE.Vector3; readonly tangent: THREE.Vector3 }, sample: RaidChatGround | undefined, side?: THREE.Vector3): Vec3[] {
+  if (!sample) return [];
+  const A = RAID_APPROACH, out = gate.tangent.clone().setY(0);
+  if (out.lengthSq() < 1e-9) return [];
+  out.normalize().negate();
+  const across = side ? side.clone().setY(0) : null;
+  if (across && across.lengthSq() > 1e-9) across.normalize();
+  const walk = (turn: number): Vec3[] => {
+    const points: Vec3[] = [], dir = new THREE.Vector3();
+    let x = gate.position.x, z = gate.position.z, last = gate.position.y;
+    for (let k = 1; k * A.step <= A.reach + 1e-9; k++) {
+      // Heading at the middle of this stride: straight out of the gate, then easing round by `turn`.
+      const s = (k - 0.5) * A.step, u = Math.min(1, Math.max(0, (s - A.bend.from) / (A.bend.to - A.bend.from)));
+      const angle = turn * u * u * (3 - 2 * u);
+      dir.copy(out).multiplyScalar(Math.cos(angle));
+      if (across && turn) dir.addScaledVector(across, Math.sin(angle));
+      x += dir.x * A.step; z += dir.z * A.step;
+      let height: number | null;
+      try { height = sample(x, z); } catch { height = null; }
+      // The first refused stride (a lot, a square, water, a steep bank) ends the road; nothing is laid past it.
+      if (height === null || !Number.isFinite(height) || Math.abs(height - last) > A.maxRise) break;
+      points.push([x, height, z]); last = height;
+    }
+    return points;
+  };
+  let best: Vec3[] = [];
+  for (const turn of across && across.lengthSq() > 0 ? [-A.bend.angle, A.bend.angle, 0] : [0]) {
+    const points = walk(turn);
+    if (points.length > best.length) best = points;
+    if (best.length * A.step >= A.reach - 1e-9) break;
+  }
+  return best.length * A.step >= A.min ? best.reverse() : [];
+}
 
 /** The gate as the road supplies it: its ground point, the way into the town, and the side its standard stands. */
 export interface RaidGateSite { readonly position: THREE.Vector3; readonly facing: THREE.Vector3; readonly side: THREE.Vector3 }
@@ -180,6 +268,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
   let anchors: { cue: RaidChatCue; position: THREE.Vector3; opacity: number }[] = [];
   let drawnLights: RaidChatLantern[] = [];
   let ground = host.ground;
+  let approachGround: RaidChatGround | undefined;
   let gateLanterns = 0;
   const gateSlots = new Map<string, { raidId: string; source: string; slot: number }>();
   let priorWagonLights = new Set<string>();
@@ -201,8 +290,8 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
   const torchCores = new Cores(layer, RAID_VIEW_LIMITS.torchCores);
   const torchGlows = new Glows(layer, RAID_VIEW_LIMITS.torches, false, 'raid-torch-glows');
   const torchPools = new Glows(layer, RAID_VIEW_LIMITS.torches, true, 'raid-torch-pools');
-  const skyCores = new Cores(layer, RAID_VIEW_LIMITS.sky);
-  const skyGlows = new Glows(layer, RAID_VIEW_LIMITS.sky, false, 'raid-sky-glows');
+  const skyCores = new Cores(layer, RAID_VIEW_LIMITS.sky, RAID_SKY_NEAR);
+  const skyGlows = new Glows(layer, RAID_VIEW_LIMITS.sky, false, 'raid-sky-glows', RAID_SKY_NEAR);
   /** Torch sites per raid, chosen once from supported ground beside the actual street; never re-guessed per frame. */
   const avenues = new Map<string, { at: THREE.Vector3; pair: number }[]>();
   let torchSites: Vec3[] = [];
@@ -226,7 +315,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
   }
   const dye = (tincture: Tincture) => pool(dyeBlueprint(host.kit, tincture), RAID_VIEW_LIMITS.dye);
 
-  /** The whole road: in from the gate to the market, then on up the castle road. */
+  /** The whole road: down the open approach (when there is one), in from the gate to the market, then on up the castle road. */
   function path(): Path | null {
     if (road === undefined) {
       const route = host.route();
@@ -237,7 +326,10 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
           const last = joined.at(-1)!;
           if (Math.hypot(point[0] - last[0], point[1] - last[1], point[2] - last[2]) > 0.05) joined.push(point);
         }
-        road = new Path(joined);
+        // Where the land in front of the gate is open, the column is seen coming down the road to it.
+        const inward = new Path(joined), entry = inward.at(0);
+        const approach = raidApproachPoints(entry, approachGround, new THREE.Vector3().crossVectors(UP, entry.tangent));
+        road = approach.length ? new RaidRoad([...approach, ...joined], new Path([...approach, joined[0]!]).length) : inward;
       }
     }
     return road;
@@ -332,7 +424,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
       const phase = (((atMs / 1000 + k * 0.29 + (sign > 0 ? 0.13 : 0)) / 1.8) % 1 + 1) % 1;
       point.copy(coals).addScaledVector(UP, 0.3 + phase * 2.4);
       point.x += Math.sin(k * 2.1 + phase * 3) * 0.25; point.z += Math.cos(k * 1.3 + phase * 2.2) * 0.2;
-      cores.push(point, 0.05 * (1 - phase * 0.6), k, EMBER, 1.6 * (1 - phase) * Math.min(1, flame));
+      cores.fade(point, 0.05 * (1 - phase * 0.6), k, EMBER, 1.6, (1 - phase) * Math.min(1, flame));
     }
   }
 
@@ -410,7 +502,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
         .addScaledVector(spot.tangent, 0.12 * s).addScaledVector(UP, 2.4 + SKY.rise * s + 0.04 * s * s);
       const opacity = Math.min(1, age / 700) * Math.min(1, (SKY.life - age) / 3200);
       const flicker = 1 + 0.08 * Math.sin(atMs * 0.009 + j * 1.3 + index);
-      skyCores.push(point, 0.17, h * TAU, SKY_LANTERN, 1.35 * flicker * opacity, 1.45);
+      skyCores.fade(point, 0.17, h * TAU, SKY_LANTERN, 1.35 * flicker, opacity, 1.45);
       skyGlows.push(point, 1.15, SKY_GLOW, 0.3 * flicker * opacity);
       counts.skyLanterns++;
     }
@@ -441,6 +533,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     if (!wanted || index >= Math.min(frame.units, RAID_LIMITS.units) - 1) return;
     const lead = frame.t - RAID_BEAT.arrive - index * frame.timing.pitch;
     const speed = wagonPose(0, line.length, frame.timing).speed, gap = frame.timing.pitch / 1000 * speed;
+    const approach = approachOf(line), early = approachLead(approach, speed), roadFade = raidRoadFade(frame.t);
     const P = BANNER_PONY_CELLS, L = RAID_PONY_LAYOUT;
     // The wagon ahead reaches back past its pivot to its tailboard; the one behind reaches forward to its pony's nose.
     const tail = RAID_WAGON_CELLS.pivot[0] * CELL;
@@ -454,8 +547,8 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     for (let row = 0; row < rows; row++) {
       const behind = tail + air * (row + 1) + row * length + P.front;
       const elapsed = lead - behind / speed * 1000;
-      if (elapsed < 0 || elapsed >= frame.timing.travel) continue;
-      const pose = wagonPose(elapsed, line.length, frame.timing), fade = pose.presence;
+      if (elapsed < -early || elapsed >= frame.timing.travel) continue;
+      const pose = wagonPose(elapsed, line.length, frame.timing, approach), fade = pose.presence * roadFade;
       if (fade <= 0.01) continue;
       const d = pose.distance, ahead = line.at(d + 1).position, back = line.at(d - 1).position, at = line.at(d).position;
       const dx = ahead.x - back.x, dz = ahead.z - back.z;
@@ -478,9 +571,9 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
   }
 
   function drawWagon(frame: RaidFrame, set: Banners, index: number, line: Path, atMs: number): boolean {
-    const elapsed = wagonElapsed(frame, index);
+    const approach = approachOf(line), elapsed = wagonElapsed(frame, index, approachLead(approach, wagonPose(0, line.length, frame.timing).speed));
     if (elapsed === null) return false;
-    const pose = wagonPose(elapsed, line.length, frame.timing), fade = pose.presence;
+    const pose = wagonPose(elapsed, line.length, frame.timing, approach), fade = pose.presence * raidRoadFade(frame.t);
     if (fade <= 0.01) return false;
     const d = pose.distance, kind = wagonKind(index), colour = set.arms.colour;
     // Level along the chord from the back axle to the pony, so a bend in the street turns the wagon, never snaps it.
@@ -527,7 +620,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
         // The two panes are authored in rack-local cells. Follow the complete fitted transform on bends.
         for (const x of [2, 5]) {
           point.copy(cells(x, 5.5, 2.5)).applyMatrix4(m);
-          cores.push(point, 0.105, index, LAMP, 1.5 * fade);
+          cores.fade(point, 0.105, index, LAMP, 1.5, fade);
         }
         point.copy(cells(3.5, 5.5, 2.5)).applyMatrix4(m);
         glows.push(point, 1.0, LAMP_GLOW, 0.22 * fade);
@@ -546,7 +639,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     // Its lantern, and the warm light it carries along the street.
     const [lx, ly, lz] = RAID_WAGON_CELLS.lantern, flicker = 1 + 0.06 * Math.sin(atMs * 0.011 + index * 1.9);
     point.copy(cells(lx - px, ly, lz - pz)).applyMatrix4(w);
-    cores.push(point, 0.11, index, LAMP, 1.7 * flicker * fade);
+    cores.fade(point, 0.11, index, LAMP, 1.7 * flicker, fade);
     glows.push(point, 1.5, LAMP_GLOW, 0.42 * flicker * fade);
     lightPools.push(b.copy(at).addScaledVector(s3.set(dx, 0, dz).normalize(), 1.3).addScaledVector(UP, 0.05), 3.6, LAMP_POOL, 0.16 * fade);
     return true;
@@ -570,6 +663,13 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
       cues = [...byCue.values()].sort((a, b) => b.asOf - a.asOf || a.lightId.localeCompare(b.lightId)).slice(0, 32);
     },
     ground(sample: RaidChatGround | undefined): void { ground = sample; },
+    /** The open land in front of the gate the column may come down; none keeps it gathering at the gate. */
+    approachGround(sample: RaidChatGround | undefined): void {
+      if (sample === approachGround) return;
+      approachGround = sample; road = undefined;
+    },
+    /** Metres of open road the column is seen on before the gate (0 without one). */
+    approach: (): number => { const line = path(); return line ? approachOf(line) : 0; },
     chatAnchors: () => anchors.map(anchor => ({ ...anchor, position: anchor.position.clone() })),
     apply(frames: readonly RaidFrame[], atMs: number): void {
       for (const instances of pools.values()) instances.count = 0;
@@ -726,7 +826,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
         chatLanterns: chatLights.stats().lanterns, chatGateLanterns: gateLanterns,
         chatGateX: centre.x, chatGateY: centre.y, chatGateZ: centre.z,
         chatGateSpan: points.length ? Math.hypot(bounds.max.x - bounds.min.x, bounds.max.z - bounds.min.z) : 0,
-        torches: counts.torches, skyLanterns: counts.skyLanterns,
+        torches: counts.torches, skyLanterns: counts.skyLanterns, approach: road ? approachOf(road) : 0,
         lights: cores.count + glows.count + lightPools.count + torchCores.count + torchGlows.count + torchPools.count + skyCores.count + skyGlows.count };
     },
     dispose(): void {

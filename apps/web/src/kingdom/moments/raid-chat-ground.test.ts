@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { generateSettlementPlan, type SettlementPlan } from '@chatdom/world';
-import { raidChatGroundOf, raidPropGroundOf } from './raid-chat-ground';
+import { RAID_APPROACH_HALF_WIDTH, raidApproachGroundOf, raidChatGroundOf, raidPropGroundOf } from './raid-chat-ground';
 
 const generated = generateSettlementPlan({ seed: 'raid-chat-ground', tier: 'hamlet', firstYear: 2026, year: 2026 });
 function site(): SettlementPlan {
@@ -61,4 +61,19 @@ describe('raid chat on the adopted surface', () => {
     expect(sample(99, 10)).toBeNull();
   });
 
+
+  it('opens the road in front of the gate past the bounds and across streets, never through a lot, a square or water', () => {
+    const plan = site(), reservation = generated.reservations[0]!;
+    const sample = raidApproachGroundOf({ ...plan, reservations: [{ ...reservation, lot: { ...reservation.lot, minX: 20, maxX: 25, minZ: 20, maxZ: 25 } }],
+      streets: [{ id: 'road', from: 'a', to: 'b', kind: 'main', name: 'Road', points: [[0, 7, -50], [0, 7, 50]], width: 8, verge: 1 }], activeStreetIds: ['road'] }, () => 7);
+    // A street and land past the plan's bounds carry it; the chat lamp's sampler refuses both.
+    expect(sample(0, 0)).toBe(7);
+    expect(sample(130, 0)).toBe(7);
+    // A wagon's half-width clear of a lot, the civic square and the lake.
+    for (const [x, z] of [[20 - RAID_APPROACH_HALF_WIDTH + .1, 22], [-85, -85], [50, 50 - 5 - RAID_APPROACH_HALF_WIDTH + .5]]) expect(sample(x!, z!)).toBeNull();
+    expect(sample(20 - RAID_APPROACH_HALF_WIDTH - .1, 22)).toBe(7);
+    // A steep bank or missing terrain ends it.
+    expect(raidApproachGroundOf(plan, x => 7 + x)(10, 10)).toBeNull();
+    expect(raidApproachGroundOf(plan, () => NaN)(10, 10)).toBeNull();
+  });
 });

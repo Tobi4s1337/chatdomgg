@@ -6,6 +6,7 @@
  */
 import { createSignal, For, lazy, onCleanup, onMount, Show } from 'solid-js';
 import type { KingdomId } from '../../../api/src/raid-gate/contracts';
+import { parseRaidWelcomePath } from '../../../api/src/raid-gate/guest-contracts';
 import { createKingdomScene } from '../kingdom/scene';
 import type { GateBench } from './bench';
 import { createRaidGateController, type GateSnapshot, type RaidGateController } from './controller';
@@ -40,10 +41,21 @@ const RaidRoad = lazy(() => import('./road/RaidRoad'));
 const IncomingRaid = lazy(() => import('./incoming'));
 const NoticeBench = lazy(() => import('./entry/notice-bench'));
 const GuestInsigniaBench = lazy(() => import('./guest-insignia-bench'));
+/**
+ * `/-/raid-gate?guestWalk=/raid/<kingdom>/<key>` walks a signed-in raider into the lane's own mock stack through the
+ * production welcome entry (the RS10 stage serves this build against that stack only). It admits a simulated kingdom
+ * and nothing else; the live `/raid/...` route still admits only a live one.
+ */
+const GuestWalk = lazy(() => import('./entry'));
 
 export default function RaidGatePage() {
   const query = new URLSearchParams(location.search);
   if (query.get('guestInsignia') === '1') return <GuestInsigniaBench />;
+  const walk = query.get('guestWalk');
+  if (walk !== null) {
+    if (!parseRaidWelcomePath(walk)) return <p class="rg-bench-refused" role="alert">This bench walks in only through a raid welcome path.</p>;
+    return <GuestWalk pathname={walk} origin="simulated" />;
+  }
   if (query.get('entryNotice') === '1') return <NoticeBench />;
   if (query.get('incoming') === '1') return <IncomingRaid />;
   return <Show when={query.get('road') === '1' && query.get('bench') === 'simulated'} fallback={<RaidGateRoute />}><RaidRoad /></Show>;

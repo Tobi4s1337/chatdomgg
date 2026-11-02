@@ -47,6 +47,28 @@ function arms(id: string): SVGSVGElement | null {
 }
 const dateFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
+/**
+ * Where the trigger may rest. The wall's top often sits above the picture, so the trigger is clamped to the canvas
+ * edge, where the page keeps its own controls (the Chronicle, the welcome note). It steps below whatever control would
+ * cover it, and stays put when stepping down would leave the canvas.
+ */
+export function raidPennantTriggerTop(trigger: { left: number; top: number; width: number; height: number }, floor: number,
+  coverAt: (x: number, y: number) => { bottom: number } | null): number {
+  const { left, width, height } = trigger;
+  let top = trigger.top;
+  if (!(width > 0) || !(height > 0)) return top;
+  for (let tries = 0; tries < 4; tries++) {
+    let below = -Infinity;
+    for (const x of [left + 2, left + width / 2, left + width - 2]) for (const y of [top + 2, top + height - 2]) {
+      const cover = coverAt(x, y); if (cover && Number.isFinite(cover.bottom)) below = Math.max(below, cover.bottom);
+    }
+    if (below === -Infinity) return top;
+    if (below + 8 + height > floor - 8) return trigger.top;
+    top = below + 8;
+  }
+  return top;
+}
+
 /** A DOM reading surface attached to an existing visible wall; it owns no world input. */
 export function mountRaidPennantBrowser(options: RaidPennantBrowserOptions): { dispose(): void } {
   const { canvas, camera, browser, signal } = options;
@@ -158,7 +180,7 @@ export function mountRaidPennantBrowser(options: RaidPennantBrowserOptions): { d
     trigger.hidden = !visible || !state.canOpen || state.open;
     if (anchor) {
       const left = Math.max(rect.left + 8, Math.min(anchor.x - trigger.offsetWidth / 2, rect.right - trigger.offsetWidth - 8));
-      const top = Math.max(rect.top + 8, Math.min(anchor.y - trigger.offsetHeight - 10, rect.bottom - trigger.offsetHeight - 8));
+      const top = clearOfPage(left, Math.max(rect.top + 8, Math.min(anchor.y - trigger.offsetHeight - 10, rect.bottom - trigger.offsetHeight - 8)), rect);
       trigger.style.left = `${left}px`; trigger.style.top = `${top}px`;
       if (state.open) {
         panel.style.maxWidth = `${Math.max(0, rect.width - 16)}px`;
@@ -169,6 +191,19 @@ export function mountRaidPennantBrowser(options: RaidPennantBrowserOptions): { d
       }
     }
     frame = requestAnimationFrame(position);
+  }
+  /** What page control covers a point above the canvas: the first one over it that is not this layer's own. */
+  function coverAt(x: number, y: number): { bottom: number } | null {
+    for (const element of document.elementsFromPoint(x, y)) {
+      if (layer.contains(element)) continue;
+      if (element === canvas || element.contains(canvas)) return null;
+      return element.getBoundingClientRect();
+    }
+    return null;
+  }
+  function clearOfPage(left: number, top: number, rect: DOMRect): number {
+    if (typeof document.elementsFromPoint !== 'function') return top;
+    return raidPennantTriggerTop({ left, top, width: trigger.offsetWidth, height: trigger.offsetHeight }, rect.bottom, coverAt);
   }
   function dispose() {
     if (disposed) return; disposed = true; cancelAnimationFrame(frame); unsubscribe();

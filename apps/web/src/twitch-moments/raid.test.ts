@@ -86,8 +86,8 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     expect(moments.sample(START + 5000).raids).toHaveLength(1);
   });
 
-  it('restores silently: a raid in a reset snapshot or recovered is never welcomed again', () => {
-    const { moments } = controller('simulated', [raid(START - 2000, { seq: 3, raidKey: 'old' })], 3);
+  it('restores silently: a finished raid in a reset snapshot or a recovered one is never welcomed again', () => {
+    const { moments } = controller('simulated', [raid(START - 10 * 60_000, { seq: 3, raidKey: 'old' })], 3);
     expect(moments.currentFacts()).toEqual([]);
     expect(moments.sample(START + 4000).raids).toEqual([]);
     expect(moments.receiveFact('e1', raid(START, { seq: 4, origin: 'recovered', raidKey: 'later' }))).toEqual({ accepted: true });
@@ -96,6 +96,29 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     expect(frame.raids).toEqual([]);
     expect(frame.audio).toEqual([]);
     expect(frame.focus).toBeNull();
+  });
+
+  it('joins a column still on the road where it is, hearing nothing it missed and never replaying the gate', () => {
+    const committed = START - 20_000;
+    const { moments } = controller('simulated', [raid(committed, { seq: 5, raidKey: 'road', viewers: 10_000 })], 5);
+    const frame = moments.sample(START + 1000);
+    expect(frame.raids).toHaveLength(1);
+    expect(frame.raids[0]).toMatchObject({ key: 'road', t: 21_000, units: raidUnits(10_000) });
+    expect(frame.audio.length).toBeGreaterThan(0);
+    expect(frame.audio.every(cue => cue.atMs >= START)).toBe(true);
+    expect(frame.audio.map(cue => cue.cue)).not.toContain('cloth-unfurl');
+    // The same raid arriving again as a live fact is the same caravan.
+    expect(moments.receiveFact('e1', raid(committed, { seq: 6, raidKey: 'road', viewers: 10_000 }))).toEqual({ accepted: true });
+    expect(moments.sample(START + 2000).raids).toHaveLength(1);
+    // A reconnect mid-show keeps the beat this page was already playing.
+    expect(moments.reset({ epoch: 'e1', asOf: START + 3000, throughSeq: 6, current: [raid(committed, { seq: 5, raidKey: 'road', viewers: 10_000 })] })).toEqual({ accepted: true });
+    expect(moments.sample(START + 3000).raids[0]).toMatchObject({ key: 'road', t: 23_000 });
+  });
+
+  it('never stages a late-delivered raid from a snapshot', () => {
+    const late = { ...raid(START - 5000, { seq: 7, raidKey: 'late', displayUntil: START - 4000 }), committedAt: START - 2000 };
+    const { moments } = controller('simulated', [late], 7);
+    expect(moments.sample(START + 1000).raids).toEqual([]);
   });
 
   it('keeps origins apart and labels the simulated', () => {

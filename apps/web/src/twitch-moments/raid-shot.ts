@@ -27,8 +27,16 @@ export interface RaidShotGate {
 
 export type RaidShotCandidate = readonly [eye: THREE.Vector3, target: THREE.Vector3, fov: number];
 
-/** An optional standing check from the adopted world: whether an eye may stand there and see its aim. */
-export type RaidShotClear = (eye: THREE.Vector3, target: THREE.Vector3) => boolean;
+/**
+ * An optional standing check from the adopted world: whether an eye may stand there and see its aim. With a `frame`,
+ * the check also refuses a view whose near foreground (a roof beside the eye) covers more than a small part of the
+ * picture; without one it judges standing and the line to the aim only.
+ */
+export type RaidShotClear = (eye: THREE.Vector3, target: THREE.Vector3, frame?: RaidShotFrame) => boolean;
+/** The picture a view is judged for; `maxBlocked` loosens the world's own foreground limit for a fallback tier. */
+export interface RaidShotFrame { readonly fov: number; readonly aspect: number; readonly maxBlocked?: number }
+/** Foreground tiers tried in turn before a view is kept on standing alone: the world's own limit, then looser ones. */
+export const RAID_SHOT_FOREGROUND_TIERS = [undefined, 0.2, 0.35] as const;
 
 const UP = new THREE.Vector3(0, 1, 0);
 const camera = new THREE.PerspectiveCamera();
@@ -151,8 +159,16 @@ export function* raidFittedShots(line: Path | null, gate: RaidShotGate, aspect: 
     if (share <= maxShare) fitted.push({ shot, rank: -gateShare(gate, eye, target, fov, aspect) });
     else if (Number.isFinite(share)) loose.push({ shot, rank: share }); // A lower bound: enough to order the fallbacks.
   }
-  // Nothing fits cleanly (a tight bend, a hill): the least-crowded honest view, never one that passes through the lens.
-  for (const list of [fitted.sort((a, b) => a.rank - b.rank), loose.sort((a, b) => a.rank - b.rank).slice(0, 6)]) {
-    for (const { shot } of list) if (!clear || clear(shot[0], shot[1])) yield shot;
+  // A fitted view with an open foreground first (no roof filling the side of the picture), then the fitted views with
+  // the least of one (a dense hamlet may have no fully open view); then any fitted view the eye may stand in; and when
+  // nothing fits cleanly (a tight bend, a hill), the least-crowded honest view, never one that passes through the lens.
+  fitted.sort((a, b) => a.rank - b.rank);
+  const given = new Set<RaidShotCandidate>();
+  if (clear) for (const maxBlocked of RAID_SHOT_FOREGROUND_TIERS) for (const { shot } of fitted) {
+    if (given.has(shot) || !clear(shot[0], shot[1], maxBlocked === undefined ? { fov: shot[2], aspect } : { fov: shot[2], aspect, maxBlocked })) continue;
+    given.add(shot); yield shot;
+  }
+  for (const list of [fitted, loose.sort((a, b) => a.rank - b.rank).slice(0, 6)]) {
+    for (const { shot } of list) if (!given.has(shot) && (!clear || clear(shot[0], shot[1]))) yield shot;
   }
 }

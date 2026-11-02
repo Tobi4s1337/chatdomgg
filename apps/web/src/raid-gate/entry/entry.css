@@ -17,4 +17,4 @@
 .raid-entry-choice a { display: inline-flex; align-items: center; min-height: 44px; margin: 8px 0 -12px; color: #71372b; font-size: 15px; text-underline-offset: 4px; }
 .raid-entry-choice button:focus-visible, .raid-entry-choice a:focus-visible, .raid-entry-welcome a:focus-visible { outline: 3px solid #aa6437; outline-offset: 4px; }
 .raid-notice-bench { position: fixed; inset: 0; background: radial-gradient(ellipse at 50% 30%, #474556, #202633 75%); }
-@media (max-width: 600px) { .raid-entry-welcome { top: 12px; padding: 14px 20px 12px; } .raid-entry-welcome p { font-size: 16px; } .raid-entry-choice-paper { padding: 30px 22px; } }
+@media (max-width: 700px) { .raid-entry-welcome { top: 146px; padding: 14px 20px 12px; } .raid-entry-welcome p { font-size: 16px; } .raid-entry-choice-paper { padding: 30px 22px; } }

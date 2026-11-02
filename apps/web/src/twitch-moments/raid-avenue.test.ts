@@ -4,7 +4,7 @@ import { RAID_BEAT, raidScaleProfile, raidUnits, type RaidFrame } from './raid-b
 import { BANNER_PONY_CELLS, RAID_WAGON_CELLS, bannerPonyRows, skyLanternsPerWagon, torchPairs } from './raid-art';
 import { CART_CELLS, PONY_CELLS } from './gift-art';
 import { CELL } from './banner';
-import { RAID_PONY_LAYOUT, RAID_TORCH_LAYOUT, RAID_VIEW_LIMITS, createRaidLayer, type RaidChatGround, type RaidLayerHost } from './raid-view';
+import { RAID_PONY_LAYOUT, RAID_SKY_NEAR, RAID_TORCH_LAYOUT, RAID_VIEW_LIMITS, createRaidLayer, type RaidChatGround, type RaidLayerHost } from './raid-view';
 
 /** A straight street running +z from a gate at z 20, 4 m wide; the sampler refuses the street itself and one lot. */
 function layer(ground?: RaidChatGround) {
@@ -94,6 +94,42 @@ describe('raid torch avenue and sky lanterns', () => {
       view.dispose(); dispose();
     }
   }, 20_000);
+
+  it('never leaves a dark block in the air: a fading flame or lantern shrinks and stays warm', () => {
+    const { root, view, dispose } = layer(open);
+    let checked = 0;
+    for (let t = 0; t < 90_000; t += 700) {
+      view.apply([frame(70_000, t)], t);
+      root.traverse(node => {
+        if (!(node instanceof THREE.InstancedMesh) || node.name !== 'raid-flames' || !node.instanceColor) return;
+        for (let i = 0; i < node.count; i++) {
+          const [r, g, b] = [0, 1, 2].map(k => node.instanceColor!.getComponent(i, k));
+          expect(Math.max(r!, g!, b!)).toBeGreaterThan(0.6);
+          checked++;
+        }
+      });
+    }
+    expect(checked).toBeGreaterThan(100);
+    view.dispose(); dispose();
+  }, 30_000);
+
+  it('shrinks sky lanterns away near whichever eye draws them, and only the sky lanterns', () => {
+    const { root, view, dispose } = layer(open);
+    view.apply([frame(70_000, 24_000)], 24_000);
+    const meshes = root.getObjectsByProperty('isInstancedMesh', true) as THREE.InstancedMesh[];
+    const near = meshes.filter(mesh => (mesh.material as THREE.Material & { defines?: Record<string, string> }).defines?.NEAR_FROM);
+    expect(near.map(mesh => mesh.name).sort()).toEqual(['raid-flames', 'raid-sky-glows']);
+    for (const mesh of near) {
+      const material = mesh.material as THREE.Material & { defines: Record<string, string> };
+      expect([Number(material.defines.NEAR_FROM), Number(material.defines.NEAR_TO)]).toEqual([...RAID_SKY_NEAR]);
+    }
+    const core = near.find(mesh => mesh.name === 'raid-flames')!.material as THREE.MeshBasicMaterial;
+    const shader = { vertexShader: THREE.ShaderLib.basic.vertexShader, fragmentShader: '', uniforms: {} } as unknown as THREE.WebGLProgramParametersWithUniforms;
+    core.onBeforeCompile(shader, undefined as unknown as THREE.WebGLRenderer);
+    expect(shader.vertexShader).toMatch(/smoothstep\(NEAR_FROM, NEAR_TO, distance\(nearCentre, cameraPosition\)\);\s*#include <project_vertex>/);
+    expect(RAID_SKY_NEAR[0]).toBeGreaterThanOrEqual(2);
+    view.dispose(); dispose();
+  });
 
   it('leads banner ponies two abreast between the wagons of a longer column, never for a single wagon', () => {
     expect([3, 140, 10_000, 70_000].map(v => bannerPonyRows(raidUnits(v)))).toEqual([0, 1, 2, 2]);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { Path } from './gift-view';
 import { createRaidLayer, type RaidLayerHost } from './raid-view';
-import { RAID_SHOT_FIT, RAID_UNIT_ENVELOPE, raidColumnShare, raidFittedShots } from './raid-shot';
+import { RAID_SHOT_FIT, RAID_SHOT_FOREGROUND_TIERS, RAID_UNIT_ENVELOPE, raidColumnShare, raidFittedShots } from './raid-shot';
 
 const INBOUND: [number, number, number][] = [[10, 0, 20], [10, 0, 60]];
 const OUTBOUND: [number, number, number][] = [[10, 0, 60], [10, 0, 100]];
@@ -108,5 +108,46 @@ describe('raid gate camera', () => {
     const shots = [...raidFittedShots(bent, gate, 16 / 9)];
     expect(shots.length).toBeGreaterThan(0);
     for (const [eye, target, fov] of shots) expect(raidColumnShare(bent, eye, target, fov, 16 / 9)).toBeLessThan(Infinity);
+  });
+
+  it('prefers a fitted view with an open foreground, and keeps standing-only views behind it', () => {
+    const bent = new Path([[0, 0, 0], [0, 0, 30], [25, 0, 55], [25, 0, 110]]);
+    const gate = { position: new THREE.Vector3(0, 0, 0), facing: new THREE.Vector3(0, 0, 1), side: new THREE.Vector3(1, 0, 0) };
+    const plain = [...raidFittedShots(bent, gate, 16 / 9)];
+    const best = plain[0]!;
+    // The best-ranked view has a roof in its foreground; the world asks about the picture only when given a frame.
+    const frames: unknown[] = [];
+    const roofed = (eye: THREE.Vector3, _target: THREE.Vector3, frame?: { fov: number; aspect: number }) => {
+      if (frame) frames.push(frame);
+      return !frame || !eye.equals(best[0]);
+    };
+    const shots = [...raidFittedShots(bent, gate, 16 / 9, roofed)];
+    expect(shots[0]![0].equals(best[0])).toBe(false);
+    expect(shots.some(shot => shot[0].equals(best[0]))).toBe(true);
+    expect(frames[0]).toEqual({ fov: best[2], aspect: 16 / 9 });
+    // A world that refuses every picture still yields the standing views, in rank order.
+    const closed = [...raidFittedShots(bent, gate, 16 / 9, (_eye, _target, frame) => !frame)];
+    expect(closed[0]![0].equals(best[0])).toBe(true);
+  });
+
+  it('takes the least obstructed fitted view when no foreground is fully open, before standing-only views', () => {
+    const bent = new Path([[0, 0, 0], [0, 0, 30], [25, 0, 55], [25, 0, 110]]);
+    const gate = { position: new THREE.Vector3(0, 0, 0), facing: new THREE.Vector3(0, 0, 1), side: new THREE.Vector3(1, 0, 0) };
+    const plain = [...raidFittedShots(bent, gate, 16 / 9)];
+    const best = plain[0]!, second = plain[1]!;
+    // A lined street: every picture has some roof in it; the second-ranked view has the least, open at the 20% tier.
+    const asked: (number | undefined)[] = [];
+    const lined = (eye: THREE.Vector3, _target: THREE.Vector3, frame?: { fov: number; aspect: number; maxBlocked?: number }) => {
+      if (!frame) return true;
+      asked.push(frame.maxBlocked);
+      return (frame.maxBlocked ?? 0) >= (eye.equals(second[0]) ? 0.2 : 0.35);
+    };
+    const shots = [...raidFittedShots(bent, gate, 16 / 9, lined)];
+    expect(shots[0]![0].equals(second[0])).toBe(true);
+    expect(shots[1]![0].equals(best[0])).toBe(true);
+    expect(asked.slice(0, 1)).toEqual([undefined]);
+    expect(new Set(asked)).toEqual(new Set(RAID_SHOT_FOREGROUND_TIERS));
+    // Each view is offered once.
+    expect(new Set(shots).size).toBe(shots.length);
   });
 });

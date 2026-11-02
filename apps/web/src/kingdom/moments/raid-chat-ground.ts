@@ -13,7 +13,11 @@ const segmentDistance = (x: number, z: number, a: readonly number[], b: readonly
   return Math.hypot(x - a[0]! - t * dx, z - a[2]! - t * dz);
 };
 
-export interface RaidPropGroundOptions { readonly radius: number; readonly height: number; readonly maxRise?: number; readonly sampleSpacing?: number; readonly support?: RaidChatSupport }
+export interface RaidPropGroundOptions {
+  readonly radius: number; readonly height: number; readonly maxRise?: number; readonly sampleSpacing?: number; readonly support?: RaidChatSupport;
+  /** A road, not a prop: it may run on past the plan's bounds and across a street; lots, squares, the castle and water still refuse it. */
+  readonly road?: boolean;
+}
 
 /** Read-only adopted plan plus the exact surface drawn by this scene. Recreate on world adoption. */
 export function raidPropGroundOf(plan: SettlementPlan, ground: (x: number, z: number) => number, options: RaidPropGroundOptions): RaidChatGround {
@@ -38,12 +42,12 @@ export function raidPropGroundOf(plan: SettlementPlan, ground: (x: number, z: nu
     catch { return null; }
   };
   const blocked = (x: number, z: number): boolean => {
-    if (x - r < plan.bounds.minX || x + r > plan.bounds.maxX || z - r < plan.bounds.minZ || z + r > plan.bounds.maxZ) return true;
+    if (!options.road && (x - r < plan.bounds.minX || x + r > plan.bounds.maxX || z - r < plan.bounds.minZ || z + r > plan.bounds.maxZ)) return true;
     if (excluded.some(box => x + r >= box.minX && x - r <= box.maxX && z + r >= box.minZ && z - r <= box.maxZ)) return true;
     if (plan.lake.radiusX > 0 && plan.lake.radiusZ > 0 &&
         Math.hypot((Math.max(0, Math.abs(x - plan.lake.x) - r)) / plan.lake.radiusX,
           (Math.max(0, Math.abs(z - plan.lake.z) - r)) / plan.lake.radiusZ) <= 1.08) return true;
-    return streets.some(street => street.points.slice(1).some((point, i) =>
+    return !options.road && streets.some(street => street.points.slice(1).some((point, i) =>
       segmentDistance(x, z, street.points[i]!, point) <= street.width / 2 + r));
   };
   return (x, z) => {
@@ -65,4 +69,16 @@ export function raidPropGroundOf(plan: SettlementPlan, ground: (x: number, z: nu
 
 export function raidChatGroundOf(plan: SettlementPlan, ground: (x: number, z: number) => number, support?: RaidChatSupport): RaidChatGround {
   return raidPropGroundOf(plan, ground, { radius: RAID_CHAT_FOOT, height: 2.4, ...(support ? { support } : {}) });
+}
+
+/** A wagon with its pony and standard, half its width plus air, in metres; the approach is cleared this far either side. */
+export const RAID_APPROACH_HALF_WIDTH = 1.9;
+
+/**
+ * The open road in front of the gate, for the incoming column to come down: clear of every lot, square, the castle
+ * and water by a wagon's half-width, on the adopted terrain, and on gently sloping ground only. It is a visual road,
+ * not a walkable one; the scene's own trees and native occupancy reach it through `support` when the host has them.
+ */
+export function raidApproachGroundOf(plan: SettlementPlan, ground: (x: number, z: number) => number, support?: RaidChatSupport): RaidChatGround {
+  return raidPropGroundOf(plan, ground, { radius: RAID_APPROACH_HALF_WIDTH, height: 5.6, maxRise: .9, sampleSpacing: 1.9, road: true, ...(support ? { support } : {}) });
 }
