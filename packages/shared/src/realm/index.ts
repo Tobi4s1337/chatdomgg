@@ -12,3 +12,4 @@ export * from './hosts';
 export * from './watch';
 export * from './moments';
 export * from './dock';
+export * from './monarch';

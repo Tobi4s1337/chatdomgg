@@ -6,6 +6,7 @@ import { assertRealmSchema, createRealmPool, describeStorageFailure,
 import { INGRESS_ROUTE, ingressCredentials } from './ingress';
 import { RealmPanelGifts, RealmPanelService, mountRealmPanelRoutes } from './ingress/panel';
 import { ForgetGuard, RealmChatPrivacy, createQuietDisclosure, disclosedServices, mountChatPrivacyRoute } from './ingress/panel';
+import { createMonarchRoomChannel, createPostgresMonarchTitles, withMonarchArrival } from './monarch';
 import { RealmPanelSettings } from './ingress/panel/settings';
 import { HEALTH_ROUTE, READY_ROUTE } from './diagnostics';
 import { TenureEvidenceVerifier, tenureEvidenceKey } from './allocation';
@@ -149,6 +150,12 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
       const kingdom = boot.services.kingdoms.get(id), plan = boot.loader.current(id)?.scene.plan;
       return kingdom && plan ? shelfHomes(plan, kingdom.privateState.homes, kingdom.layoutRevision) : [];
     } })] });
+  // The monarch: the verified broadcaster steps out at the castle gate, crowned with the title they chose (monarch/).
+  const monarchTitles = createPostgresMonarchTitles(pool, origin);
+  Object.assign(boot.services, { monarch: monarchTitles, channels: [...boot.services.channels!, createMonarchRoomChannel(monarchTitles)], prepareSpawn: withMonarchArrival(boot.services.prepareSpawn, kingdomId => {
+    const held = boot.services.kingdoms.get(kingdomId), founded = boot.loader.current(kingdomId);
+    return held?.current && founded ? { world: held.world, layoutRevision: held.layoutRevision, writerEpoch: held.writerEpoch, plan: founded.scene.plan } : undefined;
+  }) });
   // Fishing opens only where its pier layer is drawn: REALM_PIER_FISHING=1 once the kingdom view mounts it.
   const pierVisible = process.env.REALM_PIER_FISHING === '1';
   const pierWhere = (id: string) => names.has(id) ? `${names.get(id)} pier` : 'the pier';

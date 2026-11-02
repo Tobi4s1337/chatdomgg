@@ -1,0 +1,16 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": [
+    "../../../packages/shared/src/realm/**/*.ts",
+    "../../../apps/realm/src/monarch/**/*.ts",
+    "../../../apps/realm/src/kingdom-room.ts",
+    "../../../apps/realm/src/ports.ts",
+    "../../../apps/realm/src/main.ts",
+    "../../../apps/web/src/kingdom/scene.ts",
+    "../../../apps/web/src/kingdom/grand-land/monarch/**/*.ts",
+    "../../../apps/web/src/kingdom/grand-land/monarch/**/*.tsx",
+    "../../../apps/web/src/kingdom/walk-scene.ts",
+    "../../../apps/web/src/kingdom/observed-walkers.ts"
+  ]
+}

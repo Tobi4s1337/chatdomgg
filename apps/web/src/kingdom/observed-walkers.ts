@@ -13,6 +13,7 @@ import type { RealmWalkerPose } from '../realm/client';
 import type { WalkerLabel } from './walk-scene';
 import { presentWalkers, type WalkerPresentation } from './walker-presentation';
 import { createWalkerFigures, createWalkerSplit, createWalkerViewTest } from './walker-figures';
+import { walkerGaze } from './grand-land/monarch/gaze';
 
 export type WalkerSlots = ReadonlyMap<number, WalkerPresentation>;
 
@@ -107,7 +108,7 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
       people.update(full.map(({ pose, opacity }) => ({ id: pose.id, look: pose.look,
         position: [pose.x, bodyY(pose), pose.z] as const, ...(ground ? { ground: ground.groundFor(pose.id), floor: ground.floorAt } : {}), heading: pose.yaw * Math.PI * 2 / 256,
         distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, opacity,
-        ...(pose.posture ? { posture: pose.posture } : {}), time: now / 1000 })), camera);
+        ...(pose.posture ? { posture: pose.posture } : {}), time: now / 1000, ...walkerGaze(pose) })), camera);
       figures.update(simple.map(({ pose, opacity }) => ({ id: pose.id, position: [pose.x, bodyY(pose), pose.z] as const,
         heading: pose.yaw * Math.PI * 2 / 256, distance: pose.distance, speed: pose.posture ? 0 : pose.speed, opacity })), now);
       ground?.retain(heights);
