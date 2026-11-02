@@ -12,6 +12,8 @@ export interface ItemCardOptions {
   /** The picture's size in CSS pixels. By default it follows the space the card has. */
   readonly portraitSize?: number;
   readonly sound?: BagSound;
+  /** Facts another part of the kingdom knows about this thing (a rod's fish landed), shown after its own. */
+  readonly facts?: (item: ItemRecord) => readonly { readonly label: string; readonly value: string }[];
 }
 
 const SHOWN_EVENTS = 6;
@@ -131,7 +133,7 @@ export function mountItemCard(host: HTMLElement, item: ItemRecord, options: Item
   if (line && !(origin && opening(line) === opening(origin))) paper.append(el('p', 'cdc-line', line));
   if (origin) paper.append(el('p', 'cdc-origin', origin));
 
-  const list = facts(item, owner);
+  const list = [...facts(item, owner), ...(owner && options.facts ? options.facts(item) : [])];
   if (list.length) {
     const dl = el('dl', 'cdc-facts');
     for (const fact of list) {

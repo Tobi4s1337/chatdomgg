@@ -1,4 +1,4 @@
-import type { FishingPierSite, Vec3 } from '@chatdom/shared';
+import { ROD_MAX_REACH_M, type FishingPierSite, type Vec3 } from '@chatdom/shared';
 import type { RealmChannelPose } from '../room-channels';
 
 export type FishingWaterSample = { readonly waterY: number | null; readonly groundY: number };
@@ -28,8 +28,9 @@ export function onFishingLip(site: FishingPierSite, pose: RealmChannelPose, revi
 }
 
 /** Server byte yaw (0 = +Z, 64 = +X), not camera radians. Samples the whole open-water cast corridor. */
+/** `reachM` is the rod's earned reach (PI12, `fishingRodHistory`): a little further at full draw, never luckier. */
 export function aimFishingCast(site: FishingPierSite, pose: RealmChannelPose, revision: number,
-  chargeMs: number, sample: FishingWaterSampler): FishingCastAim {
+  chargeMs: number, sample: FishingWaterSampler, reachM = 0): FishingCastAim {
   const refuse = (message: string): FishingCastAim => ({ ok: false, message });
   if (!onFishingLip(site, pose, revision)) return refuse('Stand at the end of the pier to cast.');
   if (!Number.isFinite(chargeMs) || chargeMs < 200 || chargeMs > 5000) return refuse('Draw the rod back a little before casting.');
@@ -39,7 +40,8 @@ export function aimFishingCast(site: FishingPierSite, pose: RealmChannelPose, re
   const fromRootX = pose.position[0] - site.root[0], fromRootZ = pose.position[2] - site.root[2];
   const localZ = fromRootX * out[0] + fromRootZ * out[2];
   const toEdge = (site.walk + 4 - localZ) / forward;
-  const range = 2 + 5 * Math.min(1, (chargeMs - 200) / 1400), distance = toEdge + range;
+  const reach = Number.isFinite(reachM) ? Math.min(ROD_MAX_REACH_M, Math.max(0, reachM)) : 0;
+  const range = 2 + (5 + reach) * Math.min(1, (chargeMs - 200) / 1400), distance = toEdge + range;
   const steps = Math.ceil(range / .25);
   let depthM = 0;
   for (let step = 0; step <= steps; step++) {

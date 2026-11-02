@@ -102,3 +102,58 @@ export type ItemReply =
   | { readonly type: 'items.history'; readonly id: string; readonly itemId: ItemId; readonly events: readonly ItemEvent[]; readonly next?: string | null }
   | { readonly type: 'items.invalidated' } // coalesced overflow; refresh the bag using bounded pages
   | { readonly type: 'items.refused'; readonly id: string; readonly message: string };   // plain words for the person
+
+/*
+ * The keepsake shelf at home and the belt's order (PI12). A separate 'shelf' room channel, so the closed item request
+ * union stays as it is. The shelf and the belt are the two slotted places; arranging into a taken slot swaps the two
+ * things, so nothing is ever lost or pushed out. Visitors see a shelf only while its owner shows it, from the owner's
+ * door, and only as `ShelfPiece`s: approved names, never a person id.
+ */
+export const SHELF_CHANNEL = 'shelf';
+/** Slots 0..63 on the shelf, as on the belt. The shelf is drawn in bays of `SHELF_BAY_SLOTS`. */
+export const SHELF_SLOTS = 64;
+export const SHELF_BAY_SLOTS = 12;
+const shelfRequestId = z.string().min(1).max(64);
+export const ShelfRequestSchema = z.discriminatedUnion('type', [
+  /** Your own shelf's settings and your door. Your things themselves come over the 'items' channel. */
+  z.strictObject({ type: z.literal('shelf.read'), id: shelfRequestId }),
+  /** Put one of your things into a shelf or belt slot. A taken slot swaps the two things. */
+  z.strictObject({ type: z.literal('shelf.arrange'), id: shelfRequestId, itemId: z.string().min(1).max(64),
+    revision: z.number().int().nonnegative(), to: z.enum(['shelf', 'hotbar']), slot: z.number().int().min(0).max(SHELF_SLOTS - 1) }),
+  /** Show your shelf to visitors at your door, or keep it to yourself. Revision-checked. */
+  z.strictObject({ type: z.literal('shelf.show'), id: shelfRequestId, shown: z.boolean(), revision: z.number().int().nonnegative() }),
+  /** The doors in this kingdom whose shelves you may look at, your own included. */
+  z.strictObject({ type: z.literal('shelf.doors'), id: shelfRequestId }),
+  /** Look at the shelf behind one door, as a visitor sees it. */
+  z.strictObject({ type: z.literal('shelf.visit'), id: shelfRequestId, plotId: z.string().min(1).max(128) }),
+]);
+export type ShelfRequest = z.infer<typeof ShelfRequestSchema>;
+export interface ShelfSettings {
+  /** Visitors may look at the shelf from your door. Off until you choose. */
+  readonly shown: boolean;
+  readonly revision: number;
+}
+/** A door with a shelf behind it: yours, or one its owner shows. `at` is the step in front of the door, in metres. */
+export interface ShelfDoor {
+  readonly plotId: string;
+  readonly at: readonly [number, number, number];
+  /** The owner's approved public name; null for your own door or a hidden name ("a neighbour"). */
+  readonly name: string | null;
+  readonly mine: boolean;
+  readonly shown: boolean;
+}
+/** A keepsake as a visitor sees it: what it is and its story, never whose id it is. */
+export interface ShelfPiece {
+  readonly id: ItemId;
+  readonly defId: ItemDefId;
+  readonly slot: number;
+  readonly number: number | null;
+  readonly story: { readonly name: string | null; readonly where: string; readonly at: number; readonly line: string };
+  readonly detail: Readonly<Record<string, string | number>>;
+}
+export type ShelfReply =
+  | { readonly type: 'shelf.state'; readonly id?: string; readonly settings: ShelfSettings; readonly door: ShelfDoor | null }
+  | { readonly type: 'shelf.arranged'; readonly id: string; readonly items: readonly ItemRecord[] }
+  | { readonly type: 'shelf.doors'; readonly id: string; readonly doors: readonly ShelfDoor[] }
+  | { readonly type: 'shelf.view'; readonly id: string; readonly plotId: string; readonly name: string | null; readonly pieces: readonly ShelfPiece[] }
+  | { readonly type: 'shelf.refused'; readonly id: string; readonly message: string };

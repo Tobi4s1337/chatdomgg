@@ -124,7 +124,36 @@ export interface FishingPublicCast {
   readonly id: string; readonly walkerId: string; readonly phase: FishingCastPhase;
   readonly anchor: Vec3; readonly float: Vec3 | null; readonly at: number; readonly fight?: FishingFightView;
 }
-export interface FishingPublicRod { readonly walkerId: string; readonly model: 'tool:rod.willow' }
+export interface FishingPublicRod {
+  readonly walkerId: string; readonly model: 'tool:rod.willow';
+  /** The rod's history as others see it: carved notches and the legend's ribbon (PI12). */
+  readonly notches?: number; readonly ribbon?: boolean;
+}
+
+/**
+ * A rod gets a little better by doing, never by paying, and never luckier: it reaches a little further for the fish
+ * it has landed, and it carries its history (a notch per ten catches, a ribbon after its first legend). Counted from
+ * the kingdom's own catch records for walker catches; chat lines are not a rod.
+ */
+export interface FishingRodHistory {
+  readonly catches: number;
+  readonly notches: number;
+  /** The first legend this rod held, or null. */
+  readonly legend: { readonly speciesId: string; readonly at: number } | null;
+  /** Extra metres of cast at full draw. Odds, bites and fights never change. */
+  readonly reachM: number;
+}
+export const ROD_NOTCH_EVERY = 10;
+export const ROD_MAX_NOTCHES = 12;
+export const ROD_REACH_EVERY = 25;
+export const ROD_REACH_STEP_M = .25;
+export const ROD_MAX_REACH_M = 1.5;
+export function fishingRodHistory(catches: number, legend: FishingRodHistory['legend'] = null): FishingRodHistory {
+  const count = Number.isSafeInteger(catches) && catches > 0 ? catches : 0;
+  return Object.freeze({ catches: count, notches: Math.min(ROD_MAX_NOTCHES, Math.floor(count / ROD_NOTCH_EVERY)),
+    legend: legend ? Object.freeze({ speciesId: legend.speciesId, at: legend.at }) : null,
+    reachM: Math.min(ROD_MAX_REACH_M, Math.floor(count / ROD_REACH_EVERY) * ROD_REACH_STEP_M) });
+}
 export interface FishingPublicBeat {
   readonly castId: string; readonly walkerId: string; readonly at: number;
   readonly kind: 'draw' | 'cast' | 'float' | 'nibble' | 'bite' | 'hook' | 'pressure' | 'landing' | 'ended';
@@ -141,18 +170,23 @@ export type FishingPrivateReply =
       readonly almanac?: Vec3;
       readonly water: { readonly hour: number; readonly mood: FishingMood } | null;
       readonly casts: readonly FishingPublicCast[]; readonly rods: readonly FishingPublicRod[];
-      readonly self: { readonly rod: ItemRecord | null; readonly cast: FishingOwnerCast | null; readonly pendingCastId: string | null } }
+      readonly self: { readonly rod: ItemRecord | null; readonly cast: FishingOwnerCast | null; readonly pendingCastId: string | null;
+        /** Your rod's history (PI12), once the kingdom has read it. */
+        readonly history?: FishingRodHistory } }
   | { readonly type: 'pier.action'; readonly id: string; readonly cast: FishingOwnerCast | null }
   | { readonly type: 'pier.refused'; readonly id?: string; readonly castId?: string; readonly message: string }
   | { readonly type: 'pier.pending'; readonly id?: string; readonly castId: string; readonly message: string }
   | { readonly type: 'pier.kept'; readonly id?: string; readonly castId: string; readonly item: ItemRecord;
       readonly fish: FishingCaughtFish; readonly personalFirst: boolean; readonly kingdomFirst: boolean; readonly replayed: boolean;
       /** The numbered mount a rare catch or a kingdom first leaves on your shelf. */
-      readonly keepsake?: ItemRecord | null }
+      readonly keepsake?: ItemRecord | null;
+      /** Your rod's history after this catch (PI12). */
+      readonly history?: FishingRodHistory }
   | { readonly type: 'pier.marks'; readonly id: string; readonly marks: readonly PierAlmanacMark[] };
 export type FishingPublicReply =
   | { readonly type: 'pier.casts'; readonly at: number; readonly revision: number; readonly casts: readonly FishingPublicCast[] }
-  | { readonly type: 'pier.rod'; readonly at: number; readonly walkerId: string; readonly equipped: boolean }
+  | { readonly type: 'pier.rod'; readonly at: number; readonly walkerId: string; readonly equipped: boolean;
+      readonly notches?: number; readonly ribbon?: boolean }
   | { readonly type: 'pier.beats'; readonly beats: readonly FishingPublicBeat[] }
   | { readonly type: 'pier.caught'; readonly at: number; readonly castId: string; readonly walkerId: string;
       readonly fish: FishingCaughtFish; readonly kingdomFirst: boolean };

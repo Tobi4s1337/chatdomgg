@@ -161,7 +161,8 @@ try {
     console.log(path.replace(root + '/', ''));
   } else {
     const clip = has('clip');
-    const url = `http://localhost:${port}/-/pier?view=play&kingdom=${scene.kingdomId}&hour=${hour}&seed=${seed}${clip ? '&clip=1' : '&hold=1'}`;
+    // --query adds bench params (`camera=first&rodcatches=34&legend=fish:frostking-char`); --prefix names the stills.
+    const url = `http://localhost:${port}/-/pier?view=play&kingdom=${scene.kingdomId}&hour=${hour}&seed=${seed}${clip ? '&clip=1' : '&hold=1'}${arg('query') ? `&${arg('query')}` : ''}`;
     await send('Page.navigate', { url });
     for (let i = 0; ; i++) {
       const state = await evaluate('JSON.stringify({ready:window.__chatdomPier?.stats.ready,error:window.__chatdomPierError})', false).then(JSON.parse).catch(() => ({}));
@@ -213,11 +214,13 @@ try {
     const shoot = async name => {
       if (clip || (only && !only.includes(name))) return;
       await evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
-      const path = resolve(output, `pi10-gpu-${name}-dusk@${width}x${height}.png`);
+      const path = resolve(output, `${arg('prefix') ?? 'pi10-gpu'}-${name}-dusk@${width}x${height}.png`);
       await capture(path);
       const stats = await play('stats'), pier = await evaluate('({calls: window.__chatdomPier.stats.calls, triangles: window.__chatdomPier.stats.triangles})', false);
       measurements.push({ path: path.replace(root + '/', ''), url, renderer: gpu, layer: stats, frame: pier });
       console.log(`${path.replace(root + '/', '')} ${JSON.stringify(pier)} layer ${JSON.stringify(stats)}`);
+      // Hold the lease only as long as the stills asked for.
+      if (only && name === only.at(-1)) throw Symbol.for('done');
     };
     // Advance the stage: in clip mode every 1/fps is one shot frame; for stills it is stepped in server ticks.
     const advance = async ms => {

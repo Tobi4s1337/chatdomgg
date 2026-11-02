@@ -6,13 +6,14 @@ import {
   type ItemDefinition, type ItemId, type ItemPlace, type ItemRecord, type ItemSource, type ItemStory,
   type KingdomId, type PersonId,
   ItemListCursorSchema, ItemHistoryCursorSchema, type ItemListPage, type ItemHistoryPage,
+  SHELF_SLOTS, type ShelfPiece, type ShelfSettings,
 } from '@chatdom/shared';
 import { type ItemCatalogue } from './catalogue';
-import type { ItemStore, ItemTransaction } from './store';
+import type { ItemStore, ItemTransaction, ShelfRow } from './store';
 import { itemPage } from './pages';
 export { createItemCatalogue, itemCatalogue, registerItemDefinitions } from './catalogue';
 export type { ItemCatalogue } from './catalogue';
-export type { ItemStore, ItemTransaction } from './store';
+export type { ItemStore, ItemTransaction, ShelfRow } from './store';
 
 export interface GrantInput {
   readonly key: string;
@@ -34,6 +35,11 @@ export type SharedGrantInput = Omit<GrantInput, 'ownerId' | 'key' | 'story'> & {
   readonly story: Omit<ItemStory, 'by'>;
 };
 export type ItemResult = { readonly ok: true; readonly item: ItemRecord } | { readonly ok: false; readonly message: string };
+/** An arrangement moves the thing and, when its slot was taken, the thing that stood there. */
+export type ArrangeResult = { readonly ok: true; readonly items: readonly ItemRecord[] } | { readonly ok: false; readonly message: string };
+export type ShelfResult = { readonly ok: true; readonly settings: ShelfSettings } | { readonly ok: false; readonly message: string };
+/** A shown shelf in this kingdom: whose it is and the approved name they showed it under. */
+export interface ShownShelf { readonly ownerId: PersonId; readonly name: string | null }
 /** Server-only admission for browser writes; checked inside the kingdom transaction. */
 export interface ItemOwnerAccess {
   readonly kingdomId: KingdomId; readonly origin: ItemRecord['origin'];
@@ -52,7 +58,24 @@ export interface RealmItems {
   historyPage(itemId: ItemId, after?: string): Promise<ItemHistoryPage>;
   onChange(listener: (ownerId: PersonId, kingdomId: KingdomId, items: readonly ItemRecord[]) => void): () => void;
   forgetName(personId: PersonId): Promise<void>;
+  /**
+   * Owner-only, revision-checked: put a thing into a shelf or belt slot. When another of your things stands there it
+   * moves too, never out of your keeping: to the slot you came from, else the first free slot in the same place, else
+   * the place you came from. Both moves are in the history.
+   */
+  arrange(ownerId: PersonId, itemId: ItemId, to: { place: 'shelf' | 'hotbar'; slot: number }, revision: number, access?: ItemOwnerAccess): Promise<ArrangeResult>;
+  /** Your shelf's settings here; hidden until you choose (`{ shown: false, revision: 0 }`). */
+  shelf(ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin']): Promise<ShelfSettings>;
+  /** Show your shelf at your door under your approved name, or keep it to yourself. Revision-checked. */
+  showShelf(ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin'], shown: boolean, revision: number,
+    name: string, access?: ItemOwnerAccess): Promise<ShelfResult>;
+  shownShelves(kingdomId: KingdomId, origin: ItemRecord['origin']): Promise<readonly ShownShelf[]>;
+  /** What a visitor sees on a shown shelf; null while its owner keeps it to themselves. No person ids. */
+  visitShelf(ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin']): Promise<readonly ShelfPiece[] | null>;
 }
+
+const settingsOf = (row: ShelfRow | null): ShelfSettings => Object.freeze({ shown: row?.shown ?? false, revision: row?.revision ?? 0 });
+const ShelfNameSchema = z.string().trim().min(1).max(128);
 
 const StorySchema = z.strictObject({
   by: z.strictObject({ personId: PersonIdSchema, name: z.string().trim().min(1).max(128) }).nullable(),
@@ -251,6 +274,93 @@ export function createRealmItems(options: { store: ItemStore; catalogue: ItemCat
     },
     onChange(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     forgetName: personId => store.forgetName(personId),
+    async arrange(ownerId, id, to, revision, access) {
+      if ((to.place !== 'shelf' && to.place !== 'hotbar') || !Number.isInteger(to.slot) || to.slot < 0 || to.slot >= SHELF_SLOTS) {
+        return { ok: false, message: 'Choose a valid place for this thing.' };
+      }
+      const current = await store.get(id);
+      const belongs = (item: ItemRecord) => item.ownerId === ownerId && (!access || item.kingdomId === access.kingdomId && item.origin === access.origin);
+      if (!current || !belongs(current)) return { ok: false, message: 'This thing is not yours here.' };
+      const admit = async (tx: ItemTransaction) => { if (access && !await access.current(tx)) refuse('Your kingdom entry has ended. Open your bag after walking in again.'); };
+      try {
+        const changed = await store.transaction(current.kingdomId, async tx => {
+          const item = await tx.get(id);
+          if (!item || !belongs(item)) return refuse('This thing is not yours here.');
+          if (item.revision !== revision) return refuse('This thing has changed. Look again before moving it.');
+          if (item.place === 'spent') return refuse('This thing has already been let go.');
+          await admit(tx);
+          const def = definition(item.defId);
+          if (!def.places.includes(to.place)) refuse(to.place === 'shelf' ? 'Only keepsakes stand on the shelf.' : 'Only tools go on your belt.');
+          if (item.place === to.place && item.slot === to.slot) return [item];
+          const there = await tx.atPlace(ownerId, item.origin, to.place);
+          const occupant = there.find(other => other.id !== id && other.slot === to.slot);
+          const at = now(), moved: ItemRecord[] = [];
+          const place = async (thing: ItemRecord, where: ItemPlace, slot: number | null) => {
+            const next = { ...thing, place: where, slot, revision: thing.revision + 1 };
+            await tx.save(next);
+            await tx.append({ itemId: thing.id, kind: 'moved', from: thing.place, to: where, at, actor: 'owner' });
+            notify(tx, next); moved.push(next);
+          };
+          if (occupant) {
+            const otherDef = definition(occupant.defId);
+            let where: ItemPlace, slot: number | null;
+            if (item.place === to.place && item.slot !== null) { where = to.place; slot = item.slot; }
+            else {
+              const taken = new Set(there.map(other => other.slot));
+              const free = Array.from({ length: SHELF_SLOTS }, (_, index) => index).find(index => !taken.has(index));
+              if (free !== undefined) { where = to.place; slot = free; }
+              else if (item.place !== 'hand' && otherDef.places.includes(item.place)) {
+                where = item.place; slot = item.place === 'shelf' || item.place === 'hotbar' ? item.slot : null;
+              } else return refuse('There is no free place here. Take something down first.');
+            }
+            // The two saves pass through each other's slots; the constraint still holds at the commit.
+            await tx.deferSlots();
+            await place(item, to.place, to.slot);
+            await place(occupant, where, slot);
+          } else await place(item, to.place, to.slot);
+          await admit(tx);
+          return moved;
+        });
+        return { ok: true, items: await Promise.all(changed.map(async item => await store.get(item.id) ?? item)) };
+      } catch (error) {
+        if (error instanceof ItemRuleError) return { ok: false, message: error.message };
+        throw error;
+      }
+    },
+    async shelf(ownerId, kingdomId, origin) { return settingsOf(await store.shelf(ownerId, kingdomId, origin)); },
+    async showShelf(ownerId, kingdomId, origin, shown, revision, name, access) {
+      if (access && (access.kingdomId !== kingdomId || access.origin !== origin)) return { ok: false, message: 'This shelf is not yours here.' };
+      const approved = ShelfNameSchema.safeParse(name);
+      if (shown && !approved.success) return { ok: false, message: 'Your shelf needs your approved name before visitors can see it.' };
+      try {
+        const settings = await store.transaction(kingdomId, async tx => {
+          const row = await tx.shelf(ownerId, origin);
+          if ((row?.revision ?? 0) !== revision) refuse('Your shelf has changed. Look again before choosing.');
+          if (access && !await access.current(tx)) refuse('Your kingdom entry has ended. Walk in again to choose.');
+          if (row && row.shown === shown) return settingsOf(row);
+          const next: ShelfRow = { ownerId, origin, shown, name: shown && approved.success ? approved.data : null, revision: revision + 1, updatedAt: now() };
+          await tx.saveShelf(next);
+          return settingsOf(next);
+        });
+        return { ok: true, settings };
+      } catch (error) {
+        if (error instanceof ItemRuleError) return { ok: false, message: error.message };
+        throw error;
+      }
+    },
+    async shownShelves(kingdomId, origin) {
+      return (await store.shownShelves(kingdomId, origin)).map(row => Object.freeze({ ownerId: row.ownerId, name: row.name }));
+    },
+    async visitShelf(ownerId, kingdomId, origin) {
+      const row = await store.shelf(ownerId, kingdomId, origin);
+      if (!row?.shown) return null;
+      const items = await store.atPlace(ownerId, kingdomId, origin, 'shelf');
+      return items.filter(item => item.slot !== null).map((item): ShelfPiece => Object.freeze({
+        id: item.id, defId: item.defId, slot: item.slot!, number: item.number,
+        story: { name: item.story.by?.name ?? null, where: item.story.where, at: item.story.at, line: item.story.line },
+        detail: { ...item.detail },
+      }));
+    },
   };
 }
 

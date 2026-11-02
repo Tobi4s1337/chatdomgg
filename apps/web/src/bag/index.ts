@@ -5,6 +5,6 @@ export { createBagStore, BAG_MAX_RECORDS, type BagStore, type BagStoreOptions, t
 export { itemPortrait, paintItemPortrait, disposeItemPortraits, portraitPixels, PORTRAIT_HOUR } from './portrait';
 export { mountItemCard, type ItemCardOptions } from './card';
 export { mountBag, type BagOptions } from './bag';
-export { mountHotbar, hotbarSlots, type Hotbar, type HotbarOptions } from './hotbar';
+export { HOTBAR_SLOTS, mountHotbar, hotbarSlots, type Hotbar, type HotbarOptions } from './hotbar';
 export type { BagSound, BagSurface } from './dom';
 export * from './words';

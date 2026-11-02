@@ -9,7 +9,38 @@ export interface WillowRodModel {
   readonly tip: Vec3;
 }
 
-export function createWillowRod(): WillowRodModel {
+/** What a rod has earned: tally notches (one per ten fish, at most twelve) and the ribbon of its first legend. */
+export interface RodMarks { readonly notches?: number; readonly ribbon?: boolean }
+
+/**
+ * The tally: little pale cuts standing out on either side of the foregrip, two to a row, read from the reel up.
+ * Rod cells, in the order they are earned.
+ */
+export const ROD_NOTCH_CELLS: readonly Vec3[] = Object.freeze(Array.from({ length: 12 }, (_, index): Vec3 =>
+  Object.freeze([index % 2 ? 1 : 3, 13 + Math.floor(index / 2), 1]) as unknown as Vec3));
+export const ROD_NOTCH_MATERIAL = MAT.cream;
+
+/** The first legend's ribbon: a red band tied below the foregrip with a gold knot and two short tails. Rod cells. */
+export const ROD_RIBBON_CELLS: readonly (readonly [number, number, number, number])[] = Object.freeze([
+  [1, 11, 1, MAT.fabricRed], [3, 11, 1, MAT.fabricRed], [2, 11, 2, MAT.fabricRed], [2, 11, 0, MAT.fabricGold],
+  [1, 11, 0, MAT.fabricRed], [3, 11, 0, MAT.fabricRed], [3, 10, 0, MAT.fabricRed], [3, 9, 0, MAT.fabricRed], [1, 10, 0, MAT.fabricRed],
+].map(cell => Object.freeze(cell) as unknown as readonly [number, number, number, number]));
+
+/** The ribbon alone, in the rod's own cells, for a layer that ties it onto a drawn rod. */
+export function createRodRibbon(): VoxelAsset {
+  const s = new Sculpt(5, 32, 5);
+  for (const [x, y, z, material] of ROD_RIBBON_CELLS) s.set(x, y, z, material);
+  return { id: 'tool:rod.willow.ribbon', revision: 1, lattice: 'avatar', size: [5, 32, 5], voxels: s.cells };
+}
+
+/** One notch, a single pale cell at the origin, placed per notch by a layer. */
+export function createRodNotch(): VoxelAsset {
+  const s = new Sculpt(1, 1, 1);
+  s.set(0, 0, 0, ROD_NOTCH_MATERIAL);
+  return { id: 'tool:rod.willow.notch', revision: 1, lattice: 'avatar', size: [1, 1, 1], voxels: s.cells };
+}
+
+export function createWillowRod(marks: RodMarks = {}): WillowRodModel {
   const s = new Sculpt(5, 32, 5);
   // A willow wand, with a heavier bark grip and three pale bindings. The upper stem leans gently forwards.
   s.box(2, 0, 1, 3, 7, 3, MAT.bark);
@@ -28,6 +59,9 @@ export function createWillowRod(): WillowRodModel {
   }
   s.set(4, 4, 4, MAT.brass);
   s.set(2, 30, 3, MAT.brass).set(2, 31, 3, MAT.brass);
+  const notches = Math.max(0, Math.min(ROD_NOTCH_CELLS.length, Math.trunc(marks.notches ?? 0)));
+  for (const [x, y, z] of ROD_NOTCH_CELLS.slice(0, notches)) s.set(x, y, z, ROD_NOTCH_MATERIAL);
+  if (marks.ribbon) for (const [x, y, z, material] of ROD_RIBBON_CELLS) s.set(x, y, z, material);
   return { asset: { id: 'tool:rod.willow', revision: 1, lattice: 'avatar', size: [5, 32, 5], voxels: s.cells }, grip: [2.5, 6, 2], tip: [2.5, 31.5, 3.5] };
 }
 

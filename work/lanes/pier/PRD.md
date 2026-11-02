@@ -70,14 +70,14 @@ You own the how and make the design calls. Be ambitious, make it feel wonderful 
   - Stills on the 5080, looked at: the Almanac open on a known page, an unknown page, a first-catch page with its seal, and the contents, at 1440x900 and 390x844; the fish contact sheet with all species.
   - If a live `!fish` on tobi4s_'s channel cannot be run by the lane, write `needs: live !fish check on tobi4s_` with exact steps.
 
-- [ ] **PI12 — The keepsake shelf at home, and a hotbar that feels finished.**
+- [x] **PI12 — The keepsake shelf at home, and a hotbar that feels finished.**
   Outcome: your keepsakes stand on a carved wooden shelf at your home in that kingdom, each the real voxel thing, lit warmly, arranged by you, with its card one tap away. You reach it at your own door ("Your shelf") and from the ledger; visitors can look at it from your door when you choose to show it; when furnished interiors exist, the shelf stands in your room (write the `needs:` for an interior anchor). The hotbar is finished: tools appear only once you own them, slots can be reordered, the selected tool shows in your hand in both views, number keys and touch both work, and the rod carries its history (a notch per ten catches, a ribbon after its first legend), getting a little better by doing (reach, never luck), never by paying. Other lanes write into the item foundation now: gather's game keepsakes and the shared-moment keepsake (G06: the same dated keepsake to everyone who took part) work through `grantShared`, and the documentation in SEAMS.md is tested by example.
   Quality bar: the shelf looks like a cherished thing at home, never like an inventory grid; it holds a dozen keepsakes without crowding and a first one without looking empty. The hotbar is small and quiet (Quality UI rule 14) and never covers the world.
   Done when:
   - Tests pass for: arranging the shelf (ownership, revisions, no duplicates, nothing lost when a slot is taken); showing and hiding the shelf to visitors; `grantShared` giving the same numbered keepsake to every participant exactly once; a game keepsake written through the API as gather will; the rod's history counters.
   - Stills on the 5080, looked at: the shelf with one keepsake and with twelve, an item card, a visitor's view, the hotbar in third and first person, at 1440x900 and 390x844.
 
-- [ ] **PI13 — A gentle reason to come back.**
+- [-] **PI13 — A gentle reason to come back.** *(Parked: Tobias, Mon 2 Nov 17:10, wrap-up. Do not start it.)*
   Outcome: something new at the pier each day, never a streak you can lose (G05, ChatDom principle 5): the day's fish (one species per kingdom per day that bites more often, chalked on the board and spoken softly by the pier), the board's record catches for the day and for all time, a legend's shadow seen in the water before anyone has caught it, and more species where the content earns them. Nothing is lost by being away; nothing can be bought.
   Quality bar: it reads as a small kindness of the place, never a chore list or a timer.
   Done when: a design note in `work/lanes/pier/` with stills of the board and a shadow on the 5080, and tests that the day's fish is the same for everyone in a kingdom on a given day and that absence costs nothing.
