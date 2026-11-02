@@ -121,9 +121,10 @@ Do not use tools. Return only JSON matching the supplied schema. Do not repeat e
         } },
       },
     };
+    // Strict structured output rejects `uniqueItems` (a 400 on every escalated read); uniqueness is checked on parse.
     const terraSchema: JsonObject = { type: 'object', additionalProperties: false, required: ['outcome', 'concerns', 'subject'],
       properties: { outcome: { type: 'string', enum: ['pass', 'hold', 'refuse'] },
-        concerns: { type: 'array', uniqueItems: true, maxItems: questions.length, items: { type: 'string', enum: questions.map(question => question.name) } },
+        concerns: { type: 'array', maxItems: questions.length, items: { type: 'string', enum: questions.map(question => question.name) } },
         subject: FORGE_SUBJECT_JSON_SCHEMA } };
     async function invoke(input: Omit<Parameters<CodexDraftRunner>[0], 'signal'>): Promise<PromiseSettledResult<string>> {
       try {
