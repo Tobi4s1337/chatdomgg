@@ -8,6 +8,10 @@
     "../../../packages/content/src/tavern/**/*.ts",
     "../../../packages/shared/src/games.ts",
     "../../../apps/web/src/realm-reference/index.tsx",
-    "../../../apps/web/src/avatar-builder/lineup.ts"
+    "../../../apps/web/src/avatar-builder/lineup.ts",
+    "../../../apps/realm/src/campfire/**/*.ts",
+    "../../../apps/web/src/campfire/**/*.ts",
+    "../../../apps/web/src/campfire/**/*.tsx",
+    "../../../packages/content/src/campfire/**/*.ts"
   ]
 }

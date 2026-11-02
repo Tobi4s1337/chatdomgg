@@ -92,6 +92,28 @@ The bar: every place and game is pleasant to watch without reading anything, fun
 
 ## Decisions
 
+- **2026-11-02 — Dusk Court's exact short rules.** 4 to 10 players from the logs at the moment of the deal (a call
+  that ends below four is cancelled). One Wolf, two from eight players; one Watchman. Phases: call 10 s, deal 8 s,
+  night 30 s, dawn 8 s, talk 60 s, ballot 20 s, verdict 8 s, at most four nights. A Wolf that taps nobody leaves it
+  to the wind: the server's seeded draw snuffs a living non-Wolf, so a round with no input at all still ends (the
+  Wolves win by outnumbering or when the lanterns run out after night four). Most votes is sent away; a tie or no
+  votes sends nobody. Dark lanterns (snuffed or sent) show their role and never vote. An away player's place is held
+  for 60 s; a Wolf who is gone ends the round with no winner. When live, the streamer in chair 0 is the Magistrate:
+  they may call a round any time, end the talk early (never the ballot), and read the dawn and the verdict, each of
+  which waits for them at most 20 s. The Gallery's `!sus` counts once per Twitch identity per day; embers glow
+  relative to the day's most-suspected player (one to three); identities are dropped at the end of each day and on
+  a cleanup. The public revision moves only on public change, so secret taps never show as activity.
+- **2026-11-02 — The fire lives in the kingdom room.** One `attachCampfireRoom` hook in `kingdom-room.ts` and the
+  campfire seat host on the kingdom's interaction authority (`evening/interactions.ts`, `main.ts`). Messages:
+  `campfire.hello` and `campfire.act` up, `campfire` (public frame, on change plus a 5 s heartbeat), `campfire.self`
+  (only to that person's current controlling session) and `campfire.receipt` down. Every change is saved before it
+  is published and mutations are serialised. Checkpoints go to their own table (`gather_fire_checkpoints`,
+  migration `0016b`), because the tavern checkpoint schema allows only its own kinds and four players.
+- **2026-11-02 — The clearing is founded geometry, logs square to the hearth.** Founded placements are cardinal and
+  rotated logs alias on the build lattice, so the logs sit in a square around a stone hearth: ten player seats and
+  the Magistrate's chair (seat 0), placement `campfire:clearing:v1`, site `clearing`, seat top .25 m like the
+  market log, so the shared seated pose fits without floating. The client draws only what moves or glows: the fire,
+  embers, lantern lights, warm light and the chat lanterns.
 - **2026-11-02 — The door is crossed, not pressed.** The frozen target kinds have no portal, and Tobias says "crossing
   its door". Each side is therefore a walk-through threshold in `games.ts`'s `TavernPortal`. The exterior doorway and
   return anchor are derived from the installed tavern blueprint's own carve and the exact collision, so every level

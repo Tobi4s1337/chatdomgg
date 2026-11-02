@@ -1,136 +1,133 @@
-/* The campfire: walnut, brass, parchment and ink, lit by the fire. Every rule is scoped under `.campfire`. */
-
-@font-face { font-family: 'IM Fell English'; font-style: normal; font-weight: 400; font-display: block; src: url('../atlas/assets/fonts/im-fell-english-regular.woff2') format('woff2'); }
-@font-face { font-family: 'IM Fell English'; font-style: italic; font-weight: 400; font-display: block; src: url('../atlas/assets/fonts/im-fell-english-italic.woff2') format('woff2'); }
-@font-face { font-family: 'IM Fell English SC'; font-style: normal; font-weight: 400; font-display: block; src: url('../atlas/assets/fonts/im-fell-english-sc.woff2') format('woff2'); }
-@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400 900; font-display: block; src: url('../atlas/assets/fonts/alegreya-roman-latin.woff2') format('woff2'); }
-@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 400 900; font-display: block; src: url('../atlas/assets/fonts/alegreya-italic-latin.woff2') format('woff2'); }
+/* The campfire: the carved kit's walnut, brass, parchment and ink, lit by the fire. Every rule is scoped under `.campfire`. */
 
 .campfire {
-  --walnut: #2b1e17; --walnut-mid: #452f22; --walnut-hi: #6a4a33; --brass: #c69a5c; --brass-hi: #f1d398; --brass-lo: #7c5830;
-  --parchment: #ecdcb6; --parchment-lo: #d6bf90; --ink: #33251a; --ink-soft: #6a5236; --cream: #f5e6c6; --cream-soft: #d9c4a0; --ember: #f0a04b;
-  position: fixed; inset: 0; overflow: hidden; isolation: isolate; color: var(--cream);
-  font: 400 16px/1.4 Alegreya, Georgia, serif; -webkit-font-smoothing: antialiased; background: #171a33;
+  position: fixed; inset: 0; overflow: hidden; isolation: isolate; color: var(--cd-cream);
+  font: var(--cd-type-lead)/1.4 var(--cd-face-body); -webkit-font-smoothing: antialiased; background: #121427;
 }
 .campfire *, .campfire *::before, .campfire *::after { box-sizing: border-box; }
 .campfire-stage { position: absolute; inset: 0; }
-.campfire-canvas { display: block; width: 100%; height: 100%; }
+.campfire-stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .campfire-shade { position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(120% 90% at 50% 52%, transparent 55%, #0b0c1c66 100%), linear-gradient(180deg, #0d0f2440 0, transparent 22%, transparent 64%, #0c0b1a8c 100%); }
+  background: radial-gradient(120% 90% at 50% 55%, transparent 58%, #0a0b1a66 100%), linear-gradient(180deg, #0c0e2238 0, transparent 20%, transparent 70%, #0b0a1880 100%); }
 .campfire-glyph { width: 1em; height: 1em; flex: none; }
 
-/* Heading and source */
-.campfire-heading { position: absolute; top: 30px; left: 36px; pointer-events: none; text-shadow: 0 2px 10px #0c0d22b0; }
-.campfire-eyebrow { margin: 0 0 6px; font: 400 13px/1.2 'IM Fell English SC', Georgia, serif; letter-spacing: .16em; color: #efd3a2; }
-.campfire-heading h1 { margin: 0; font: 400 36px/1.05 'IM Fell English', Georgia, serif; letter-spacing: -.01em; color: #f8ead0; }
-.campfire-source { position: absolute; top: 30px; right: 34px; margin: 0; display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 12px;
-  border: 1px solid #c69a5c88; border-radius: 3px; background: linear-gradient(#2f2236e6, #1e1726e6); box-shadow: inset 0 0 0 2px #120d1866, 0 4px 14px #07081466;
-  font: 400 13px/1.2 Alegreya, Georgia, serif; color: var(--cream-soft); }
-.campfire-source b { font: 700 12px/1 Alegreya, Georgia, serif; letter-spacing: .2em; color: #f2bd62; }
+/* Words in the night: names over heads, and chat beside its lantern. */
+.campfire-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.campfire-name { position: absolute; left: 0; top: 0; padding: 1px 8px 2px; white-space: nowrap; border-radius: 2px;
+  font: 600 var(--cd-type-small)/16px var(--cd-face-body); color: var(--cd-ink);
+  background: linear-gradient(var(--cd-parch), var(--cd-parch-lo)); box-shadow: 0 0 0 1px #8a6a3f, 0 3px 8px #0a0b1a80; }
+.campfire-name.is-self { box-shadow: 0 0 0 1px var(--cd-brass-lo), 0 0 0 3px #f4dc9d55, 0 3px 8px #0a0b1a80; }
+.campfire-chat { position: absolute; left: 0; top: 0; max-width: 240px; padding: 0 2px; white-space: normal;
+  font: italic 400 var(--cd-type-body)/1.25 var(--cd-face-body); color: #fde8bd; letter-spacing: .01em;
+  text-shadow: 0 0 6px #ff9a3a66, 0 1px 2px #0a0812, 0 0 12px #0a0812; }
 
-/* Nameplates: small parchment tags pinned above heads */
-.campfire-nameplates { position: absolute; inset: 0; pointer-events: none; }
-.campfire-nameplate { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 5px; padding: 3px 9px 4px; white-space: nowrap;
-  font: 600 14px/1.1 Alegreya, Georgia, serif; color: var(--ink); border-radius: 2px;
-  background: linear-gradient(#f2e3c0, #dcc596); box-shadow: 0 0 0 1px #8a6a3f, 0 3px 8px #0a0b1a80, inset 0 1px #fff5dc; }
-.campfire-nameplate::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 7px; height: 7px; transform: translateX(-50%) rotate(45deg); background: #dcc596; box-shadow: 1px 1px 0 #8a6a3f; }
-.campfire-nameplate-mark { width: 14px; height: 14px; color: var(--ink-soft); }
-.campfire-nameplate.is-magistrate { background: linear-gradient(#f7e0a6, #d9b46b); box-shadow: 0 0 0 1px #6d4c22, 0 0 0 3px #e4c27f55, 0 3px 8px #0a0b1a80, inset 0 1px #fff3cf; }
-.campfire-nameplate.is-magistrate .campfire-nameplate-mark { color: #6d4510; }
-.campfire-nameplate.is-out { background: linear-gradient(#c9c3bd, #a9a3a4); color: #2d2a33; box-shadow: 0 0 0 1px #5d5866, 0 3px 8px #0a0b1a80; }
-.campfire-nameplate.is-out::after { background: #a9a3a4; box-shadow: 1px 1px 0 #5d5866; }
-.campfire-nameplate.is-away { opacity: .72; }
-.campfire-nameplate-role { font: 400 11px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .08em; color: #4a4352; padding-left: 6px; border-left: 1px solid #6e6878; }
-.campfire-nameplates--compact .campfire-nameplate { font-size: 12px; padding: 2px 7px 3px; }
+/* In a kingdom walk: layers in play's feature overlay, under its HUD pieces. */
+.campfire-words, .campfire-walk-hud { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.campfire-walk-hud .campfire-hud { box-sizing: border-box; }
+.campfire-walk-hud .campfire-hud *, .campfire-walk-hud .campfire-hud *::before, .campfire-walk-hud .campfire-hud *::after { box-sizing: border-box; }
 
-/* The dock: the phase plate, the witnessed line and the rules */
-.campfire-dock { position: absolute; left: 36px; bottom: 30px; display: flex; flex-direction: column; gap: 10px; width: min(500px, calc(100% - 72px)); }
-.campfire-dock-main { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
-.campfire-plate { position: relative; width: 100%; padding: 14px 20px 15px; border-radius: 4px;
-  background: repeating-linear-gradient(91deg, transparent 0 7px, #ffffff05 7px 8px, transparent 8px 19px), repeating-linear-gradient(1deg, #00000000 0 3px, #0000000f 3px 4px), linear-gradient(#523829, #33231a 70%, #2a1d16);
-  border: 1px solid #120b08; box-shadow: inset 0 0 0 1px #c69a5c66, inset 0 0 0 4px #2a1d16, inset 0 0 0 5px #c69a5c33, 0 5px 0 #160e0b, 0 10px 26px #06071499; }
-.campfire-plate::before, .campfire-plate::after { content: ''; position: absolute; top: 9px; width: 5px; height: 5px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, var(--brass-hi), var(--brass-lo)); box-shadow: 0 1px 1px #0008; }
-.campfire-plate::before { left: 9px; } .campfire-plate::after { right: 9px; }
-.campfire-plate-eyebrow { margin: 0 0 3px; font: 400 13px/1.2 'IM Fell English SC', Georgia, serif; letter-spacing: .14em; color: #e6c48c; }
+/* Notices the page itself owns (an empty fire, a door that would not open). */
+.campfire-quiet { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); width: min(460px, calc(100% - 32px)); padding: 16px 20px 17px; text-align: center; }
+.campfire-quiet h1 { margin: 0 0 4px; font: 400 var(--cd-type-title)/1.15 var(--cd-face-story); color: #fbecd0; }
+.campfire-quiet p { margin: 0; color: var(--cd-cream-soft); font-size: var(--cd-type-body); }
+
+/* The HUD */
+.campfire-hud { position: absolute; inset: 0; pointer-events: none; padding: 24px 28px; display: flex; flex-direction: column; justify-content: space-between; gap: 14px; }
+.campfire-hud button, .campfire-hud .campfire-card, .campfire-hud .campfire-rules, .campfire-hud .campfire-plate { pointer-events: auto; }
+.campfire-hud-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.campfire-hud-bottom { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+.campfire-plate { position: relative; width: min(480px, 100%); padding: 14px 20px 15px; }
+.campfire-plate.is-compact { width: min(520px, 100%); padding: 12px 18px 13px; }
+.campfire-plate-eyebrow { margin: 0 0 4px; color: #e6c48c; font-size: var(--cd-type-small); }
 .campfire-plate-title { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
-.campfire-plate h2 { margin: 0; font: 400 29px/1.08 'IM Fell English', Georgia, serif; color: #fbecd0; }
-.campfire-clock { flex: none; padding: 3px 10px 2px; font: 600 19px/1.1 Alegreya, Georgia, serif; font-variant-numeric: tabular-nums lining-nums; color: var(--ink);
-  border-radius: 3px; background: linear-gradient(#f1e1bc, #d8c08f); box-shadow: 0 0 0 1px #7c5830, inset 0 1px #fff6dc; }
-.campfire-plate-line { margin: 6px 0 0; font-size: 16px; line-height: 1.38; color: #ead7b4; max-width: 60ch; }
-.campfire-witnessed { margin: 0; display: flex; gap: 9px; align-items: flex-start; padding: 9px 14px; border-radius: 3px; width: 100%;
-  font: italic 400 17px/1.35 Alegreya, Georgia, serif; color: #fbe8c6; background: linear-gradient(90deg, #1b1424d9, #1b142499 70%, #1b142400); }
-.campfire-witnessed-mark { width: 18px; height: 18px; margin-top: 2px; color: var(--ember); }
-.campfire-gallery-hint { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 15px; color: #e7d3ae; text-shadow: 0 1px 6px #090a18; }
-.campfire-gallery-mark { width: 17px; height: 17px; color: var(--ember); }
+.campfire-plate h2 { margin: 0; font: 400 28px/1.08 var(--cd-face-story); color: #fbecd0; }
+.campfire-clock { flex: none; padding: 2px 10px 1px; font: 700 18px/1.15 var(--cd-face-body); font-variant-numeric: tabular-nums lining-nums; }
+.campfire-plate-line { margin: 6px 0 0; font-size: var(--cd-type-lead); line-height: 1.38; color: #ead7b4; }
+.campfire-plate-note { display: flex; gap: 7px; align-items: flex-start; margin: 8px 0 0; padding-top: 8px; border-top: 1px solid #c99f5b33; font-size: var(--cd-type-body); color: var(--cd-cream-soft); }
+.campfire-plate-note .campfire-glyph { margin-top: 2px; color: var(--cd-brass-hi); }
 
-.campfire-button { appearance: none; display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 16px; cursor: pointer;
-  font: 600 15px/1 Alegreya, Georgia, serif; color: #f6e5c4; border-radius: 4px; border: 1px solid #120b08;
-  background: repeating-linear-gradient(90deg, transparent 0 9px, #ffffff06 9px 10px), linear-gradient(#5d4130, #3d2b20);
-  box-shadow: inset 0 0 0 1px #c69a5c70, inset 0 1px #f4d29a33, 0 3px 0 #160e0b, 0 6px 16px #0507128c; transition: transform .1s, box-shadow .1s, color .15s; }
-.campfire-button:hover { color: #fff3d8; }
-.campfire-button:active { transform: translateY(2px); box-shadow: inset 0 0 0 1px #c69a5c70, 0 1px 0 #160e0b, 0 3px 8px #0507128c; }
-.campfire-button:focus-visible { outline: 2px solid #f1d398; outline-offset: 3px; }
-.campfire-button-mark { width: 19px; height: 19px; color: #f0c27a; }
+.campfire-card { display: flex; gap: 12px; width: min(330px, 100%); padding: 12px 16px 13px 12px; }
+.campfire-card-mark { width: 34px; height: 34px; margin-top: 2px; color: var(--cd-ink); }
+.campfire-card-eyebrow { margin: 0 0 3px; color: var(--cd-ink-soft); }
+.campfire-card h3 { margin: 0 0 3px; font: 400 21px/1.1 var(--cd-face-story); color: var(--cd-ink); }
+.campfire-card p { margin: 0; font-size: var(--cd-type-body); line-height: 1.32; }
+.campfire-card .campfire-card-note { margin-top: 6px; padding-top: 5px; border-top: 1px dashed #654a3155; font-weight: 700; color: var(--cd-ink); }
 
-/* The rules, on parchment */
-.campfire-guide { color: var(--ink); padding: 20px 22px 18px;
-  background: radial-gradient(120% 70% at 30% 0%, #fff2d633, transparent 60%), radial-gradient(90% 60% at 80% 100%, #b98f5a26, transparent 70%), linear-gradient(#efdfba, #e2cc9e);
-  clip-path: polygon(0 1.2%, 6% 0, 21% .8%, 38% .1%, 55% .9%, 73% 0, 90% .7%, 100% 0, 99.4% 18%, 100% 41%, 99.3% 63%, 100% 84%, 99.5% 100%, 81% 99.2%, 62% 100%, 44% 99.3%, 27% 100%, 9% 99.4%, 0 100%, .6% 79%, 0 57%, .7% 33%);
-  filter: drop-shadow(0 8px 18px #06071499); }
-.campfire-guide header { margin-bottom: 12px; }
-.campfire-guide-eyebrow { margin: 0; font: 400 12px/1.2 'IM Fell English SC', Georgia, serif; letter-spacing: .16em; color: #7a5a35; }
-.campfire-guide h2 { margin: 2px 0 6px; font: 400 31px/1 'IM Fell English', Georgia, serif; color: #2a1c12; }
-.campfire-guide-lede { margin: 0; font: italic 400 16px/1.38 Alegreya, Georgia, serif; color: #4b3722; }
-.campfire-roles { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.campfire-roles li { display: flex; gap: 11px; align-items: flex-start; }
-.campfire-role-mark { width: 26px; height: 26px; color: #4a3220; margin-top: 1px; }
-.campfire-roles h3 { margin: 0; font: 700 15px/1.2 Alegreya, Georgia, serif; color: #2a1c12; }
-.campfire-roles p { margin: 1px 0 0; font-size: 14.5px; line-height: 1.32; color: #4b3722; }
-.campfire-day { list-style: none; margin: 13px 0 0; padding: 10px 0 0; border-top: 1px solid #8a6a3f55; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: 14px; line-height: 1.3; color: #4b3722; }
-.campfire-day b { display: block; font: 400 15px/1.2 'IM Fell English SC', Georgia, serif; letter-spacing: .06em; color: #2a1c12; }
-.campfire-guide-gallery { display: flex; gap: 11px; margin: 12px 0 0; padding-top: 10px; border-top: 1px solid #8a6a3f55; font-size: 14.5px; line-height: 1.32; color: #4b3722; }
-.campfire-guide-gallery b { color: #2a1c12; }
-.campfire kbd { font: 700 13.5px/1 Alegreya, Georgia, serif; padding: 1px 5px 2px; border-radius: 2px; background: #d9c08e; box-shadow: 0 0 0 1px #8a6a3f; color: #2a1c12; }
-.campfire-guide-foot { margin: 10px 0 0; font: italic 400 13px/1.35 Alegreya, Georgia, serif; color: #6a5236; }
-.campfire-guide--dock { position: fixed; top: 96px; right: 34px; width: 372px; max-height: calc(100% - 128px); overflow: auto; }
+.campfire-rules { position: absolute; right: 28px; top: 50%; transform: translateY(-50%); width: min(390px, calc(100% - 32px)); padding: 16px 20px 16px; }
+.campfire-rules-head { position: relative; margin-bottom: 8px; }
+.campfire-rules-head p { margin: 0; color: #e6c48c; }
+.campfire-rules h2 { margin: 2px 0 0; font: 400 26px/1.1 var(--cd-face-story); color: #fbecd0; }
+.campfire-rules ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.campfire-rules li { display: flex; gap: 10px; align-items: flex-start; font-size: var(--cd-type-body); line-height: 1.35; color: #ead7b4; }
+.campfire-rules li b { color: #fbecd0; }
+.campfire-rules-mark { width: 22px; height: 22px; color: var(--cd-brass-hi); margin-top: 1px; }
+.campfire-rules-win { margin: 10px 0 0; padding-top: 9px; border-top: 1px solid #c99f5b44; font-size: var(--cd-type-body); color: #fbecd0; }
+.campfire-rules-small { margin: 6px 0 0; font-size: var(--cd-type-small); color: var(--cd-cream-soft); }
+.campfire-close { position: absolute; right: -6px; top: -4px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--cd-cream); font: 400 22px/1 var(--cd-face-body); cursor: pointer; }
 
-.campfire-failure { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100% - 40px)); padding: 20px 22px; color: var(--ink);
-  background: linear-gradient(#efdfba, #e2cc9e); box-shadow: 0 0 0 1px #8a6a3f, 0 10px 30px #050612aa; border-radius: 3px; }
-.campfire-failure strong { display: block; font: 400 24px/1.1 'IM Fell English', Georgia, serif; margin-bottom: 6px; }
-.campfire-failure p { margin: 0; font-size: 16px; line-height: 1.4; color: #4b3722; }
+.campfire-choice-title { margin: 0; padding: 5px 14px 6px; border-radius: 999px; background: #120d18b3; text-align: center; font-size: var(--cd-type-body); color: var(--cd-cream-soft); }
+.campfire-choice-title b { font: 400 var(--cd-type-lead)/1.2 var(--cd-face-story); color: #fbecd0; margin-right: 6px; }
 
-/* The stream: the clearing dominant, a small caption plate low on the left */
-.campfire--stream .campfire-stream-caption { position: absolute; left: 3.2cqw; bottom: 5cqh; width: min(30vw, 560px); display: flex; flex-direction: column; gap: 8px; }
-.campfire--stream { container-type: size; }
-.campfire-plate--stream { padding: 1.2vh 1.4vw 1.3vh; }
-.campfire--stream .campfire-plate h2 { font-size: max(20px, 2.1vw); }
-.campfire--stream .campfire-plate-eyebrow { font-size: max(11px, .8vw); }
-.campfire--stream .campfire-plate-line { font-size: max(13px, .95vw); }
-.campfire--stream .campfire-clock { font-size: max(15px, 1.15vw); }
-.campfire--stream .campfire-witnessed { font-size: max(14px, 1.05vw); }
-.campfire--stream .campfire-gallery-hint { font-size: max(13px, .95vw); }
-.campfire--stream .campfire-source { top: 3.4cqh; right: auto; left: 3.2cqw; font-size: max(11px, .8vw); }
-.campfire--stream .campfire-nameplate { font-size: max(12px, .85vw); }
+.campfire-circle { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: min(980px, 100%); }
+.campfire-chip { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 7px; font: 600 var(--cd-type-body)/1.2 var(--cd-face-body); pointer-events: auto; }
+.campfire-chip-button { all: unset; display: flex; align-items: center; gap: 6px; cursor: pointer; margin: -4px -10px -4px -7px; padding: 4px 10px 4px 7px; border-radius: 3px; }
+.campfire-chip-seat { min-width: 1.2em; text-align: center; color: var(--cd-ink-soft); }
+.campfire-chip-lantern { width: 18px; height: 18px; color: #b0631f; }
+.campfire-chip.is-dark { background: linear-gradient(172deg, #c9c3bd, #a6a0a3); color: #2b2833; }
+.campfire-chip.is-dark .campfire-chip-lantern { color: #4d4856; }
+.campfire-chip.is-away { opacity: .75; }
+.campfire-chip.is-you { box-shadow: 0 0 0 1px var(--cd-brass-lo), 0 0 0 3px #f4dc9d66, 0 2px 0 #0000004d; }
+.campfire-chip.is-focus { box-shadow: 0 0 0 2px var(--cd-brass-hi), 0 0 14px #ffb85c88, 0 2px 0 #0000004d; transform: translateY(-2px); }
+.campfire-chip-role { display: inline-flex; align-items: center; gap: 3px; padding-left: 6px; border-left: 1px solid #654a3166; color: var(--cd-ink-soft); }
+.campfire-chip-embers { display: inline-flex; color: #c4501f; }
+.campfire-chip-embers .campfire-glyph { width: 14px; height: 14px; margin-right: -3px; }
+.campfire-chip-voted { color: var(--cd-ink-soft); }
 
-/* Phones: the ring stays in the middle, words collect into one bottom sheet */
-@media (max-width: 640px) {
-  .campfire-heading { top: 18px; left: 18px; right: 18px; }
-  .campfire-eyebrow { font-size: 11.5px; }
-  .campfire-heading h1 { font-size: 26px; }
-  .campfire-source { top: auto; bottom: auto; right: auto; left: 18px; margin-top: 78px; position: absolute; top: 0; padding: 6px 10px; font-size: 12px; gap: 8px; }
-  .campfire-source b { font-size: 11px; }
-  .campfire-dock { left: 12px; right: 12px; bottom: 12px; width: auto; gap: 8px; }
-  .campfire-plate { padding: 11px 15px 12px; }
-  .campfire-plate h2 { font-size: 24px; }
-  .campfire-plate-line { font-size: 15px; }
-  .campfire-witnessed { font-size: 15.5px; padding: 8px 11px; }
-  .campfire-gallery-hint { font-size: 14px; }
-  .campfire-dock-main { gap: 8px; }
-  .campfire-button { width: 100%; justify-content: center; }
-  .campfire-guide--dock { position: static; width: 100%; max-height: 52vh; overflow: auto; }
-  .campfire-dock.has-guide .campfire-witnessed, .campfire-dock.has-guide .campfire-gallery-hint, .campfire-dock.has-guide .campfire-plate-line { display: none; }
-  .campfire-nameplate { font-size: 12px; padding: 2px 6px 3px; gap: 4px; }
-  .campfire-nameplate-mark { width: 12px; height: 12px; }
-  .campfire-nameplate-role { font-size: 10px; padding-left: 4px; }
+.campfire-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.campfire-button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; cursor: pointer;
+  font: 700 var(--cd-type-lead)/1 var(--cd-face-body); color: var(--cd-ink); border: 1px solid #6d4c22; border-radius: 6px;
+  background: linear-gradient(#f7e0a6, #d9b46b); box-shadow: inset 0 1px #fff3cf, 0 2px 0 #3d2718, 0 6px 16px #0a0b1a80; }
+.campfire-button .campfire-glyph { width: 20px; height: 20px; }
+.campfire-button:hover:not(:disabled) { background: linear-gradient(#fbe9b9, #e2bf79); }
+.campfire-button:active:not(:disabled) { transform: translateY(1px); box-shadow: inset 0 1px #fff3cf, 0 1px 0 #3d2718, 0 4px 10px #0a0b1a80; }
+.campfire-button:disabled { opacity: .6; cursor: default; }
+.campfire-button.is-quiet { color: var(--cd-cream); border-color: var(--cd-wood-edge); background: linear-gradient(176deg, var(--cd-wood-hi), var(--cd-wood) 45%, var(--cd-wood-lo)); box-shadow: inset 0 1px #ffe1b440, 0 2px 0 #160e0b, 0 6px 16px #0a0b1a80; font-weight: 600; }
+.campfire-button.is-quiet.is-focus { box-shadow: 0 0 0 2px var(--cd-brass-hi), 0 0 14px #ffb85c88; }
+.campfire-keys { margin: 0; color: #e8d6b6; text-shadow: 0 1px 3px #0a0812; }
+.campfire-notice { margin: 0; padding: 6px 14px; font-size: var(--cd-type-body); }
+
+/* Inside the kingdom walk: play owns the corners, so the fire keeps to the top centre and the bottom. */
+.campfire-hud.is-walk { padding: 72px 20px 88px; }
+.campfire-hud.is-walk .campfire-hud-top { justify-content: center; }
+/* Keep the fire's plate below a notice owned by the kingdom entry. */
+body:has(.kingdom-entry-notice) .campfire-hud.is-walk { padding-top: 164px; }
+
+@media (max-width: 720px) {
+  .campfire-hud { padding: 14px 12px 18px; }
+  .campfire-hud-top { flex-direction: column; align-items: stretch; gap: 8px; }
+  .campfire-plate, .campfire-card { width: 100%; }
+  .campfire-plate { padding: 11px 14px 12px; }
+  .campfire-plate h2 { font-size: 23px; }
+  .campfire-plate-line { font-size: var(--cd-type-body); }
+  .campfire-card { padding: 9px 12px 10px 9px; }
+  .campfire-card-mark { width: 26px; height: 26px; }
+  .campfire-card h3 { font-size: 18px; }
+  .campfire-rules { right: 50%; transform: translate(50%, -50%); }
+  .campfire-chip { font-size: var(--cd-type-small); padding: 3px 8px 3px 6px; }
+  .campfire-keys { display: none; }
+  .campfire-hud.is-walk { padding: 64px 12px 96px; }
+  body:has(.kingdom-entry-notice) .campfire-hud.is-walk { padding-top: 196px; }
 }
-@media (prefers-reduced-motion: reduce) { .campfire-button { transition: none; } }
+
+/* The stream: small and quiet at the bottom left, the fire framed above it. */
+.campfire-stream { position: absolute; left: 40px; bottom: 36px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none; }
+.campfire-stream .campfire-plate h2 { font-size: 30px; }
+.campfire-stream-circle { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; max-width: 900px; }
+.campfire-stream-circle li { display: flex; align-items: center; gap: 5px; padding: 3px 9px 3px 6px; border-radius: 3px; background: #120d18c0; box-shadow: inset 0 0 0 1px #c99f5b44;
+  font: 600 var(--cd-type-lead)/1.2 var(--cd-face-body); color: var(--cd-cream); }
+.campfire-stream-circle li .campfire-glyph { width: 20px; height: 20px; color: #ffb85c; }
+.campfire-stream-circle li.is-dark { color: #a9a3b0; }
+.campfire-stream-circle li.is-dark .campfire-glyph { color: #6b6676; }
+.campfire-stream-circle .cd-label { color: var(--cd-brass-hi); font-size: var(--cd-type-small); }
+.campfire-stream-gallery { margin: 0; padding: 5px 12px; font-size: var(--cd-type-body); }

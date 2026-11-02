@@ -19,6 +19,7 @@ import { realmListenHost, realmListenPort } from './listen-port';
 import { ownRealmShutdown } from './lifecycle';
 import { installGatherStore, createPostgresGatherStore } from './games/store';
 import { installTavernReturns } from './games/return';
+import { Campfires, installCampfires, createPostgresFireStore, mountGatherChatRoute } from './campfire';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -73,15 +74,17 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   }
   const castle = createRealmCastle({ origin, kingdomNames: names, safetyKey: evidenceKey });
   const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names, castle: castle.observe, evidenceKey });
+  const campfires = new Campfires({ store: createPostgresFireStore(pool) });
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
     repositoryOptions: gate.install({ origin, guards: [castle.guard] }), furnish: citizens.furnish,
     attach: kingdom => {
       const detachEvening = evening.attach(kingdom);
+      const fire = campfires.fire(kingdom.kingdomId), detachLive = fire.bindLive(() => kingdom.current && kingdom.privateState.stream.liveUntil > Date.now());
       const detachInteractions = attachEveningInteractions(kingdom, { auth: boot.services.auth,
-        scene: () => boot.loader.current(kingdom.kingdomId)?.scene });
-      return () => { detachInteractions(); detachEvening(); };
+        scene: () => boot.loader.current(kingdom.kingdomId)?.scene, campfire: fire.seats });
+      return () => { detachInteractions(); detachLive(); detachEvening(); };
     },
   });
   citizens.use(boot.allocation, boot.services);
@@ -94,11 +97,13 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   dock.use(boot.services);
   installGatherStore(boot.services, createPostgresGatherStore(pool));
   installTavernReturns(boot.services, kingdomId => boot.loader.current(kingdomId)?.scene);
-  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); } });
+  installCampfires(boot.services, campfires);
+  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock);
+    mountGatherChatRoute(app, process.env.REALM_INTERNAL_SECRET, envelope => campfires.fire(envelope.kingdomId).chat(envelope)); } });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
   ownRealmShutdown(server, transport, async () => {
-    dock.stop();
+    dock.stop(); campfires.dispose();
     try { await evening.stop(); }
     finally { try { await boot.stop(); } finally { await pool.end(); } }
   });

@@ -9,6 +9,7 @@ import { FoundedSceneError, encodeFoundedScene, validateFoundedScene } from './v
 import { FOUNDED_PHYSICS_VERSION } from './collision';
 import { arrivalFurnishings } from './arrival-furnishings';
 import { installFoundedCivicGrowth, type FoundedCivicDiagnostic } from './civic-growth';
+import { campfireClearingPieces } from '../campfire/clearing';
 
 export interface FoundedSceneInput {
   readonly kingdomId: KingdomId;
@@ -143,6 +144,7 @@ export async function assembleFoundedScene(input: FoundedSceneInput): Promise<Fo
     blueprint: ownedCastle && fixture.id === keepId ? ownedCastle.blueprint : fixture.blueprint,
     position: fixture.position, rotation: fixture.rotation });
   pieces.push(...arrivalFurnishings(plan, pieces));
+  pieces.push(...campfireClearingPieces(plan, pieces));
 
   // Content identity is the exact bytes; one factory object is hashed once, distinct bytes stay distinct.
   const hashes = new Map<VoxelBlueprint, string>(), assets = new Map<string, RealmFoundedBlueprint>();
