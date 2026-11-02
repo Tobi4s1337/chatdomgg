@@ -441,7 +441,9 @@ describe('createGroundDressing', () => {
     const view = handle.views().street;
     camera.position.set(...view.eye); camera.lookAt(...view.target); camera.updateMatrixWorld(); camera.updateProjectionMatrix();
     handle.update({ time: 0, walkers: [] });
-    const meshes = scene.children.filter((child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh);
+    // The dressing lives under one root, which the half-resolution water reflection leaves out.
+    expect(scene.children).toContain(handle.root);
+    const meshes = handle.root.children.filter((child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh);
     return { scene, camera, clay, registerShadow, releases, handle, meshes };
   }
 
@@ -501,12 +503,13 @@ describe('createGroundDressing', () => {
     expect(registerShadow).toHaveBeenCalledTimes(solids.size);
     for (const [mesh] of registerShadow.mock.calls) expect((mesh as THREE.InstancedMesh).count).toBe(solids.get(mesh.name.replace(':shadow-source', '')));
     const clayDisposed = vi.fn(); clay.material.addEventListener('dispose', clayDisposed);
-    const owned = scene.children.filter(child => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh[];
+    const owned = handle.root.children.filter(child => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh[];
     const geometryDisposed = vi.fn(); for (const mesh of owned) mesh.geometry.addEventListener('dispose', geometryDisposed);
     handle.dispose();
     for (const release of releases) expect(release).toHaveBeenCalledTimes(1);
     expect(geometryDisposed).toHaveBeenCalledTimes(owned.length);
-    expect(scene.children.some(child => child instanceof THREE.InstancedMesh)).toBe(false);
+    expect(scene.children).not.toContain(handle.root);
+    expect(handle.root.children.some(child => child instanceof THREE.InstancedMesh)).toBe(false);
     expect(clayDisposed).not.toHaveBeenCalled(); expect(pool.dispose).not.toHaveBeenCalled();
     clay.dispose();
   }, 120_000);

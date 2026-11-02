@@ -1023,3 +1023,18 @@ Run in the deployed checkout (lane/integrator with this checkpoint merged). Noth
 
 Still open for the integrator (unchanged): the Chronicle's historical scenes do not pass through the founded store, so
 replaying an old receipt shows today's land unless that exact receipt was published (`publish-cli`).
+
+## GW12 frame budget: what the scene host now offers and one ask — 2026-11-02
+
+- **Quality.** `kingdom/scene.ts` governs the automatic quality (`grand-land/quality-governor.ts`): GPU time from
+  timer queries plus main-thread render time, high/balanced/low, applied at camera cuts. A chosen quality
+  (`setQuality`) turns it off; `null` hands it back. Inside OBS (`window.obsstudio`) it opens balanced on a 4 ms GPU
+  budget and never probes above balanced without timer queries. Software renderers, replays and fixed captures are
+  never governed. `inspect().quality` reports the tier, the budget and the governor's last 90th percentiles.
+- **Reflection.** The water's planar pass draws the outer land at level 2 and leaves out the ground dressing. A lane
+  that adds many small objects near the ground and wants them out of the half-resolution reflection asks for its
+  root to join `reflectionExclusions` in `scene.ts`.
+- **Ask (forge):** `forge/emitters` submits all of its point pools in every pass, also when no particle is alive:
+  21 draws of zero triangles in the main view and 21 more in the reflection at every stream pose (the 5080 count at
+  the door and pier shots). Hiding a pool while its alphas are all zero (`points.visible = false`) brings the door
+  shot under spec 56's 500-draw frame budget. Nothing else changes; the pools stay allocated.

@@ -40,6 +40,9 @@ export interface GroundDressing {
   hideLot(slot: number | null): void;
   views(): GroundViews;
   stats(): GroundDressingStats;
+  /** Every dressing mesh drawn by the scene. Hosts leave it out of the water's half-resolution reflection, where
+   * tufts, flowers and pebbles are under a pixel through the moving surface. */
+  readonly root: THREE.Object3D;
   dispose(): void;
 }
 
@@ -73,6 +76,7 @@ export function createGroundDressing(host: GroundDressingHost): GroundDressing {
   const derived = createDressingMaterial(clay.material);
   const views = planViews(host.land, host.ground, plan);
   let disposed = false, hidden: number | null = null, dirty = true, portrait = camera.aspect < 1, cpuBytes = 0;
+  const root = new THREE.Group(); root.name = 'ground-dressing'; scene.add(root);
 
   // Tiles hold every placement by its origin, the same point the shader measures fades from.
   const tiles: Tile[] = [], tileIndex = new Map<string, number>();
@@ -176,7 +180,7 @@ export function createGroundDressing(host: GroundDressingHost): GroundDressing {
       mesh.count = 0; mesh.visible = false; mesh.frustumCulled = false; mesh.name = `${batch.blueprint.id}:lod${level.level}`;
       // Sun shadows are cast by dedicated sources; a camera-culled level must not double them.
       mesh.castShadow = false; mesh.receiveShadow = false;
-      level.geometry = geometry; level.mesh = mesh; scene.add(mesh); dirty = true;
+      level.geometry = geometry; level.mesh = mesh; root.add(mesh); dirty = true;
     }));
     await Promise.all(jobs);
     if (disposed || signal.aborted) throw new Error('Ground dressing closed while meshing');
@@ -233,15 +237,15 @@ export function createGroundDressing(host: GroundDressingHost): GroundDressing {
     for (const batch of batches) {
       if (batch.shadow) { batch.shadow.release(); batch.shadow.mesh.dispose(); batch.shadow.geometry.dispose(); delete batch.shadow; }
       for (const level of batch.levels) {
-        if (level.mesh) { scene.remove(level.mesh); level.mesh.dispose(); }
+        if (level.mesh) { root.remove(level.mesh); level.mesh.dispose(); }
         level.geometry?.dispose(); delete level.mesh; delete level.geometry;
       }
     }
-    derived.dispose();
+    derived.dispose(); scene.remove(root);
   }
 
   return {
-    ready,
+    ready, root,
     blockers: plan.blockers, collisionPieces: plan.collisionPieces,
     update,
     hideLot(slot) {

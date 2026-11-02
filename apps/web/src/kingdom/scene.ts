@@ -87,6 +87,8 @@ import { createSceneStills, type SceneStillOptions } from './grand-land/scene-st
 import { pierShot, type PierShotPose } from './grand-land/pier-shot';
 import { createRaidMomentHooks, raidTorchLights } from './grand-land/raid-support';
 import { automaticSceneQuality, sceneQualityBudget, type SceneQuality } from './grand-land/scene-quality';
+import { createQualityGovernor, GOVERNOR_BUDGETS, softwareRenderer } from './grand-land/quality-governor';
+import { createGpuFrameTimer } from './grand-land/gpu-timer';
 export type { PlaceMount, PlaceMounter } from './grand-land/place-mount';
 export { registerKingdomLayer, type KingdomLayerMount, type KingdomLayerMounter } from './grand-land/kingdom-layer';
 export { SCENE_QUALITIES, isSceneQuality, type SceneQuality, type SceneQualityBudget } from './grand-land/scene-quality';
@@ -189,9 +191,15 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     handoffPose={view:copy,rotation:new THREE.Quaternion().setFromRotationMatrix(matrix),elapsed:0};poseRevision++;
   }
   if(options.initialView)startHandoff(options.initialView);
-  // A person's quality choice scales effects only (scene-quality.ts); null keeps the automatic opening choice.
-  const openedQuality=automaticSceneQuality(canvas.clientWidth);let qualityChoice:SceneQuality|null=null;
-  const post=own(createPostStack(renderer,scene,camera,{quality:openedQuality,toneMapping:'aces',fog:'material'}));
+  // A person's quality choice scales effects and distance only (scene-quality.ts); null is automatic: the governor
+  // moves the tier from where it opened by what frames measurably cost. Beside a game in OBS it opens balanced on a
+  // 4 ms GPU budget. A software renderer, a replay or a fixed evidence frame is never governed (captures stay exact).
+  const insideObs='obsstudio' in window,openedQuality=automaticSceneQuality(canvas.clientWidth);
+  let qualityChoice:SceneQuality|null=null,automaticQuality:SceneQuality=insideObs&&openedQuality==='high'?'balanced':openedQuality;
+  const governor=createQualityGovernor({start:automaticQuality,budget:insideObs?GOVERNOR_BUDGETS.obs:GOVERNOR_BUDGETS.desktop,blindCeiling:insideObs?'balanced':'high'});
+  const software=softwareRenderer(renderer.getContext()),gpuTimer=software?null:createGpuFrameTimer(renderer.getContext());
+  let governedAt=0,governedCamera='',proposedAt=0,frameStartedAt=0;const governedEye=new THREE.Vector3();
+  const post=own(createPostStack(renderer,scene,camera,{quality:automaticQuality,toneMapping:'aces',fog:'material'}));
   const registry=options.founded?.materials??MATERIALS;
   const clay=own(createVoxelMaterial(registry,'build')),ground=own(createVoxelMaterial(registry,'terrain'));
   // Both lattices share one GPU light volume; two materials must not double the field budget.
@@ -391,7 +399,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(!dockKingdomId)throw new Error('Dock presentations need the installed kingdom identity');
     if(dockActive)activateDock();
   }
-  function resize(){renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);post.resize(canvas.clientWidth,canvas.clientHeight,renderer.getPixelRatio());camera.aspect=canvas.clientWidth/canvas.clientHeight;setHero();focusHome(focusSlot);walk?.controller.resize(canvas.clientWidth,canvas.clientHeight);sunShadows.setResolution(portrait()?1024:2048);placeMounts.resize(canvas.clientWidth,canvas.clientHeight);}
+  function resize(){renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);post.resize(canvas.clientWidth,canvas.clientHeight,renderer.getPixelRatio());grandLand?.setDetail(landDetail(sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth).landDetail));camera.aspect=canvas.clientWidth/canvas.clientHeight;setHero();focusHome(focusSlot);walk?.controller.resize(canvas.clientWidth,canvas.clientHeight);sunShadows.setResolution(portrait()?1024:2048);placeMounts.resize(canvas.clientWidth,canvas.clientHeight);}
   const observer=new ResizeObserver(resize);earlyCleanups.push(()=>observer.disconnect());observer.observe(canvas);resize();
   const blockers=installed?[...houses,...props.map(p=>({...p,slot:65534}))]:buildings;
   const lightBounds=inhabitedLightBounds(layout.homes);
@@ -513,6 +521,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const dressing=own(createGroundDressing({...coverInput,land:{plan:layout,sites:[],places:{court:{boundary:layout.castle.court.boundary}}},
     seed:layout.config.seed,tier:layout.config.tier,plan:coverPlan,scene,camera,pool,clay,signal:abort.signal,
     registerShadow:mesh=>sunShadows.register(mesh)}));
+  // The water's half-resolution reflection leaves out the sky dome (atmosphere) and the ground dressing (GW12).
+  const reflectionExclusions=[...atmosphere.reflectionExclusions,dressing.root];
   const sites:TreeSite[]=[];
   const treeCount=options.tier==='hamlet'?115:260;
   const planted:THREE.Vector2[]=[];
@@ -630,8 +640,26 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   let lastAmbience=-Infinity,ambienceTarget:AmbienceTarget={wind:0,water:0,waterPan:0};
   const listenerRight=new THREE.Vector3();
   let forgeShade=0;
+  /** Land detail is a screen error in rendered pixels: the post stack may draw the scene below the canvas size
+   * (balanced and low, or a dense display), so the error is converted to drawing-buffer pixels, which the land
+   * host measures in. Detail finer than a rendered pixel cannot be seen and is not drawn. */
+  function landDetail(pixels:number|null):number|null{const post$=post.diagnostics(),buffer=renderer.getDrawingBufferSize(new THREE.Vector2()).y;const scale=post$.hdr&&buffer>0?Math.min(1,post$.height/buffer):1;return scale>.98?pixels:Math.min(8,(pixels??1.5)/scale);}
+  function applyQuality(){const budget=sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth);post.setQuality(budget.post);grandLand?.setDetail(landDetail(budget.landDetail));lastRenderedKey='';}
+  // Called after each drawn frame. A step the governor proposes waits for a camera cut (a new director shot, or the
+  // eye jumping) so the picture never changes inside a shot; walking has no cuts, so a step down applies after 1.5 s
+  // and a step up after 6 s. Only drawn, live frames count: a capture, a replay or a still never feeds it.
+  function governFrame(now:number){
+    const gpuMs=gpuTimer?.take()??null,interval=governedAt?now-governedAt:Infinity;governedAt=now;
+    const cut=camName!==governedCamera||camera.position.distanceToSquared(governedEye)>36;governedCamera=camName;governedEye.copy(camera.position);
+    if(software||fixedTime||qualityChoice!==null||!loaded||document.visibilityState==='hidden'){proposedAt=0;return;}
+    const proposed=governor.sample({at:now,intervalMs:interval,cpuMs:performance.now()-frameStartedAt,gpuMs});
+    if(!proposed){proposedAt=0;return;}
+    proposedAt||=now;
+    const down=['low','balanced','high'].indexOf(proposed)<['low','balanced','high'].indexOf(automaticQuality);
+    if(cut||now-proposedAt>=(down?1500:6000)){automaticQuality=proposed;governor.applied(proposed,now);proposedAt=0;applyQuality();}
+  }
   function render(now:number){
-    if(disposed||renderHolds>0)return;try {grandLand?.update(now);if(grandLand){canvas.dataset.hostedLand=JSON.stringify({...grandLand.stats,identity:grandLand.identity});if(opening){reportLandBytes(grandLand.stats);if(grandLand.stats.startupPhase==='settled'&&announcedReady)opening.step('whole');}}const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
+    if(disposed||renderHolds>0)return;frameStartedAt=performance.now();try {grandLand?.update(now);if(grandLand){canvas.dataset.hostedLand=JSON.stringify({...grandLand.stats,identity:grandLand.identity});if(opening){reportLandBytes(grandLand.stats);if(grandLand.stats.startupPhase==='settled'&&announcedReady)opening.step('whole');}}const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
     if(loaded&&debug.ready&&!fixedTime)time+=dt;
     if(ownSimulation)simulation.advance(time);
     // A transport retry does not revoke a still-valid presence lease or send everyone home again.
@@ -772,7 +800,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
     fog.color.set(grade.fog);fog.density=grade.fogDensity;renderer.toneMappingExposure=grade.exposure;
     post.update({environment:grade,hour,focusDistance:camName==='window'||forgeDirected||forge.status().busy?camera.position.distanceTo(forgeDirected&&realmForge?realmForge.focusPoint:target):null,beacon:{position:new THREE.Vector3(...beaconPosition),strength:beacon},forge:{position:new THREE.Vector3(0,layout.market.elevation+1.6,8),strength:realmForge?.active()||forge.status().busy?1:0}});
-    const nextWaterQuality=sceneQualityBudget(qualityChoice,openedQuality,canvas.clientWidth).water;
+    const nextWaterQuality=sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth).water;
     if(nextWaterQuality!==waterQuality){waterQuality=nextWaterQuality;water.setQuality(waterQuality);}
     water.update({time,environment:grade,camera,sources:[
       ...[...windows.getSources(),...build.getSources()].map(source=>({...source,kind:'window' as const})),
@@ -797,7 +825,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     // The sun-shadow map is refreshed only for a frame that draws: every region attached during
     // startup dirties it, and re-rendering the whole static shadow pass per install starved the pump.
     // The first loaded frame below still draws the full native view before announcing ready.
-    if((loaded||!useGrandLand)&&(!grandLand||grandLand.canPresent())&&((loaded&&(!fixedTime||!!walk))||renderKey!==lastRenderedKey)){renderPhase='drawing';renderStartedAt=performance.now();if(loaded)sunShadows.updateSunDirection(grade.sunDirection);water.reflect({renderer,scene,camera,frame:++waterFrame,exclusions:atmosphere.reflectionExclusions});post.render(dt);stills.drawn();if(!landPresentationDeferred||handoffAwaiter){grandLand?.markPresented();landPresentationDeferred=false;}renderCompletedAt=performance.now();if(handoffAwaiter){const complete=handoffAwaiter;handoffAwaiter=undefined;complete.resolve();}renderPhase='drawn';lastRenderedKey=renderKey;if(dockVisible){dockActs?.drawn();if(dockVisuals?.finished())dockActs?.finish();}}
+    if((loaded||!useGrandLand)&&(!grandLand||grandLand.canPresent())&&((loaded&&(!fixedTime||!!walk))||renderKey!==lastRenderedKey)){renderPhase='drawing';renderStartedAt=performance.now();if(loaded)sunShadows.updateSunDirection(grade.sunDirection);gpuTimer?.begin();water.reflect({renderer,scene,camera,frame:++waterFrame,exclusions:reflectionExclusions});post.render(dt);gpuTimer?.end();governFrame(now);stills.drawn();if(!landPresentationDeferred||handoffAwaiter){grandLand?.markPresented();landPresentationDeferred=false;}renderCompletedAt=performance.now();if(handoffAwaiter){const complete=handoffAwaiter;handoffAwaiter=undefined;complete.resolve();}renderPhase='drawn';lastRenderedKey=renderKey;if(dockVisible){dockActs?.drawn();if(dockVisuals?.finished())dockActs?.finish();}}
     // The gate covers loading the place, not background light refinement. The
     // full scene and presence windows have drawn; independently scheduled light
     // workers may still be waking. Captures can wait on lightingReady separately.
@@ -848,7 +876,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       }}:{}),
     })).then(async land=>{
       if(disposed){land.dispose();return;}
-      grandLand=land;setHero();landSurface=grandFloorSurface(layout,{seaLevel:land.water.raster.seaLevel});
+      grandLand=land;land.setDetail(landDetail(sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth).landDetail));setHero();landSurface=grandFloorSurface(layout,{seaLevel:land.water.raster.seaLevel});
       if(options.overview){
         const physical=new THREE.Box3(new THREE.Vector3(layout.bounds.minX,layout.castle.centre[1],layout.bounds.minZ),new THREE.Vector3(layout.bounds.maxX,layout.castle.centre[1],layout.bounds.maxZ));
         // Ordered installed blueprints determine the town's true vertical extent; no guessed city layout.
@@ -870,7 +898,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }
     opening?.step('ground');
   }));
-  function dispose(){if(disposed)return;stills.dispose();handoffAwaiter?.reject(new DOMException('The kingdom closed during view handoff','AbortError'));handoffAwaiter=undefined;const checkpoint=options.founded&&!options.replay&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);overview?.dispose();kingdomLayers?.dispose();placeMounts.dispose();walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();grandLand?.dispose();clearInterval(soulClockTimer);soul?.dispose();civicLife?.dispose();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;stills.dispose();handoffAwaiter?.reject(new DOMException('The kingdom closed during view handoff','AbortError'));handoffAwaiter=undefined;const checkpoint=options.founded&&!options.replay&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);overview?.dispose();kingdomLayers?.dispose();placeMounts.dispose();walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();grandLand?.dispose();clearInterval(soulClockTimer);soul?.dispose();civicLife?.dispose();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();gpuTimer?.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();opening?.fail('The kingdom lost its rendering context');options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
@@ -939,7 +967,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     walkSelected:()=>walkSelected,
     selectWalk(selected:boolean){walkSelected=selected&&!!walk;overview?.setActive(overviewOwnsLens());if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
     seekGrowthCeremony(seconds:number|null){growth?.seek(seconds);},
-    inspect:()=>({overview:overview?.inspect()??null,placeShot:placeShot.inspect(),land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),shadow:{...sunShadows.stats},moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
+    inspect:()=>({quality:{...sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth),governed:!software&&!fixedTime&&qualityChoice===null,gpuTimer:gpuTimer?.supported??false,obs:insideObs,governor:governor.state()},overview:overview?.inspect()??null,placeShot:placeShot.inspect(),land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),shadow:{...sunShadows.stats},moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
       if(!crowd.receiveChat(input))return false;
       const cue=CitizenChatCueSchema.parse(input),at=Date.now();
       if(cue.asOf<=at&&at-cue.asOf<=5000&&cue.expiresAt>at)arrivalDirector?.chat(cue.slot,at);
@@ -972,8 +1000,10 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     still(width:number,options?:SceneStillOptions){return stills.still(width,options);},
     setHour(value:number){targetHour=value;sound.cue('wood');},
     /** Play's ledger setting: effects scale, palette, light, near detail and dusk windows never do. Null is automatic. */
-    setQuality(value:SceneQuality|null){const budget=sceneQualityBudget(value,openedQuality,canvas.clientWidth);qualityChoice=budget.choice;post.setQuality(budget.post);lastRenderedKey='';},
-    quality:()=>sceneQualityBudget(qualityChoice,openedQuality,canvas.clientWidth),
+    setQuality(value:SceneQuality|null){qualityChoice=sceneQualityBudget(value,automaticQuality,canvas.clientWidth).choice;applyQuality();},
+    quality:()=>sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth),
+    /** Evidence only: far land error in pixels, until the next quality change (null: the quality's own). */
+    setLandDetail(pixels:number|null){grandLand?.setDetail(landDetail(pixels??sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth).landDetail));lastRenderedKey='';},
     setCamera(value:CameraName){arrivalDirector?.cancel();walkSelected=false;walk?.controller.release();capturePose=null;poseRevision++;camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
     /** Evidence framing only. Null returns control to the current production camera. */
     pose(eye:Vec3|null,lookAt?:Vec3,fov=43){

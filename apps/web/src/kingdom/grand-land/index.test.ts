@@ -90,6 +90,14 @@ describe('baked terrain renderer scheduling', () => {
     expect(f.scene.children[0]!.position.toArray()).toEqual([-16, -5, -32]);
   });
 
+  it('takes a far-detail setting from the quality governor within one to eight pixels', async () => {
+    const f = fixture(), owner = await f.start();
+    expect(() => owner.setDetail(3)).not.toThrow();
+    expect(() => owner.setDetail(null)).not.toThrow();
+    expect(() => owner.setDetail(.5)).toThrow(/1 to 8 pixels/);
+    expect(() => owner.setDetail(Number.NaN)).toThrow(/1 to 8 pixels/);
+  });
+
   it('requests the physical L0 regions at open, before any camera, and reserves their exact decoded size', async () => {
     const f = fixture(), owner = await f.prepare();
     // The installed streets are asked for as soon as the source opens, nearest the town centre first.

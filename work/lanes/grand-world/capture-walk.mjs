@@ -350,10 +350,13 @@ try {
     page.on('response', response => { if (new URL(response.url()).pathname.startsWith('/api/realm/land/')) run.landRequests++; });
     // Frame pacing probe: how long each animation-frame callback runs, and the interval between them.
     await page.addInitScript(() => {
-      const raf = window.requestAnimationFrame.bind(window), probe = window.__walkFrames = { calls: 0, slow: [], last: 0, intervals: [] };
+      // `record`, when set to an array, keeps every frame's interval (GW12: the walk's frame times along the route).
+      // Frames are told apart by the timestamp every callback of one frame shares, not by callbacks.
+      const raf = window.requestAnimationFrame.bind(window), probe = window.__walkFrames = { calls: 0, slow: [], last: 0, intervals: [], record: null, frameAt: 0 };
       window.requestAnimationFrame = callback => raf(time => {
         const started = performance.now();
         if (probe.last) { probe.intervals.push(Math.round(started - probe.last)); if (probe.intervals.length > 20) probe.intervals.shift(); }
+        if (time !== probe.frameAt) { if (probe.frameAt) probe.record?.push(+(time - probe.frameAt).toFixed(2)); probe.frameAt = time; }
         probe.last = started;
         try { callback(time); } finally {
           const took = performance.now() - started; probe.calls++;
@@ -381,7 +384,8 @@ try {
         if (Date.now() - started > timeout) throw new Error(`Timed out: ${JSON.stringify(run.trail.at(-1))}`);
       }
     };
-    run.gateMs = await timed(() => !!document.querySelector('.kingdom-gate'), 30_000);
+    // The gate shows only when the opening loader does not; a page already ready has passed both.
+    run.gateMs = await timed(() => !!document.querySelector('.kingdom-gate') || window.__chatdomReady === true, 30_000);
     run.loadedMs = await timed(() => window.__chatdomReady === true && !!window.__chatdomKingdom?.inspect?.().loaded, 240_000);
     run.walkableMs = await timed(() => window.__chatdomWalk?.ready === true && window.__chatdomWalk.owner === 'walking', 240_000);
     run.land = await page.evaluate(() => { const s = window.__chatdomKingdom.inspect().land; return s && { generatedColumns: s.generatedColumns, initialNetworkBytes: s.initialNetworkBytes, phase: s.phase, regions: s.regions ?? null }; });
@@ -403,6 +407,8 @@ try {
       assert.ok(effects().placeWalker(walker, spot.start, world.revision), `placeWalker ${name}`);
       await page.waitForFunction(([x, z]) => { const s = window.__chatdomWalk.self; return s && Math.hypot(s.x - x, s.z - z) < .3 && s.speed < .05; }, [spot.start[0], spot.start[2]], { timeout: 60_000, polling: 100 })
         .catch(async error => { throw new Error(`${error.message}: ${JSON.stringify(await page.evaluate(() => ({ self: window.__chatdomWalk.self, authority: window.__chatdomWalk.authority, frames: window.__chatdomWalk.frames, owner: window.__chatdomWalk.owner })))}`); });
+      // Frame intervals from the turn to the stop: the walk as a person feels it.
+      await page.evaluate(() => { window.__walkFrames.record = []; });
       // Turn the camera with a real drag until it faces the spot (heading convention: (sin h, cos h)).
       const box = { x: Math.round(w * .5), y: Math.round(h * .45) };
       let perPixel = null;
@@ -435,6 +441,11 @@ try {
       view.heldMs = Date.now() - holdStarted;
       await page.waitForFunction(() => (window.__chatdomWalk.self?.speed ?? 1) < .05, null, { timeout: pc ? 10_000 : 60_000, polling: 100 })
         .catch(async error => { throw new Error(`${error.message} (still after W): ${JSON.stringify({ view, before, now: await self(), frames: await page.evaluate(() => window.__chatdomWalk.frames), raf: await page.evaluate(() => window.__walkFrames && { calls: window.__walkFrames.calls, slow: window.__walkFrames.slow, intervals: window.__walkFrames.intervals }) })}`); });
+      view.frames = await page.evaluate(() => {
+        const t = window.__walkFrames.record ?? []; window.__walkFrames.record = null;
+        const s = [...t].sort((a, b) => a - b), q = p => s[Math.min(s.length - 1, Math.floor(p * s.length))] ?? null;
+        return { frames: s.length, p50: q(.5), p95: q(.95), p99: q(.99), worst: s.at(-1) ?? null, over16: s.filter(x => x > 16.7).length, over33: s.filter(x => x > 33.4).length, intervals: t };
+      });
       const after = await self();
       view.walked = Math.hypot(after.x - before.x, after.z - before.z);
       view.end = [after.x, after.y, after.z];
@@ -448,7 +459,8 @@ try {
       await page.screenshot({ path, timeout: pc ? 30_000 : 180_000 });
       view.png = path;
       run.views.push(view);
-      console.log(JSON.stringify({ size: run.size, name, walked: +view.walked.toFixed(2), floorGap: view.floorGap, fromStop: view.fromStop }));
+      console.log(JSON.stringify({ size: run.size, name, walked: +view.walked.toFixed(2), floorGap: view.floorGap, fromStop: view.fromStop,
+        frames: { n: view.frames.frames, p50: view.frames.p50, p95: view.frames.p95, p99: view.frames.p99, worst: view.frames.worst } }));
     }
     if (pc) await page.close(); else await context.close();
   }
