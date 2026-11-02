@@ -67,6 +67,11 @@ export interface FeedOptions {
    * reconnect or a reload hears only raids stored after it. A malformed event is dropped without a word.
    */
   onRaid?: (raid: CaravanRaid) => void;
+  /**
+   * The service's withheld set changed (an operator withheld a channel, or a streamer hid or showed their own): read
+   * the names projection again now rather than at the next refresh. The event names no one.
+   */
+  onNames?: () => void;
 }
 
 export const RECONCILE_MS = 60_000;
@@ -209,6 +214,9 @@ export class LiveFeed {
             return;
           }
           this.options.onRaid(raid);
+        });
+        stream.addEventListener('names', () => {
+          if (!this.controller.signal.aborted) this.options.onNames?.();
         });
         stream.onopen = () => {
           this.transport = 'streaming';

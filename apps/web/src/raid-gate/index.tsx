@@ -8,10 +8,10 @@ import { createSignal, For, lazy, onCleanup, onMount, Show } from 'solid-js';
 import type { KingdomId } from '../../../api/src/raid-gate/contracts';
 import { parseRaidWelcomePath } from '../../../api/src/raid-gate/guest-contracts';
 import { createKingdomScene } from '../kingdom/scene';
-import type { GateBench } from './bench';
+import type { BenchCast, GateBench } from './bench';
 import { createRaidGateController, type GateSnapshot, type RaidGateController } from './controller';
 import { GuestArrivalPane } from './GuestArrival';
-import type { GateKingdom, RaidGatePorts } from './ports';
+import type { AtlasGateHost, GateKingdom, RaidGatePorts } from './ports';
 import { GateDefs, RaidGatePane } from './RaidGatePane';
 import { Seal } from './Seal';
 import { VisitorGiftPane } from './VisitorGifts';
@@ -41,6 +41,8 @@ const RaidRoad = lazy(() => import('./road/RaidRoad'));
 const IncomingRaid = lazy(() => import('./incoming'));
 const NoticeBench = lazy(() => import('./entry/notice-bench'));
 const GuestInsigniaBench = lazy(() => import('./guest-insignia-bench'));
+/** `/-/raid-gate?walkGate=<stage>`: the march call in play's HUD region and the journey layer, over a street at dusk. */
+const WalkGateBench = lazy(() => import('./walk-gate-bench'));
 /**
  * `/-/raid-gate?guestWalk=/raid/<kingdom>/<key>` walks a signed-in raider into the lane's own mock stack through the
  * production welcome entry (the RS10 stage serves this build against that stack only). It admits a simulated kingdom
@@ -51,6 +53,8 @@ const GuestWalk = lazy(() => import('./entry'));
 export default function RaidGatePage() {
   const query = new URLSearchParams(location.search);
   if (query.get('guestInsignia') === '1') return <GuestInsigniaBench />;
+  const walkGate = query.get('walkGate');
+  if (walkGate !== null) return <WalkGateBench stage={walkGate} map={query.get('map')} />;
   const walk = query.get('guestWalk');
   if (walk !== null) {
     if (!parseRaidWelcomePath(walk)) return <p class="rg-bench-refused" role="alert">This bench walks in only through a raid welcome path.</p>;
@@ -78,8 +82,13 @@ function RaidGateRoute() {
   const [kingdomFailed, setKingdomFailed] = createSignal(false);
   const [finderOpen, setFinderOpen] = createSignal(false);
   const [staged, setStaged] = createSignal(false);
+  // `&map=atlas`: the board opens the Atlas's own gate mode (when this build carries it) over the rehearsed raid
+  // road's real channels, instead of the bench's stand-in finder.
+  const onMap = benchMode && query.get('map') === 'atlas';
+  const [mapSettled, setMapSettled] = createSignal(!onMap);
   const life = new AbortController();
   let canvas!: HTMLCanvasElement;
+  let atlasHost!: HTMLDivElement;
   let dispose: (() => void) | undefined;
 
   onMount(() => {
@@ -106,9 +115,17 @@ function RaidGateRoute() {
         const { createGateBench } = await import('./bench');
         const twitch = (['accept', 'lose', 'refuse'] as const).find(each => each === query.get('twitch')) ?? 'accept';
         const rooms = (['ready', 'slow', 'hold', 'lose', 'deny'] as const).find(each => each === query.get('rooms')) ?? 'ready';
-        made = createGateBench({ viewer, authority, clock, twitch, rooms });
+        let cast: BenchCast | undefined, atlas: AtlasGateHost | null = null;
+        if (onMap) {
+          const [{ castFor }, { roadLand, ROAD_PAIR }, { deferGateAtlas }] = await Promise.all([import('./road/cast'), import('./road/lands'), import('./atlas-gate')]);
+          cast = castFor(roadLand(ROAD_PAIR.from), roadLand(ROAD_PAIR.to), 'founded');
+          // The map is drawn (or found missing) before the capture is called ready.
+          atlas = deferGateAtlas(() => atlasHost, life.signal, undefined, { onReady: state => { if (state !== 'still') setTimeout(() => setMapSettled(true), 2500); } });
+          if (!atlas) setMapSettled(true);
+        }
+        made = createGateBench({ viewer, authority, clock, twitch, rooms, ...(cast ? { cast } : {}) });
         made.finder.onChange(() => setFinderOpen(made!.finder.open()));
-        ports = { api: made.api, atlas: made.atlas, source: made.source, clock, account: { reconnect: () => made!.reconnect() } };
+        ports = { api: made.api, atlas: onMap ? atlas : made.atlas, source: made.source, clock, account: { reconnect: () => made!.reconnect() } };
       }
       if (life.signal.aborted) return;
       const gate = createRaidGateController(ports);
@@ -116,10 +133,14 @@ function RaidGateRoute() {
       setSnap(gate.snapshot());
       gate.subscribe(setSnap);
       await waitFor(gate, snapshot => snapshot.phase !== 'loading');
+      if (onMap && query.get('finder') === '1' && viewer === 'monarch') gate.open();
+      else setMapSettled(true);
       const pick = query.get('pick') as KingdomId | null, walkers = Math.max(0, Math.min(7, Number(query.get('walkers')) || 0));
       if (made && pick && authority === 'ready') {
         if (viewer === 'monarch') {
-          made.finder.pick(pick);
+          // With the Atlas bound, the bench's stand-in finder is not the controller's map: ask for the preview directly.
+          if (onMap) void gate.preview(pick);
+          else made.finder.pick(pick);
           await waitFor(gate, snapshot => snapshot.phase === 'preview' || snapshot.notice !== null);
         } else {
           await made.monarchPreview(pick);
@@ -174,7 +195,7 @@ function RaidGateRoute() {
     })();
   });
 
-  const ready = () => kingdomReady() || kingdomFailed();
+  const ready = () => (kingdomReady() || kingdomFailed()) && mapSettled();
   /** The kingdom has drawn and the gate shows the authority's answer. The scene raises `__chatdomReady` on its own. */
   const markReady = () => {
     const gateWindow = window as GateWindow & { __chatdomRaidGate?: { ready: boolean } };
@@ -209,6 +230,7 @@ function RaidGateRoute() {
     <Show when={welcome()}>{state => <GuestArrivalPane welcome={state().welcome} homeName={state().snap.source.name} homeKingdomId={state().snap.source.kingdomId}
       hostName={state().snap.journey?.destination?.channel?.kingdomName ?? WELCOME_HOST.name} hostKingdomId={state().snap.journey!.to} />}</Show>
     <Show when={!ready()}><div class="rg-veil" role="status"><p>Unfolding the valley…</p></div></Show>
+    <div ref={element => { atlasHost = element; }} class="rg-atlas-host" classList={{ 'is-open': snap()?.phase === 'choosing' }} aria-hidden={snap()?.phase === 'choosing' ? undefined : 'true'} />
     <Show when={bench() && finderOpen()}>
       <BenchFinder bench={bench()!} />
     </Show>

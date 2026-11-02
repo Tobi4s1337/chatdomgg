@@ -5,6 +5,7 @@ import { KingdomRoomState, WalkerSchema, WalkInputSchema, RealmJoinSchema, Realm
 import { stepPlayer, bodyStuck, embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmRoomHandle, RealmRoomServices } from './ports';
 import { tavernReturnsFor } from './games/return';
+import { attachCampfireRoom } from './campfire';
 import { RealmSeats, RealmSeatRefusedError, REALM_SESSION_CHECK_MS } from './auth/seats';
 import { RealmDistricts } from './limits/districts';
 import { attachRealmRoomChannels } from './room-channels';
@@ -160,6 +161,11 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         pose: id => { const p = this.state.walkers.get(id); return p ? { position: [p.x,p.y,p.z], yaw: p.yaw, grounded: p.grounded, collisionRevision: p.collisionRevision } : null; },
         world: () => this.world, end: (id, reason) => this.seats.end(id, reason),
       }).dispose);
+      // The campfire (gather): its own messages; a seat's secrets go to that person's current session only.
+      this.unbind.push(attachCampfireRoom(services, kingdomId, { on: (type, handler) => this.onMessage(type, (client, raw) => { if (this.accepting && client.auth && this.control.get(client.auth.personId) === client.sessionId) handler(client.auth, raw); }),
+        send: (person, type, message) => { const sid = this.control.get(person); if (this.accepting && sid) this.clients.getById(sid)?.send(type, message); },
+        broadcast: (type, message) => { if (this.accepting) this.broadcast(type, message); },
+        nameOf: person => { const sid = this.control.get(person); return sid ? this.state.walkers.get(sid)?.name ?? null : null; } }));
       this.setFixedTimestep(ctx => {
         if(!this.accepting)return;
         for (const [sid, p] of this.state.walkers) {

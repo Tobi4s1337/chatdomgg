@@ -1,4 +1,4 @@
-import { FISHING_CHANNEL, type FishingPierSite, type ItemRecord, type KingdomId, type PersonId, type Vec3 } from '@chatdom/shared';
+import { FISHING_CHANNEL, fishingRodHistory, type FishingPierSite, type ItemRecord, type KingdomId, type PersonId, type Vec3 } from '@chatdom/shared';
 import type { RealmChannelPose, RealmChannelRoom, RealmChannelSender } from '../../../realm/src/room-channels';
 import { createFishingCasts } from '../../../realm/src/fishing/cast';
 import type { FishingWaterSampler } from '../../../realm/src/fishing/cast-site';
@@ -20,6 +20,8 @@ export interface StagedPierOptions {
   readonly kingdomId: string;
   readonly site: FishingPierSite;
   readonly rack: Vec3;
+  /** Where the staged Almanac lectern stands. */
+  readonly almanac?: Vec3;
   readonly revision: number;
   readonly sample: FishingWaterSampler;
   readonly where: string;
@@ -28,6 +30,8 @@ export interface StagedPierOptions {
   /** Deterministic cast seeds for a recorded review; random otherwise. */
   readonly seeds?: readonly number[];
   readonly onGrant?: (record: ItemRecord) => void;
+  /** A staged rod's earlier history per person: fish it has landed and the legend it once held. */
+  readonly rods?: Readonly<Record<string, { readonly catches: number; readonly legend?: string }>>;
 }
 
 const uuid = () => crypto.randomUUID();
@@ -58,8 +62,14 @@ export function createStagedPier(options: StagedPierOptions) {
     person: personId => senders.get(personId) ?? null,
     world: () => { throw new Error('The staged pier has no collision world.'); },
   };
-  const installation = { site: options.site, revision: options.revision, rack: options.rack, sample: options.sample, biome: null };
+  const installation = { site: options.site, revision: options.revision, rack: options.rack, sample: options.sample, biome: null,
+    ...(options.almanac ? { almanac: options.almanac } : {}) };
   const records = new Map<string, ItemRecord>(), firsts = new Set<string>(), personal = new Set<string>();
+  // The rod's history: staged earlier catches (`rods`) plus what is landed here.
+  const rodCatches = new Map<string, number>(Object.entries(options.rods ?? {}).map(([person, rod]) => [person, rod.catches]));
+  const rodLegends = new Map<string, { speciesId: string; at: number }>(Object.entries(options.rods ?? {})
+    .flatMap(([person, rod]) => rod.legend ? [[person, { speciesId: rod.legend, at: clock() - 86_400_000 }] as const] : []));
+  const historyOf = (owner: string) => fishingRodHistory(rodCatches.get(owner) ?? 0, rodLegends.get(owner) ?? null);
   let seedIndex = 0;
   const makeRecord = (owner: string, defId: string, place: ItemRecord['place'], storied: boolean, story: ItemRecord['story'],
     source: ItemRecord['source'], detail: ItemRecord['detail'], slot: number | null): ItemRecord => ({
@@ -72,7 +82,7 @@ export function createStagedPier(options: StagedPierOptions) {
       casts = createFishingCasts({ kingdomId, clock, species,
         seat: personId => {
           const sender = senders.get(personId), pose = sender?.pose();
-          return sender && pose ? { token: sender.walkerId, pose, ownsRod: !!selected(personId, sender.walkerId) } : null;
+          return sender && pose ? { token: sender.walkerId, pose, ownsRod: !!selected(personId, sender.walkerId), reachM: historyOf(personId).reachM } : null;
         },
         installation: () => installation, makeId: uuid,
         seed: () => options.seeds?.length ? options.seeds[seedIndex++ % options.seeds.length]! : crypto.getRandomValues(new Uint32Array(1))[0]! });
@@ -109,8 +119,11 @@ export function createStagedPier(options: StagedPierOptions) {
             collisionRevision: candidate.collisionRevision,
             proof: { version: 1, castSeed: candidate.castSeed, fightSeed: candidate.fightSeed, inputs: candidate.inputs, result: candidate.result } };
           casts.finish(owner, castId);
-          return { status: 'kept', catch: record, item, replayed: false };
+          rodCatches.set(owner, (rodCatches.get(owner) ?? 0) + 1);
+          if (fish.legend && !rodLegends.has(owner)) rodLegends.set(owner, { speciesId: fish.id, at: candidate.at });
+          return { status: 'kept', catch: record, item, keepsake: null, replayed: false };
         },
+        async rodHistory(from) { return historyOf(from.principal.personId); },
         onRodChange: () => () => {},
         dispose: () => casts.dispose(),
       };

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
-import type { Vec3, VoxelAsset } from '@chatdom/shared';
+import { KingdomIdSchema, kingdomHoldsFish, type Vec3, type VoxelAsset } from '@chatdom/shared';
 import { executeVoxelJob } from '../../../voxel/src/protocol';
 import { MATERIALS } from '../materials';
 import { createWillowRod, WILLOW_ROD_DEFINITION } from '../pier/rod';
@@ -46,10 +46,39 @@ function check(asset: VoxelAsset, anchors: readonly Vec3[]) {
   return { cells, triangles };
 }
 
-it('authors twelve distinct, connected fish with independent buffers and real meshed geometry', () => {
-  expect(FISH_SPECIES).toHaveLength(12);
-  expect(new Set(FISH_SPECIES.map(fish => fish.id)).size).toBe(12);
-  expect(new Set(FISH_SPECIES.map(fish => fish.name)).size).toBe(12);
+const COUNT = FISH_SPECIES.length;
+
+it('authors 24 to 30 fish with lore and a riddle each, from common through four legends', () => {
+  expect(COUNT).toBeGreaterThanOrEqual(24); expect(COUNT).toBeLessThanOrEqual(30);
+  const legends = FISH_SPECIES.filter(fish => fish.legend);
+  expect(legends).toHaveLength(4);
+  expect(legends.every(fish => fish.rarity === 'rare')).toBe(true);
+  for (const rarity of ['common', 'uncommon', 'rare'] as const) expect(FISH_SPECIES.some(fish => fish.rarity === rarity)).toBe(true);
+  for (const fish of FISH_SPECIES) {
+    expect(fish.lore.length).toBeGreaterThan(40); expect(fish.riddle.length).toBeGreaterThan(20);
+    expect(fish.lore).not.toBe(fish.riddle);
+    if (fish.share !== undefined) { expect(fish.share).toBeGreaterThan(0); expect(fish.share).toBeLessThan(1); }
+  }
+  expect(new Set(FISH_SPECIES.map(fish => fish.riddle)).size).toBe(COUNT);
+});
+
+it('lets every kingdom catch at least fourteen fish at its own lake pier, and not the same fourteen everywhere', () => {
+  const lake = FISH_SPECIES.filter(fish => fish.waters.includes('lake') && fish.biomes.includes('*'));
+  const seen = new Set<string>();
+  for (let n = 0; n < 400; n++) {
+    const kingdomId = KingdomIdSchema.parse(String(1000 + n * 7919));
+    const held = lake.filter(fish => kingdomHoldsFish(kingdomId, fish)).map(fish => fish.id);
+    expect(held.length).toBeGreaterThanOrEqual(14);
+    seen.add(held.join(','));
+  }
+  expect(seen.size).toBeGreaterThan(8);
+  // Some fish live only elsewhere: the sea, or a biome no founded lake pier has.
+  expect(FISH_SPECIES.some(fish => !fish.waters.includes('lake') || !fish.biomes.includes('*'))).toBe(true);
+});
+
+it('authors distinct, connected fish with independent buffers and real meshed geometry', () => {
+  expect(new Set(FISH_SPECIES.map(fish => fish.id)).size).toBe(COUNT);
+  expect(new Set(FISH_SPECIES.map(fish => fish.name)).size).toBe(COUNT);
   expect(FISH_ITEM_DEFINITIONS.map(def => def.id)).toEqual(FISH_SPECIES.map(fish => fish.id));
   const shapes = new Set<string>(), costs: string[] = [];
   for (const fish of FISH_SPECIES) {
@@ -65,7 +94,7 @@ it('authors twelve distinct, connected fish with independent buffers and real me
     shapes.add(createHash('sha256').update(shape).digest('hex'));
     costs.push(`${fish.id}=${triangles}`);
   }
-  expect(shapes.size).toBe(12);
+  expect(shapes.size).toBe(COUNT);
   console.info(`Fish triangles: ${costs.join(', ')}`);
   expect(() => createFishModel('fish:missing')).toThrow();
 });

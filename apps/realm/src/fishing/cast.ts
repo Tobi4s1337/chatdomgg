@@ -5,7 +5,11 @@ import { aimFishingCast, onFishingLip, type FishingWaterSampler } from './cast-s
 import { createFight, stepFight, verifyFight, FIGHT_TICK_MS, MAX_FIGHT_TICKS, type FightInput, type FightState } from './fight';
 import { validFishingSeed, type FishingSpecies } from './species';
 
-export interface FishingSeat { readonly token: string; readonly pose: RealmChannelPose; readonly ownsRod: boolean }
+export interface FishingSeat {
+  readonly token: string; readonly pose: RealmChannelPose; readonly ownsRod: boolean;
+  /** The rod's earned reach in metres (PI12); absent is none. */
+  readonly reachM?: number;
+}
 export interface FishingInstallation {
   readonly site: FishingPierSite; readonly revision: number; readonly sample: FishingWaterSampler;
   /** Adopted recipe identity, never landscape character or inferred style. null allows wildcard habitats only. */
@@ -182,7 +186,7 @@ export function createFishingCasts(options: FishingCastsOptions) {
         if (request.type === 'pier.release') {
           if (cast.phase !== 'drawing') return refuse('Your line is already out.');
           const status = current(cast)!;
-          const aim = aimFishingCast(cast.site, status.seat.pose, cast.revision, time - cast.at, status.installation.sample);
+          const aim = aimFishingCast(cast.site, status.seat.pose, cast.revision, time - cast.at, status.installation.sample, status.seat.reachM ?? 0);
           if (!aim.ok) { end(cast, time, beats, aim.message); return refuse(aim.message); }
           cast.float = copiedVec(aim.float); cast.depthM = aim.depthM; cast.phase = 'flying'; cast.at = time; cast.landedAt = time + FLIGHT_MS;
           emit(beats, cast, 'cast', time);

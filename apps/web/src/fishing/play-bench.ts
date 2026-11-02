@@ -59,6 +59,10 @@ export async function createPlayStage(options: PlayStageOptions): Promise<PlaySt
     sample: (x, z) => ({ waterY: pierWaterAt(plan, x, z), groundY: foundedGroundAt(plan, x, z)[1] }), where: 'Willowmere pier', clock: now,
     ...(options.query.get('seed') ? { seeds: [Number(options.query.get('seed'))] } : {}),
     ...(options.onGrant ? { onGrant: options.onGrant } : {}),
+    // A rod with a history for review stills: `rodcatches=34&legend=fish:frostking-char` (Juniper), `othercatches=12` (saoirse_k).
+    rods: Object.fromEntries([['1001', options.query.get('rodcatches'), options.query.get('legend')], ['1002', options.query.get('othercatches'), options.query.get('otherlegend')]]
+      .filter(([, catches]) => catches && /^\d{1,5}$/.test(catches))
+      .map(([person, catches, legend]) => [person!, { catches: Number(catches), ...(legend ? { legend } : {}) }])),
     people: [{ personId: '1001', walkerId: 'juniper', name: 'Juniper', pose: pose(selfAt, (byteYaw + 252) % 256) },
       { personId: '1002', walkerId: 'saoirse', name: 'saoirse_k', pose: pose(otherAt, (byteYaw + 6) % 256) }] });
   const controller = createFishingController({ link: fishingLink(staged.room('1001')), selfWalkerId: 'juniper', now });

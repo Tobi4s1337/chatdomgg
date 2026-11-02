@@ -26,7 +26,7 @@ const SITE_PAGES: Readonly<Record<string, SitePage>> = { '/how-it-works': 'how-i
 const MOVED: Readonly<Record<string, string>> = { '/showcase': '/' };
 
 const AUTH = /^\/api\/realm\/(?:session|ticket|signout|auth\/(?:start|callback)|simulated-oidc\/.*)$/;
-const REALM_READ = /^\/api\/realm\/(?:clock|(?:founded|entry|watch|chronicle)\/[1-9][0-9]{0,31}|founded\/scenes\/[a-f0-9]{64})$/;
+const REALM_READ = /^\/api\/realm\/(?:clock|(?:founded|entry|watch|chronicle|pier\/almanac|pier\/watch)\/[1-9][0-9]{0,31}|founded\/scenes\/[a-f0-9]{64})$/;
 const MATCHMAKE = /^\/matchmake\/(?:(?:joinOrCreate|create|join)\/kingdom|(?:joinById|reconnect)\/k:[1-9][0-9]{0,31})$/;
 const ROOM_SOCKET = /^\/[A-Za-z0-9_-]{1,128}\/k:[1-9][0-9]{0,31}$/;
 const REALM_PREFIX = '/live-realm-data';
@@ -71,9 +71,11 @@ export function classify(pathname: string, search: string): PublicRoute {
   if (AUTH.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/raid-gate\/crier\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/raid-gate\/guest\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
+  if (pathname === '/api/raid-gate/passport/travels') return { kind: 'auth' };
   if (/^\/api\/raid-gate\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/realm\/forge\/chat\/(?:status|authorize|callback|wish|revoke)$/.test(pathname)) return { kind: 'realm' };
   if (pathname === '/api/realm/forge/queue') return { kind: 'realm' };
+  if (pathname === '/api/realm/forge/ledger') return { kind: 'realm' };
   if (/^\/api\/dock\/(?:status|actions|presentations|witness)$/.test(pathname)) return { kind: 'dock' };
   if (REALM_READ.test(pathname)) return { kind: 'realm' };
   if (/^\/(?:live-realm-data\/)?realm\/(?:raid-roads|raid-pennants\/[1-9][0-9]{0,31})$/.test(pathname)) return { kind: 'realm' };

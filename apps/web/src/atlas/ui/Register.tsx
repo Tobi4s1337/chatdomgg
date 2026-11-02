@@ -243,6 +243,8 @@ export function WaitingCard(props: {
   onRoad: (road: CardRoad) => void;
   onRetry: () => void;
   ledger?: (() => JSX.Element | null) | undefined;
+  /** Only on the signed-in broadcaster's own card: the line that hides it. */
+  owner?: (() => JSX.Element | null) | undefined;
 }) {
   const close = useCardKeys(() => props.face.id, props.onClose);
   const card = () => (props.state.status === 'ready' ? props.state.reply : null);
@@ -303,6 +305,7 @@ export function WaitingCard(props: {
         </Show>
         <Show when={props.face.login}>{(login) => <ShareButton path={`/map/${login()}`} title={`${props.face.name} on the Atlas of Kingdoms`} />}</Show>
       </div>
+      {props.owner?.()}
       </footer>
     </section>
   );

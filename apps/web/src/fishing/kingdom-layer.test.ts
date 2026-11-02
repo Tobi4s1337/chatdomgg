@@ -4,7 +4,7 @@ import { VOXEL_METRES, type KingdomId, type Vec3 } from '@chatdom/shared';
 import { transformCardinalPoint, type RealmFoundedScene } from '@chatdom/world';
 import { PIER_REVIEW_SITE } from '../../../../packages/content/src/places/water/pier';
 import { createFishingPier } from '../../../../packages/content/src/pier/layout';
-import { claimPierScene, registerPierKingdomLayer, type PierKingdomHost } from './kingdom-layer';
+import { claimPierScene, mountPierKingdomLayer, registerPierKingdomLayer, type PierChatViews, type PierKingdomHost } from './kingdom-layer';
 import type { PierLayer, PierLayerHost } from './layer';
 
 const CELL = VOXEL_METRES.build;
@@ -115,5 +115,52 @@ describe("the pier's lanterns in a watched kingdom", () => {
     second.abort.abort();
     expect(mounted[1]!.layer.disposed).toBe(true);
     expect(second.ticks.size).toBe(0);
+  });
+});
+
+describe("chat's lines in every view of the kingdom", () => {
+  function fakeChat() {
+    const applied: string[] = [], hosts: unknown[] = [];
+    let listener: ((event: Parameters<PierChatViews['watch']>[1] extends (e: infer E) => void ? E : never) => void) | null = null;
+    const state = { feedDisposed: false, linesDisposed: false, removed: false, updates: 0 };
+    const views: PierChatViews = {
+      mount(host) { hosts.push(host); return { apply(event) { applied.push(event.kind + (event.kind === 'caught' ? `:${event.via}` : '')); },
+        update() { state.updates++; }, stats: () => ({ floats: 0, leaving: 0, leaps: 0, cards: 0, names: 0, draws: 0, triangles: 0 }) as never,
+        dispose() { state.linesDisposed = true; } }; },
+      watch(_id, onEvent) { listener = onEvent; return { dispose() { state.feedDisposed = true; } }; },
+      kingdomName: async () => 'Willowmere',
+      overlay: () => ({ remove() { state.removed = true; } }) as unknown as HTMLElement,
+    };
+    return { views, applied, hosts, state, send: (event: Parameters<NonNullable<typeof listener>>[0]) => listener?.(event) };
+  }
+  const caught = (via: 'chat' | 'pier') => ({ kind: 'caught' as const, at: 1, id: 'c', via, who: { name: 'saoirse_k', slot: 2, colour: '#ffd36e' },
+    fish: { speciesId: 'fish:copper-perch', lengthMm: 200, weightG: 300 }, kingdomFirst: false, keepsake: null, float: null });
+
+  it('watches the feed once the water is drawn, keeps early beats, and cleans up', async () => {
+    const { host, tick, abort } = fakeHost();
+    const chat = fakeChat(), { layer } = fakeLayer();
+    mountPierKingdomLayer(host, layer, chat.views);
+    tick(); await settle();
+    expect(chat.hosts).toHaveLength(1);
+    expect(chat.hosts[0]).toMatchObject({ kingdomName: 'Willowmere', site: { waterY: .25 } });
+    chat.send(caught('chat')); chat.send(caught('pier'));
+    expect(chat.applied).toEqual(['caught:chat', 'caught:pier']);
+    tick();
+    expect(chat.state.updates).toBeGreaterThan(0);
+    abort.abort();
+    expect(chat.state).toMatchObject({ feedDisposed: true, linesDisposed: true, removed: true });
+  });
+
+  it('draws chat while a walk holds the scene, leaving walker catches to the walk', async () => {
+    const { host, tick } = fakeHost({ mode: 'walking' });
+    const release = claimPierScene(host.scene);
+    const chat = fakeChat(), { layer, mounted } = fakeLayer();
+    mountPierKingdomLayer(host, layer, chat.views);
+    tick(); await settle();
+    expect(mounted).toHaveLength(0);
+    expect(chat.hosts).toHaveLength(1);
+    chat.send(caught('pier')); chat.send(caught('chat'));
+    expect(chat.applied).toEqual(['caught:chat']);
+    release();
   });
 });

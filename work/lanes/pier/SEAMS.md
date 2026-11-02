@@ -6,6 +6,104 @@ and keeps going on its fallback. Every ask below has a fallback; pier uses it un
 both. Section 1 is what pier provides; sections 2 to 4 are what pier asks for; section 5 is the small realm hooks pier
 writes itself; section 6 lists the other lanes that touch this one.
 
+## PI12 the keepsake shelf, the finished belt and the rod's history — 2 November 2026
+
+- **The shelf channel** (`apps/realm/src/items/shelf.ts`, composed in `apps/realm/src/main.ts` after the items channel):
+  room channel `shelf` (`SHELF_CHANNEL`, contract additive in `packages/shared/src/items.ts`). `shelf.read` answers your
+  `ShelfSettings` (`shown`, `revision`) and your door; `shelf.arrange` places one of your keepsakes on a shelf slot
+  (0..63) or a tool on a belt slot; `shelf.show` shows or hides your shelf to visitors (revision-checked; showing needs
+  your approved name); `shelf.doors` lists your door and every shown shelf's door; `shelf.visit` answers a door's
+  `ShelfPiece[]` to someone standing within 4 m of it (approved names only, never a person id, detail trimmed to 1 KiB
+  per piece). Your own door shows your shelf as visitors would see it, shown or not. Grants never come from here.
+- **Arrange** (`RealmItems.arrange`): a taken slot swaps: the occupant takes the mover's old slot in the same place,
+  else the first free slot there, else the mover's old place, else the arrange is refused and nothing moves. Both
+  writes are revision-checked, each appends `moved`, and both are pushed to the owner on the items channel. A tool
+  never stands on the shelf and a keepsake never goes on the belt (the definition's `places`).
+- **Migration `0017e_realm_pier_shelf.sql`** replaces the `realm_items_slots` unique index with the deferrable
+  exclusion constraint `realm_items_slot_places`, so a swap passes through both slots inside one transaction and the
+  database still refuses two things in one slot at commit; adds `realm_item_shelves` (shown flag, approved name only
+  while shown, revision). The next pier migration is `0017f`.
+- **Doors**: `shelfHomes(plan, kingdom.privateState.homes, kingdom.layoutRevision)` reads the founded plan's homes and
+  their approach nodes (the step in front of each door); only homes adopted under the current layout have an owner.
+- **The rod's history** (`apps/realm/src/fishing/rod-history.ts`): derived from `realm_fishing_catches` (walker catches
+  only), never stored twice: `fishingRodHistory(catches, legend)` gives a notch per ten fish (at most 12), the first
+  legend's ribbon and earned reach (+0.25 m per 25 fish, at most +1.5 m, on a full cast only; never luck, never bought).
+  `pier.state.self.history` and `pier.kept.history` carry it to the owner; `pier.rod` and `pier.state.rods` carry only
+  `notches` and `ribbon` to everyone, so the marks show on rods in other people's hands.
+- **Client**: `createShelfStore` (`apps/web/src/bag/shelf-store.ts`) over the bag store; `mountShelf`
+  (`apps/web/src/bag/shelf/`) draws the carved shelf with the real voxel keepsakes; the belt (`mountHotbar`) reorders by
+  drag (a finger after a short hold), by Shift and an arrow key, and shows all nine places while a tool moves. Play
+  gets a `Shelf` ledger page (order 27), a `pier.shelf` world prompt ("Your shelf" at your door, "Wren’s shelf" at a
+  shown one), and nine rebindable `hotbar.1`..`hotbar.9` bindings that follow the rail's keys.
+- **Review**: `/-/pier?view=shelf` (`count=`, `card=1`, `visit=1`, `drawer=1`) stages the shelf with no kingdom behind it.
+  The shelf content (`createKeepsakeShelf`) now carries `lamps` beside `lights`: a brass display lamp under the board over
+  each tier, two per bay, lighting the plaques; places stop three cells above them.
+
+How another lane writes into the item foundation, tested by example in `apps/realm/src/items/seams.test.ts` (memory
+and Postgres): gather defines a game keepsake (`game:pong.ribbon`, `branch: 'kept'`, `keepsake: true`, places
+`['shelf','bag','away']`), registers it with one import line in `providers.ts`, and calls
+`items.grant({ key: 'game:pong:<match>:<winner>', ownerId, kingdomId, origin, defId, story, source: { kind: 'game', ref }, detail })`
+once per winner: the keepsake is numbered, stands on the shelf, a retry returns the same record and reusing the key for
+a different fact is refused. A shared moment (G06) calls `items.grantShared({ key: 'campfire:night:<date>', people,
+story, source, defId })`: every participant gets the same number exactly once, even when two deliveries race, a person
+listed twice gets one, and the same key with different people is refused. If that test changes, this recipe changes.
+
+Asks:
+
+- `needs: home-interiors a shelf anchor in the home interior` — a named anchor (`shelf`, world position, facing, width
+  in cells) in each home kit, so `mountShelf` can stand in the room instead of over it. Until then the shelf opens from
+  your door and the ledger as a lit alcove view; the anchor is read through the same `ShelfDoor` the doors carry.
+
+## PI11 the Almanac and `!fish` from chat — 2 November 2026
+
+What landed, in this lane's scope plus the hooks listed in the PRD:
+
+- **28 fish** (`packages/content/src/fish/`): the twelve PI10 fish plus four still-water, four sunlit/cold, four sea
+  fish and four legends (`legends.ts`: Stormcrown Sturgeon, Goldscale Emperor, Moonwake Ray, Frostking Char). Each has
+  lore, a riddle for its unknown page, conditions, sizes and a fight. `FishSpecies` gains two optional fields in
+  `packages/shared/src/fishing.ts`: `legend: true` (always rare; a chat line can never hold it) and `share` (0–1: the
+  share of kingdoms whose water holds the fish, fixed per kingdom by `kingdomHoldsFish`). Fourteen lake fish have no
+  share, so every kingdom's lake pier can catch at least fourteen; the shared ones make each kingdom's Almanac differ.
+  The realm reads one kingdom's water with `fishingSpecies.forKingdom(kingdomId)`.
+- **Mounts** (`packages/content/src/keepsakes/`): one numbered keepsake per species, `keepsake:mount.<slug>`, an oak
+  plaque with the real fish model on a brass peg. A rare catch or a kingdom's first of a species grants its mount in
+  the same transaction as the fish (`fishing:mount:1:<castId>` grant key), numbered gaplessly by the item service's
+  `realm_item_numbers`; it goes on the shelf, or the bag once the shelf holds 64. `pier.kept` carries `keepsake`.
+- **`!fish`** (`apps/realm/src/fishing/chat.ts`, `pier.ts`): the 5b hook below is applied. A chatter with a lit window
+  who types `!fish` (first word, any case) gets a float in their window's light colour off the head; the realm plays
+  the bite and a scripted steady-hand fight itself (`chatFight`: lands about nine in ten; the proof replays like a
+  walker's), and `createPostgresChatCatchWriter` keeps fish, mount and catch record in one fenced transaction
+  (`via: 'chat'`, the approved name on the record). One line per person, 45 s rest after a line ends, at most 8 chat
+  floats; the 9th hears one honest "pier is full" beat (once per person per 30 s). A legend takes the float and
+  breaks the line. A deleted message pulls its float; a timeout or ban clears that person's line and hides their name
+  from the pier's public pages from then on (`realm_pier_hidden_names`, migration `0017d`); a chat clear clears every
+  chat line. A catch already being written stays the person's, without the name on stream.
+- **Public reads** (`apps/realm/src/fishing/routes.ts`): `GET /api/realm/pier/almanac/:id` (JSON, `max-age=5`) and
+  `GET /api/realm/pier/watch/:id` (SSE `event: pier`, `PierFeedEvent`; at most 64 watchers, keepalive 15 s, a stalled
+  watcher is closed after 10 s). Walker catches are announced on the same feed. No person ids anywhere; a moderated
+  person's name is null. The proxy line and the `routes.ts` allowlist line are applied (section 4); front-door may
+  add `/api/realm/pier/almanac/1001` and `/api/realm/pier/watch/1001` to its `routes.test.ts` list (pier does not
+  edit that test).
+- **Your own marks**: `pier.marks` on the fishing channel answers your species, counts, best, first time and whether
+  you hold the kingdom's first. `pier.state` gains the optional `almanac` lectern position.
+- **The book** (`apps/web/src/almanac/`): `mountAlmanac` draws the Almanac with plates from the real voxel renders,
+  silhouettes and riddles for unknown fish, the wax seal for a kingdom's first, your own pencilled marks and paper
+  sound. Play opens it three ways through the slots it already has: a `Read the Almanac` world prompt at the lectern
+  (`pier.state.almanac`), an `Almanac` ledger page (order 35, for walkers with their marks and for watchers without),
+  and the public page `/almanac?kingdom=<id>` (one `lanePaths` entry in `apps/web/src/main.tsx`). An open book
+  rewrites itself when you keep a fish.
+- **Composition** (`apps/realm/src/main.ts`): `createRealmPier` beside the fishing channel, `chatCommands` passed to
+  `RealmEveningBridge` only while `REALM_PIER_FISHING=1`, `mountPierRoutes`, and disposal on shutdown.
+
+Decisions:
+
+1. Chat fishers have no session. Admission is the lit window Herald proved (the bridge's `speechHost`), and the
+   writer still fences the kingdom's writer lease. The chat fight is the realm's own, so the catch carries the same
+   replayable proof the 0017c constraints check.
+2. Old founded plans carry no biome, so per-kingdom variety comes from `share` rather than from guessing a biome.
+3. A clear-by-person cleanup is taken as moderation (Herald sends no reason), and the name stays hidden. Lifting it
+   when a person is restored is in the backlog.
+
 ## PI10 physical pier checkpoint — 2 November 2026
 
 The fallback site is now implemented in `apps/realm/src/fishing/site.ts`. It reads only the adopted plan's
@@ -808,7 +906,7 @@ readonly chatCommands?: {
 ```
 
 `apps/realm/src/evening/**` belongs to main and the integrator; pier writes exactly these lines and nothing else there.
-If the integrator would rather apply them, pier writes `needs: integrator chat command hook` with this patch.
+Applied in PI11 (2 November): nine added lines and one changed line in `bridge.ts`.
 
 ### 5c. The pier placement (`apps/realm/src/founded/scene.ts`)
 

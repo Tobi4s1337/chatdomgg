@@ -20,6 +20,7 @@ const lanePaths: Record<string, string> = {
   ...(/^\/raid\/[1-9][0-9]{0,31}\/[a-f0-9]{32}\/[a-f0-9]{32}$/u.test(location.pathname) ? { [location.pathname]: (laneViews['./raid-gate/entry/index.tsx'] = () => import('./raid-gate/entry'), './raid-gate/entry/index.tsx') } : {}),
   '/-/atlas-embed': (laneViews['./atlas/bench/index.tsx'] = () => import('./atlas/bench/index'), './atlas/bench/index.tsx'),
   '/-/soul': (laneViews['./soul/index.tsx'] = () => import('./soul/index'), './soul/index.tsx'),
+  '/almanac': (laneViews['./almanac/index.tsx'] = () => import('./almanac/index'), './almanac/index.tsx'),
   '/-/passport':'./passport/index.tsx', '/-/grand':'./grand/index.tsx',
   '/-/grand-bench':'./grand/index.tsx',
   '/-/citizen-card':'./citizen-card/index.tsx', '/-/twitch-moments':'./twitch-moments-bench/index.tsx', '/-/campfire':'./campfire/index.tsx',

@@ -34,6 +34,9 @@
 .atlas .atlas-cartouche .atlas-search-panel { top: calc(100% + 13px); border: 4px solid var(--cd-wood-lo); border-radius: 5px; color: var(--cd-ink);
   box-shadow: inset 0 0 0 1px #dfbc8059, 0 1px 0 var(--cd-brass-lo), 0 8px 20px #34231655; }
 .atlas .atlas-cartouche .atlas-search-result[aria-selected='true'] { border-left-color: var(--cd-brass-lo); background: #9b744922; }
+/* The plate's cream lettering stops at the panel: names in the list are ink on paper. */
+.atlas .atlas-cartouche .atlas-search-panel { color: var(--cd-ink); }
+.atlas .atlas-cartouche .atlas-search-name { color: var(--cd-ink); }
 .atlas .atlas-search-result { touch-action: manipulation; }
 .atlas .atlas-search-result[data-atlas-press='true'] .atlas-face-seal, .atlas .atlas-search-result:active .atlas-face-seal { transform: scale(.94); filter: brightness(.96); }
 

@@ -119,6 +119,15 @@
 .mc-close:hover { background: #6b4a2c14; color: var(--mc-ink); }
 
 /* A phone: a compact strip under the thumbs, clear of the middle of the picture. Words above, choices in one row. */
+/* The walking key on the primary button: a small brass keycap, only while walking with the mouse captured. */
+.mc-key { display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin-left: 4px; padding: 0 5px; border-radius: 3px;
+  font: 600 12px/1 Alegreya, Georgia, serif; color: #2a1c12; background: linear-gradient(#f3d9a4, #c99c5c); box-shadow: inset 0 -2px 0 #8a6232, 0 1px 0 #1d140f; }
+@media (pointer: coarse) { .mc-key { display: none; } }
+
+/* In play's HUD region the piece flows with the region's other pieces rather than standing at the page's foot. */
+.mc-host[data-place='slot'] { display: block; }
+.mc-host[data-place='slot'] .mc-layer { position: static; transform: none; width: min(560px, calc(100vw - 32px)); }
+
 @media (max-width: 600px) {
   .mc-layer { width: calc(100vw - 16px); bottom: max(8px, env(safe-area-inset-bottom)); }
   .mc-call { gap: 9px; padding: 7px 7px 7px 8px; align-items: start; }

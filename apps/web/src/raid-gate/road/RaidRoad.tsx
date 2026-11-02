@@ -1,17 +1,19 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import { AtlasChannelSchema, type PresenceFeed, type RaidChatFeed, type RaidPartyPublicFeed, type RaidPartyPublicFrame, type RaidPennantFeed } from '@chatdom/shared';
-import type { KingdomId, PersonId } from '../../../../api/src/raid-gate/contracts';
+import { type PresenceFeed, type RaidChatFeed, type RaidPartyPublicFeed, type RaidPartyPublicFrame, type RaidPennantFeed } from '@chatdom/shared';
+import type { KingdomId } from '../../../../api/src/raid-gate/contracts';
 import { openRoadAtlas, RoadAtlasError, type RoadAtlas } from '../../atlas/road';
 import { createKingdomScene } from '../../kingdom/scene';
 import { installFrameGate, type FrameGate } from './frames';
-import type { BenchCast, GateBench } from '../bench';
+import type { GateBench } from '../bench';
 import { createRaidGateController, type GateSnapshot, type RaidGateController } from '../controller';
 import { incoming } from '../welcome';
 import { GateDefs, RaidGatePane } from '../RaidGatePane';
+import { MarchCall } from '../MarchCall';
 import { Seal } from '../Seal';
 import { twitchChannelUrl } from '../march-call';
 import { CHAPTERS, chapterOf, mapFrame, momentAt, ramp, REDUCED_TIMING, ROAD_TIMING, type RoadFacts, type RoadMoment, type RoadTiming } from './director';
-import { emptyPresence, ROAD_PAIR, roadLand, type RoadLand } from './lands';
+import { emptyPresence, ROAD_PAIR, roadLand } from './lands';
+import { castFor } from './cast';
 import { createRoadArrivalFeed, type RoadArrivalFeed } from './arrival-feed';
 import { sourceGateShot } from './gate-shot';
 import '../raid-gate.css';
@@ -60,25 +62,9 @@ const WALKER_CUES = [1.1, 2.0, 3.6, 4.4, 5.6];
 const START_AT = 7.2, WITNESS_AT = 15.5, REDUCED_START_AT = 2.8, REDUCED_WITNESS_AT = 3.6;
 /** How long the walker lingers before choosing to come home. */
 const LINGER = { welcome: 11, land: 9 } as const;
-const SIMULATED_HOST = '53000001' as PersonId;
 /** Waits before asking the survey again after a read that failed or ran out of time. */
 const MAP_RETRIES = [1500, 4000, 9000];
 const PARTY_POLL_MS = 400;
-
-function castFor(from: RoadLand, to: RoadLand, land: 'founded' | 'waiting'): BenchCast {
-  const founded = land === 'founded';
-  const channel = AtlasChannelSchema.parse({ kingdomId: to.id, login: to.login, displayName: to.name, language: 'en', founded,
-    kingdomName: founded ? to.name : null, contentClassification: 'general' });
-  return {
-    source: { kingdomId: from.id as KingdomId, name: from.name, login: from.login },
-    destinations: [{ channel, land, live: true, group: 'road' }],
-    rooms: founded ? [from.id as KingdomId, to.id as KingdomId] : [from.id as KingdomId],
-    welcome: { kingdomId: to.id as KingdomId, name: to.name, host: SIMULATED_HOST, things: { hostGift: 'Lantern of the rose-lit river', monarchGift: 'River-reed welcome loaf' } },
-    names: { [to.id]: to.name, [SIMULATED_HOST]: 'Ash of the Mill', [from.id]: from.name, '52000001': 'Wren', '52000002': 'Tamsin',
-      '52000003': 'Oswin', '52000004': 'Brannoc', '52000005': 'Ysolde', '52000006': 'Corwen' },
-    carried: { crafted: 'A pawn carved from mountain pine', forged: 'Citadel-glass lantern' },
-  };
-}
 
 const sceneFeed = (id: string): PresenceFeed => ({ label: 'SIMULATED', subscribe(receive) { receive(emptyPresence(id, Date.now())); return () => undefined; } });
 /** A kingdom on this route has no raid chat and its pennant wall is not the story here: both read as empty. */
@@ -101,6 +87,7 @@ export default function RaidRoad() {
   const capture = query.get('capture') === '1';
   const captureFrames = capture ? (frameGate ??= installFrameGate()) : null;
   const reduced = query.get('motion') === 'reduced' || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 600px)').matches;
   const land: 'founded' | 'waiting' = query.get('to') === 'waiting' ? 'waiting' : 'founded';
   const timing: RoadTiming = reduced ? REDUCED_TIMING : ROAD_TIMING;
   const from = roadLand(ROAD_PAIR.from), to = roadLand(ROAD_PAIR.to);
@@ -410,6 +397,8 @@ export default function RaidRoad() {
   const homeIn = () => (act() === 'home' && homeReady() ? Math.min(1, moment().elapsed / 1.4) : 0);
   const onRoad = () => ['rise', 'ride', 'hold', 'wake', 'land'].includes(act());
   const atGate = () => act() === 'gather' || act() === 'setout';
+  /** A walker on a phone is called by the march call, as in the walking view; the throne's board would cover the party. */
+  const calling = () => narrow && atGate();
   const chapter = () => chapterOf(act());
   const raid = () => snap()?.raid ?? null;
   const partySize = () => snap()?.welcome?.view?.party ?? 0;
@@ -475,7 +464,7 @@ export default function RaidRoad() {
   const sourceShown = () => act() === 'gather' || act() === 'setout' || act() === 'rise';
   const destShown = () => act() === 'wake' || act() === 'welcome' || (act() === 'home' && homeIn() < 1);
 
-  return <div class="rr-route" classList={{ 'rg-route': true, 'rr-reduced': reduced }} data-act={act()} data-land={land}>
+  return <div class="rr-route" classList={{ 'rg-route': true, 'rr-reduced': reduced, 'rr-calling': calling(), 'rr-capture': capture }} data-act={act()} data-land={land}>
     <GateDefs />
     <div class="rr-map" ref={element => { mapHost = element; }} aria-label={`The Atlas: the road from ${from.name} to ${to.name}`}
       style={{ opacity: atGate() ? 0 : act() === 'home' ? String(1 - homeIn()) : String(ramp(0.05, 0.7, rise())) }} />
@@ -530,7 +519,10 @@ export default function RaidRoad() {
       </aside>
     </Show>
 
-    <Show when={controller() && (atGate() || act() === 'welcome' || (act() === 'home' && land === 'founded'))}>
+    <Show when={controller() && calling()}>
+      <div class="rr-call"><MarchCall controller={controller()!} clock={clock} pathname={() => location.pathname} storage={null} /></div>
+    </Show>
+    <Show when={controller() && !calling() && (atGate() || act() === 'welcome' || (act() === 'home' && land === 'founded'))}>
       <div class="rr-board" classList={{ 'rr-board-late': act() === 'welcome' }}><RaidGatePane controller={controller()!} clock={clock} /></div>
     </Show>
     <Show when={worldError() || !sourceReady()}><div class="rg-veil" role="status"><p>{worldError() ?? `Unfolding ${from.name}'s land…`}</p></div></Show>

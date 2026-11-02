@@ -1,7 +1,7 @@
 import type { ItemEvent, ItemRecord, KingdomId, PersonId } from '@chatdom/shared';
 import type { PoolClient } from 'pg';
 import type { RealmDatabase } from '../persistence/database';
-import { ItemCommitUncertainError, redactItem, type GrantReceipt, type ItemStore, type ItemTransaction } from './store';
+import { ItemCommitUncertainError, redactItem, type GrantReceipt, type ItemStore, type ItemTransaction, type ShelfRow } from './store';
 import { ITEM_PAGE_ROWS } from './pages';
 
 const clients = new WeakMap<ItemTransaction, { client: PoolClient; active: boolean; guards: (() => boolean)[] }>();
@@ -20,6 +20,10 @@ function placementRows<T>(rows: readonly T[], place: 'hand' | 'hotbar' | 'shelf'
   if (rows.length > (place === 'hand' ? 1 : 64)) throw new Error('The item placement exceeds its capacity.');
   return rows;
 }
+
+interface ShelfSql { owner_id: string; origin: ItemRecord['origin']; shown: boolean; name: string | null; revision: number; updated_ms: string }
+const shelfRow = (row: ShelfSql): ShelfRow => ({ ownerId: row.owner_id as PersonId, origin: row.origin, shown: row.shown, name: row.name,
+  revision: row.revision, updatedAt: Number(row.updated_ms) });
 
 /** The caller may use this client only during the item transaction callback. */
 export function postgresItemClient(tx: ItemTransaction): Pick<PoolClient, 'query'> {
@@ -94,6 +98,19 @@ export function createPostgresItemStore({ pool }: { pool: RealmDatabase }): Item
           return number;
         },
         afterCommit(callback) { check(); callbacks.push(callback); },
+        async deferSlots() { check(); await client.query('SET CONSTRAINTS realm_items_slot_places DEFERRED'); },
+        async shelf(ownerId, origin) {
+          check();
+          const r = await client.query<ShelfSql>('SELECT owner_id,origin,shown,name,revision,updated_ms::text AS updated_ms FROM realm_item_shelves WHERE kingdom_id=$1 AND owner_id=$2 AND origin=$3', [kingdomId, ownerId, origin]);
+          return r.rows[0] ? shelfRow(r.rows[0]) : null;
+        },
+        async saveShelf(row) {
+          check();
+          const r = row.revision === 1
+            ? await client.query('INSERT INTO realm_item_shelves (kingdom_id,owner_id,origin,shown,name,revision,updated_ms) VALUES ($1,$2,$3,$4,$5,1,$6) ON CONFLICT DO NOTHING', [kingdomId, row.ownerId, row.origin, row.shown, row.name, row.updatedAt])
+            : await client.query('UPDATE realm_item_shelves SET shown=$4,name=$5,revision=$6,updated_ms=$7 WHERE kingdom_id=$1 AND owner_id=$2 AND origin=$3 AND revision=$6-1', [kingdomId, row.ownerId, row.origin, row.shown, row.name, row.revision, row.updatedAt]);
+          if (r.rowCount !== 1) throw new Error('Shelf revision conflict');
+        },
       };
       clients.set(tx, state);
       try {
@@ -136,6 +153,16 @@ export function createPostgresItemStore({ pool }: { pool: RealmDatabase }): Item
       return r.rows.map(row => ({ cursor: row.sequence, value: row.event }));
     },
     async forgetName(personId) { await pool.query('INSERT INTO realm_item_hidden_names (person_id) VALUES ($1) ON CONFLICT DO NOTHING', [personId]); },
+    async shelf(ownerId, kingdomId, origin) {
+      const r = await pool.query<ShelfSql>('SELECT owner_id,origin,shown,name,revision,updated_ms::text AS updated_ms FROM realm_item_shelves WHERE kingdom_id=$1 AND owner_id=$2 AND origin=$3', [kingdomId, ownerId, origin]);
+      return r.rows[0] ? shelfRow(r.rows[0]) : null;
+    },
+    async shownShelves(kingdomId, origin) {
+      const r = await pool.query<ShelfSql>(`SELECT s.owner_id,s.origin,s.shown,CASE WHEN h.person_id IS NULL THEN s.name END AS name,s.revision,s.updated_ms::text AS updated_ms
+        FROM realm_item_shelves s LEFT JOIN realm_item_hidden_names h ON h.person_id=s.owner_id
+        WHERE s.kingdom_id=$1 AND s.origin=$2 AND s.shown ORDER BY s.owner_id LIMIT 512`, [kingdomId, origin]);
+      return r.rows.map(shelfRow);
+    },
   };
   return store;
 }

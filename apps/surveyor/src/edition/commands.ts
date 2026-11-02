@@ -7,6 +7,7 @@ import { sha256 } from '../export/project';
 import type { SnapshotManifest } from '../export/schema';
 import { currentTaxonomyText, loadTaxonomy } from '../cartography/taxonomy';
 import { WITHHELD_FILE, WithheldSchema } from '../policy/visibility';
+import { OWNER_VISIBILITY_FILE, ownerHiddenKey, readOwnerHidden } from '../policy/owner-hide';
 import { MANIFEST_FILE, layout, readCurrent, revisionDir } from '../store/revisions';
 import { founderKey, signAuthorization } from './authorization';
 import { draftEdition, foundingGates, foundingRecord } from './found';
@@ -44,11 +45,13 @@ const keyFrom = (pem: string | null) => (pem ? founderKey(pem) : null);
  */
 export function readWithheldList(dataDir: string): { ids: ReadonlySet<string>; key: string } | { error: string } {
   const path = join(dataDir, WITHHELD_FILE);
-  if (!existsSync(path)) return { ids: new Set(), key: 'none' };
   try {
+    // Owners' own hides are withheld exactly like the operator's list; the key gains their part only when there is one.
+    const owner = readOwnerHidden(dataDir);
+    if (!existsSync(path)) return { ids: new Set(owner), key: `none${ownerHiddenKey(owner)}` };
     const bytes = readFileSync(path);
     const parsed = WithheldSchema.parse(JSON.parse(bytes.toString('utf8')));
-    return { ids: new Set(parsed.kingdomIds), key: `sha256:${sha256(bytes)}` };
+    return { ids: new Set([...parsed.kingdomIds, ...owner]), key: `sha256:${sha256(bytes)}${ownerHiddenKey(owner)}` };
   } catch (failure) {
     return { error: `withheld list unreadable: ${failure instanceof Error ? failure.message.slice(0, 160) : String(failure)}` };
   }
@@ -436,7 +439,7 @@ export function runStage(sourceDir: string, stageDir: string, number: EditionNum
   mkdirSync(layout(target).revisions, { recursive: true });
   // The bench gets its own copy of every kept revision; the source directory is never written.
   for (const revision of revisions) cpSync(revisionDir(source, revision), revisionDir(target, revision), { recursive: true });
-  for (const file of [WITHHELD_FILE]) if (existsSync(join(source, file))) cpSync(join(source, file), join(target, file));
+  for (const file of [WITHHELD_FILE, OWNER_VISIBILITY_FILE]) if (existsSync(join(source, file))) cpSync(join(source, file), join(target, file));
   if (existsSync(join(source, 'roads', 'ledger.ndjson'))) {
     mkdirSync(join(target, 'roads'), { recursive: true });
     cpSync(join(source, 'roads', 'ledger.ndjson'), join(target, 'roads', 'ledger.ndjson'));

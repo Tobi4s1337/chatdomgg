@@ -10,6 +10,10 @@
     "../../../apps/realm/src/fishing/**/*.ts",
     "../../../apps/web/src/fishing/**/*.ts",
     "../../../apps/web/src/fishing/**/*.tsx",
-    "../../../apps/web/src/bag/**/*.ts"
+    "../../../apps/web/src/bag/**/*.ts",
+    "../../../packages/content/src/keepsakes/**/*.ts",
+    "../../../apps/web/src/almanac/**/*.ts",
+    "../../../apps/web/src/almanac/**/*.tsx",
+    "../../../apps/realm/src/evening/bridge.ts"
   ]
 }

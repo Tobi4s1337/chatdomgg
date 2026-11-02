@@ -1,0 +1,264 @@
+diff --git a/apps/api/src/public/config.test.ts b/apps/api/src/public/config.test.ts
+index 1315792d..59fce771 100644
+--- a/apps/api/src/public/config.test.ts
++++ b/apps/api/src/public/config.test.ts
+@@ -26,6 +26,7 @@ describe('the public server settings', () => {
+     });
+     expect(config.optional).toEqual({ herald: null, map: null, forge: null });
+     expect(config.extension).toBeNull();
++    expect(config.trustedProxies).toBeNull();
+   });
+ 
+   it('takes the host, port and web root it is given, resolving relative roots against the repo', () => {
+@@ -87,4 +88,11 @@ describe('the public server settings', () => {
+     expect(read({ REALM_PUBLIC_ORIGIN: 'https://chatdom.io' }).proto).toBe('https');
+     expect(read({ REALM_PUBLIC_ORIGIN: 'http://localhost:5175' }).proto).toBe('http');
+   });
++
++  it('believes X-Forwarded-For only from the proxies it is told to trust', () => {
++    const trusted = read({ PUBLIC_TRUSTED_PROXIES: '172.17.0.0/16' }).trustedProxies!;
++    expect(trusted('172.17.0.2')).toBe(true);
++    expect(trusted('203.0.113.9')).toBe(false);
++    refuses({ ...BASE, PUBLIC_TRUSTED_PROXIES: 'traefik.internal' }, 'traefik.internal', /PUBLIC_TRUSTED_PROXIES must list/);
++  });
+ });
+diff --git a/apps/api/src/public/config.ts b/apps/api/src/public/config.ts
+index c8f75cf1..48c2d274 100644
+--- a/apps/api/src/public/config.ts
++++ b/apps/api/src/public/config.ts
+@@ -1,5 +1,5 @@
+ import { isAbsolute, resolve } from 'node:path';
+-import { parseTarget, type ProxyTarget } from './proxy';
++import { parseTarget, parseTrustedProxies, type ProxyTarget, type TrustedProxies } from './proxy';
+ 
+ /** One kingdom the front door offers, by its Twitch channel id and login (for "Watch on Twitch"). */
+ export interface DoorKingdom { readonly kingdomId: string; readonly login: string }
+@@ -15,6 +15,8 @@ export interface PublicConfig {
+   readonly realm: { readonly mode: 'spawn' | 'proxy'; readonly target: ProxyTarget; readonly entry: string };
+   readonly optional: { readonly herald: ProxyTarget | null; readonly map: ProxyTarget | null; readonly forge: ProxyTarget | null };
+   readonly extension: { readonly clientId: string; readonly secret: string } | null;
++  /** The host's TLS proxy (PUBLIC_TRUSTED_PROXIES), whose X-Forwarded-For names the visitor; null trusts nobody. */
++  readonly trustedProxies: TrustedProxies | null;
+ }
+ 
+ const KINGDOM = /^([1-9][0-9]{0,31}):([a-z0-9_]{1,25})$/;
+@@ -53,5 +55,6 @@ export function readPublicConfig(env: Record<string, string | undefined>, repoRo
+     realm: { mode: existing ? 'proxy' : 'spawn', target: realmTarget, entry: at('apps/realm/dist/realm.mjs') },
+     optional: { herald: optional('PUBLIC_HERALD_TARGET', '/presence-data'), map: optional('PUBLIC_MAP_TARGET', '/map-data'), forge: optional('PUBLIC_FORGE_TARGET', '/forge-data') },
+     extension: clientId ? { clientId, secret } : null,
++    trustedProxies: parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', env.PUBLIC_TRUSTED_PROXIES),
+   };
+ }
+diff --git a/apps/api/src/public/main.ts b/apps/api/src/public/main.ts
+index 300b2890..b7e2c745 100644
+--- a/apps/api/src/public/main.ts
++++ b/apps/api/src/public/main.ts
+@@ -151,13 +151,13 @@ async function route(request: IncomingMessage, response: ServerResponse) {
+     case 'dock':
+       if (!await (await import('../dock')).handleDock(request, response, { pool, config: auth })) unavailableJson(response, 404, 'No such route');
+       return;
+-    case 'realm': proxyHttp(config.realm.target, request, response, config.proto); return;
++    case 'realm': proxyHttp(config.realm.target, request, response, config.proto, config.trustedProxies); return;
+     case 'panel': await panel(request, response, url.pathname); return;
+     case 'door-data': await doorData(response); return;
+     case 'optional': {
+       const upstream = optionalTargets[target.service];
+       // Herald, Surveyor and the Forge already mount their own public prefixes. Only the realm mount is stripped.
+-      if (upstream) proxyHttp({ name: upstream.name, host: upstream.host, port: upstream.port }, request, response, config.proto);
++      if (upstream) proxyHttp({ name: upstream.name, host: upstream.host, port: upstream.port }, request, response, config.proto, config.trustedProxies);
+       else unavailableJson(response, 503, 'This part of Chatdom is not running on this host.');
+       return;
+     }
+@@ -187,7 +187,7 @@ server.on('upgrade', (request, socket, head) => {
+     const url = new URL(request.url ?? '/', 'http://public.invalid');
+     request.url = `${url.pathname}${url.search}`;
+     // Only the realm's rooms accept sockets; anything else is closed at once.
+-    if (isRealmSocket(url.pathname)) proxyUpgrade(config.realm.target, request, socket, head, config.proto);
++    if (isRealmSocket(url.pathname)) proxyUpgrade(config.realm.target, request, socket, head, config.proto, config.trustedProxies);
+     else socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+   } catch { socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); }
+ });
+diff --git a/apps/api/src/public/proxy.test.ts b/apps/api/src/public/proxy.test.ts
+index fd54b4ec..abe1b56c 100644
+--- a/apps/api/src/public/proxy.test.ts
++++ b/apps/api/src/public/proxy.test.ts
+@@ -1,7 +1,7 @@
+ import { createServer, request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type OutgoingHttpHeaders, type Server } from 'node:http';
+ import type { AddressInfo, Socket } from 'node:net';
+ import { afterEach, describe, expect, it } from 'vitest';
+-import { parseTarget, proxyHttp, proxyUpgrade, type ProxyTarget } from './proxy';
++import { clientAddress, parseTarget, parseTrustedProxies, proxyHttp, proxyUpgrade, type ProxyTarget, type TrustedProxies } from './proxy';
+ 
+ describe('parseTarget', () => {
+   it('accepts a plain http://host:port address', () => {
+@@ -24,6 +24,57 @@ describe('parseTarget', () => {
+   });
+ });
+ 
++describe('the visitor behind the host\'s TLS proxy', () => {
++  const bridge = parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', '172.17.0.0/16, ::1')!;
++
++  it('reads IPv4 ranges and single addresses, and trusts nobody when unset', () => {
++    expect(parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', undefined)).toBeNull();
++    expect(parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', ' , ')).toBeNull();
++    expect(bridge('172.17.0.2')).toBe(true);
++    expect(bridge('::ffff:172.17.255.254')).toBe(true);
++    expect(bridge('172.18.0.2')).toBe(false);
++    expect(bridge('::1')).toBe(true);
++    expect(bridge('203.0.113.9')).toBe(false);
++    const everyone = parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', '0.0.0.0/0')!;
++    expect(everyone('8.8.8.8')).toBe(true);
++  });
++
++  it('refuses a malformed list without repeating it', () => {
++    for (const value of ['172.17.0.0/33', '172.17.0.0/x', 'traefik', '172.17.0.0/16/2', '::1/64', '999.1.1.1']) {
++      let message = '';
++      try { parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', value); } catch (error) { message = (error as Error).message; }
++      expect(message, value).toBe('PUBLIC_TRUSTED_PROXIES must list IPv4 ranges or single addresses, comma separated');
++    }
++  });
++
++  it('believes only the entry the trusted proxy wrote, never what the browser claimed', () => {
++    // Traefik appends the address it saw to whatever the browser sent.
++    expect(clientAddress({ 'x-forwarded-for': '6.6.6.6, 203.0.113.9' }, '172.17.0.2', bridge)).toBe('203.0.113.9');
++    expect(clientAddress({ 'x-forwarded-for': '203.0.113.9' }, '::ffff:172.17.0.2', bridge)).toBe('203.0.113.9');
++    // A chain of trusted hops is walked from the right.
++    expect(clientAddress({ 'x-forwarded-for': '203.0.113.9, 172.17.0.3' }, '172.17.0.2', bridge)).toBe('203.0.113.9');
++    expect(clientAddress({ 'x-forwarded-for': '2001:db8::7' }, '172.17.0.2', bridge)).toBe('2001:db8::7');
++    // An untrusted peer is the visitor, whatever it claims; without a list nobody is believed.
++    expect(clientAddress({ 'x-forwarded-for': '203.0.113.9' }, '198.51.100.4', bridge)).toBe('198.51.100.4');
++    expect(clientAddress({ 'x-forwarded-for': '203.0.113.9' }, '172.17.0.2', null)).toBe('172.17.0.2');
++    // Nothing usable: the peer, never a made-up value.
++    expect(clientAddress({}, '172.17.0.2', bridge)).toBe('172.17.0.2');
++    expect(clientAddress({ 'x-forwarded-for': 'unknown' }, '172.17.0.2', bridge)).toBe('172.17.0.2');
++    expect(clientAddress({ 'x-forwarded-for': '172.17.0.9' }, '172.17.0.2', bridge)).toBe('172.17.0.2');
++  });
++
++  it('tells the upstream the visitor\'s address when the peer is trusted', async () => {
++    const upstream = await echoUpstream();
++    const trusted = parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', '127.0.0.1');
++    const port = await gateway(target(upstream.port), 'https', trusted);
++    await call(port, '/map-data/v1/search?q=tobi4s_', { headers: { 'X-Forwarded-For': '6.6.6.6, 203.0.113.9' } });
++    expect(upstream.seen[0]?.headers['x-forwarded-for']).toBe('203.0.113.9');
++    const untrusted = await gateway(target(upstream.port), 'https', parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', '172.17.0.0/16'));
++    await call(untrusted, '/map-data/v1/search?q=tobi4s_', { headers: { 'X-Forwarded-For': '203.0.113.9' } });
++    expect(upstream.seen[1]?.headers['x-forwarded-for']).toBe('127.0.0.1');
++  });
++});
++
+ // ---------------------------------------------------------------------------------------------------------------
+ // A loopback upstream and a gateway in front of it, both on ephemeral ports.
+ 
+@@ -56,9 +107,9 @@ async function echoUpstream(extra: OutgoingHttpHeaders = {}) {
+ }
+ 
+ /** A gateway that sends everything to `target` the way the public server does. */
+-async function gateway(target: ProxyTarget, proto = 'https') {
+-  const server = createServer((request, response) => proxyHttp(target, request, response, proto));
+-  server.on('upgrade', (request, socket, head) => proxyUpgrade(target, request, socket, head, proto));
++async function gateway(target: ProxyTarget, proto = 'https', trusted?: TrustedProxies | null) {
++  const server = createServer((request, response) => proxyHttp(target, request, response, proto, trusted));
++  server.on('upgrade', (request, socket, head) => proxyUpgrade(target, request, socket, head, proto, trusted));
+   return listen(server);
+ }
+ 
+diff --git a/apps/api/src/public/proxy.ts b/apps/api/src/public/proxy.ts
+index a4941e1c..3e46edc8 100644
+--- a/apps/api/src/public/proxy.ts
++++ b/apps/api/src/public/proxy.ts
+@@ -1,5 +1,5 @@
+ import { Agent, request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http';
+-import { connect, type Socket } from 'node:net';
++import { connect, isIP, type Socket } from 'node:net';
+ import type { Duplex } from 'node:stream';
+ 
+ /** A loopback service behind the public origin. `strip` removes the public prefix before forwarding. */
+@@ -27,6 +27,58 @@ function forwardedPath(target: ProxyTarget, url: string): string {
+   return rest.startsWith('/') ? rest : `/${rest}`;
+ }
+ 
++/** Whether a peer is the host's own TLS proxy, whose `X-Forwarded-For` entry for the visitor is believed. */
++export type TrustedProxies = (address: string) => boolean;
++
++const plain = (address: string) => address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
++function ipv4(address: string): number | null {
++  if (isIP(address) !== 4) return null;
++  return address.split('.').reduce((value, part) => value * 256 + Number(part), 0);
++}
++
++/**
++ * Reads a comma-separated list of IPv4 ranges (`172.17.0.0/16`) and single addresses (IPv4 or IPv6). An empty value
++ * trusts nobody. Errors name the setting, never its value.
++ */
++export function parseTrustedProxies(name: string, value: string | undefined): TrustedProxies | null {
++  const items = (value ?? '').split(',').map(item => item.trim()).filter(Boolean);
++  if (!items.length) return null;
++  const ranges: { base: number; mask: number }[] = [];
++  const exact = new Set<string>();
++  for (const item of items) {
++    const [address = '', bits, extra] = item.split('/');
++    if (extra !== undefined) throw new Error(`${name} must list IPv4 ranges or single addresses, comma separated`);
++    if (bits === undefined && isIP(address)) { exact.add(plain(address).toLowerCase()); continue; }
++    const base = ipv4(address), prefix = Number(bits);
++    if (base === null || !/^\d{1,2}$/.test(bits ?? '') || prefix > 32) throw new Error(`${name} must list IPv4 ranges or single addresses, comma separated`);
++    const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
++    ranges.push({ base: (base & mask) >>> 0, mask });
++  }
++  return address => {
++    const bare = plain(address).toLowerCase();
++    if (exact.has(bare)) return true;
++    const value = ipv4(bare);
++    return value !== null && ranges.some(range => ((value & range.mask) >>> 0) === range.base);
++  };
++}
++
++/**
++ * The visitor's address. A peer that is not a trusted proxy is the visitor. Behind a trusted proxy, the visitor is
++ * the right-most `X-Forwarded-For` entry that is not itself a trusted proxy: entries to its left were written by the
++ * browser and are never believed. A malformed or missing entry falls back to the peer.
++ */
++export function clientAddress(source: IncomingHttpHeaders, peer: string | undefined, trusted?: TrustedProxies | null): string | undefined {
++  if (!peer || !trusted || !trusted(peer)) return peer;
++  const raw = source['x-forwarded-for'];
++  const entries = (Array.isArray(raw) ? raw.join(',') : raw ?? '').split(',').map(entry => entry.trim()).filter(Boolean);
++  for (let index = entries.length - 1; index >= 0; index -= 1) {
++    const entry = plain(entries[index]!);
++    if (!isIP(entry)) return peer;
++    if (!trusted(entry)) return entry;
++  }
++  return peer;
++}
++
+ /**
+  * Headers for the upstream request. The browser's own `X-Forwarded-*` claims are discarded and replaced with what
+  * this process saw, so a visitor can never pose as another address or scheme.
+@@ -50,10 +102,10 @@ function unavailable(response: ServerResponse) {
+ }
+ 
+ /** Forwards one HTTP request (including long-lived SSE) and streams the answer back unbuffered. */
+-export function proxyHttp(target: ProxyTarget, request: IncomingMessage, response: ServerResponse, publicProto: string): void {
++export function proxyHttp(target: ProxyTarget, request: IncomingMessage, response: ServerResponse, publicProto: string, trusted?: TrustedProxies | null): void {
+   const upstream = httpRequest({
+     host: target.host, port: target.port, method: request.method, path: forwardedPath(target, request.url ?? '/'),
+-    headers: upstreamHeaders(request.headers, request.socket.remoteAddress, publicProto), agent,
++    headers: upstreamHeaders(request.headers, clientAddress(request.headers, request.socket.remoteAddress, trusted), publicProto), agent,
+   }, reply => {
+     const headers: Record<string, string | string[]> = {};
+     for (const [name, value] of Object.entries(reply.headers)) if (value !== undefined && !HOP.has(name)) headers[name] = value;
+@@ -72,14 +124,14 @@ export function proxyHttp(target: ProxyTarget, request: IncomingMessage, respons
+  * Hands a WebSocket upgrade to the target over a raw socket: the request head is rewritten (prefix, forwarded
+  * headers), then bytes flow both ways untouched. Colyseus frames, compression and close codes pass as they are.
+  */
+-export function proxyUpgrade(target: ProxyTarget, request: IncomingMessage, socket: Duplex, head: Buffer, publicProto: string): void {
++export function proxyUpgrade(target: ProxyTarget, request: IncomingMessage, socket: Duplex, head: Buffer, publicProto: string, trusted?: TrustedProxies | null): void {
+   const upstream: Socket = connect({ host: target.host, port: target.port });
+   const fail = () => { if (!socket.destroyed) socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); upstream.destroy(); };
+   upstream.setNoDelay(true);
+   upstream.once('error', fail);
+   upstream.once('connect', () => {
+     upstream.removeListener('error', fail);
+-    const headers = upstreamHeaders(request.headers, request.socket.remoteAddress, publicProto);
++    const headers = upstreamHeaders(request.headers, clientAddress(request.headers, request.socket.remoteAddress, trusted), publicProto);
+     const lines = [`${request.method ?? 'GET'} ${forwardedPath(target, request.url ?? '/')} HTTP/1.1`];
+     for (const [name, value] of Object.entries(headers)) for (const item of Array.isArray(value) ? value : [value]) lines.push(`${name}: ${item}`);
+     lines.push('Connection: Upgrade', `Upgrade: ${String(request.headers.upgrade ?? 'websocket')}`);

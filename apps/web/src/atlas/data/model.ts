@@ -165,6 +165,8 @@ export class SettlerStore {
   private withheld = new Set<string>();
   /** Whether a names projection has ever been applied. */
   named = false;
+  /** True once the whole names projection (not only its head) has been taken. */
+  namedWhole = false;
   version = 0;
   /** Names/visibility changed on existing holdings. Background chunk arrivals do not re-letter the fixed still. */
   labelsVersion = 0;
@@ -181,9 +183,19 @@ export class SettlerStore {
     this.add(world.head, 0);
   }
 
-  /** Take a new names projection: it replaces the previous one entirely (a name it omits is no longer shown). */
-  applyNames(served: ServedNames): void {
+  /** How many holdings the world's head carries (a names head never names more). */
+  get headSize(): number {
+    return this.world.head.ids.length;
+  }
+
+  /**
+   * Take a names projection: it replaces the previous one entirely (a name it omits is no longer shown). `whole` is false for the head part (the head's names and every withheld id), which a
+   * first frame waits for; the whole projection follows and replaces it. A head never replaces a whole.
+   */
+  applyNames(served: ServedNames, whole = true): void {
     if (served.preview !== this.world.id) return;
+    if (!whole && this.namedWhole) return;
+    if (whole) this.namedWhole = true;
     this.names = new Map(served.ids.map((id, i) => [id, { login: served.logins[i]!, name: served.names[i]!, freshUntil: served.freshUntil[i]! }]));
     this.withheld = new Set(served.withheld);
     this.named = true;

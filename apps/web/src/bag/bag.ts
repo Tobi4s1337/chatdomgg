@@ -1,6 +1,6 @@
 import type { ItemRecord } from '@chatdom/shared';
 import './bag.css';
-import { mountItemCard } from './card';
+import { mountItemCard, type ItemCardOptions } from './card';
 import { el, reducedMotion, SEAL_MARKUP, svg, type BagSound } from './dom';
 import { compareItems, GROUP_TITLES, groupOf, isFish, titleOf, type BagGroup } from './kinds';
 import { paintItemPortrait } from './portrait';
@@ -15,6 +15,8 @@ export interface BagOptions {
   /** Opens this thing's card as soon as it is in the bag. */
   readonly openItemId?: string;
   readonly sound?: BagSound;
+  /** Facts another part of the kingdom knows about one of your things, shown on its card. */
+  readonly facts?: ItemCardOptions['facts'];
 }
 
 const GROUPS: readonly BagGroup[] = ['tools', 'catch', 'keepsakes', 'other'];
@@ -205,6 +207,7 @@ export function mountBag(host: HTMLElement, store: BagStore, options: BagOptions
       onClose: () => hideCard(true),
       ...(compact ? { portraitSize: 112 } : { portraitSize: 160 }),
       ...(options.sound ? { sound: options.sound } : {}),
+      ...(options.facts ? { facts: options.facts } : {}),
     });
     shownRevision = item.revision;
     if (compact) sheetBody.setAttribute('aria-label', titleOf(item.defId));

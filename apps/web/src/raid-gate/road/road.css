@@ -67,12 +67,18 @@
 .rr-board { display: contents; }
 .rr-board .rg-pane { z-index: 8; }
 
+/* A walker on a phone: the march call sits under the carved header, the words at the foot, the party between them. */
+.rr-call .mc-layer { top: 82px; bottom: auto; }
+/* Under a capture the page's timeline only moves as the capture seeks, so an entrance animation would hold its first frame. */
+.rr-capture .mc-call { animation: none; }
+
 @media (max-width: 760px) {
   .rr-header { top: 12px; left: 12px; right: 12px; padding: 9px 12px; gap: 10px; }
   .rr-header h1 { font-size: 22px; }
   .rr-chapters { gap: 8px; font-size: 10px; }
   .rr-chapters li:not(.rr-now) { display: none; }
   .rr-stage { width: 100vw; height: 30vh; bottom: 42vh; }
+  .rr-calling .rr-stage { bottom: 0; height: 28vh; }
   .rr-words { left: 16px; right: 16px; bottom: 16px; }
   .rr-title { font-size: 26px; }
   .rr-line { font-size: 15px; }

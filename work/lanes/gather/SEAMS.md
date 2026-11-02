@@ -186,6 +186,19 @@ wardrobe/look continuity must use the same approved look source as play before p
 - Stream framing selects a source scene as well as a shot: streamer table games are in `tavern`, Dusk Court is
   in `kingdom`. Gather supplies public game cues; grand-world's director lets raids and big moments take priority.
   **needs: grand-world** confirm tavern scene selection for stream framing and the campfire anchor/mount.
+- **Mount recipe (GA11, 2026-11-02).** Entry: play's walk feature `campfire` (`apps/web/src/campfire/register.ts`;
+  one line in play's `providers.ts`: `import '../campfire/register';`). Anchor: the founded placement
+  `campfire:clearing:v1` (blueprint `civic-campfire-clearing-v1`), installed by `campfireClearingPieces` in the
+  founded scene hook; the hearth is the blueprint's pivot. Props: none from the host; the host draws and collides the
+  placement as any other. The fire needs the walk's `scene`, `camera`, `founded`, `hour`, `overlay`, `room`, `pose`,
+  `audio`, `requestCursor` and `onFrame` (all in play's `WalkFeatureContext` on lane/integrator).
+- **Asks (grand-world, 2026-11-02):** (1) the fire's warmth on faces and logs needs the kingdom's light field to take
+  extra sources: `effects.lightSources()` gives the hearth and each burning lantern in world metres
+  (`{ position, strength 0..1, reach m }`); a `lights(sources)` on `PlaceMount` or the walk would do. Until then the
+  fire glows by its own emissive cubes and halos only. (2) `PlaceMount.claimPlacement` accepts only `gather:campfire:*`
+  ids; gather's clearing is `campfire:clearing:v1` and is drawn by the host, so nothing is claimed today. (3) The
+  stream view: mount `StreamOverlay` with a public session in the stream mode's HUD slot and frame the clearing while
+  `frame.court` runs (the public frame is on every kingdom room client).
 
 ## 3. Chat commands (raid-show owns `apps/herald`)
 
@@ -289,6 +302,26 @@ production transport or dependency file is changed here. This is a host-isolatio
   sends `arrive: { portal }`, play's lookup finds no tavern finder and returns null, and gather's return places the
   walker. `apps/web/src/games/with-play.mjs` assembles exactly this merge in `/tmp`; it typechecks, and the
   browser journey passes on it (`work/evidence/gather/ga10-journey.md`).
+- **The fire (GA11, 2026-11-02, applied here under the 12:18 rule).** All backward compatible: without an
+  installed `Campfires` the room and the authority behave exactly as before.
+  - `kingdom-room.ts`: one import (`attachCampfireRoom` from `./campfire`) and one `this.unbind.push(...)` in
+    `onCreate` before `setFixedTimestep`. Its port only lets a client's current controlling session act, sends
+    `campfire.self` only to that session, and goes quiet once the room stops accepting.
+  - `evening/interactions.ts`: the optional `campfire?: CampfireSeatHost` option, passed as
+    `hosts: composeInteractionHosts({ campfire })`. Logs stay social seats when it is absent.
+  - `main.ts`: `new Campfires({ store: createPostgresFireStore(pool) })` before boot,
+    `installCampfires(boot.services, campfires)` after it, `fire.bindLive(...)` from the kingdom's
+    `privateState.stream.liveUntil` and `campfire: fire.seats` in the evening attach, the `!sus` route
+    (`mountGatherChatRoute`) inside `mountIngress` with `REALM_INTERNAL_SECRET`, and `campfires.dispose()` on
+    shutdown.
+  - Migration `0016b_realm_gather_fire.sql`: `gather_fire_checkpoints (kingdom_id, site)` only.
+  - **needs: raid-show herald gather commands** — the herald's `!sus` send (§3) is not in yet; the route, its auth
+    and the Gallery are tested here with the same envelope.
+  - **The herald path landed differently (lane/integrator, raid-show):** a generic `realmChatCommands` registry at
+    `/internal/realm/chat-commands`. Gather's `campfireChatCommands(campfires)` (`apps/realm/src/campfire/commands.ts`,
+    structural types, tested) owns `sus` there. On merge, `main.ts` takes one line after the campfires are built:
+    `realmChatCommands.register(campfireChatCommands(campfires));` and gather's own `mountGatherChatRoute` line can then
+    be dropped (it stays only until the registry is on gather's base).
 
 ## 5. Read routes (gather offers; panel-window, play and the future bag read)
 

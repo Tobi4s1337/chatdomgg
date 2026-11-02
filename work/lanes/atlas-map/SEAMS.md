@@ -318,3 +318,184 @@ this branch after it takes front-door).
   width it wrapped one word per line.
 - 2 Nov (LA10), deploy: the live data service on 5193 is the old `lane/atlas` build without roads or lookup; exact
   steps in `work/lanes/launch/SEAMS.md` under `deploy:`.
+## Self-serve hide — 2 Nov, AM13 (atlas-map built the session authority itself)
+
+§4 asked front-door and main for a session authority that calls the Atlas's private hide routes. Neither round lane
+owns that code now (front-door is finished, main takes no patches), so atlas-map wrote it as the smallest additive
+change, modelled exactly on the dock's handler. The lane review ruled `apps/api` outside this lane's scope, so the
+change is not in this branch: it is the patch `work/lanes/atlas-map/atlas-owner-api.patch` (applies cleanly on this
+branch's base; `git apply` it as its own commit, `feat(api): the Atlas owner's hide and show`, then run
+`apps/api/src/atlas-owner/index.test.ts` and `public/routes.test.ts`). Until it lands, `/api/atlas/me` is a gateway
+404, the map reads that as anonymous and no card offers hiding; everything on the Atlas side is in this branch.
+
+- **`apps/api/src/atlas-owner/index.ts`** (new): `GET /api/atlas/me[?preview=<map id>]`, `POST /api/atlas/me/hide`,
+  `POST /api/atlas/me/show`. The channel is always the session's own person (`dockPrincipal`: a signed-in Twitch user
+  is the broadcaster of exactly one channel), never anything the browser sends. Mutations need the page's exact
+  `Origin` and the session's CSRF token (`dockMutationAllowed`). Replies are `no-store`, `Vary: Cookie`. A SIMULATED
+  sign-in never reaches the Atlas. Replies: `{version:1,status:'anonymous'}`, `{version:1,status:'unavailable',channelId}`
+  (Atlas not configured or unreachable: the map shows no button), or `{version:1,status:'broadcaster',channelId,hidden,
+  onMap,card,csrfToken}` (`card` only while hidden: the card as the map would draw it without the owner's hide).
+- **Wiring, one line each:** `apps/api/src/main.ts` (after the dock), `apps/api/src/public/main.ts` (a `case 'atlas-owner'`
+  beside `'dock'`), `apps/api/src/public/routes.ts` (the three paths, exactly; `routes.test.ts` checks them and their
+  near misses).
+- **Configuration (operator):** `ATLAS_PRIVATE_URL=http://127.0.0.1:$ATLAS_INGEST_PORT` and `ATLAS_INGEST_TOKEN` on the
+  public gateway / API process, the same token the Atlas service's private listener has. The hide routes refuse to
+  exist (`503 not-configured`) on an Atlas service without a token.
+- **The Atlas service's private routes** (on the ingest listener, bearer token): `POST /v1/channels/<id>/hide` and
+  `/unhide` with `{"version":1,"at":<ms>}` → `200 {kind:'hidden'|'shown', kingdomId, changed, hidden, onMap}`; `GET
+  /v1/channels/<id>/visibility[?preview=]` → `{version:1, kind:'owner-visibility', kingdomId, preview, hidden, onMap, card}`.
+  The act is fsynced to `moderation/owner-visibility.ndjson` before the reply; every reader folds owner hides into the
+  withheld set (names, search, cards, roads, finder, live paint, settlement), and the operator's `withheld.json` always
+  wins. Open maps hear `event: names` on their live stream within ~2 s and read their names again.
+- **On the map:** only in explore mode and only after the first frame, the Atlas reads `/api/atlas/me` once. The signed-in
+  broadcaster's own card gets one quiet line, "Your channel · Hide my channel"; while hidden, their own card ("Hidden by
+  you", "Show my channel") opens from search and from `/map/<login>`, for them only. Hero and gate never ask.
+- **Still owed:** the stills through the real Twitch sign-in as tobi4s_ (needs Tobias at a browser on chatdom.io once
+  adopted). The bench stills in `work/evidence/atlas-map/am13-hide-*.png` were taken with the check playing this
+  session authority against the lane's own Atlas service.
+
+## The first frame comes first — 2 Nov, AM13 (additive; nothing to change on the host)
+
+- **Faces:** `mountAtlas` adds `<link rel="preload" as="font" type="font/woff2" crossorigin>` for the Atlas's seven faces
+  (the same files `atlas.css` declares) to `document.head`, once per document, the moment a map is mounted. A strict-CSP
+  host needs no new source: the faces were already same-origin fonts.
+- **Ready:** unchanged in shape. `handle.ready` resolves with the first coherent frame, `'still'` with WebGL too; the
+  moving map (its renderer is now its own chunk, `engine`) is built only after the still is up and takes the still's
+  baked land, so `data-atlas-ready` turns `map` later than before on slow machines. Hosts that already wait for the first
+  state need nothing.
+- **Names:** the map first reads `/map-data/v1/preview/<id>/names?part=head` (the capitals' and cities' names and every
+  withheld id, ~40 KB brotli instead of ~1 MB), and the whole projection only after the first frame. The gateway's
+  `MAP_READ` already passes the query; an Atlas service without the part answers the whole, which the map also reads.
+- **Compression:** the Atlas service now answers brotli where the reader takes it (world, regions, names, live files)
+  and gzips its larger JSON replies (`roads/busiest` 71 → 15 KB). Proxies must pass `content-encoding` and
+  `vary: accept-encoding` through, as `apps/api/src/public/proxy.ts` does.
+- **Suggested to main / front-door (outside this lane, not done):** `apps/web/src/main.tsx` statically imports
+  `@chatdom/shared` and the realm contracts, so `identity` + `realm` (61 KB gzip, ~100 ms of evaluation here) load and
+  run on every route, `/map` and the front page included, before the Atlas is asked for; importing them inside the
+  `walk=1` branch takes them off the Atlas's first frame. The static asset server could also send brotli for JS and CSS
+  (about 10 % fewer bytes than gzip).
+
+## deploy: the Atlas service chatdom.io reads — 2 Nov, AM14 (for the operator to run)
+
+chatdom.io's `/map-data` today goes to the old service on 127.0.0.1:5193 (the `atlas` worktree's build, data from 31 Oct
+code). It has no directory fallback, so `tobi4s_` and every other channel the survey never saw reads "not found". These
+steps start this lane's build as a second service beside it, on its own data, and switch the gateway to it. The old
+service, its data and its `atlas-refresh` loop stay exactly as they are, as the rollback. Nothing here writes to the
+collector or to Twitch. Every step was run on this lane's copy (127.0.0.2:5199, `apps/surveyor/shots/am14-data`) on
+2 Nov; the timings are from there.
+
+**What it needs.** Code: the reviewed tip of `lane/atlas-map` that carries AM14 (or any later `lane/integrator` commit
+that contains it). Ports: `127.0.0.1:5200` for public reads (outside every range the lanes and capture tools use), and
+optionally `127.0.0.1:5201` for the private listener. Memory: about 0.9 GB resident (two survey registers during an
+import swap: about 1.5 GB), idle CPU 0 %. Disk: about 300 MB per kept revision, 100 MB of road ledger.
+
+**Environment (names only; the values are in the env files the operator already has).**
+
+| Name | Value / source |
+|---|---|
+| `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` | from `/root/.config/chatdom/atlas.env` via `node --env-file` (the app token for public reads; nothing else in that file is read) |
+| `ATLAS_DATA_DIR` | `/srv/chatdom/data/atlas` (outside any worktree, so code upgrades never touch it) |
+| `ATLAS_HOST`, `ATLAS_PORT` | `127.0.0.1`, `5200` |
+| `ATLAS_TRUST_LOOPBACK_PROXY` | `1` (the gateway on the same host names the caller in `X-Forwarded-For`) |
+| `ATLAS_LOOKUPS_PER_CLIENT_MINUTE` | `60`: the gateway names every visitor with Traefik's one address (see `needs:` below), so the per-client allowance is raised to the shared Twitch budget (60 a minute, never below 200 points left), which still bounds the whole service |
+| `SURVEYOR_BASE_URL` | `http://172.17.0.1:3541/atlas/api/` (the collector's status and live raid stream, read-only) |
+| `SURVEYOR_DB_PATH` | `/srv/chatdom-atlas/data/surveyor.db` (opened read-only) |
+| `ATLAS_LIVE_INTERVAL_MS` | `60000` for the live producer (sweeps come every 3 minutes) |
+| optional `ATLAS_RAID_FEED_URL` | raid-show's `/realm/raid-roads` on the live realm, once it serves it |
+| optional `ATLAS_INGEST_PORT`, `ATLAS_INGEST_TOKEN` | `5201` and a fresh secret (`openssl rand -hex 32`, kept in an env file outside the repo) for the private listener: road observations, claims, owner hide/show. Not needed for search |
+
+**1. Build (about 2 minutes).**
+
+```sh
+cd /srv/chatdom/chatdomgg
+git worktree add --detach /srv/chatdom/atlas-live lane/atlas-map
+cd /srv/chatdom/atlas-live
+taskset -c 0-8 nice -n 10 pnpm install --frozen-lockfile --ignore-scripts
+taskset -c 0-8 nice -n 10 pnpm --filter @chatdom/surveyor build          # writes apps/surveyor/dist/atlas.mjs
+```
+
+**2–4 run through one script**, `apps/surveyor/scripts/atlas-live.sh` in the built checkout. Its defaults are the
+table above (each can be overridden from the environment; `ATLAS_SEED_FROM` names the old data, which it only reads;
+`ATLAS_LOG_DIR` defaults to `ops/state`). It refuses to run without a build or before the data is seeded. All three
+loops and the health gate were rehearsed on this lane's copy on 2 Nov (127.0.0.2:5199): seed 2 min 22 s, the service
+restarted 10 s after it was ended and shut down cleanly on SIGTERM, health green.
+
+**2. Seed (about 2.5 minutes; safe to run again, it then copies nothing, and an interrupted seed resumes without copying a finished revision twice).** Copies the old service's current revision,
+its import ledger and the operator's withheld list read-only (the pointer last, so it never names a missing revision),
+draws this build's own preview from that revision (language names, codes-only artifacts; the old preview is not
+copied), runs `check` (fails the seed unless it ends "verified: …") and publishes the first live wash frame.
+
+```sh
+L=/srv/chatdom/atlas-live/apps/surveyor/scripts/atlas-live.sh
+$L seed
+```
+
+**3. Run it: three loops, each in its own window, like `bin/public` and `bin/atlas-refresh`.** Logs:
+`ops/state/atlas-live.log`, `atlas-live-wash.log`, `atlas-live-refresh.log`.
+
+```sh
+tmux new-window -d -t chatdom -n atlas-live         "$L serve"     # the service on 127.0.0.1:5200, restarted 10 s after an exit
+tmux new-window -d -t chatdom -n atlas-live-wash    "$L wash"      # the live producer: wash, live cards, the finder's live check
+tmux new-window -d -t chatdom -n atlas-live-refresh "$L refresh"   # the 6-hourly import, same source and cadence as atlas-refresh
+```
+
+`serve` and `refresh` read the Twitch app credentials from `/root/.config/chatdom/atlas.env` with `node --env-file`
+(nothing else in that file is used); without the file the service still answers from the survey and says plainly that a
+name is not on the map yet. The old setup runs no live producer, which is why chatdom.io's wash dates from 30 Oct.
+
+An import takes its own lock and never the service's road ledger, so it runs beside the service; the service notices the
+new `current.json` and reads the new register within 30 s, before anyone has to wait for it. Two import loops read the
+collector: once the new service has served a day, stopping `atlas-refresh` halves that load (the old service then keeps
+its last data as a frozen rollback).
+
+**4. Health check, before switching.** The service listens 10–20 s after start (it first recovers the road ledger from
+the recorder, about 100 MB on the first start) and reads the search register in about 15–20 s. The gate waits through
+that (up to `ATLAS_HEALTH_WAIT_S`, 120 s) and exits 0 only when health and preview answer, `tobi4s_` (a channel outside
+the survey) is found and pencilled, its card stands at the same place and holds no land, and a random made-up login is
+never invented:
+
+```sh
+$L health                     # "healthy in …"; exit 1 with the failing line otherwise
+#   ok   tobi4s_ waiting at {"x":-11.2,"y":355.6}
+#   ok   card 200 in 5 ms at {"x":-11.2,"y":355.6}
+```
+
+**5. Switch.** In `ops/bin/public`, set `export PUBLIC_MAP_TARGET=http://127.0.0.1:5200` and restart the window
+(`tmux kill-window -t chatdom:public; tmux new-window -d -t chatdom -n public ops/bin/public`). The gateway needs no
+code change: its allowlist already admits every route the search and the card read (tested in
+`apps/surveyor/src/directory/public-gateway.test.ts`). Then:
+
+```sh
+$L health https://chatdom.io   # the same gate through the public gateway: exit 0 (today it fails "tobi4s_ not found")
+cd /srv/chatdom/atlas-map
+ATLAS_CHECK_URL=https://chatdom.io ATLAS_CHECK_NAME=chatdomio node apps/web/src/atlas/checks/deploy-shots.mjs
+#   stills work/evidence/atlas-map/am14-chatdomio-card-{1440,390}.png, timings in am14-chatdomio.json (exit 0 = found and placed)
+```
+
+The map ID changes with the switch (this build draws its own preview), so a visitor's saved view from the old map falls
+back to the usual start, by design.
+
+**Rollback.** Set `PUBLIC_MAP_TARGET=http://127.0.0.1:5193` back in `ops/bin/public` and restart the window. The old
+service never stopped. Then stop the three `atlas-live*` windows if wanted; `/srv/chatdom/data/atlas` can stay
+for a later retry.
+
+**Upgrade later.** `git -C /srv/chatdom/atlas-live checkout --detach <newer commit>`, `pnpm install
+--frozen-lockfile --ignore-scripts`, `pnpm --filter @chatdom/surveyor build`, then end the `atlas.mjs serve` and `live`
+processes (their loops restart them on the new build within 10–30 s). The data directory carries over.
+
+**Still owed by others (written as `needs:` in progress).** The public gateway (`apps/api/src/public/proxy.ts`,
+`upstreamHeaders`) replaces `X-Forwarded-For` with its own peer, which on chatdom.io is always Traefik's one docker
+address, so every visitor shares one client allowance (hence the 60 above). The fix is ready as a patch, since the
+gateway is not this lane's: `work/lanes/atlas-map/gateway-visitor-address.integrator.patch` (applies to `lane/integrator`
+and to chatdom.io's `public-next` as they stand; `gateway-visitor-address.patch` is the same change on `main`). It adds
+`PUBLIC_TRUSTED_PROXIES` (IPv4 ranges or single addresses, comma separated; unset keeps today's rule exactly). When the
+peer is a trusted proxy, the gateway forwards the right-most `X-Forwarded-For` entry that is not itself a trusted proxy,
+so a browser's own claim to the left is never believed; a malformed or missing entry falls back to the peer. It covers
+HTTP and the realm's WebSocket upgrades alike. Tests in `proxy.test.ts` and `config.test.ts` (26 pass on the integrator
+files). To adopt it:
+
+```sh
+git apply work/lanes/atlas-map/gateway-visitor-address.integrator.patch   # own commit: fix(api): name each visitor behind the TLS proxy
+# ops/bin/public: export PUBLIC_TRUSTED_PROXIES=172.17.0.0/16   (Traefik's docker bridge; the gateway listens on 172.17.0.1)
+# restart the public window, then the serve loop as ATLAS_LOOKUPS_PER_CLIENT_MINUTE=6 atlas-live.sh serve (6 per visitor)
+```

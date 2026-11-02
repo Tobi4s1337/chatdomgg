@@ -35,7 +35,8 @@ export interface PierBench {
 export type PierBenchWindow = Window & { __chatdomReady?: boolean; __chatdomPier?: PierBench; __chatdomPierError?: string; __chatdomPierPhase?: string };
 const W = window as PierBenchWindow;
 
-async function fixture(query: URLSearchParams): Promise<{ plan: SettlementPlan; pieces: readonly PierPiece[] }> {
+/** A founded kingdom's own plan and pieces with `?kingdom=<id>` (read from the realm, hash-checked), else a generated lake. */
+export async function pierBenchFixture(query: URLSearchParams): Promise<{ plan: SettlementPlan; pieces: readonly PierPiece[] }> {
   const kingdomId = query.get('kingdom');
   if (kingdomId) {
     if (!/^[1-9][0-9]{0,31}$/.test(kingdomId)) throw new Error('Choose a valid founded kingdom.');
@@ -65,7 +66,7 @@ export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearch
   if (query.get('view') === 'furnishings') return mountFurnishingSheet(canvas, query);
   W.__chatdomReady = false;
   W.__chatdomPierPhase = 'reading-founded-copy';
-  const { plan, pieces } = await fixture(query);
+  const { plan, pieces } = await pierBenchFixture(query);
   W.__chatdomPierPhase = 'placing-pier';
   const installed = installPier(plan, pieces);
   if (!installed) throw new Error('No supported, clear pier site fits this founded scene.');

@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'so
 import { GATE_LIMITS } from '../../../api/src/raid-gate/contracts';
 import type { GateSnapshot, RaidGateController } from './controller';
 import {
-  countdownSeconds, countdownShare, marchActions, marchCallShows, marchNews, marchNotice, marchWords, twitchChannelUrl, watchLogin,
+  countdownSeconds, countdownShare, marchActions, marchCallShows, marchNews, marchNotice, marchPrimary, marchWords, twitchChannelUrl, watchLogin,
   type MarchAction, type MarchNews,
 } from './march-call';
 import { Seal } from './Seal';
@@ -22,6 +22,8 @@ export type MarchCallProps = {
   pathname: () => string;
   /** Where told news is remembered across reloads; null keeps it for this page only. Defaults to session storage. */
   storage?: Storage | null;
+  /** The walking key that presses the primary action, shown as a keycap on it (`G`); absent outside a walk. */
+  keyHint?: () => string | null;
 };
 
 function sessionStore(): Storage | null {
@@ -113,11 +115,11 @@ export function MarchCall(props: MarchCallProps) {
   onCleanup(() => window.clearTimeout(leaveTimer));
 
   return <div class="mc-layer" onPointerDown={event => event.stopPropagation()}>
-    <Show when={shown()}>{s => <Piece snap={s()} now={now()} leaving={leaving()} controller={props.controller} putAway={() => putAway(news())} />}</Show>
+    <Show when={shown()}>{s => <Piece snap={s()} now={now()} leaving={leaving()} controller={props.controller} putAway={() => putAway(news())} keyHint={props.keyHint} />}</Show>
   </div>;
 }
 
-function Piece(props: { snap: GateSnapshot; now: number; leaving: boolean; controller: RaidGateController; putAway: () => void }) {
+function Piece(props: { snap: GateSnapshot; now: number; leaving: boolean; controller: RaidGateController; putAway: () => void; keyHint?: (() => string | null) | undefined }) {
   const s = () => props.snap;
   const words = createMemo(() => marchWords(s(), props.now));
   const actions = () => marchActions(s());
@@ -171,7 +173,8 @@ function Piece(props: { snap: GateSnapshot; now: number; leaving: boolean; contr
           <Show when={counting()}>
             <span class="mc-count" aria-label={`${s().optedIn} marching`}><b>{s().optedIn}</b><span>marching</span></span>
           </Show>
-          <For each={actions()}>{action => <ActionControl action={action} snap={s()} controller={props.controller} putAway={props.putAway} />}</For>
+          <For each={actions()}>{action => <ActionControl action={action} snap={s()} controller={props.controller} putAway={props.putAway}
+            keyCap={action === marchPrimary(s()) ? props.keyHint?.() ?? null : null} />}</For>
         </div>
       </Show>
     </div>
@@ -196,7 +199,12 @@ function pressed(event: MouseEvent, act: () => void): void {
   act();
 }
 
-function ActionControl(props: { action: MarchAction; snap: GateSnapshot; controller: RaidGateController; putAway: () => void }) {
+/** The walking key on the primary button, so a walker with the mouse captured knows how to answer. */
+function KeyCap(props: { label: string | null }) {
+  return <Show when={props.label}>{label => <kbd class="mc-key" aria-hidden="true">{label()}</kbd>}</Show>;
+}
+
+function ActionControl(props: { action: MarchAction; snap: GateSnapshot; controller: RaidGateController; putAway: () => void; keyCap: string | null }) {
   const s = () => props.snap;
   const c = props.controller;
   const monarch = () => s().viewer === 'monarch';
@@ -208,14 +216,14 @@ function ActionControl(props: { action: MarchAction; snap: GateSnapshot; control
   switch (props.action) {
     case 'join':
       return <button class="mc-button mc-primary" disabled={gateBusy()} aria-busy={s().busy === 'join'} onClick={event => pressed(event, () => void c.join())}>
-        <Glyph kind="boot" />{s().busy === 'join' ? 'Joining…' : monarch() ? 'Lead the march' : 'Join the march'}
+        <Glyph kind="boot" />{s().busy === 'join' ? 'Joining…' : monarch() ? 'Lead the march' : 'Join the march'}<KeyCap label={props.keyCap} />
       </button>;
     case 'leave':
       return <button class="mc-button mc-subtle" disabled={gateBusy()} aria-busy={s().busy === 'leave'} onClick={event => pressed(event, () => void c.leave())}>
         {s().busy === 'leave' ? 'Leaving…' : monarch() ? 'Stay behind' : 'Leave the march'}
       </button>;
     case 'ride':
-      return <button class="mc-button mc-primary mc-ride" onClick={event => pressed(event, () => void c.travel())}><Glyph kind="gate" />Ride out</button>;
+      return <button class="mc-button mc-primary mc-ride" onClick={event => pressed(event, () => void c.travel())}><Glyph kind="gate" />Ride out<KeyCap label={props.keyCap} /></button>;
     case 'stay':
       return <button class="mc-button mc-subtle" onClick={event => pressed(event, props.putAway)}>Stay home</button>;
     case 'watch':
@@ -228,13 +236,13 @@ function ActionControl(props: { action: MarchAction; snap: GateSnapshot; control
       </button>;
     case 'check':
       return <button class="mc-button mc-subtle" disabled={journeyBusy()} aria-busy={j()?.busy === 'reconcile'} onClick={event => pressed(event, () => void c.reconcileTravel())}>
-        {j()?.busy === 'reconcile' ? 'Checking…' : 'Check again'}
+        {j()?.busy === 'reconcile' ? 'Checking…' : 'Check again'}<KeyCap label={props.keyCap} />
       </button>;
     case 'return':
-      return <button class="mc-button mc-primary" disabled={journeyBusy()} onClick={event => pressed(event, () => void c.returnHome())}><Glyph kind="boot" />Return home</button>;
+      return <button class="mc-button mc-primary" disabled={journeyBusy()} onClick={event => pressed(event, () => void c.returnHome())}><Glyph kind="boot" />Return home<KeyCap label={props.keyCap} /></button>;
     case 'again':
       return <button class="mc-button mc-primary" onClick={event => pressed(event, () => { c.dismissJourney(); void c.travel(); })}>
-        <Glyph kind="gate" />{j()?.refusal === 'full' ? 'Ask again' : 'Try the gate again'}
+        <Glyph kind="gate" />{j()?.refusal === 'full' ? 'Ask again' : 'Try the gate again'}<KeyCap label={props.keyCap} />
       </button>;
     case 'done':
       // Beside another choice it is the plain way to stay; on its own it is the small mark that puts news away.
