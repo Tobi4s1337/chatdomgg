@@ -130,7 +130,7 @@ export function ForgeGlyph() {
   return <svg class="cp-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 10.5h12.5c0 2-1.6 3.2-3.8 3.6v2.4h1.8v2.5H7.6v-2.5h1.8v-2.4c-2.6-.4-4.9-1.8-4.9-3.6Z" /><path d="M17 10.5h2.5" /><path d="m15.5 4.5-1 2.2m3.4-.8-1.9 1.6m-3.6-3.4.2 2.3" /></svg>;
 }
 
-/** Leaves Twitch: an arrow out of a frame, beside every link that opens chatdom.gg. */
+/** Leaves Twitch: an arrow out of a frame, beside every link that opens chatdom.io. */
 export function LeaveGlyph() {
   return <svg class="cp-glyph leave" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 5.5h5v5M18.5 5.5 11 13" /><path d="M16.5 13.5v4a1.5 1.5 0 0 1-1.5 1.5H7a1.5 1.5 0 0 1-1.5-1.5V9.5A1.5 1.5 0 0 1 7 8h4" /></svg>;
 }

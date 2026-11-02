@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, Switch, Match } from 'solid-js';
 import { createPassportReading } from '@chatdom/ui/passport/live';
 import { selectAdapter } from './adapters/select';
+import { gateHref, hostOf } from './gate';
 import { CardSheet, PassportCorner } from './card/CardSheet';
 import { PanelPassport } from './passport/PanelPassport';
 import { createPanelSound } from './sound';
@@ -204,10 +205,10 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
             <Show when={unreached() || footCount() || snap().moment || gate()}>
             <div class="cw-kingdom-foot">
               <Show when={!walking()} fallback={<Show when={gate()}>{gate => <div class="cw-walk-open">
-                <p class="cw-walk-note">Leaves Twitch for chatdom.gg</p>
+                <p class="cw-walk-note">Leaves Twitch for {hostOf(gate().path)}</p>
                 <div class="cw-links">
                   <For each={[['Kingdom', 'the kingdom'], ['Tavern', 'the kingdom, then its tavern'], ['Forge', 'the kingdom, then its Forge']] as const}>{([label, where]) =>
-                    <a href={new URL(gate().path, 'https://chatdom.gg').href} target="_blank" rel="noopener noreferrer" aria-label={`Walk into ${where} on chatdom.gg (leaves Twitch)`}>{label} ↗</a>}</For>
+                    <a href={gateHref(gate().path)} target="_blank" rel="noopener noreferrer" aria-label={`Walk into ${where} on ${hostOf(gate().path)} (leaves Twitch)`}>{label} ↗</a>}</For>
                   <button type="button" class="cw-walk-close" aria-label="Close the walk-in links" onClick={() => setWalking(false)}>×</button>
                 </div>
               </div>}</Show>}>

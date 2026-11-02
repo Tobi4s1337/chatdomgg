@@ -544,6 +544,9 @@ git apply work/lanes/atlas-map/gateway-visitor-address.integrator.patch   # own 
   and open to visit. The map draws its land with the Atlas's next edition." Before, tobi4s_'s card (found by the
   public lookup since the Atlas service was rebuilt) said "Waiting · no land of its own" with no way in.
   (`apps/web/src/atlas/ui/Register.tsx`, `WaitingCard`.)
+  Review follow-up: the words live in `apps/web/src/atlas/ui/waiting.ts` (tested), and the card matches by the
+  channel's login only (`matchFoundedChannel` in `data/open-kingdoms.ts`), so a channel that merely shares a
+  kingdom's name is never offered its door.
 - 2 Nov (LA10): `gateway-visitor-address.integrator.patch` is applied on `lane/launch` (tests pass) and goes to
   `lane/integrator` with the launch merge. On this host Traefik reaches the gateway from `172.18.0.4` (bridge
   `172.18.0.0/16`), not from docker0, so the setting is `PUBLIC_TRUSTED_PROXIES=172.18.0.0/16` (launch `SEAMS.md`,

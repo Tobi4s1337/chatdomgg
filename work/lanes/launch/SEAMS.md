@@ -60,6 +60,31 @@ After the deploy that carries this lane:
 3. Check: `ss -tn state established '( sport = :5480 )'` still shows peers in `172.18.0.0/16`, and two visitors no
    longer share one lookup allowance (the Atlas service's per-client log line names different addresses).
 
+**4. The panel's picture: run the panel painter.** The Chatdom panel is live in Hosted Test on twitch.tv/tobi4s_
+and its frame, name, tabs and Walk in work (5080 still `work/evidence/launch/gpu/twitch-panel@1440x2000.png`, 19:25), but
+its picture says "The kingdom is out of view" and always will: the picture is painted by
+`apps/web/src/panel-painter/runner.mjs` (README beside it), which uploads a WebP to `POST /api/panel/v1/stills`, and
+nothing on this host runs it (no runner process; `PANEL_STILL_DIRECTORY` defaults to `/tmp/chatdom-panel-stills`, which
+does not exist). In the deploy checkout of `lane/integrator`:
+
+1. A new upload secret, different from `REALM_INGRESS_PANEL_SECRET`: `openssl rand -hex 32`. Put it as
+   `PANEL_PAINTER_SECRET=<it>` and `PANEL_STILL_DIRECTORY=/srv/chatdom/panel-stills` (`mkdir -p` it; outside `/tmp`, so
+   a reboot keeps the last painting) into the gateway env file that already holds `REALM_INGRESS_PANEL_SECRET`, and
+   restart the gateway (`node scripts/public/start.mjs --no-migrate`, as now).
+2. Serve the deploy checkout's web build for the painter page on a loopback port of the lane range (5175 was free at
+   19:25): `cd apps/web && pnpm exec vite preview --host 127.0.0.1 --port 5175 --strictPort`. It only serves
+   `/-/panel-painter`; the gateway never exposes it.
+3. A painter env file, mode 600, outside the repo (e.g. `/root/.config/chatdom/panel-painter.env`):
+   `PANEL_PAINTER_WEB_ORIGIN=http://127.0.0.1:5175`, `PANEL_PAINTER_API_ORIGIN=http://172.17.0.1:5480` (the gateway's
+   listen address), `PANEL_PAINTER_REALM_ORIGIN=http://127.0.0.1:5197`, `PANEL_PAINTER_KINGDOM_IDS=129634568`, the same
+   `REALM_INGRESS_PANEL_SECRET` the gateway and realm use, and the new `PANEL_PAINTER_SECRET`.
+4. Start it from the checkout root and keep it running:
+   `nice node --env-file=/root/.config/chatdom/panel-painter.env apps/web/src/panel-painter/runner.mjs`
+   (headless Chrome; the grand land's cold load takes about a minute, then one still a minute while live and at most
+   one an hour at rest; it takes the shared capture lock per still).
+5. Check: `ls /srv/chatdom/panel-stills` holds a picture for `129634568` within a few minutes, and the panel on
+   twitch.tv/tobi4s_ (About) shows Willowmere instead of "The kingdom is out of view".
+
 **2. After the next deploy of `lane/integrator`**, nothing else is needed for this lane's fixes: they are in the web
 build, the gateway (`apps/api`) and the realm (`apps/realm`).
 

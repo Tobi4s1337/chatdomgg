@@ -1,10 +1,11 @@
 import { createEffect, createResource, createSignal, For, Match, onCleanup, Show, Switch, type JSX } from 'solid-js';
 import type { CardReply, CardRoad, ChannelFace, DirectoryError, RoadReply, RoadTally } from '../data/directory';
 import { waitingDoorHolding, type DoorHolding } from '../data/holding';
-import { findOpenKingdom } from '../data/open-kingdoms';
+import { findFoundedChannel } from '../data/open-kingdoms';
 import type { PreviewWorld } from '../data/preview';
 import { formatCount, formatDayRange, formatMoment, formatTime, TIER_NAMES, watchUrl } from './format';
 import { ShieldIcon } from './marks';
+import { waitingWords } from './waiting';
 import { ChannelFaceSeal } from './Face';
 
 /** What the page knows of the open card's register entry. */
@@ -253,7 +254,8 @@ export function WaitingCard(props: {
   const land = () => faceLand(props.face, props.world);
   const door = () => { const c = card(); return c && c.channel.id === props.face.id ? waitingDoorHolding(c, props.world) : null; };
   // A founded kingdom the front door opens, whose channel the survey has not drawn yet: its way in, not a pencil note.
-  const [founded] = createResource(() => props.face.login || null, login => findOpenKingdom(login));
+  const [founded] = createResource(() => props.face.login || null, login => findFoundedChannel(login));
+  const words = () => waitingWords(founded(), !!props.onAir);
   const enter = (event: MouseEvent, holding: DoorHolding) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
@@ -265,7 +267,7 @@ export function WaitingCard(props: {
       <header class="atlas-card-head">
         <ChannelFaceSeal channelId={props.face.id} name={props.face.name} portrait={card()?.channel.id === props.face.id ? card()?.portrait : null} />
         <div class="atlas-card-names">
-          <p class="atlas-card-status">{founded() ? `${props.onAir ? 'On air' : 'Founded'} · ${founded()!.name}` : props.onAir ? 'On air · no land of its own' : 'Waiting · no land of its own'}</p>
+          <p class="atlas-card-status">{words().status}</p>
           <h2 id="atlas-card-title" dir="auto" classList={{ 'atlas-card-unnamed': !props.face.name }}>{faceName(props.face)}</h2>
           <Show when={props.face.login && props.face.name && props.face.name.toLowerCase() !== props.face.login}>
             <p class="atlas-card-login">{props.face.login}</p>
@@ -292,16 +294,12 @@ export function WaitingCard(props: {
         </Show>
       </dl>
       <RegisterFacts state={props.state} world={props.world} onAirNow={props.live ? props.onAir : null} onRoad={props.onRoad} onRetry={props.onRetry} ledger={props.ledger} />
-      <Show when={founded()} fallback={<p class="atlas-card-note">
-        Pencilled into the realm of its language and game. This place stays the same until the channel claims land.
-      </p>}>{(kingdom) => <p class="atlas-card-note">
-        {kingdom().name} is founded and open to visit. The map draws its land with the Atlas's next edition.
-      </p>}</Show>
+      <p class="atlas-card-note">{words().note}</p>
       </div>
       <footer class="atlas-card-footer">
-      <Show when={!door() && founded()}>{(kingdom) => (
-        <a class="atlas-watch atlas-door" href={`/kingdom/${encodeURIComponent(kingdom().kingdomId)}`}>
-          Enter {kingdom().name} <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 14V7a5 5 0 0 1 10 0v7M3 14h10M8 9v2" /></svg>
+      <Show when={!door() && words().enter}>{(way) => (
+        <a class="atlas-watch atlas-door" href={way().href}>
+          {way().label} <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 14V7a5 5 0 0 1 10 0v7M3 14h10M8 9v2" /></svg>
         </a>
       )}</Show>
       <Show when={door()}>{(holding) => (
