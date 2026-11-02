@@ -1,0 +1,57 @@
+@font-face { font-family: 'Grand Fell'; src: url('../atlas/assets/fonts/im-fell-english-regular.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: 'Grand Fell SC'; src: url('../atlas/assets/fonts/im-fell-english-sc.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: 'Grand Alegreya'; src: url('../atlas/assets/fonts/alegreya-roman-latin.woff2') format('woff2'); font-display: swap; }
+.grand-live { position: fixed; inset: 0; width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0; display: block; text-align: left; overflow: hidden; isolation: isolate; background: #cdbb96; color: #f8ebcf; font: 16px/1.4 'Grand Alegreya', Georgia, serif; }
+.grand-live *, .grand-live *::before, .grand-live *::after { box-sizing: border-box; }
+.grand-live__scene { position: absolute; inset: 0; }
+.grand-live__scene canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.grand-live__shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, #24170d55, transparent 24%, transparent 70%, #24170d50); }
+.grand-live__heading, .grand-live__map, .grand-live__controls { position: absolute; z-index: 2; }
+.grand-live__heading { top: 28px; left: 32px; max-width: min(440px, 55vw); padding: 14px 22px 16px; background: #302016e8; border: 1px solid #bd945b; box-shadow: inset 0 0 0 4px #21150e, inset 0 0 0 5px #c79b5b4d, 0 8px 24px #1c130d55; }
+.grand-live__eyebrow, .grand-live__paper-kicker { font: 14px/1.2 'Grand Fell SC', Georgia, serif; letter-spacing: .14em; color: #dec497; }
+.grand-live__heading h1 { margin: 3px 0 0; font: 38px/1.04 'Grand Fell', Georgia, serif; overflow-wrap: anywhere; }
+.grand-live__heading p { margin: 5px 0 0; color: #ddc9a7; text-transform: capitalize; }
+.grand-live__map, .grand-live__reset, .grand-live__retry { color: #f7e8c8; background: #35241a; border: 1px solid #b99059; box-shadow: inset 0 0 0 3px #22160f, 0 5px 15px #1c130d44; font: 17px 'Grand Alegreya', Georgia, serif; cursor: pointer; }
+.grand-live__map { top: 28px; right: 32px; padding: 10px 18px; text-decoration: none; }
+.grand-live__map span { margin-right: 8px; color: #d4b47e; }
+.grand-live__controls { left: 50%; bottom: 26px; transform: translateX(-50%); width: min(570px, calc(100% - 48px)); padding: 13px 20px 11px; background: #302016ee; border: 1px solid #b99059; box-shadow: inset 0 0 0 4px #21150e, 0 8px 24px #1c130d55; }
+.grand-live__time-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.grand-live__time-row label { font: 16px 'Grand Fell SC', Georgia, serif; letter-spacing: .06em; color: #dfc79d; }
+.grand-live__time-row label span { margin-left: 10px; font: 23px 'Grand Fell', Georgia, serif; letter-spacing: 0; color: #faecd0; font-variant-numeric: tabular-nums; }
+.grand-live__reset { padding: 5px 12px; font-size: 15px; }
+.grand-live input[type='range'] { appearance: none; display: block; width: 100%; height: 20px; margin: 7px 0 1px; background: transparent; cursor: pointer; }
+.grand-live input[type='range']::-webkit-slider-runnable-track { height: 4px; background: #8e6a43; border-radius: 4px; box-shadow: 0 1px #f4d39755; }
+.grand-live input[type='range']::-webkit-slider-thumb { appearance: none; width: 15px; height: 15px; margin-top: -6px; background: #e0bd7c; border: 2px solid #6f4b2f; transform: rotate(45deg); }
+.grand-live input[type='range']::-moz-range-track { height: 4px; background: #8e6a43; }
+.grand-live input[type='range']::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid #6f4b2f; border-radius: 0; background: #e0bd7c; transform: rotate(45deg); }
+.grand-live__hours { display: flex; justify-content: space-between; gap: 2px; }
+.grand-live__hours button { border: 0; padding: 5px 2px; background: none; color: #d9c3a0; font: 15px 'Grand Alegreya', Georgia, serif; cursor: pointer; }
+.grand-live__hours button.is-current { color: #f4d395; text-decoration: underline; text-underline-offset: 4px; }
+.grand-live button:hover, .grand-live__map:hover { color: #fff5df; filter: brightness(1.15); }
+.grand-live button:focus-visible, .grand-live a:focus-visible, .grand-live input:focus-visible { outline: 2px solid #f3cf8c; outline-offset: 3px; }
+.grand-live__veil { position: absolute; z-index: 1; inset: 0; display: grid; place-items: center; padding: 100px 24px; background: #38271955; }
+.grand-live__paper { position: relative; width: min(460px, 100%); padding: 35px 42px 36px; text-align: center; color: #4d3826; background: #e8d7ae; border: 1px solid #a27c50; box-shadow: inset 0 0 0 6px #eadbb9, inset 0 0 0 7px #bca477, 0 15px 40px #2a1b1055; }
+.grand-live__ornament { color: #a57949; font-size: 20px; line-height: 1; }
+.grand-live__paper-kicker { margin: 12px 0 10px; color: #8b6948; }
+.grand-live__paper h2 { margin: 0; font: 34px/1.12 'Grand Fell', Georgia, serif; color: #49301f; }
+.grand-live__paper p:not(.grand-live__paper-kicker) { margin: 12px 0 0; font-size: 18px; }
+.grand-live__engraving { display: block; width: 100%; height: 64px; margin: 20px auto 0; stroke: #a98053; stroke-width: 1.3; }
+.grand-live__engraving-base { opacity: .35; }
+.grand-live__engraving-ink { stroke: #755032; stroke-dasharray: 360; stroke-dashoffset: 360; animation: grand-live-ink 3s ease-in-out infinite; }
+.grand-live__progress { height: 3px; margin: 4px auto 0; background: #c6ae83; }
+.grand-live__progress span { display: block; height: 100%; background: #785637; transition: width .3s; }
+.grand-live__retry { margin-top: 24px; padding: 9px 25px; }
+@keyframes grand-live-ink { 0% { stroke-dashoffset: 360; opacity: .5; } 70%, 100% { stroke-dashoffset: 0; opacity: 1; } }
+@media (max-width: 600px) {
+  .grand-live__heading { top: 14px; left: 14px; max-width: calc(100% - 140px); padding: 11px 15px 12px; }
+  .grand-live__heading h1 { font-size: 27px; }
+  .grand-live__eyebrow { font-size: 12px; }
+  .grand-live__map { top: 14px; right: 14px; padding: 8px 12px; }
+  .grand-live__controls { bottom: 14px; width: calc(100% - 28px); padding: 10px 14px; }
+  .grand-live__hours button { font-size: 13px; }
+  .grand-live__hours button:nth-child(2) { display: none; }
+  .grand-live__paper { padding: 32px 24px; }
+  .grand-live__paper h2 { font-size: 29px; }
+}
+@media (prefers-reduced-motion: reduce) { .grand-live__engraving-ink { animation: none; stroke-dashoffset: 0; } .grand-live__progress span { transition: none; } }
+.grand-live button:disabled, .grand-live input:disabled { opacity: .5; cursor: default; }

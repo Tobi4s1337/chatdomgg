@@ -71,30 +71,22 @@ html.stream-document, html.stream-document body { margin: 0; width: 100%; height
   font: 400 3.1cqmin/1 'IM Fell English', Georgia, serif; letter-spacing: .01em; color: #f6e6c6; text-shadow: 0 1px 2px #0b0814, 0 0 18px #120d22b0; pointer-events: none; }
 .stream-crest { display: block; flex: none; width: 4.3cqmin; height: 5cqmin; filter: drop-shadow(0 1px 2px #000c); }
 
-/* Source: a parchment ribbon for the demonstration night, quiet ink for the real kingdom's losses. */
+/* Quiet ink for a real kingdom's connection and resting state. */
 .stream-mark { position: absolute; z-index: 4; right: calc(var(--edge) + 2.1cqmin); top: calc(var(--edge) + 2cqmin); display: flex; flex-direction: column; align-items: flex-end; gap: .45cqmin; pointer-events: none; }
 .stream-mark strong { display: block; padding: .75cqmin 1.25cqmin .75cqmin 1.9cqmin; font: 700 max(12px, 1.55cqmin)/1 Alegreya, Georgia, serif; letter-spacing: .16em; text-transform: uppercase; white-space: nowrap;
   color: #7a1d12; background: linear-gradient(180deg, #f4e5c0, #e3cc9c); clip-path: polygon(1cqmin 0, 100% 0, 100% 100%, 1cqmin 100%, 0 50%); filter: drop-shadow(0 1px 0 #0008); }
 .stream-mark small { font: italic 400 max(13px, 1.6cqmin)/1.1 Alegreya, Georgia, serif; color: #ecd9b6; text-shadow: 0 1px 2px #0b0814, 0 0 10px #0b0814; }
-.stream-mark:not(.simulated) strong { color: #f1dcb4; background: linear-gradient(180deg, #3d2b20, #2a1d15); box-shadow: inset 0 0 0 1px #c69a5c66; letter-spacing: .1em; text-transform: none; font: 400 max(14px, 1.9cqmin)/1 'IM Fell English SC', Georgia, serif; }
+.stream-mark strong { color: #f1dcb4; background: linear-gradient(180deg, #3d2b20, #2a1d15); box-shadow: inset 0 0 0 1px #c69a5c66; letter-spacing: .1em; text-transform: none; font: 400 max(14px, 1.9cqmin)/1 'IM Fell English SC', Georgia, serif; }
 .stream-mark.lost strong::before, .stream-mark.resting strong::before, .stream-mark.connecting strong::before { content: ''; display: inline-block; width: .6cqmin; height: .6cqmin; margin: 0 1cqmin .25cqmin 0; transform: rotate(45deg); background: #8c7a66; }
 .stream-mark.resting strong::before { background: #c69a5c; }
 /* Small formats: the same mark, sized for a source scaled into a corner. */
 .layout-window .stream-mark { right: 12px; top: auto; bottom: 12px; }
 .layout-window .stream-mark strong { padding: 5px 8px 5px 13px; font-size: 12px; clip-path: polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%); }
-.layout-window .stream-mark:not(.simulated) strong { font-size: 14px; }
+.layout-window .stream-mark strong { font-size: 14px; }
 .layout-strip .stream-mark { right: 16px; top: 50%; transform: translateY(-50%); }
 .layout-strip .stream-mark strong { padding: 6px 10px 6px 16px; font-size: 13px; clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%); }
-.layout-strip .stream-mark:not(.simulated) strong { font-size: 15px; }
+.layout-strip .stream-mark strong { font-size: 15px; }
 .layout-window .stream-mark strong::before, .layout-strip .stream-mark strong::before { width: 5px !important; height: 5px !important; margin: 0 8px 2px 0 !important; }
-
-/* A rehearsal needs one legible disclosure, kept out of the picture's way. */
-.stream-mark.simulated strong, .layout-window .stream-mark.simulated strong, .layout-strip .stream-mark.simulated strong {
-  padding: 5px 8px; border: 1px solid #d2ae7766; border-radius: 3px; clip-path: none;
-  color: #f3dfbb; background: #2b2424df; filter: none;
-  font: 700 11px/1 Alegreya, Georgia, serif; letter-spacing: .1em;
-}
-.layout-strip .stream-mark.simulated { top: 12px; transform: none; }
 
 /* Shutters: show cuts behind two plank leaves that swing in from the frame and out again.
    A thread of lamplight leaks where they meet. Calm dips through dusk instead. */
@@ -165,10 +157,11 @@ html.stream-document, html.stream-document body { margin: 0; width: 100%; height
 .stream-curtain p { margin: 0; font: italic 400 2.2cqmin/1.3 Alegreya, Georgia, serif; color: #dcc8ab; }
 .stream-progress { width: 22cqmin; height: 2px; margin-top: 3cqmin; background: #e7c3931f; overflow: hidden; }
 .stream-progress i { display: block; width: 100%; height: 100%; background: linear-gradient(90deg, #a7783f, #f3d69c); transform-origin: left; transition: transform .5s ease-out; }
+.stream-gate a { text-decoration: none; }
 .stream-gate { display: flex; flex-direction: column; align-items: center; }
-.stream-gate button { margin-top: 2.6cqmin; padding: 1.2cqmin 2.4cqmin; font: 400 2cqmin/1 'IM Fell English SC', Georgia, serif; letter-spacing: .06em; color: #f1dcb4; cursor: pointer;
+.stream-gate :is(button, a) { margin-top: 2.6cqmin; padding: 1.2cqmin 2.4cqmin; font: 400 2cqmin/1 'IM Fell English SC', Georgia, serif; letter-spacing: .06em; color: #f1dcb4; cursor: pointer;
   border: 1px solid #c69a5c99; border-radius: 3px; background: linear-gradient(#4a3424, #2f2118); box-shadow: inset 0 1px #f3d69c33, 0 2px 0 #120c08; }
-.stream-gate button:focus-visible { outline: 2px solid #f6b558; outline-offset: 3px; }
+.stream-gate :is(button, a):focus-visible { outline: 2px solid #f6b558; outline-offset: 3px; }
 /* The small shapes keep only the crest and the progress: almost no words in a corner. */
 .layout-window .stream-curtain h2, .layout-strip .stream-curtain h2 { font-size: 22px; }
 .layout-window .stream-curtain p, .layout-strip .stream-curtain p, .layout-window .stream-gate p, .layout-strip .stream-gate p { display: none; }
@@ -179,8 +172,8 @@ html.stream-document, html.stream-document body { margin: 0; width: 100%; height
 .layout-strip .stream-curtain h2 { margin: 0; }
 .layout-strip .stream-progress { width: 120px; margin: 0 0 0 8px; }
 .layout-strip .stream-gate { flex-direction: row; gap: 16px; }
-.layout-strip .stream-gate button, .layout-window .stream-gate button { margin: 0; padding: 7px 12px; font-size: 13px; }
-.layout-window .stream-gate button { margin-top: 12px; }
+.layout-strip .stream-gate :is(button, a), .layout-window .stream-gate :is(button, a) { margin: 0; padding: 7px 12px; font-size: 13px; }
+.layout-window .stream-gate :is(button, a) { margin-top: 12px; }
 
 @media (prefers-reduced-motion: reduce) { .stream-curtain, .stream-progress i { transition: none; } }
 
@@ -217,4 +210,3 @@ html.stream-preview-document, html.stream-preview-document body { background: #1
 .stream-bench-foot { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; color: #d5ba8f; }
 .stream-bench-foot p { margin: 0; }
 .stream-bench-foot code { font: 13px ui-monospace, monospace; color: #f2e3c5; }
-.stream-bench-simulated { font-weight: 700; letter-spacing: .04em; color: #f0b09c; }

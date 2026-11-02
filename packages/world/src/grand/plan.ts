@@ -1,5 +1,5 @@
 import { hashString, rng } from './noise';
-import type { GrandCharacter, GrandLandSeed } from './types';
+import { GRAND_REGION, type GrandCharacter, type GrandLandSeed } from './types';
 import type { GenesisTier, GenesisBiome } from '../genesis/contracts';
 import type { GrandPaletteStyle, StoneFamily, GrassSeason } from './palette';
 
@@ -51,7 +51,10 @@ export function planGrandLand(seed: GrandLandSeed): GrandPlan {
   const r = rng(base);
   const pick = <T>(items: readonly T[]): T => items[Math.floor(r() * items.length)]!;
   const between = (lo: number, hi: number) => lo + (hi - lo) * r();
-  const size = SIZES[seed.tier];
+  if (seed.minSize !== undefined && (!Number.isSafeInteger(seed.minSize) || seed.minSize <= 0)) {
+    throw new Error('Grand land minimum size must be a positive safe integer');
+  }
+  const size = Math.max(SIZES[seed.tier], Math.ceil((seed.minSize ?? 0) / GRAND_REGION) * GRAND_REGION);
   const seaLevel = 48;
   const character: GrandCharacter = seed.character;
   const biome: GenesisBiome = seed.biome;

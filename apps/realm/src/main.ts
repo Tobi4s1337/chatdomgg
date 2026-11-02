@@ -153,6 +153,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   mountRealmWatchRoutes(transport.app, { services: disclosedServices(boot.services, createQuietDisclosure({ db: pool, origin })), founded: boot.founded, loader: boot.loader });
   const raidChatRead = mountRaidChatRead(transport.app, { origin, presentation: raidChat, current: kingdomId => boot.services.kingdoms.get(kingdomId)?.current === true });
   forgeChat.mount(transport.app);
+  if (process.env.REALM_LAND_DIRECTORY) (await import('./land/mount')).mountLandRoutes(transport.app, process.env.REALM_LAND_DIRECTORY);
   ownRealmShutdown(server, transport, async () => {
     itemFoundation.dispose();
     dock.stop();

@@ -25,6 +25,13 @@ export const CASTLE_CRAG_REACH = 72;
 const CRAG_FACE = 7;
 /** Graded ground rising this many voxels or more to a neighbour (45° and steeper) shows rock, not turf. */
 const ROCK_STEP = 2;
+/**
+ * Inside the installed town the founded floor is lawn graded in half-metre steps, and a slope there (the castle
+ * mound below the walls) steps one metre at a time. Dressed as rock, those banks drew dark stone risers and stone
+ * stripes along every tread, a quarried stair where the town's own floor is a lawn. The voxeliser keeps the top two
+ * cells of turf green, so a one-metre bank stays turf; only a real cut (1.5 m and more) shows stone.
+ */
+export const TOWN_ROCK_STEP = 3;
 
 /** Cheap stable hash noise in [0, 1) per column, for the crag's broken face. */
 const jitter = (x: number, z: number): number => {
@@ -116,15 +123,16 @@ export function gradeSettlement(field: GrandField, seat: GrandSeat, ground: Sett
     }
     blended++;
   }
-  // Rock: wherever the graded ground (region and band) steps two voxels or more to a neighbour, turf gives way to
-  // stone. Cover only; heights stay as graded. The castle's crag gets it on every face it broke.
+  // Rock: wherever the graded ground steps two voxels or more to a neighbour (three inside the town's lawns), turf
+  // gives way to stone. Cover only; heights stay as graded. The castle's crag gets it on every face it broke.
   let rock = 0;
   const rx0 = Math.max(1, bx0), rz0 = Math.max(1, bz0), rx1 = Math.min(size - 1, bx1), rz1 = Math.min(size - 1, bz1);
   for (let cz = rz0; cz < rz1; cz++) for (let cx = rx0; cx < rx1; cx++) {
     const i = cx + cz * size, g = field.ground[i]!;
     if (field.water[i] || pavedMask[i]) continue;
     const step = Math.max(Math.abs(g - field.ground[i - 1]!), Math.abs(g - field.ground[i + 1]!), Math.abs(g - field.ground[i - size]!), Math.abs(g - field.ground[i + size]!));
-    if (step >= ROCK_STEP || (step >= 1 && crag(Math.max(x0, Math.min(x1 - 1, cx)), Math.max(z0, Math.min(z1 - 1, cz))) > 0.5 && !(cx >= x0 && cx < x1 && cz >= z0 && cz < z1))) {
+    const town = cx >= x0 && cx < x1 && cz >= z0 && cz < z1;
+    if (step >= (town ? TOWN_ROCK_STEP : ROCK_STEP) || (step >= 1 && !town && crag(Math.max(x0, Math.min(x1 - 1, cx)), Math.max(z0, Math.min(z1 - 1, cz))) > 0.5)) {
       if (field.cover[i] !== KINGDOM_COVER.rock) { field.cover[i] = KINGDOM_COVER.rock; rock++; }
     }
   }

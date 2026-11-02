@@ -7,3 +7,4 @@ export * from './asset';
 export * from './protocol';
 export * from './codec';
 export * from './worker-pool';
+export { mergeOpaqueShadowChunk, createOpaqueShadowChunks, assertExactOpaqueShadowChunks, MAX_SHADOW_SOURCE_QUADS, SHADOW_MASK_BYTES } from './shadow-mesh';

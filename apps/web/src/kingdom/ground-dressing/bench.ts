@@ -31,7 +31,7 @@ const time = 30;
 
 const canvas = document.querySelector('canvas')!;
 const seal = document.querySelector('[data-seal]')!;
-seal.textContent = `${SIMULATED_LAND} · SIMULATED evening presence · ground dressing ${dressed ? 'on' : 'off'}`;
+seal.textContent = `${SIMULATED_LAND} · evening presence · ground dressing ${dressed ? 'on' : 'off'}`;
 const fail = (error: unknown) => { console.error('Ground dressing bench failed', error); document.body.dataset.error = String(error); };
 
 try {

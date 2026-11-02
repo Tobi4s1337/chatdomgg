@@ -150,7 +150,7 @@ async function main(): Promise<void> {
   const view = views[viewName]!(land, routes, edges), { placed: landContent, pending } = placeLandContent(routes.dressings);
   document.querySelector('#caption')!.textContent = view.caption;
   const held = (form: string) => pending.filter(item => item.form === form).length;
-  document.querySelector('#fixture')!.textContent = `SIMULATED town fixture · ${fixture.kept} installed homes on the new land · trail earth is a bench preview · `
+  document.querySelector('#fixture')!.textContent = `Town fixture · ${fixture.kept} installed homes on the new land · trail earth is a bench preview · `
     + `${held('bench')} benches and ${held('direction-sign')} fingerposts reserved for their civic models`;
   document.querySelector('#plan')!.innerHTML = planInset(plan, land, routes, edges, view);
 

@@ -69,7 +69,7 @@ async function main(): Promise<void> {
   const land = foundKingdomGeography(config), town = foundKingdomTown(config, land), { plan } = town;
   const view = views[viewName]!(town);
   document.querySelector('#caption')!.textContent = view.caption;
-  document.querySelector('#fixture')!.textContent = `SIMULATED citizens · ${plan.homes.length} founded homes in ${plan.quarters.length} quarters, all shown lived in; the streets hold ${town.capacity} lots`;
+  document.querySelector('#fixture')!.textContent = `Town study · ${plan.homes.length} founded homes in ${plan.quarters.length} quarters, all shown lived in; the streets hold ${town.capacity} lots`;
   document.querySelector('#map')!.innerHTML = townMapSvg(land, town, 300);
 
   const canvas = document.querySelector<HTMLCanvasElement>('#land')!;

@@ -1,7 +1,8 @@
 /* global Worker:readonly */
 import { sameMeshStamp } from './mesh';
+import { assertExactOpaqueShadowChunks } from './shadow-mesh';
 import { HALO_VOLUME } from './coordinates';
-import type { VoxelJob, VoxelJobResult, VoxelWorkerResponse } from './protocol';
+import type { AssetChunkMesh, VoxelJob, VoxelJobResult, VoxelWorkerResponse } from './protocol';
 
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never;
 export type VoxelJobInput = WithoutId<VoxelJob>;
@@ -60,9 +61,29 @@ function inputBuffers(job: VoxelJobInput): ArrayBuffer[] {
   return [...new Set(views.map(view => view.buffer as ArrayBuffer))];
 }
 
+/** Alternate depth geometry owns its buffers and uses the same packed build lattice as colour. */
+function matchesShadowChunks(shadows: readonly AssetChunkMesh[], colours: readonly AssetChunkMesh[],
+  materials: Extract<VoxelJob, { kind: 'blueprint' }>['materials']): boolean {
+  if (!Array.isArray(shadows) || shadows.length !== colours.length) return false;
+  const buffers = new Set(colours.flatMap(({ mesh }) => [mesh.vertices.buffer, mesh.indices.buffer]));
+  for (const chunk of shadows) {
+    const mesh: AssetChunkMesh['mesh'] = chunk.mesh;
+    if (!(mesh.vertices instanceof Uint32Array) || !(mesh.indices instanceof Uint32Array)) return false;
+    for (const view of [mesh.vertices, mesh.indices]) {
+      if (!(view.buffer instanceof ArrayBuffer) || buffers.has(view.buffer)) return false;
+      buffers.add(view.buffer);
+    }
+  }
+  // The worker may choose a different rectangle tiling, but every original opaque oriented
+  // square must remain exactly once. Shared bounded masks also validate indices and winding.
+  assertExactOpaqueShadowChunks(colours, shadows, materials);
+  return true;
+}
+
 /** Metadata checks supplement job IDs: old geometry cannot install with a newer request's ID. */
 function matchesJob(result: VoxelJobResult, job: VoxelJob): boolean {
   try {
+    if ('shadowChunks' in result && !(job.kind === 'blueprint' && job.shadow === 'opaque-faces-v1')) return false;
     if (job.kind === 'mesh') {
       return result.kind === 'mesh' && sameMeshStamp(result.mesh.stamp, job.request.stamp)
         && result.mesh.vertices instanceof Uint32Array && result.mesh.indices instanceof Uint32Array;
@@ -108,7 +129,7 @@ function matchesJob(result: VoxelJobResult, job: VoxelJob): boolean {
     const size = job.kind === 'asset' ? job.asset.size : job.blueprint.size;
     const counts = size.map(n => Math.ceil(n / (factor * 32)));
     const seen = new Set<string>();
-    return result.chunks.every(({ coordinate, mesh }) => {
+    const matchesColour = result.chunks.every(({ coordinate, mesh }) => {
       if (coordinate.length !== 3 || coordinate.some((n, axis) => !Number.isSafeInteger(n) || n < 0 || n >= counts[axis]!)) return false;
       const key = `${meshId}:${coordinate.join(',')}`;
       if (seen.has(key)) return false;
@@ -123,6 +144,10 @@ function matchesJob(result: VoxelJobResult, job: VoxelJob): boolean {
       return sameMeshStamp(mesh.stamp, { key, revision, materialRevision: job.materialRevision, dependencies })
         && mesh.vertices instanceof Uint32Array && mesh.indices instanceof Uint32Array;
     });
+    if (!matchesColour) return false;
+    if (job.kind !== 'blueprint' || job.shadow === undefined) return result.shadowChunks === undefined;
+    return job.shadow === 'opaque-faces-v1' && factor === 1 && result.shadowChunks !== undefined
+      && matchesShadowChunks(result.shadowChunks, result.chunks, job.materials);
   } catch {
     return false;
   }

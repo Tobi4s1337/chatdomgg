@@ -4,7 +4,7 @@ import type { DockAct, DockActWitness } from '../kingdom/dock-acts';
 import type { DockPresentationConnection } from './dock-presenter';
 
 /** Display is public. Only a broadcaster-session stream can receive the private draw acknowledgement capability. */
-export function createDockConnection(kingdomId: string): DockPresentationConnection & { dispose(): void } {
+export function createDockConnection(kingdomId: string, options: { readonly readOnly?: boolean } = {}): DockPresentationConnection & { dispose(): void } {
   KingdomIdSchema.parse(kingdomId);
   const listeners = new Set<(act: DockAct) => void>();
   const states = new Set<(state: RealmDockStageState) => void>();
@@ -23,6 +23,7 @@ export function createDockConnection(kingdomId: string): DockPresentationConnect
     source = new EventSource(`/api/dock/presentations?kingdom=${encodeURIComponent(kingdomId)}`, { withCredentials: true });
     source.addEventListener('presenter', message => {
       token = undefined;
+      if (options.readOnly) return;
       try { const value: unknown = JSON.parse((message as MessageEvent<string>).data);
         if (value && typeof value === 'object' && 'presenterToken' in value && typeof value.presenterToken === 'string'
           && /^[A-Za-z0-9_-]{32,192}$/.test(value.presenterToken)) token = value.presenterToken;
@@ -50,6 +51,7 @@ export function createDockConnection(kingdomId: string): DockPresentationConnect
       states.delete(receive); if (!states.size && !listeners.size) { source?.close(); source = undefined; token = undefined; }
     }; },
     async witness(value: DockActWitness) {
+      if (options.readOnly) throw new Error('This view only observes royal acts.');
       const grant = token;
       if (!grant || disposed || value.kingdomId !== kingdomId || document.visibilityState === 'hidden') throw new Error('This stream has no active presentation grant.');
       const response = await fetch('/api/realm/session', { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(5000) });

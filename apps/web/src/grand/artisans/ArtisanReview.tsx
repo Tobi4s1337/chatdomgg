@@ -17,7 +17,7 @@ export function ArtisanReview() {
   return <div ref={element => { root = element; }} class="artisan-review">
     <div class="artisan-sky" />
     <canvas class="artisan-scene" />
-    <div class="artisan-caption"><strong>GRAND ARTISANS · SIMULATED</strong><span class="artisan-subject">Preparing the clay…</span></div>
+    <div class="artisan-caption"><strong>GRAND ARTISANS</strong><span class="artisan-subject">Preparing the clay…</span></div>
     <div class="artisan-error" role="status" />
   </div>;
 }

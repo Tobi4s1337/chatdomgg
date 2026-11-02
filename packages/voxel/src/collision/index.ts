@@ -21,6 +21,12 @@ export interface CollisionCompilerInput {
   readonly placements: readonly { readonly id: string; readonly assetHash: string; readonly position: Vec3; readonly rotation: number }[];
   readonly terrain: SampledTerrain;
 }
+export type PlacedSolidsInput = Pick<CollisionCompilerInput, 'materials' | 'assets' | 'placements'>;
+/** Supply explicit limits when compiling an untrusted proposal. Existing scene compilation retains its limits. */
+export interface PlacedSolidsLimits {
+  readonly assets: number; readonly placements: number; readonly materials: number;
+  readonly cells: number; readonly writes: number; readonly writeCells: number; readonly boxes: number;
+}
 export const COLLISION_COMPILER_VERSION = 'founded-collision:1' as const;
 const METRES = { terrain: .5, build: .125, avatar: .0625 } as const;
 const MAX_CELLS = 16_777_216, BIN = 4, MAX_QUERY_CELLS = 65_536;
@@ -30,7 +36,7 @@ const intersects = (a: CollisionBox, b: CollisionBox) => a.min.every((v, i) => v
 const keyBox = (b: CollisionBox) => [...b.min, ...b.max].join(',');
 
 /** Resolve all ordered writes before coalescing into disjoint cuboids. Allocation is per asset, never per town. */
-function compileAsset(bp: Blueprint, solid: Map<number, boolean>): CollisionBox[] {
+function compileAsset(bp: Blueprint, solid: Map<number, boolean>, maxBoxes = Number.MAX_SAFE_INTEGER): CollisionBox[] {
   const size = bp.size, unit = METRES[bp.lattice];
   if (!unit || !finite(size) || size.some(n => !Number.isInteger(n) || n < 1 || n > 256)
     || size[0] * size[1] * size[2] > MAX_CELLS) throw new Error('Invalid collision blueprint dimensions.');
@@ -51,6 +57,7 @@ function compileAsset(bp: Blueprint, solid: Map<number, boolean>): CollisionBox[
     while (ey < sy) { let ok = true; for (let xx = x; xx < ex; xx++) if (!occupied[at(xx, ey, z)]) { ok = false; break; } if (!ok) break; ey++; }
     while (ez < sz) { let ok = true; for (let yy = y; yy < ey && ok; yy++) for (let xx = x; xx < ex; xx++) if (!occupied[at(xx, yy, ez)]) { ok = false; break; } if (!ok) break; ez++; }
     for (let zz = z; zz < ez; zz++) for (let yy = y; yy < ey; yy++) occupied.fill(0, at(x, yy, zz), at(ex, yy, zz));
+    if (result.length >= maxBoxes) throw new RangeError('Placed solid box budget exceeded.');
     result.push(freezeBox([x * unit, y * unit, z * unit], [ex * unit, ey * unit, ez * unit]));
   }
   return result;
@@ -61,6 +68,53 @@ function transform(b: CollisionBox, p: Vec3, turn: number): CollisionBox {
   return freezeBox([p[0] + horizontal[0]!, p[1] + y, p[2] + horizontal[1]!], [p[0] + horizontal[2]!, p[1] + Y, p[2] + horizontal[3]!]);
 }
 
+/** Actual ordered-write interiors only. No terrain, exterior unknown barriers, synthetic support or revision.
+ * Overlay these boxes on one existing CollisionWorld; never union independently compiled finite worlds.
+ * All requested allocation/write budgets and headers are checked before any voxel occupancy allocation. */
+export function compilePlacedSolids(input: PlacedSolidsInput, limits?: PlacedSolidsLimits): readonly CollisionBox[] {
+  if (limits && Object.values(limits).some(v => !Number.isSafeInteger(v) || v < 1)) throw new RangeError('Invalid placed solid budget.');
+  if (limits && (input.assets.length > limits.assets || input.placements.length > limits.placements || input.materials.materials.length > limits.materials)) throw new RangeError('Placed solid input budget exceeded.');
+  const solid = new Map<number, boolean>();
+  for (const m of input.materials.materials) {
+    if (!Number.isInteger(m.id) || m.id < 0 || m.id > 65535 || typeof m.solid !== 'boolean' || solid.has(m.id)) throw new Error('Invalid collision material registry.');
+    solid.set(m.id, m.solid);
+  }
+  if (solid.get(0) !== false) throw new Error('Material zero must be air.');
+  let cells = 0, writes = 0, writeCells = 0;
+  const hashes = new Set<string>(), ids = new Set<string>();
+  for (const a of input.assets) {
+    if (hashes.has(a.assetHash)) throw new Error('Duplicate collision asset.');
+    hashes.add(a.assetHash);
+    const bp = a.blueprint, size = bp.size, volume = size[0] * size[1] * size[2];
+    if (!METRES[bp.lattice] || !finite(size) || size.some(n => !Number.isInteger(n) || n < 1 || n > 256) || volume > MAX_CELLS) throw new Error('Invalid collision blueprint dimensions.');
+    cells += volume; writes += bp.boxes.length;
+    if (limits && (cells > limits.cells || writes > limits.writes)) throw new RangeError('Placed solid allocation budget exceeded.');
+    for (const b of bp.boxes) {
+      if (!finite(b.from) || !finite(b.to) || b.from.some((v, i) => !Number.isInteger(v) || !Number.isInteger(b.to[i]) || v < 0 || v >= b.to[i]! || b.to[i]! > size[i]!)
+        || !Number.isInteger(b.material) || !solid.has(b.material)) throw new Error('Invalid or unknown collision material or box.');
+      writeCells += (b.to[0] - b.from[0]) * (b.to[1] - b.from[1]) * (b.to[2] - b.from[2]);
+      if (limits && writeCells > limits.writeCells) throw new RangeError('Placed solid write budget exceeded.');
+    }
+  }
+  for (const p of input.placements) {
+    if (ids.has(p.id) || !finite(p.position) || !Number.isInteger(p.rotation) || p.rotation < 0 || p.rotation > 3) throw new Error('Invalid collision placement.');
+    if (!hashes.has(p.assetHash)) throw new Error('Missing collision asset.');
+    ids.add(p.id);
+  }
+  const assets = new Map<string, CollisionBox[]>();
+  let localBoxes = 0;
+  for (const a of input.assets) {
+    const boxes = compileAsset(a.blueprint, solid, limits ? limits.boxes - localBoxes : undefined);
+    localBoxes += boxes.length; assets.set(a.assetHash, boxes);
+  }
+  const out: CollisionBox[] = [];
+  for (const p of input.placements) for (const b of assets.get(p.assetHash)!) {
+    if (limits && out.length >= limits.boxes) throw new RangeError('Placed solid box budget exceeded.');
+    out.push(transform(b, p.position, p.rotation));
+  }
+  return Object.freeze(out);
+}
+
 /**
  * Terrain is sampled at half-metre cell centres and rounded as in the renderer's occupancy field.
  * The renderer's smoothed metre-scale surface can differ; visual easing belongs to the walking client.
@@ -68,30 +122,17 @@ function transform(b: CollisionBox, p: Vec3, turn: number): CollisionBox {
  */
 export function compileCollisionWorld(input: CollisionCompilerInput): CollisionWorld {
   if (!Number.isInteger(input.revision) || input.revision < 0 || input.revision > 0xffffffff) throw new Error('Invalid collision revision.');
-  const solid = new Map<number, boolean>();
-  for (const m of input.materials.materials) {
-    if (!Number.isInteger(m.id) || m.id < 0 || m.id > 65535 || typeof m.solid !== 'boolean' || solid.has(m.id)) throw new Error('Invalid collision material registry.');
-    solid.set(m.id, m.solid);
-  }
-  if (solid.get(0) !== false) throw new Error('Material zero must be air.');
-  const assets = new Map<string, CollisionBox[]>();
-  for (const a of input.assets) { if (assets.has(a.assetHash)) throw new Error('Duplicate collision asset.'); assets.set(a.assetHash, compileAsset(a.blueprint, solid)); }
+  const placed = compilePlacedSolids(input);
   const t = input.terrain, [ox, bottom, oz] = t.origin;
   if (!finite(t.origin) || !Number.isFinite(t.ceilingY) || t.ceilingY <= bottom || !Number.isInteger(t.columns) || !Number.isInteger(t.rows) || t.columns < 1 || t.rows < 1 || t.columns * t.rows > MAX_CELLS || t.heights.length !== t.columns * t.rows) throw new Error('Invalid sampled terrain.');
   const heights = Array.from(t.heights);
   for (const h of heights) if (h !== null && (!Number.isFinite(h) || h < bottom || h > t.ceilingY || !Number.isInteger(h * 2))) throw new Error('Invalid terrain height.');
   const columns = t.columns, rows = t.rows, ceiling = t.ceilingY;
   const endX = ox + columns * .5, endZ = oz + rows * .5;
-  const bins = new Map<string, CollisionBox[]>(), ids = new Set<string>();
-  for (const placement of input.placements) {
-    if (ids.has(placement.id) || !finite(placement.position) || !Number.isInteger(placement.rotation) || placement.rotation < 0 || placement.rotation > 3) throw new Error('Invalid collision placement.');
-    ids.add(placement.id);
-    const local = assets.get(placement.assetHash); if (!local) throw new Error('Missing collision asset.');
-    for (const item of local) {
-      const b = transform(item, placement.position, placement.rotation);
-      const x0 = Math.floor(b.min[0] / BIN), x1 = Math.ceil(b.max[0] / BIN), z0 = Math.floor(b.min[2] / BIN), z1 = Math.ceil(b.max[2] / BIN);
-      for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) { const k = `${x},${z}`, bin = bins.get(k); if (bin) bin.push(b); else bins.set(k, [b]); }
-    }
+  const bins = new Map<string, CollisionBox[]>();
+  for (const b of placed) {
+    const x0 = Math.floor(b.min[0] / BIN), x1 = Math.ceil(b.max[0] / BIN), z0 = Math.floor(b.min[2] / BIN), z1 = Math.ceil(b.max[2] / BIN);
+    for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) { const k = `${x},${z}`, bin = bins.get(k); if (bin) bin.push(b); else bins.set(k, [b]); }
   }
   return Object.freeze({ revision: input.revision, query(bounds: CollisionBox): readonly CollisionBox[] {
     if (!finite(bounds.min) || !finite(bounds.max) || bounds.min.some((n, i) => n > bounds.max[i]!)) throw new Error('Invalid collision query.');

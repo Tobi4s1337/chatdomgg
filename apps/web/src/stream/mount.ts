@@ -25,6 +25,8 @@ interface Entry {
   frame: number;
   timeout?: ReturnType<typeof setTimeout>;
   ready: boolean;
+  activating?: boolean;
+  resumePrevious?: (() => void) | undefined;
   released: boolean;
   publications: Map<string, () => void>;
 }
@@ -62,9 +64,16 @@ export function createSceneMount(hooks: {
     else entry.publications.set(key, action);
   }
 
+  function resumePrevious(entry: Entry): void {
+    const resume = entry.resumePrevious;
+    entry.resumePrevious = undefined;
+    resume?.();
+  }
+
   function release(entry: Entry, reason?: 'scene-revision'): void {
     if (entry.released) return;
     entry.released = true;
+    resumePrevious(entry);
     cancelAnimationFrame(entry.frame);
     clearTimeout(entry.timeout);
     if (!entry.scene) stats.cancelled++;
@@ -106,25 +115,39 @@ export function createSceneMount(hooks: {
     hooks.onPhase('failed');
   }
 
-  function activate(entry: Entry): void {
+  async function activate(entry: Entry): Promise<void> {
+    if (!owns(entry) || pending !== entry || entry.activating) return;
+    entry.activating = true;
     const old = current;
-    const citizens = old?.scene?.captureCitizens();
-    if (old?.scene) entry.scene!.handoffView(old.scene.captureView());
-    current = entry;
-    pending = undefined;
-    clearTimeout(entry.timeout);
-    entry.canvas.style.visibility = '';
-    // No frame can occur between revealing the loaded canvas and retiring the old one.
-    if (old) release(old, 'scene-revision');
-    entry.scene!.activateDock?.();
-    entry.scene!.restoreCitizens(citizens);
-    hooks.onSpeech?.([]);
-    for (const action of entry.publications.values()) action();
-    entry.publications.clear();
-    entry.prepared?.activate?.();
-    hooks.onScene(entry.scene);
-    if (failed) { failed = false; hooks.onPhase('ready'); }
-    hooks.onDirecting?.(entry.scene!.momentDirecting());
+    try {
+      // Hold the outgoing lens steady while the hidden renderer covers that exact view.
+      // Its canvas and live feeds stay owned until the replacement's final draw succeeds.
+      if (old?.scene) entry.resumePrevious = old.scene.suspendRendering();
+      if (old?.scene) await entry.scene!.handoffView(old.scene.captureView());
+      // A watch revision, timeout or hide can win while handoff is awaiting a draw.
+      if (!owns(entry) || pending !== entry || current !== old || old?.released) return;
+      const citizens = old?.scene?.captureCitizens();
+      current = entry;
+      pending = undefined;
+      clearTimeout(entry.timeout);
+      entry.canvas.style.visibility = '';
+      // No frame can occur between revealing the loaded canvas and retiring the old one.
+      if (old) release(old, 'scene-revision');
+      resumePrevious(entry);
+      entry.scene!.activateDock?.();
+      entry.scene!.restoreCitizens(citizens);
+      hooks.onSpeech?.([]);
+      for (const action of entry.publications.values()) action();
+      entry.publications.clear();
+      entry.prepared?.activate?.();
+      hooks.onScene(entry.scene);
+      if (failed) { failed = false; hooks.onPhase('ready'); }
+      hooks.onDirecting?.(entry.scene!.momentDirecting());
+    } catch (cause) {
+      fail(entry, cause instanceof Error ? cause.message : 'The replacement could not render its final view');
+    } finally {
+      resumePrevious(entry);
+    }
   }
 
   function revise(entry: Entry): void {
@@ -151,7 +174,7 @@ export function createSceneMount(hooks: {
     const entry: Entry = { canvas, controller: new AbortController(), frame: 0, ready: false, released: false, publications: new Map() };
     if (replacement) {
       pending = entry;
-      entry.timeout = setTimeout(() => fail(entry, 'The replacement exceeded five minutes before its first loaded draw'), REPLACEMENT_TIMEOUT_MS);
+      entry.timeout = setTimeout(() => fail(entry, 'The replacement exceeded five minutes before its final loaded draw'), REPLACEMENT_TIMEOUT_MS);
     } else {
       current = entry;
       failed = false;
@@ -172,6 +195,8 @@ export function createSceneMount(hooks: {
       const prior = replacement ? current?.scene : undefined;
       return createKingdomScene(canvas, {
         ...settings,
+        mode: settings.mode ?? 'stream',
+        deferLandPresentation: replacement,
         ...(prior ? { initialView: prior.captureView(), camera: prior.debug.camera, hour: prior.debug.hour, time: settings.time === null ? null : prior.debug.time } : {}),
         // These labels also originate in SceneOptions; a warming scene cannot
         // move live plates or captions belonging to the visible kingdom.
@@ -204,14 +229,14 @@ export function createSceneMount(hooks: {
         if (!owns(entry)) return;
         if (!entry.ready && scene.debug.ready) {
           entry.ready = true;
-          if (pending === entry) { directing = scene.momentDirecting(); activate(entry); }
+          if (pending === entry) { directing = scene.momentDirecting(); void activate(entry); }
           else hooks.onPhase('ready');
         }
         if (visible(entry)) {
           const next = scene.momentDirecting();
           if (next !== directing) { directing = next; hooks.onDirecting?.(next); }
         }
-        entry.frame = requestAnimationFrame(opened);
+        if (owns(entry)) entry.frame = requestAnimationFrame(opened);
       };
       entry.frame = requestAnimationFrame(opened);
     }).catch((cause: unknown) => {

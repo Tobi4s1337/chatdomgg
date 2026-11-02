@@ -2,10 +2,10 @@ import { createDockFixture } from './dock-fixture';
 import { openDurableChronicle } from '../chronicle/native-overlay';
 import { createDockConnection } from './dock-connection';
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
-import type { NameLabel } from '../kingdom/scene';
+import type { NameLabel, PlaceMounter } from '../kingdom/scene';
 import { createSceneMount, type KingdomScene, type StreamPhase } from './mount';
-import { parseStreamParams, safeAreaName, SAFE_PRESETS, type SafeArea, type StreamLayout, type StreamMood, type StreamSeam } from './params';
-import { createDirector, planNight, type DirectorState, type Shot } from './director';
+import { browserSourcePath, parseStreamParams, safeAreaName, SAFE_PRESETS, type SafeArea, type StreamLayout, type StreamMood, type StreamSeam } from './params';
+import { createDirector, planNight, type DirectorCueSource, type DirectorState, type Shot } from './director';
 import { Corner, Crest, Flame, StreamDefs } from './fittings';
 import { SkyCaptions, type ScreenCaption } from '../twitch-moments';
 import { createRealmSpectatorSource } from '../kingdom-entry/spectator';
@@ -22,7 +22,7 @@ interface SourceMark { kind: SourceKind; title: string; note: string }
 /** The renderer's own source words, told the way a stream should tell them. A fresh live kingdom needs no mark. */
 function sourceMark(label: string): SourceMark {
   switch (label) {
-    case 'SIMULATED': return { kind: 'simulated', title: 'SIMULATED', note: 'A demonstration night' };
+    case 'SIMULATED': return { kind: 'simulated', title: '', note: '' };
     case 'LIVE CHAT': return { kind: 'live', title: '', note: '' };
     case 'STREAM RESTING': return { kind: 'resting', title: 'Stream resting', note: 'Every home keeps its place' };
     case 'CONNECTION LOST': return { kind: 'lost', title: 'Connection lost', note: 'Reconnecting to the kingdom' };
@@ -52,8 +52,14 @@ function seamWords(seam: StreamSeam, kingdom: string, named: boolean): { eyebrow
   return { eyebrow: 'Until next time', title: named ? `Goodnight from ${kingdom}` : 'Goodnight', line: 'Every window keeps its place' };
 }
 
-export default function StreamView() {
-  const params = parseStreamParams(location.search);
+export interface StreamViewProps {
+  readonly places?: readonly PlaceMounter[];
+  /** Sources must belong to this stream's verified kingdom. Each scene revision gets fresh subscriptions. */
+  readonly directorCues?: readonly DirectorCueSource[];
+}
+
+export default function StreamView(props: StreamViewProps = {}) {
+  const params = parseStreamParams(location.search, location.pathname);
   const [layout, setLayout] = createSignal<StreamLayout>(params.layout);
   const [mood, setMood] = createSignal<StreamMood>(params.mood);
   const [seam, setSeam] = createSignal<StreamSeam | null>(params.seam);
@@ -91,6 +97,7 @@ export default function StreamView() {
       return view === 'window' ? !!subject?.homeLit : !!subject;
     },
     apply: view => mount.scene?.setCamera(view),
+    applyPlace: view => mount.scene?.setPlaceShot(view),
     drawn: view => !!mount.scene && mount.scene.debug.camera === view && mount.scene.debug.fieldSettled,
     setHour: value => { hour = value; mount.scene?.setHour(value); },
     reducedMotion: () => !!reduced?.matches,
@@ -103,17 +110,22 @@ export default function StreamView() {
   onCleanup(() => dockConnection?.dispose());
   const spectator = params.source === 'realm' && params.kingdomId ? createRealmSpectatorSource({ kingdomId: params.kingdomId }) : undefined;
   let chronicle:ReturnType<typeof openDurableChronicle>|undefined,chronicleOpened=false;
+  let offCues: (() => void)[] = [];
   onCleanup(()=>chronicle?.close());
 
   const mount = createSceneMount({
     host: () => lens,
     // Build the opening's light fields with nobody home yet. Rewinding a fully
     // inhabited town after loading leaves its warm ground light behind for a beat.
-    settings: () => ({ ...(dockFixture ? { dockFeed: dockFixture, simulatedDockSites: true, kingdomId: dockFixture.kingdomId } : {}), directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: dockFixture ? 'simulated' : params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
+    settings: () => ({ ...(props.places ? { places: props.places } : {}), ...(dockFixture ? { dockFeed: dockFixture, simulatedDockSites: true, kingdomId: dockFixture.kingdomId } : {}), directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: dockFixture ? 'simulated' : params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
     ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
       if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
-      return { settings: { founded: connection.scene, kingdomId: connection.manifest.kingdomId, ...(dockConnection ? { dockFeed: dockConnection } : {}),
+      if (location.pathname !== '/-/stream' && connection.manifest.origin !== 'live') {
+        connection.dispose();
+        throw new Error('The kingdom’s real public watch is unavailable.');
+      }
+      return { settings: { founded: connection.scene, foundedReceipt: connection.manifest, kingdomId: connection.manifest.kingdomId, ...(dockConnection ? { dockFeed: dockConnection } : {}),
         presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, growthFeed: connection.growthFeed, growthCeremonies: connection.growthCeremonies, forgeFeed: connection.forgeFeed, momentFeed: connection.momentFeed, walkerFeed: connection.walkerFeed,
         realmName: connection.kingdomName, source: 'herald' as const }, chatFeed: connection.chatFeed,
         activate: () => { connection.activate(); setKingdomName(connection.kingdomName); }, dispose: connection.dispose };
@@ -123,7 +135,7 @@ export default function StreamView() {
       if (next !== 'ready') setArrival(null);
       if (next !== 'ready') setWalkers([]);
       if (next === 'ready') { attempts = 0; director.start(); } else director.stop();
-      if (next === 'failed') scheduleRetry();
+      if (next === 'failed' && (params.kingdomId || params.source === 'simulated')) scheduleRetry();
     },
     onProgress: (text, fraction) => { setLoading(text); setProgress(fraction); },
     // A remounted real source starts unconfirmed: nothing seen before hiding is presented as fresh.
@@ -138,11 +150,14 @@ export default function StreamView() {
   });
 
   function publishDebug(scene: KingdomScene | undefined): void {
+    for (const unsubscribe of offCues) unsubscribe();
+    offCues = [];
     if (!scene) { chronicle?.close();setArrival(null); delete window.__chatdomKingdom; return; }
+    for (const source of props.directorCues ?? []) offCues.push(director.connect(source));
     if(!chronicleOpened&&params.source==='realm'&&params.kingdomId&&new URLSearchParams(location.search).get('chronicle')==='1'){
       chronicleOpened=true;chronicle=openDurableChronicle({kingdomId:params.kingdomId,liveEngine:scene,onOpen:()=>director.stop(),onClose:()=>{chronicle=undefined;if(phase()==='ready')director.start();}});
     }
-    // The labelled opening starts with the first speaker, rather than an already-full town.
+    // The staged opening starts with the first speaker, rather than an already-full town.
     // Real sources always keep their witnessed history; a fixed capture stays fixed.
     if (params.source === 'simulated' && seam() === 'starting' && params.time === null) scene.play();
     window.__chatdomKingdom = {
@@ -155,7 +170,7 @@ export default function StreamView() {
       seek: (time: number, view?: Shot) => scene.seek(time, view),
       hour: (value: number) => { hour = value; scene.setHour(value); },
       capture: (time: number) => scene.capture(time),
-      // Offline ritual capture uses the existing, explicitly SIMULATED fixture.
+      // Offline ritual capture is available only on the development bench.
       ...(params.source === 'simulated' && new URLSearchParams(location.search).get('forgeFixture') === '1' ? { forge: scene.forge } : {}),
     };
   }
@@ -252,7 +267,7 @@ export default function StreamView() {
 
   const area = () => stageSafe();
   const output = <div class={`stream-output layout-${layout()}`} data-chatdom-kingdom data-chatdom-stream
-    classList={{ drifting: director.plan.drift && phase() === 'ready' && shot().curtain === 'open', framed: !!area() }}
+    classList={{ drifting: director.plan.drift && !shot().placeCue && phase() === 'ready' && shot().curtain === 'open', framed: !!area() }}
     data-layout={layout()} data-phase={phase()} data-source={mark().kind} data-mood={mood()} data-seam={(layout() === 'stage' && seam()) || 'none'}
     data-shot={shot().shot} data-curtain={shot().curtain} data-climax={climaxName() ? 'name' : 'none'} data-safe={safeAreaName(area()) ?? (area() ? 'custom' : 'none')}
     style={area() ? { left: `${area()![0]}%`, top: `${area()![1]}%`, width: `${area()![2]}%`, height: `${area()![3]}%` } : undefined}>
@@ -292,7 +307,7 @@ export default function StreamView() {
         </div>;
       }}</Show>
     </Show>
-    <Show when={mark().kind !== 'live'}>
+    <Show when={phase() !== 'failed' && mark().title}>
       <div class={`source-ribbon stream-mark ${mark().kind}`} role="status">
         <strong>{mark().title}</strong><Show when={layout() === 'stage' && mark().kind !== 'simulated'}><small>{mark().note}</small></Show>
       </div>
@@ -302,9 +317,11 @@ export default function StreamView() {
       <Switch>
         <Match when={phase() === 'failed'}>
           <div class="stream-gate kingdom-gate">
-            <h2>{kingdomName()} needs a moment</h2>
-            <p>The gate will open again shortly.</p>
-            <button type="button" onClick={open}>Try again now</button>
+            <h2>{params.source === 'realm' && !params.kingdomId ? 'Choose a kingdom' : `${kingdomName()} needs a moment`}</h2>
+            <p>{mount.stats.lastFailure ?? 'The gate will open again shortly.'}</p>
+            <Show when={params.source === 'realm' && !params.kingdomId} fallback={<button type="button" onClick={open}>Try again now</button>}>
+              <a href="/map">Find a kingdom</a>
+            </Show>
           </div>
         </Match>
         <Match when={true}>
@@ -351,9 +368,8 @@ export default function StreamView() {
         </div>
         <div class="stream-bench-holder" ref={element => { holder = element; }}>{sheet}</div>
         <footer class="stream-bench-foot">
-          <p>Add <code>{browserSourcePath(layout(), mood(), seam(), safe())}</code> as a browser source at {OUTPUT_SIZE[layout()][0] * (layout() === 'stage' ? 1.5 : 1)}×{OUTPUT_SIZE[layout()][1] * (layout() === 'stage' ? 1.5 : 1)}. These controls stay here; the source shows only the frame.</p>
+          <p>Add <code>{browserSourcePath(location, layout(), mood(), seam(), safe())}</code> as a browser source at {OUTPUT_SIZE[layout()][0] * (layout() === 'stage' ? 1.5 : 1)}×{OUTPUT_SIZE[layout()][1] * (layout() === 'stage' ? 1.5 : 1)}. These controls stay here; the source shows only the frame.</p>
           <p class="stream-bench-sound"><strong>Broadcast mix unavailable.</strong> The source stays quiet: no kingdom sound plays into your stream yet.</p>
-          <Show when={params.source === 'simulated'}><p class="stream-bench-simulated">SIMULATED night: no chat is connected to this preview.</p></Show>
         </footer>
       </div>
     </Show>
@@ -367,15 +383,4 @@ function Choice<T extends string>(props: { label: string; options: readonly (rea
       <button type="button" aria-pressed={props.value === value} onClick={() => props.pick(value)}>{text}</button>}
     </For>
   </div>;
-}
-
-function browserSourcePath(layout: StreamLayout, mood: StreamMood, seam: StreamSeam | null, safe: SafeArea | null): string {
-  const query = new URLSearchParams(location.search);
-  query.delete('preview');
-  for (const [key, value] of [['layout', layout === 'stage' ? null : layout], ['mood', mood === 'calm' ? null : mood],
-    ['seam', layout === 'stage' ? seam : null], ['safe', layout === 'stage' && safe ? safeAreaName(safe) ?? safe.join(',') : null]] as const) {
-    if (value) query.set(key, value); else query.delete(key);
-  }
-  const search = query.toString();
-  return `${location.pathname}${search ? `?${search}` : ''}`;
 }

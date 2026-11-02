@@ -24,15 +24,19 @@ export interface SeatedKingdom {
 }
 
 /** The grading recipe's version; it changes whenever the same land and plan would grade to different columns. */
-export const KINGDOM_GRADER = 'gk11-grade-2' as const;
+export const KINGDOM_GRADER = 'gk11-grade-3' as const;
 
 /**
  * The one call the land worker makes after raising a land: frame the settlement, seat it, write its exact ground,
  * waters and paving into the land's columns and ease the land around it. The land is changed in place and stays a
  * plain transferable land; the returned seat travels with it so the renderer draws the town at `seat.offset`.
  */
-export function seatKingdomOnLand(field: GrandField & { readonly sites: Pick<GrandFieldSites, 'town' | 'harbour'> }, plan: SettlementPlan): SeatedKingdom {
-  const frame = frameSettlement(plan);
+export function seatKingdomOnLand(field: GrandField & { readonly sites: Pick<GrandFieldSites, 'town' | 'harbour'> }, plan: SettlementPlan,
+  frozenFrame?: Pick<SettlementFrame, 'envelope' | 'centre' | 'waterLevel' | 'seaward' | 'castle'>): SeatedKingdom {
+  const frame = { ...frameSettlement(plan), ...frozenFrame };
+  if (frame.region.minX < frame.envelope.minX || frame.region.maxX > frame.envelope.maxX
+    || frame.region.minZ < frame.envelope.minZ || frame.region.maxZ > frame.envelope.maxZ)
+    throw new Error('The installed region exceeds its founded land reservation');
   const seat = seatSettlement(field, field.sites, frame);
   const { pavedMask, ...grade } = gradeSettlement(field, seat, settlementGround(plan, frame.region), frame.castle.bounds);
   return {

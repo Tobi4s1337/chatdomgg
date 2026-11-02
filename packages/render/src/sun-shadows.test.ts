@@ -31,6 +31,37 @@ function fakeRenderer() {
 }
 
 describe('bounded cached sun shadows', () => {
+  it('keeps exact alternate depth geometry caller-owned and counts shared buffers once', () => {
+    const { renderer, mock } = fakeRenderer();
+    const shadows = createSunShadows(renderer, { bounds });
+    const colour = new THREE.BoxGeometry(), depth = new THREE.PlaneGeometry();
+    const shared = new THREE.BufferGeometry();
+    for (const [name, attribute] of Object.entries(depth.attributes)) shared.setAttribute(name, attribute);
+    shared.setIndex(depth.index); shared.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1);
+    const material = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: vertex, fragmentShader: fragment });
+    const source = new THREE.InstancedMesh(colour, material, 2), second = new THREE.Mesh(colour, material);
+    source.position.set(8, 2, -4);
+    source.setMatrixAt(0, new THREE.Matrix4().makeTranslation(3, 1, 0));
+    source.setMatrixAt(1, new THREE.Matrix4().makeTranslation(-2, 0, 5));
+    const buffers = new Set([...Object.values(depth.attributes).map(attribute => attribute.array.buffer), depth.index!.array.buffer]);
+    const bytes = [...buffers].reduce((sum, buffer) => sum + buffer.byteLength, 0);
+    const removeFirst = shadows.register(source, { depthGeometry: depth });
+    const removeSecond = shadows.register(second, { depthGeometry: shared });
+    source.count = 0; source.setMatrixAt(0, new THREE.Matrix4().makeTranslation(999, 0, 0));
+    shadows.updateSunDirection([1, 1, -.35]);
+    const caster = mock.render.mock.calls[0]![0].children[0] as THREE.InstancedMesh;
+    expect(source.geometry).toBe(colour); expect(caster.geometry).toBe(depth); expect(caster.count).toBe(2);
+    expect(caster.matrix.elements.slice(12, 15)).toEqual([8, 2, -4]);
+    const transform = new THREE.Matrix4(); caster.getMatrixAt(0, transform);
+    expect(transform.elements.slice(12, 15)).toEqual([3, 1, 0]);
+    expect((caster.material as THREE.ShaderMaterial).vertexShader).toBe(vertex);
+    expect(shadows.stats).toMatchObject({ depthGeometryCasters: 2, depthGeometryBytes: bytes });
+    const disposed = vi.fn(); depth.addEventListener('dispose', disposed); shared.addEventListener('dispose', disposed);
+    removeFirst(); expect(shadows.stats).toMatchObject({ depthGeometryCasters: 1, depthGeometryBytes: bytes });
+    removeSecond(); expect(shadows.stats).toMatchObject({ depthGeometryCasters: 0, depthGeometryBytes: 0 });
+    shadows.dispose(); expect(disposed).not.toHaveBeenCalled();
+    colour.dispose(); depth.dispose(); shared.dispose(); material.dispose(); source.dispose();
+  });
   it('fits all settlement corners at low and high sun and keeps a fixed texel scale', () => {
     const camera = new THREE.OrthographicCamera();
     let scale: number | undefined;

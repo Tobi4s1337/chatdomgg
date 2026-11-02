@@ -1,12 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import { stepPlayer } from '../../../world/src/movement/step';
 import { supported } from '../../../world/src/movement/collide';
-import { compileCollisionWorld, type CollisionBox } from './index';
+import { compileCollisionWorld, compilePlacedSolids, type CollisionBox, type PlacedSolidsInput } from './index';
 
 const bounds = (min: CollisionBox['min'], max: CollisionBox['max']): CollisionBox => ({ min, max });
 const hits = (world: ReturnType<typeof compileCollisionWorld>, min: CollisionBox['min'], max: CollisionBox['max']) => world.query(bounds(min, max));
 
 describe('founded collision compiler', () => {
+  it('extracts only placed ordered-write interiors and checks allocation budgets before compiling', () => {
+    const source: PlacedSolidsInput = { materials: { materials: [{ id: 0, solid: false }, { id: 1, solid: true }] },
+      assets: [{ assetHash: 'carved', blueprint: { lattice: 'build', size: [8, 8, 8], boxes: [
+        { from: [0, 0, 0], to: [8, 8, 8], material: 1 },
+        { from: [2, 0, 0], to: [6, 7, 8], material: 0 },
+      ] } }], placements: [{ id: 'carved', assetHash: 'carved', position: [3, 1, 4], rotation: 1 }] };
+    const limits = { materials: 2, assets: 1, placements: 1, cells: 512, writes: 2, writeCells: 736, boxes: 8 };
+    const raw = compilePlacedSolids(source, limits);
+    expect(raw.length).toBeGreaterThan(0);
+    expect(Object.isFrozen(raw)).toBe(true);
+    expect(raw.every(b => b.min[0] >= 3 && b.max[0] <= 4 && b.min[1] >= 1 && b.max[1] <= 2 && b.min[2] >= 3 && b.max[2] <= 4)).toBe(true);
+    const intersects = (a: CollisionBox, b: CollisionBox) => a.min.every((n, i) => n < b.max[i]! && a.max[i]! > b.min[i]!);
+    expect(raw.filter(b => intersects(b, bounds([3.1, 1.1, 3.4], [3.9, 1.8, 3.6])))).toEqual([]);
+    const full = compileCollisionWorld({ ...source, revision: 1, terrain: { origin: [0, -1, 0], columns: 16, rows: 16, heights: Array(256).fill(0), ceilingY: 8 } });
+    expect(full.query(bounds([2.9, .9, 2.9], [4.1, 2.1, 4.1]))).toEqual([...raw].sort((a, b) => {
+      for (let i = 0; i < 3; i++) { const d = a.min[i]! - b.min[i]!; if (d) return d; } return 0;
+    }));
+    expect(full.query(bounds([-2, 0, -2], [-1, 1, -1]))).not.toEqual([]);
+    for (const patch of [{ cells: 511 }, { writes: 1 }, { writeCells: 735 }, { boxes: 1 }]) expect(() => compilePlacedSolids(source, { ...limits, ...patch })).toThrow('budget');
+  });
   it('keeps carved openings, physical glass and terrain support under cardinal placement, and blocks unknown space', () => {
     const world = compileCollisionWorld({
       revision: 42,

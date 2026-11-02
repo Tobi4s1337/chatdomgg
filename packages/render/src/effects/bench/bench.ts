@@ -1,6 +1,6 @@
 // Boots the effects bench: the dusk diorama from scene.ts and, unless `effects=off`, the effects library fed with
 // the scene's real anchors. The clock is FIXED from the URL (a deterministic still); it changes only through
-// `window.__chatdomEffects.setTime`. Every input is SIMULATED, and the seal says so.
+// `window.__chatdomEffects.setTime`. Every input is a staged bench input; this page is never a kingdom.
 //   bench.html?view=street|wide|stream&hour=20&time=12&quality=balanced&effects=on|off&seed=7
 // The cues repeat every eight seconds of the bench clock: a strike on the forge's fire at 3.7 s, and a forged piece
 // flying from the forge to the near hut's roof from 2.8 s to 5.4 s, landing with its own small burst.
@@ -68,7 +68,7 @@ function benchFrame(anchors: BenchAnchors, time: number): EffectsFrame & { piece
 const canvas = document.querySelector('canvas')!;
 const seal = document.querySelector<HTMLElement>('[data-seal]')!;
 const fail = (error: unknown) => { console.error('Effects bench failed', error); document.body.dataset.error = String(error instanceof Error ? error.message : error); };
-const label = () => { seal.textContent = `SIMULATED bench inputs · effects library · ${view} · t=${time}s · ${quality}${effectsOn ? '' : ' · effects off'}`; };
+const label = () => { seal.textContent = `Bench inputs · effects library · ${view} · t=${time}s · ${quality}${effectsOn ? '' : ' · effects off'}`; };
 
 try {
   const bench = await createBenchScene(canvas, { hour });

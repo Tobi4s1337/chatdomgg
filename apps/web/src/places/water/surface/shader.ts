@@ -32,7 +32,13 @@ export const waterFragment = /* glsl */ `
   in vec3 vWorld;
   in vec3 vFlow;
 
+  #ifdef QUANTIZED_GROUND
+  precision highp usampler2D;
+  uniform usampler2D uHeight;
+  uniform float uGroundScale, uGroundOffset;
+  #else
   uniform sampler2D uHeight;
+  #endif
   uniform vec2 uOrigin, uSize;
   uniform float uStep, uOutsideGroundHeight;
   uniform int uMode;            // 0 basin, 1 course
@@ -63,16 +69,26 @@ export const waterFragment = /* glsl */ `
   uniform vec4 uContactA[CONTACT_CAP];    // segment ends a.xz, b.xz
   uniform vec2 uContactB[CONTACT_CAP];    // radius, strength
 
+  float groundTexel(ivec2 p) {
+    // Raster coverage extends one cell past the source grid, repeating its final row and column.
+    p = clamp(p, ivec2(0), textureSize(uHeight, 0) - ivec2(1));
+    #ifdef QUANTIZED_GROUND
+    return float(texelFetch(uHeight, p, 0).r) * uGroundScale + uGroundOffset;
+    #else
+    return texelFetch(uHeight, p, 0).r;
+    #endif
+  }
+
   float bedHeight(vec2 world) {
     vec2 grid = (world - uOrigin) / uStep;
     if (any(lessThan(grid, vec2(0.0))) || any(greaterThan(grid, uSize - 1.0))) return uOutsideGroundHeight;
     grid = min(grid, uSize - 1.001);
     ivec2 p = ivec2(floor(grid));
     vec2 f = fract(grid);
-    float h00 = texelFetch(uHeight, p, 0).r;
-    float h10 = texelFetch(uHeight, p + ivec2(1, 0), 0).r;
-    float h01 = texelFetch(uHeight, p + ivec2(0, 1), 0).r;
-    float h11 = texelFetch(uHeight, p + ivec2(1, 1), 0).r;
+    float h00 = groundTexel(p);
+    float h10 = groundTexel(p + ivec2(1, 0));
+    float h01 = groundTexel(p + ivec2(0, 1));
+    float h11 = groundTexel(p + ivec2(1, 1));
     // The terrain mesh's fixed diagonal, so the waterline meets the visible bank exactly.
     return f.x <= f.y ? h00 + f.x * (h11 - h01) + f.y * (h01 - h00) : h00 + f.x * (h10 - h00) + f.y * (h11 - h10);
   }

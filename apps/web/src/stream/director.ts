@@ -1,5 +1,8 @@
 import type { CameraName } from '../kingdom/scene';
 import type { StreamLayout, StreamMood, StreamSeam } from './params';
+import type { PlaceShot } from '../interactions/places/framing';
+import { snapshotDirectorCue, type DirectorCue, type DirectorCueSource } from './director-cues';
+export type { DirectorCue, DirectorCueSource } from './director-cues';
 
 /**
  * The stream's director: it only chooses among the renderer's supported cameras and
@@ -68,6 +71,8 @@ export interface DirectorState {
   cut: Cut | null;
   /** True while the beat's one public name may be shown. */
   climax: boolean;
+  /** The game currently holding the camera; the base tour shot remains unchanged. */
+  placeCue?: string;
 }
 
 export interface DirectorHost {
@@ -75,6 +80,8 @@ export interface DirectorHost {
   motive(shot: Shot): boolean;
   /** Point the live scene's supported camera at the shot. */
   apply(shot: Shot): void;
+  /** Optional place layer. The scene still gives walking, raids and major moments priority. */
+  applyPlace?(shot: PlaceShot | null): void;
   /** Whether the renderer has drawn the shot with its light settled. */
   drawn(shot: Shot): boolean;
   setHour(hour: number): void;
@@ -82,13 +89,16 @@ export interface DirectorHost {
   onChange(state: DirectorState): void;
 }
 
-export function createDirector(initial: Plan, host: DirectorHost, now: () => number = () => performance.now()) {
+export function createDirector(initial: Plan, host: DirectorHost, now: () => number = () => performance.now(), epoch: () => number = () => Date.now()) {
   let plan = initial, beat = 0, shot = plan.beats[0]!.shot, curtain: Curtain = 'open', climax = false;
   let since = now(), lastCut = -Infinity, running = false, tick = 0, step = 0, skyStart = now(), lastHour = NaN;
+  let disposed = false, held = false, activeCue: DirectorCue | null = null;
+  const sources = new Set<{ cue: DirectorCue | null; unsubscribe?: () => void }>();
   /** Every cut, for reviews: the shot and when it opened. Never shown on stream. */
   const cuts: { shot: Shot; at: number }[] = [];
 
-  const publish = () => host.onChange({ shot, beat, curtain, cut: plan.cut, climax });
+  const state = (): DirectorState => ({ shot, beat, curtain, cut: plan.cut, climax, ...(activeCue ? { placeCue: activeCue.id } : {}) });
+  const publish = () => host.onChange(state());
   const later = (ms: number, then: () => void) => { window.clearTimeout(step); step = window.setTimeout(then, ms); };
 
   function skyHour(): number | null {
@@ -124,8 +134,22 @@ export function createDirector(initial: Plan, host: DirectorHost, now: () => num
   }
 
   function update(): void {
+    if (!running || held || disposed) return;
     const hour = skyHour();
     if (hour !== null && !(Math.abs(hour - lastHour) < .004)) { lastHour = hour; host.setHour(hour); }
+    let cue: DirectorCue | null = null;
+    for (const source of sources) {
+      if (source.cue?.until !== null && source.cue && source.cue.until <= epoch()) source.cue = null;
+      // Stable subscription order prevents equal-priority game sources from alternating each frame.
+      if (!cue && source.cue) cue = source.cue;
+    }
+    if (host.applyPlace && cue !== activeCue) {
+      window.clearTimeout(step);
+      if (curtain !== 'open') beat = Math.max(0, plan.beats.findIndex(candidate => candidate.shot === shot));
+      curtain = 'open'; climax = false; since = now();
+      activeCue = cue; host.applyPlace(cue?.shot ?? null); publish();
+    }
+    if (activeCue) return;
     if (curtain !== 'open') return;
     const elapsed = (now() - since) / 1000, current = plan.beats[beat]!;
     const nextClimax = !!current.climax && current.shot === shot && elapsed >= CLIMAX[0] && elapsed < CLIMAX[1] && host.motive(shot);
@@ -150,18 +174,21 @@ export function createDirector(initial: Plan, host: DirectorHost, now: () => num
   /** Close any transition at once: hidden sources and new plans never wait on shutters. */
   function settle(): void {
     window.clearTimeout(step);
-    if (curtain !== 'open') { curtain = 'open'; since = now(); publish(); }
+    if (curtain !== 'open') {
+      beat = Math.max(0, plan.beats.findIndex(candidate => candidate.shot === shot));
+      curtain = 'open'; since = now(); publish();
+    }
   }
 
   return {
-    get state(): DirectorState { return { shot, beat, curtain, cut: plan.cut, climax }; },
+    get state(): DirectorState { return state(); },
     get shot() { return shot; },
     get plan() { return plan; },
     cuts,
     /** The hour the sky should hold now, for a scene being built. */
     hour: (fallback: number) => skyHour() ?? fallback,
     start(): void {
-      if (running) return;
+      if (running || disposed) return;
       running = true;
       since = now();
       tick = window.setInterval(update, 250);
@@ -171,6 +198,7 @@ export function createDirector(initial: Plan, host: DirectorHost, now: () => num
       running = false;
       window.clearInterval(tick);
       settle();
+      if (activeCue) { activeCue = null; host.applyPlace?.(null); }
       climax = false;
       publish();
     },
@@ -182,14 +210,34 @@ export function createDirector(initial: Plan, host: DirectorHost, now: () => num
       if (!sameSky) { skyStart = now(); lastHour = NaN; }
       const keep = plan.beats.findIndex(candidate => candidate.shot === shot);
       if (keep >= 0) { beat = keep; since = now(); climax = false; publish(); }
-      else { lastCut = -Infinity; if (running) transition(0); else { beat = 0; shot = plan.beats[0]!.shot; publish(); } }
+      else { lastCut = -Infinity; if (running && !activeCue) transition(0); else { beat = 0; shot = plan.beats[0]!.shot; if (activeCue) host.apply(shot); publish(); } }
     },
     /** Reviews only: pause the director's clock (never the scene) while a slow capture is taken. */
     hold(on: boolean): void {
+      held = on;
       window.clearInterval(tick);
       if (!on && running) tick = window.setInterval(update, 250);
     },
-    dispose(): void { running = false; window.clearInterval(tick); window.clearTimeout(step); },
+    /** Attach a verified kingdom's producer. Unsubscribe on scene/kingdom replacement. */
+    connect(source: DirectorCueSource): () => void {
+      if (disposed) throw new Error('The stream director has closed');
+      const entry: { cue: DirectorCue | null; unsubscribe?: () => void } = { cue: null };
+      sources.add(entry);
+      try {
+        entry.unsubscribe = source.subscribe(value => {
+          if (!sources.has(entry) || disposed) return;
+          entry.cue = snapshotDirectorCue(value, epoch()); update();
+        });
+      } catch (error) { sources.delete(entry); update(); throw error; }
+      return () => { if (!sources.delete(entry)) return; entry.unsubscribe?.(); update(); };
+    },
+    dispose(): void {
+      if (disposed) return;
+      disposed = true; running = false; window.clearInterval(tick); window.clearTimeout(step);
+      if (activeCue) { activeCue = null; host.applyPlace?.(null); }
+      const previous = [...sources]; sources.clear();
+      for (const source of previous) source.unsubscribe?.();
+    },
   };
 }
 

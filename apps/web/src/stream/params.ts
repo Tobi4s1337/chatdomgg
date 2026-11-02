@@ -60,12 +60,12 @@ function pick<T extends string>(raw: string | null, allowed: readonly T[], fallb
 }
 
 /**
- * Unknown values fall back to the calm defaults. A bare `/stream` asks for the real
- * kingdom: only an explicit `source=simulated` selects the demonstration night, so an
- * OBS source never presents a fixture as tonight's kingdom without saying so.
+ * Public streams always require a founded realm receipt. Staged playback belongs
+ * only to the explicit development bench; query strings cannot turn it on elsewhere.
  */
-export function parseStreamParams(search: string): StreamParams {
+export function parseStreamParams(search: string, pathname = '/stream'): StreamParams {
   const query = new URLSearchParams(search);
+  const source: StreamSource = pathname === '/-/stream' && query.get('source') !== 'realm' ? 'simulated' : 'realm';
   const layout = pick(query.get('layout'), ['stage', 'window', 'strip'] as const, 'stage');
   const rawHour = Number(query.get('hour') ?? 19.5), rawTime = Number(query.get('time'));
   const seed = /^[a-z][a-z0-9_-]{0,39}$/i.test(query.get('seed') ?? '') ? query.get('seed')!.toLowerCase() : 'willowmere';
@@ -83,12 +83,28 @@ export function parseStreamParams(search: string): StreamParams {
     time: query.has('time') && Number.isFinite(rawTime) ? Math.max(0, Math.min(3600, rawTime)) : null,
     // The small formats are close views of a window and its street; the stage may hold any supported shot.
     camera: layout !== 'stage' ? 'window' : pick(query.get('camera'), ['hero', 'window', 'citizen'] as const, 'hero'),
-    source: pick(query.get('source'), ['simulated', 'herald', 'realm'] as const, 'herald'),
-    presenceOrigin: query.get('presenceOrigin') === 'simulated' ? 'simulated' : 'live',
-    kingdomName: query.get('source') === 'realm' || (query.get('source') !== 'simulated' && !query.has('seed'))
+    source,
+    presenceOrigin: source === 'simulated' ? 'simulated' : 'live',
+    kingdomName: source === 'realm'
       ? 'Kingdom'
       : seed.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' '),
   };
+}
+
+/** Authoring controls preserve the source's route and never publish a fixture as a public stream. */
+export function browserSourcePath(location: { pathname: string; search: string }, layout: StreamLayout, mood: StreamMood, seam: StreamSeam | null, safe: SafeArea | null): string {
+  const query = new URLSearchParams(location.search);
+  query.delete('preview');
+  if (location.pathname !== '/-/stream') {
+    query.set('source', 'realm');
+    for (const key of ['presenceOrigin', 'dockFixture', 'forgeFixture', 'fixture']) query.delete(key);
+  }
+  for (const [key, value] of [['layout', layout === 'stage' ? null : layout], ['mood', mood === 'calm' ? null : mood],
+    ['seam', layout === 'stage' ? seam : null], ['safe', layout === 'stage' && safe ? safeAreaName(safe) ?? safe.join(',') : null]] as const) {
+    if (value) query.set(key, value); else query.delete(key);
+  }
+  const search = query.toString();
+  return `${location.pathname}${search ? `?${search}` : ''}`;
 }
 
 /**

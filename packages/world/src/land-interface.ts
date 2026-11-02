@@ -3,6 +3,29 @@ import type { CollisionWorld } from '@chatdom/shared/realm';
 import type { RealmFoundedScene } from './founded-world/types';
 import { foundedAnvilPosition } from './interactions/founded';
 import { finiteVec3, standingClear, SUPPORT_GAP } from './interactions/geometry';
+import type { CardinalTurn } from './settlement/types';
+import { planPlaceSites, type KingdomPlaceSites, type PlaceSiteDiagnostic, type PlaceSitePlanningOptions } from './grand-adoption/place-sites';
+import { findTavernDoor } from './grand-adoption/place-sites-tavern';
+import { planPierSites, type LandWaterSource, type PierAnchor, type PierSiteDiagnostic, type PierSitePlanningOptions } from './grand-adoption/pier-sites';
+import { validateAuthoredPier, type AuthoredPierCertificate, type AuthoredPierProposal, type AuthoredPierResult } from './grand-adoption/pier-authored';
+
+export { planPlaceSites, validatePlaceSite, placeSiteBounds, PLACE_SITE_BUDGET, CAMPFIRE_SITE_FOOTPRINT } from './grand-adoption/place-sites';
+export { findTavernDoor, type TavernDoorAnchor, type TavernDoorSite, type TavernDoorResult } from './grand-adoption/place-sites-tavern';
+export type { KingdomPlaceSites, PlaceKind, PlaceSiteContext, PlaceSiteFailure, PlaceSiteDiagnostic, PlaceSitePlan, PlaceSitePlanningOptions } from './grand-adoption/place-sites';
+export { planPierSites, validatePierSite, pierSiteBounds, PIER_SITE_BUDGET } from './grand-adoption/pier-sites';
+export { createFishingPierProposal, type FishingPierGeometry } from './grand-adoption/pier-fishing-proposal';
+export { fishingPierCandidates, FISHING_PIER_CANDIDATE_BUDGET } from './grand-adoption/pier-fishing-candidates';
+export { validateAuthoredPier, type AuthoredPierCertificate, type AuthoredPierProposal, type AuthoredPierResult } from './grand-adoption/pier-authored';
+export type { LandWaterSource, LandWaterAt, LandWaterSample, LandWaterCoverage, PierAnchor, PierSiteCandidate,
+  PierPlanningDimensions, PierSiteContext, PierSitePlanningOptions, PierSiteValidation, PierSiteFailure,
+  PierSiteDiagnostic, PierSitePlan, PierSiteWork } from './grand-adoption/pier-sites';
+
+/** Shared local blueprint origin, world metres on physical ground. Local +Z is the open/front side. */
+export interface PlaceSite {
+  readonly origin: Vec3;
+  readonly turn: CardinalTurn;
+  readonly footprint: readonly [width: number, depth: number];
+}
 
 /** Actual solid top in world metres, independent of scenery, water sheets and render LOD.
  * null means unknown/unsupported. Implementations must not extrapolate into unloaded land. */
@@ -37,14 +60,30 @@ export interface KingdomLandInterface {
    * Slot linkage comes only from scene.plan.homes[].id ↔ placement.plotId; attachments
    * retain their hashes but supply no additional citizen window. Strength comes from presence. */
   readonly light: Pick<RealmFoundedScene, 'plan' | 'assets' | 'placements'>;
+  /** Existing tavern portal; the empty campfire site is opt-in installation-time planning. */
+  readonly places?: KingdomPlaceSites;
+  /** No site is a real outcome: callers must arrange an explicit migration, never invent ground. */
+  readonly placeSiteDiagnostics?: readonly PlaceSiteDiagnostic[];
+  /** Offered only with revision-matched drawn-water evidence and physical support. Never grants deck collision. */
+  readonly piers?: readonly PierAnchor[];
+  readonly pierSiteDiagnostics?: readonly PierSiteDiagnostic[];
+  /** Exact authored-piece support/water/route evidence, when that producer requested validation. */
+  readonly authoredPier?: AuthoredPierResult;
 }
 
 /** Preserve public identity; larger landscape support is supplied by its producer, never
  * the old bounded founded terrain compiler. A supplied collision revision must match. */
 export function createKingdomLandInterface(input: {
   readonly scene: RealmFoundedScene; readonly ground: LandGroundSource; readonly collision?: CollisionWorld;
+  /** Opt-in, bounded installation-time work; keep the resulting facade instead of rebuilding it per frame. */
+  readonly placeSites?: PlaceSitePlanningOptions;
+  /** Supplied by the adoption producer from actual installed water; absent/unknown water authorizes no pier. */
+  readonly water?: LandWaterSource;
+  readonly pierSites?: PierSitePlanningOptions;
+  readonly authoredPier?: { readonly proposal: AuthoredPierProposal; readonly pinned?: AuthoredPierCertificate };
 }): KingdomLandInterface {
   const { scene, ground, collision } = input, plan = scene.plan;
+  if (input.pierSites && input.authoredPier) throw new Error('Choose one pier geometry producer per land facade');
   if (scene.layoutRevision !== plan.revision || ground.layoutRevision !== scene.layoutRevision
     || ground.collisionRevision !== scene.collisionRevision || collision && collision.revision !== scene.collisionRevision)
     throw new Error('Land consumers need the installed layout and collision revisions');
@@ -64,11 +103,22 @@ export function createKingdomLandInterface(input: {
     const point = plan.nodes.find(item => item.id === id)?.position;
     return point && supported(point) ? point : null;
   };
+  const placePlan = input.placeSites ? planPlaceSites({ scene, groundAt, ...(collision ? { collision } : {}) }, input.placeSites) : undefined;
+  const tavern = findTavernDoor({ scene, groundAt, ...(collision ? { collision } : {}) });
+  const pierPlan = input.pierSites ? planPierSites({ scene, groundAt, ...(collision ? { collision } : {}),
+    ...(input.water ? { water: input.water } : {}) }, input.pierSites) : undefined;
+  const authoredPier = input.authoredPier ? validateAuthoredPier({ scene, groundAt, ...(collision ? { collision } : {}),
+    ...(input.water ? { water: input.water } : {}) }, input.authoredPier.proposal,
+  input.authoredPier.pinned ? { pinned: input.authoredPier.pinned } : {}) : undefined;
   return Object.freeze({ scene, groundAt, collision,
     paths: Object.freeze({ nodes: plan.nodes, streets: plan.streets, activeStreetIds: plan.activeStreetIds }),
     forge: Object.freeze({ square: plan.market, anvil,
       approach: supported(candidate) && collision && standingClear(collision, candidate) ? candidate : null }),
     moments: Object.freeze({ plaza: node(plan.market.nodeId), castleGate: node(plan.castle.gateNodeId) }),
     light: Object.freeze({ plan, assets: scene.assets, placements: scene.placements }),
+    places: Object.freeze({ ...placePlan?.places, ...(tavern.anchor ? { tavern: tavern.anchor } : {}) }),
+    placeSiteDiagnostics: Object.freeze([...(tavern.diagnostic ? [tavern.diagnostic] : []), ...placePlan?.diagnostics ?? []]),
+    ...(pierPlan ? { piers: pierPlan.piers, pierSiteDiagnostics: pierPlan.diagnostics } : {}),
+    ...(authoredPier ? { authoredPier, piers: Object.freeze(authoredPier.ok ? [authoredPier.certificate.anchor] : []) } : {}),
   });
 }

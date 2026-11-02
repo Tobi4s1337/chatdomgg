@@ -47,7 +47,7 @@ class RecordingRenderer implements ReflectionRenderer {
 const lake: WaterBody = { id: 'lake', x: 0, z: 0, radiusX: 12, radiusZ: 12, level: 0, depth: 2 };
 const STREAM_LEVEL = 1.5;
 
-function landGround(): WaterGround {
+function landGround(): Extract<WaterGround, { data: Float32Array }> {
   const width = 81, height = 81, origin: [number, number] = [-40, -40], step = 1;
   const data = new Float32Array(width * height);
   for (let k = 0; k < height; k++) for (let i = 0; i < width; i++) {
