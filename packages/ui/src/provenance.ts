@@ -1,18 +1,16 @@
+import { STAGED_ALLOWED } from './staged';
+
 /** Where the people on a surface come from. Each value is a fact the surface owner already holds. */
 export type Provenance = 'simulated' | 'connecting' | 'live' | 'resting' | 'lost';
 
 /**
- * The staged state's source word, built from the state name. It is an input word the kit accepts from renderers
- * that still pass it; the kit never prints it.
- */
-const STAGED_SOURCE = 'simulated'.toUpperCase();
-
-/**
  * The renderer's exact source words. Nothing else is trusted: an unknown, empty or merely similar string is a
- * connection we cannot vouch for, and reads as lost, never as live.
+ * connection we cannot vouch for, and reads as lost, never as live. The staged state's source word (the state name
+ * in capitals) is an input the kit accepts from renderers that still pass it, never prints, and only knows in builds
+ * that may stage at all.
  */
 const SOURCE_WORDS: Readonly<Record<string, Provenance>> = {
-  [STAGED_SOURCE]: 'simulated',
+  ...(STAGED_ALLOWED ? { ['simulated'.toUpperCase()]: 'simulated' as const } : {}),
   'CONNECTING': 'connecting',
   'LIVE CHAT': 'live',
   'STREAM RESTING': 'resting',
@@ -27,13 +25,13 @@ export function provenanceFromSource(source: string): Provenance {
  * The pressed word for each real feed, kept identical to the source words so existing readers stay true. A staged
  * night has no word of its own: public surfaces show real data or nothing, so its entry is empty and never printed.
  */
-export const PROVENANCE_WORDS: Readonly<Record<Provenance, string>> = {
-  simulated: '',
+export const PROVENANCE_WORDS = {
+  ...(STAGED_ALLOWED ? { simulated: '' } : {}),
   connecting: 'CONNECTING',
   live: 'LIVE CHAT',
   resting: 'STREAM RESTING',
   lost: 'CONNECTION LOST',
-};
+} as Readonly<Record<Provenance, string>>;
 
 export interface ProvenanceLine {
   /** Which seal is pressed beside the line. */
@@ -63,7 +61,10 @@ export interface ProvenanceFacts {
  */
 export function provenanceLines(facts: ProvenanceFacts): readonly ProvenanceLine[] {
   const detail = facts.detail?.trim() || undefined;
-  if (facts.state === 'simulated') return detail ? [{ seal: 'simulated', word: detail }] : [];
-  const feed: ProvenanceLine = { seal: facts.state, word: PROVENANCE_WORDS[facts.state] };
+  if (STAGED_ALLOWED && facts.state === 'simulated') return detail ? [{ seal: 'simulated', word: detail }] : [];
+  // Only a build that cannot stage lacks a word, and nothing it runs ever reports the staged state.
+  const word = PROVENANCE_WORDS[facts.state] as string | undefined;
+  if (word === undefined) return [];
+  const feed: ProvenanceLine = { seal: facts.state, word };
   return [detail ? { ...feed, note: detail } : feed];
 }

@@ -1,5 +1,6 @@
 import { createEffect, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { DirectoryError, fetchSearch, type SearchReply, type SearchResult } from '../data/directory';
+import { findOpenKingdom } from '../data/open-kingdoms';
 import type { PreviewSource, PreviewWorld } from '../data/preview';
 import { mapNoun } from './edition';
 import { formatCount, SEARCH_PLACEHOLDER, TIER_NAMES } from './format';
@@ -49,6 +50,14 @@ export function Search(props: {
   };
   const [text, setText] = createSignal('');
   const [phase, setPhase] = createSignal<Phase>({ kind: 'idle' });
+  // A name the register does not know may still be a kingdom chatdom.io opens (founded before the survey saw it).
+  const [openKingdom, setOpenKingdom] = createSignal<{ query: string; kingdomId: string; name: string; login: string } | null>(null);
+  createEffect(() => {
+    const now = phase();
+    if (now.kind !== 'results' || now.reply.results.length) { setOpenKingdom(null); return; }
+    const query = now.query;
+    void findOpenKingdom(query).then(kingdom => { if (phase() === now) setOpenKingdom(kingdom ? { query, ...kingdom } : null); });
+  });
   const [showSearching, setShowSearching] = createSignal(false);
   const [open, setOpen] = createSignal(false);
   const [active, setActive] = createSignal(0);
@@ -266,6 +275,10 @@ export function Search(props: {
             <Match when={phase().kind === 'results'}>
               <div class="atlas-search-state" role="status">
                 <p>“<span dir="auto">{(phase() as { query: string }).query.trim()}</span>” is not on the map yet.</p>
+                <Show when={openKingdom()}>{kingdom => <>
+                  <p>{kingdom().name}, {kingdom().login}’s kingdom, is open all the same.</p>
+                  <a class="atlas-search-away atlas-search-door" href={`/kingdom/${encodeURIComponent(kingdom().kingdomId)}`}>Enter {kingdom().name}</a>
+                </>}</Show>
                 <Show when={(phase() as { reply: SearchReply }).reply.unavailable === 'limited' || (phase() as { reply: SearchReply }).reply.unavailable === 'upstream'}>
                   <p class="atlas-quiet">Try again in a moment.</p>
                   <button type="button" class="atlas-search-retry" on:click={() => ask(text())}>Search again</button>

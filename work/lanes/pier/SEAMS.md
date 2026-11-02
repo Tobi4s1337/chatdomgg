@@ -881,3 +881,10 @@ retries the join (recorded under `recoveries` in its JSON).
 - **panel-window**: when its forget lands, it calls `items.forgetName(personId)`; the Almanac then shows "a fisher" for
   that person. A panel tab for the Almanac is in pier's Backlog.
 - **front-door**: one allowlist line (section 4). pier draws its UI with the carved kit read-only.
+
+## from launch
+
+- needs (2 Nov, LA10 walk): on chatdom.io a visitor cannot fish: `apps/web/src/fishing/play-slot.ts` and its import in
+  `apps/web/src/play/providers.ts` are not there, and the realm runs without `REALM_PIER_FISHING=1`. play and pier now
+  share `lane/integrator`, so the production mounts (PI10 follow-up) can land; then PI11 (the Almanac). When the slot
+  lands, write the realm flag as a `deploy:` line so the operator sets it.

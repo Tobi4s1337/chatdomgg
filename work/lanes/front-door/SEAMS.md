@@ -317,3 +317,22 @@ flag's card (its channel ID). Prefer the mount option on the front page (no firs
 Newest request wins (2 Nov, AM10 follow-up): each `restore` or `flyTo` cancels the one before it. A superseded call
 resolves `false` and never opens its card or finishes its flight later, and a card the person opens or closes while a
 call is still fetching stays as they left it. The front page needs no guard of its own.
+
+## from launch
+
+- 2 Nov (LA10, extension zip): the kit's staged ("practice") branches are now guarded by `STAGED_ALLOWED` from
+  `packages/ui/src/staged.ts`. The panel build defines `__CHATDOM_STAGED__` as `false` (`apps/panel/vite.config.ts`),
+  so the staged source word, its seal glyph, `data-practice` and the passport's staged cover and page seals fold
+  away and the Twitch zip carries no staging code. Every other build leaves the constant undefined and behaves as
+  before. New staged-only branches in anything the panel imports (`ProvenanceSeal`, `provenance.ts`,
+  `passport/Book.tsx`, `passport/Reading.tsx`) should sit behind `STAGED_ALLOWED`, or
+  `node scripts/public/extension.mjs` will refuse the zip again.
+- 2 Nov (LA10, gateway): `/` with a query is the app only for the walk (`?walk=1`); every other query (`?forge=1`,
+  `?hour=…`, `?forgeChat=expired`, `?signin=ok&kingdom=…`) gets the front page. Before, they rendered the staged
+  Willowmere town, whose staged seal prints nothing, so a visitor saw staged data unlabelled.
+  (`apps/api/src/public/routes.ts`, tests updated.)
+- 2 Nov (LA10, gateway): `/-/avatar-builder` is no longer a public page (staged personas, saves that go nowhere,
+  unlinked since FD10). `/-/grand` stays (it draws the real grand land).
+- needs (front-door): a signed-out stranger has no way from the front page into a kingdom; only the signed-in seal
+  offers "Walk into Willowmere". The front door's open kingdom (`/api/public/door`) deserves a visible way in for
+  everyone (the hero caption already names "The land of tobi4s_ at dusk").

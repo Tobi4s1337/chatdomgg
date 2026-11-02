@@ -419,3 +419,13 @@ approval to reveal a median of 16.5 s, so submit to reveal was 35.8 s (p95 71.6)
 Until one exists, any commit on a busy host can drop the walkers who are standing in the kingdom, not only the
 maker. Section 12 (no reload on a Forge commit) is still needed after this. Without §13, §12's hot adoption would
 keep the session but still get it kicked.
+
+## from launch
+
+- 2 Nov (LA10): the chat-permission callback now returns to the walk, `/?walk=1&kingdom=<id>&forgeChat=<outcome>`
+  (`apps/realm/src/forge-chat/service.ts`), instead of `/kingdom/<id>?forgeChat=…`, which hands a founded kingdom over
+  to its watch-only stream: the visitor lost the anvil. `needs: forge-wish — read `forgeChat` on the walk and reopen
+  the anvil panel with the outcome (connected: ready to wish; denied / expired / wrong-account / unavailable: the
+  calm words); today nothing reads it, so the visitor lands back in the walk and has to walk to the anvil again.`
+- 2 Nov (LA10): `/?forgeChat=expired` (state unknown) now gets the front page from the gateway instead of the staged
+  town (see front-door's `## from launch`).

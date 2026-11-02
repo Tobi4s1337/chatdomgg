@@ -303,3 +303,18 @@ expression"). The fix is two lines, in `work/lanes/atlas-map/site-solid-plugin.p
 conflict. Checked on an export of `lane/integrator` (`ed7ac60e`): without the patch the site build fails with that
 error, with it the site build exits 0 and writes all six pages. Apply it with `git apply` on the integrator (or on
 this branch after it takes front-door).
+
+## from launch
+
+- 2 Nov (LA10): `/kingdom/<id>` now asks the realm for adopted land before reading the survey
+  (`apps/web/src/genesis/index.tsx`): a founded kingdom the survey never observed (tobi4s_, under the 5-viewer floor)
+  stopped at "The Atlas could not be read just now". The survey is read only for an unfounded holding. The "Compare
+  the three kingdoms ↗" link to the retired `/showcase` is gone.
+- 2 Nov (LA10): until the first edition is founded, a name the register does not know is checked against the front
+  door's kingdoms (`/api/public/door`, new `apps/web/src/atlas/data/open-kingdoms.ts`): the search's empty state offers
+  "Enter <kingdom>" (`.atlas-search-door`), and `/map/<login>` gives the same notice with an Enter action. Once claims
+  draw founded kingdoms, this simply never fires for them.
+- 2 Nov (LA10): phone `.atlas-notice` is pinned left 10px / right 64px (beside the zoom column); centred on half the
+  width it wrapped one word per line.
+- 2 Nov (LA10), deploy: the live data service on 5193 is the old `lane/atlas` build without roads or lookup; exact
+  steps in `work/lanes/launch/SEAMS.md` under `deploy:`.

@@ -49,7 +49,7 @@ export function isRealmSocket(pathname: string): boolean {
  * The product's pages. Everything else the web build can draw (lane benches, references) stays off the public
  * origin. A new public page is added here deliberately.
  */
-const PAGES = /^\/(?:stream|panel|dock\/?|map(?:\/(?:[a-z0-9_]{1,25}|road\/[a-z0-9_]{1,25}\/[a-z0-9_]{1,25}))?|kingdom\/[1-9][0-9]{0,31}|-\/(?:avatar-builder|grand))$/;
+const PAGES = /^\/(?:stream|panel|dock\/?|map(?:\/(?:[a-z0-9_]{1,25}|road\/[a-z0-9_]{1,25}\/[a-z0-9_]{1,25}))?|kingdom\/[1-9][0-9]{0,31}|-\/grand)$/;
 
 /**
  * A page address that asks for staged data instead of the real kingdom: a simulated or fixture source, or a named
@@ -102,11 +102,10 @@ export function classify(pathname: string, search: string): PublicRoute {
   const page = Boolean(site) || PAGES.test(pathname);
   if (page && asksForStagedData(search)) return { kind: 'staged' };
   if (pathname === '/') {
-    // The bare origin is the front page; a sign-in outcome returning there still lands on it. Any other query
-    // (`?walk=1&kingdom=…`, `?forge=1`) is the app itself.
-    const params = new URLSearchParams(search);
-    params.delete('signin');
-    return [...params.keys()].length === 0 ? { kind: 'site', page: 'index' } : { kind: 'page' };
+    // The bare origin is the front page, whatever else its query says (a sign-in outcome, a Forge permission that
+    // expired before it knew its kingdom). Only the walk (`?walk=1&kingdom=…`) is the app itself: any other app
+    // address on `/` is the staged town, which the public origin never shows.
+    return new URLSearchParams(search).get('walk') === '1' ? { kind: 'page' } : { kind: 'site', page: 'index' };
   }
   if (site) return { kind: 'site', page: site };
   if (page) return { kind: 'page' };
