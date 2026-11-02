@@ -471,7 +471,17 @@ processes (their loops restart them on the new build within 10–30 s). The data
 
 **Still owed by others (written as `needs:` in progress).** The public gateway (`apps/api/src/public/proxy.ts`,
 `upstreamHeaders`) replaces `X-Forwarded-For` with its own peer, which on chatdom.io is always Traefik's one docker
-address, so every visitor shares one client allowance (hence the 60 above). The fix belongs in the gateway: when the
-peer is the configured Traefik bridge (for example `PUBLIC_TRUSTED_PROXY=172.17.0.0/16`), forward the last address of
-Traefik's `X-Forwarded-For` instead of the peer; otherwise keep today's rule. After that, drop
-`ATLAS_LOOKUPS_PER_CLIENT_MINUTE` back to its default 6.
+address, so every visitor shares one client allowance (hence the 60 above). The fix is ready as a patch, since the
+gateway is not this lane's: `work/lanes/atlas-map/gateway-visitor-address.integrator.patch` (applies to `lane/integrator`
+and to chatdom.io's `public-next` as they stand; `gateway-visitor-address.patch` is the same change on `main`). It adds
+`PUBLIC_TRUSTED_PROXIES` (IPv4 ranges or single addresses, comma separated; unset keeps today's rule exactly). When the
+peer is a trusted proxy, the gateway forwards the right-most `X-Forwarded-For` entry that is not itself a trusted proxy,
+so a browser's own claim to the left is never believed; a malformed or missing entry falls back to the peer. It covers
+HTTP and the realm's WebSocket upgrades alike. Tests in `proxy.test.ts` and `config.test.ts` (26 pass on the integrator
+files). To adopt it:
+
+```sh
+git apply work/lanes/atlas-map/gateway-visitor-address.integrator.patch   # own commit: fix(api): name each visitor behind the TLS proxy
+# ops/bin/public: export PUBLIC_TRUSTED_PROXIES=172.17.0.0/16   (Traefik's docker bridge; the gateway listens on 172.17.0.1)
+# restart the public window, then the serve loop as ATLAS_LOOKUPS_PER_CLIENT_MINUTE=6 atlas-live.sh serve (6 per visitor)
+```
