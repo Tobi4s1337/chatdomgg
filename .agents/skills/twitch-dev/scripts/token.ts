@@ -273,11 +273,11 @@ function cmdScopes(): void {
 	const q = positional.join(' ').toLowerCase();
 	if (!q) die('usage: node scripts/token.ts scopes <scope | endpoint name | eventsub type>  e.g. scopes "send chat message"');
 	// scopes.json ships with the twitch-dev skill; when this script was copied into a project, look in the
-	// installed skill locations (Codex: ~/.agents/skills, Claude Code: ~/.claude/skills) or $TWITCH_SCOPES_JSON.
+	// installed skill location (~/.agents/skills) or $TWITCH_SCOPES_JSON.
 	const here = dirname(fileURLToPath(import.meta.url));
 	const home = process.env.HOME ?? '';
 	const candidates = [process.env.TWITCH_SCOPES_JSON, join(here, '../references/scopes.json'),
-		join(home, '.agents/skills/twitch-dev/references/scopes.json'), join(home, '.claude/skills/twitch-dev/references/scopes.json')];
+		join(home, '.agents/skills/twitch-dev/references/scopes.json')];
 	const path = candidates.find((p): p is string => !!p && existsSync(p));
 	if (!path) die(`scopes.json not found (tried: ${candidates.filter(Boolean).join(', ')}) - set TWITCH_SCOPES_JSON or run the copy inside the twitch-dev skill`);
 	type L = { name: string; anchor: string; note?: string };

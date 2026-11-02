@@ -22,7 +22,7 @@ export async function seed(input: { readonly schema: string; readonly kingdomId:
     if (namespace !== input.schema) throw new Error('The Chronicle fixture database is not isolated.');
     const existing = (await db.query<{ origin: string; sequence: string }>('SELECT origin, sequence FROM realm_kingdoms WHERE kingdom_id = $1', [kingdomId])).rows[0];
     if (existing && (existing.origin !== 'simulated' || Number(existing.sequence) !== 0)) throw new Error('Chronicle fixture only seeds an untouched simulated kingdom before services start.');
-    if (!await allocation.currentLayout(kingdomId)) throw new Error('Chronicle fixture requires the harness’s adopted layout.');
+    if (!await allocation.currentLayout(kingdomId)) throw new Error('Chronicle fixture requires the operator’s adopted layout.');
     lease = await repository.acquire(kingdomId); await repository.load(lease);
     let id = 0, grown = 0;
     const run = async (command: RealmDomainCommand, capability: RealmCapability) => {

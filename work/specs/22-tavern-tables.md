@@ -248,7 +248,7 @@ prompt preparation/pending/approved result, stale/reconnect and crown/author pla
 SIMULATED. Open contact sheets and representative full frames with `view_image` using `$look`, repair occlusion,
 clipping, generic materials, tiny controls or secret-state leaks. Record actual listening or listening limitation
 for physical table sounds. Provide motion/reduced-motion evidence. Main runs `pnpm verify` and reviews integrated
-kingdom/stream/panel paths after merging; the harness is not the production integration acceptance.
+kingdom/stream/panel paths after merging; the operator is not the production integration acceptance.
 
 ## Quality bar
 

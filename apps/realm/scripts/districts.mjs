@@ -32,7 +32,7 @@ try {
     + `handoff ${JSON.stringify(crossing.fullStates)}; ${report.violations.length ? `FAILED: ${report.violations.join('; ')}` : 'all expectations held'}`);
   process.exitCode = report.violations.length ? 1 : 0;
 } catch (error) {
-  console.error(`SIMULATED districts: ${error instanceof Error ? error.message : 'the harness failed'}`);
+  console.error(`SIMULATED districts: ${error instanceof Error ? error.message : 'the operator failed'}`);
   process.exitCode = 1;
 }
 process.exit();

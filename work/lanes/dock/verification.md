@@ -111,7 +111,7 @@ Main must add the dock importer before a frozen workspace install; see `needs.md
 
 No screenshot or clip was captured or looked at. The shared lane-priority capture queue
 never admitted Chrome; its final bounded attempt timed out before opening any socket or
-browser. Other occupied TCP ports were not touched. The harness now uses a private Unix
+browser. Other occupied TCP ports were not touched. The operator now uses a private Unix
 socket, owns only its own processes/socket, and always requires the shared capture lock.
 Exact remaining image and clip scenarios are in `work/evidence/dock/README.md`.
 
@@ -172,7 +172,7 @@ This turn revalidated the same external dependency before making a blocked-statu
 - A secret-safe environment check reports `dockRealmBridgeConfigured:false`; the worktree
   has no `.env` file. No credential or URL values were printed.
 - `pnpm-lock.yaml` still has no `apps/dock` importer.
-- Evidence contains the harness and its README only: no screenshots or clips. The prior
+- Evidence contains the operator and its README only: no screenshots or clips. The prior
   three capture processes already terminated before Chrome; no capture process is waiting.
 
 Completion remains unproven for every real gate wake/goodnight, fire gathering, raid welcome,

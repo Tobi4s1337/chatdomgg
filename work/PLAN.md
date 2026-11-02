@@ -374,7 +374,7 @@ batches are precisely recorded in the register, not silently labelled done.
 All rehearsals use owned ports, isolated schemas and temporary bundles; the final signed homecoming arrived in155ms
 and its native still was viewed (caption/neighbor-relight timing remains unproved). Final workspace/public builds
 are checked in a separate snapshot. Credentials and `.env` remain ignored. Logs only
-`../conductor/state/services.log`. No deploy, DNS, Twitch writes or Extension registration.
+`../ops/state/services.log`. No deploy, DNS, Twitch writes or Extension registration.
 
 **First pickup:** eliminate native Chronicle rebuild stalls and finish Dock proof gaps, then obtain a real-GPU loaded grand
 frame; for product completeness bind the trusted citizen/passport subject before adding share routes.

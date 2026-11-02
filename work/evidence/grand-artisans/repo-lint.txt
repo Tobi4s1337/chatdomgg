@@ -1,3 +1,0 @@
-
-> chatdom@ lint /root/chatdomgg-harness/worktrees/grand-artisans
-> eslint apps packages scripts

@@ -40,7 +40,7 @@ Viewed each with `view_image` after capture:
   then inspected the fresh capture. Mutations remain disabled. The role is a fixture;
   this is not proof that the real realm has verified a moderator grant.
 - `unknown-390x844-viewport.png`: the uncertainty notice is prominent above town facts;
-  actions remain disabled after reload and the harness observes exactly one POST. Fresh
+  actions remain disabled after reload and the operator observes exactly one POST. Fresh
   disabled text remains readable after the contrast correction.
 - `undo-390x844-viewport.png`: a simulated accepted receipt survives reload, undo restores
   the closed gate and another reload removes the stale undo control. Fixed a fixture
