@@ -30,6 +30,42 @@ At that physical checkpoint no room channel, fishing intent, public feed, clock 
 was added. That checkpoint changed no existing API in sections 1–6. No other lane's SEAMS file is present here;
 there is no additional cross-lane contract change to write into another scope.
 
+## PI10 client fishing checkpoint — 2 November 2026
+
+The client side of fishing exists and runs against the real room rules on the review bench.
+
+- `apps/web/src/fishing/controller.ts`: `createFishingController({ link, selfWalkerId, now? })`. It turns the
+  primary button into `pier.draw`, `pier.release`, `pier.strike` and `pier.reel`. A quick tap is held until the
+  server accepts the draw (260 ms), reel edges are merged (70 ms), and a take asked for before the first state answer
+  waits for it, because the room answers one job per person at a time. It also gives the plain-words hints.
+- `apps/web/src/fishing/link.ts`: `fishingLink(room)` and `itemLink(room)` over any `{ onMessage, send }` room,
+  which is the Colyseus room the kingdom page already holds.
+- `apps/web/src/fishing/layer/`: `mountPierLayer(host: PierLayerHost)` draws rods in hands, lines, floats, rings,
+  droplets, mist, the leaping and landed fish, and the lantern glass, and drives sound and UI. The host shape is
+  the section 3 ask narrowed to what the layer reads: scene, camera, site, lights, rack, controller, `hour()`,
+  `mood()`, `walkers()` (feet position, yaw in radians, self flag, display name), optional `hand(walkerId)` (the
+  citizen renderer's `grips` map), `viewport()`, `touch()`, and optional `sound`, `ui` and `portrait`.
+  It uses 5 to 8 draws and under 1 k triangles of its own while fishing.
+- `apps/web/src/fishing/ui/` (overlay: prompt slip, fight gauge, notes, catch tag, world tags),
+  `apps/web/src/fishing/sound/` (every beat, plus the reel, tension and pier beds through `kingdomAudioHost`), and
+  `apps/web/src/bag/` (store, bag, card, hotbar, portraits; section 1c).
+- `apps/web/src/fishing/staged.ts` runs the real `createFishingRoomChannel` and `createFishingCasts` in memory
+  for the bench and tests only. `/-/pier?view=play` is the whole catch with two fishers in the kingdom's own
+  bodies; `view=ui`, `view=bag` and `view=sound` are the piece benches. `work/lanes/pier/play-capture.mjs` takes
+  stepped stills of it under the shared capture lock.
+- The realm channel no longer imports `node:buffer` (it measures with `TextEncoder`), so the same module runs in
+  the browser bench.
+- `apps/realm/src/main.ts` composes `createDurableFishingChannel` after the items channel, gated by
+  `REALM_PIER_FISHING=1`, which is off by default. Production stays closed until the layer is visible in the kingdom
+  page; the lane's own stack turns it on.
+
+Still asked, unchanged from sections 2 and 3:
+- **grand-world:** `registerKingdomLayer('pier', host => { … mountPierLayer({ ...host, site, lights, rack, controller,
+  walkers, hand: id => citizens.grips.get(id) ?? null, … }) })`. The kingdom view does not expose its scene, camera,
+  walkers or citizen grips on this branch.
+- **play:** held tools (the rod in the hotbar's first slot selects `controller.equip`), the HUD's bottom-centre dock
+  (the overlay lifts with `--pier-ui-dock-bottom`), and the primary-button binding while a rod is out.
+
 ## 1. The items API (pier provides; gather, forge-wish, play, raid-show and panel-window call it)
 
 ### PI10 authored fish and rod checkpoint — 2 November

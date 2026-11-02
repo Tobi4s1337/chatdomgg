@@ -15,8 +15,9 @@ import { createLightField } from '../kingdom/light-field';
 import { createPierLanternGlow } from './lanterns';
 import { mountPierAssetBench } from './asset-bench';
 import { mountFishBench } from './fish-bench';
+import { createPlayStage, type PlayStage, type PlayStageOptions } from './play-bench';
 
-type PierView = 'shore' | 'deck' | 'head' | 'asset' | 'fish';
+type PierView = 'shore' | 'deck' | 'head' | 'asset' | 'fish' | 'play';
 type Angle = 'front' | 'side' | 'back';
 export interface PierBench {
   readonly stats: Record<string, unknown>;
@@ -24,6 +25,8 @@ export interface PierBench {
   view(value: PierView): void;
   hour(value: number): void;
   asset(id: string, angle: Angle): void;
+  /** Only on `view=play`: the staged pier's clock, camera and fair player. */
+  readonly play?: PlayStage['debug'];
   dispose(): void;
 }
 export type PierBenchWindow = Window & { __chatdomReady?: boolean; __chatdomPier?: PierBench; __chatdomPierError?: string; __chatdomPierPhase?: string };
@@ -53,7 +56,7 @@ async function fixture(query: URLSearchParams): Promise<{ plan: SettlementPlan; 
 }
 
 /** Dev-only review surface. It never opens a walking session, grants an item or writes a kingdom. */
-export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearchParams): Promise<PierBench> {
+export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearchParams, stage?: Pick<PlayStageOptions, 'hud' | 'sound' | 'ui' | 'portrait' | 'onGrant' | 'attach'>): Promise<PierBench> {
   if (query.get('view') === 'fish') return mountFishBench(canvas, query);
   if (query.get('view') === 'asset') return mountPierAssetBench(canvas, query);
   W.__chatdomReady = false;
@@ -123,7 +126,8 @@ export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearch
     pierTriangles: pierMeshes.reduce((sum, object) => sum + (object.geometry.index?.count ?? 0) / 3, 0), pierDraws: pierMeshes.length + 1, source: query.has('kingdom') ? 'founded-copy' : 'bench' };
   let hour = Number(query.get('hour') ?? 18.6), grade = getEnvironment(hour);
   if (!Number.isFinite(hour) || hour < 0 || hour >= 24) throw new Error('Hour must be between zero and twenty-four.');
-  let view: PierView = (['shore', 'deck', 'head', 'asset'].includes(query.get('view') ?? '') ? query.get('view') : 'shore') as PierView;
+  let view: PierView = (['shore', 'deck', 'head', 'asset', 'play'].includes(query.get('view') ?? '') ? query.get('view') : 'shore') as PierView;
+  let play: PlayStage | undefined;
   let activeAsset: THREE.Mesh | undefined, disposed = false, raf = 0, painted = 0, frame = 0, started = false;
   const target = new THREE.Vector3(), beacon = new THREE.Vector3(...site.root);
   const local = (at: Vec3) => pierLocalToWorld(site, at);
@@ -158,6 +162,8 @@ export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearch
       const yaw = angle === 'side' ? Math.PI * .63 : angle === 'back' ? Math.PI * 1.12 : Math.PI * .15;
       camera.position.set(Math.sin(yaw) * distance, extent * .8, Math.cos(yaw) * distance); target.set(0, extent * .44, 0); camera.fov = 36;
       fog.density = 0;
+    } else if (play) {
+      play.frame(); fog.density = grade.fogDensity;
     } else {
       const narrow = canvas.clientWidth < canvas.clientHeight;
       const walk = site.walk / .125;
@@ -166,7 +172,7 @@ export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearch
       camera.position.set(...local(eye)); target.set(...local(focus)); camera.fov = narrow ? 58 : view === 'shore' ? 48 : 60;
       fog.density = grade.fogDensity;
     }
-    camera.updateProjectionMatrix(); camera.lookAt(target); camera.updateMatrixWorld();
+    if (!play) { camera.updateProjectionMatrix(); camera.lookAt(target); camera.updateMatrixWorld(); }
     atmosphere.update(hour, 30, camera, beacon, 0);
     if (!asset) {
       water.update({ time: 30, environment: grade, camera, sources });
@@ -177,18 +183,24 @@ export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearch
     if (++painted > 2 && (asset || light.stats.publishedRevision > 0)) {
       if (!stats.ready) renderer.getContext().finish();
       stats.ready = true; W.__chatdomReady = true; W.__chatdomPierPhase = 'ready';
-      if (query.get('still') === '1') { raf = 0; return; }
+      if (query.get('still') === '1' && !play) { raf = 0; return; }
     }
     raf = requestAnimationFrame(draw);
   };
   setHour(hour);
   if (view === 'asset') await setAsset(query.get('asset') ?? BLUEPRINTS[0]!.id, angle);
+  if (view === 'play') {
+    if (!stage) throw new Error('The play view needs its overlay.');
+    play = await createPlayStage({ scene, camera, canvas, site, installation, plan, query, hour: () => hour, ...stage });
+    // The layer draws its own lantern glass; the review glass would double it.
+    glow.root.visible = false;
+  }
   started = true; raf = requestAnimationFrame(draw);
   return {
-    stats, site,
+    stats, site, ...(play ? { play: play.debug } : {}),
     view(value) { view = value; reset(); },
     hour: setHour,
     asset(id, angle) { void setAsset(id, angle).catch(error => { W.__chatdomPierError = String(error); }); },
-    dispose() { if (disposed) return; disposed = true; cancelAnimationFrame(raf); observer.disconnect(); light.dispose(); pool.dispose(); water.dispose(); glow.dispose(); shadows.dispose(); atmosphere.dispose(); clay.dispose(); cleanups.forEach(cleanup => cleanup()); renderer.dispose(); scene.clear(); delete W.__chatdomPier; W.__chatdomReady = false; },
+    dispose() { if (disposed) return; disposed = true; cancelAnimationFrame(raf); observer.disconnect(); play?.dispose(); light.dispose(); pool.dispose(); water.dispose(); glow.dispose(); shadows.dispose(); atmosphere.dispose(); clay.dispose(); cleanups.forEach(cleanup => cleanup()); renderer.dispose(); scene.clear(); delete W.__chatdomPier; W.__chatdomReady = false; },
   };
 }

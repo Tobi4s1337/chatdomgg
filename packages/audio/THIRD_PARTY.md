@@ -141,6 +141,10 @@ brightest grit and air shelved down; metal strikes are tuned by playback rate so
 1023, 1093, 1007 Hz) lands on D5, E5, A5, B5 or B4 and are damped by a gain envelope; the glass blocks (903, 1033,
 899 Hz) are tuned to F♯5, A5 and E5 and damped within ~0.4 s. Each family has a fader in dB next to its definition.
 
+The fishing pier (`apps/web/src/fishing/sound/`) reuses shipped files from both Kenney packs above, adding none:
+`book-flip-1..3` for the catch tag, `cloth-1..3` with `impact-wood-light-*` for taking and stowing the rod, and
+`footstep-wood-*`, `impact-wood-medium-*` and `impact-soft-medium-*` for the fish landing on the planks.
+
 ### Auditioned, not shipped
 
 Measured and inspected as spectrograms on 2026-10-30, all CC0 per their archives' `License.txt`:

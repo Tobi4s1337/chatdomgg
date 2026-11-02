@@ -1,2 +1,10 @@
 import './providers';
 export { itemModels, registerItemModels, createItemModelCatalogue, type ItemModelDefinition } from './catalogue';
+export { registerItemDefinitions, itemDefinition, itemDefinitions } from './definitions';
+export { createBagStore, BAG_MAX_RECORDS, type BagStore, type BagStoreOptions, type BagStatus, type BagRefusal, type BagMoveResult } from './store';
+export { itemPortrait, paintItemPortrait, disposeItemPortraits, portraitPixels, PORTRAIT_HOUR } from './portrait';
+export { mountItemCard, type ItemCardOptions } from './card';
+export { mountBag, type BagOptions } from './bag';
+export { mountHotbar, hotbarSlots, type Hotbar, type HotbarOptions } from './hotbar';
+export type { BagSound, BagSurface } from './dom';
+export * from './words';
