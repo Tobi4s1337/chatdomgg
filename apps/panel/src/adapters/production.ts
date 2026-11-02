@@ -131,7 +131,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
   const passport = (current: PanelReading): PassportSource => {
     if (!transport) return { kind: 'unavailable', reason: 'The passport is not reaching the panel yet.' };
     let source = passports.get(current);
-    if (!source) { source = { kind: 'readable', transport, places: new Map<string, string>(), disclosure: null, simulated: false }; passports.set(current, source); }
+    if (!source) { source = { kind: 'readable', transport, places: new Map<string, string>(), disclosure: null }; passports.set(current, source); }
     return source;
   };
   const currentLight = (): Light => {

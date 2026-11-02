@@ -188,7 +188,6 @@ export type PassportSource =
     /** Kingdom names the card already shows publicly (its disclosed homes), so a road can say where it began. */
     readonly places: ReadonlyMap<string, string>;
     readonly disclosure: PassportDisclosureView | null;
-    readonly simulated: boolean;
   }
   | { readonly kind: 'unavailable'; readonly reason: string };
 

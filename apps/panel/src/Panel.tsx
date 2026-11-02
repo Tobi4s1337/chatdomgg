@@ -129,10 +129,10 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
     <main class="cw-main">
       <Show when={!page()} fallback={<section class="cw-deep" aria-label={page() === 'card' ? 'Your citizen card' : page() === 'privacy' ? 'Your privacy' : 'Your passport'}>
         <Show when={page() !== 'privacy'} fallback={<PrivacySettings privacy={snap().privacy} onClose={closeCard} onRetry={() => adapter.requestPrivacy?.()} onQuiet={quiet => adapter.requestQuiet?.(quiet)} onForget={() => adapter.requestForget?.()} />}>
-          <Show when={page() === 'card'} fallback={<Show when={source()}>{value => <PanelPassport transport={value().transport} places={value().places} simulated={false} {...(reading() ? { reading: reading()! } : {})} onClose={() => setPage('card')} backLabel="Your card" />}</Show>}>
+          <Show when={page() === 'card'} fallback={<Show when={source()}>{value => <PanelPassport transport={value().transport} places={value().places} {...(reading() ? { reading: reading()! } : {})} onClose={() => setPage('card')} backLabel="Your card" />}</Show>}>
           <button class="cw-back" onClick={closeCard}>‹ <span>Back to You</span></button>
           <Show when={card()}>{found => <>
-            <CardSheet card={found().card} street={snap().home.kind === 'citizen' ? (snap().home as Extract<Home, { kind: 'citizen' }>).street : null} place={snap().home.kind === 'citizen' ? (snap().home as Extract<Home, { kind: 'citizen' }>).place : null} homePicture={null} window={lightWords() ?? 'Your window'} passport={reading()?.state() ?? null} simulated={false} />
+            <CardSheet card={found().card} street={snap().home.kind === 'citizen' ? (snap().home as Extract<Home, { kind: 'citizen' }>).street : null} place={snap().home.kind === 'citizen' ? (snap().home as Extract<Home, { kind: 'citizen' }>).place : null} homePicture={null} window={lightWords() ?? 'Your window'} passport={reading()?.state() ?? null} />
             <Show when={reading()}><PassportCorner private={reading()?.state().kind === 'hidden'} onTurn={() => setPage('passport')} /></Show>
           </>}</Show>
         </Show></Show>

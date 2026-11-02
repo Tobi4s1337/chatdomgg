@@ -26,8 +26,6 @@ export interface PanelPassportProps {
   /** Back to the kingdom. Without it the view has no way out of its own and shows no back button. */
   readonly onClose?: () => void;
   readonly backLabel?: string;
-  /** The whole surface is SIMULATED (a bench or the panel's own simulated night), whatever the book says. */
-  readonly simulated?: boolean;
   /** 0 is the closed cover, where the panel opens by default; 1 is the flyleaf. */
   readonly initialView?: number;
   /** Every state the reading passes through, for a host that waits on the first settled one. */

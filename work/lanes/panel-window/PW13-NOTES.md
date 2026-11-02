@@ -1,6 +1,16 @@
 # PW13 checkpoint — 2 November 2026
 
-PW13 remains unticked. The previous checkpoint was progress; this turn closes its Configuration Service ordering gap without changing the remaining acceptance bars. Earlier goal boxes also remain unticked. No Twitch writes, console actions, deployment or push occurred.
+PW13 remains unticked. The Configuration Service ordering gap was closed in the previous checkpoint. This checkpoint prepares the exact shared Passport handoff and enforces the complete mobile asset budget without changing the remaining acceptance bars. Earlier goal boxes also remain unticked. No Twitch writes, console actions, deployment or push occurred.
+
+## Current packaging checkpoint
+
+Unused simulation props and PassportSource metadata were removed inside `apps/panel`. The actual build, scoped TypeScript, changed-file lint and 40 focused adapter/card/transport checks pass. The strict actual-worktree zip still correctly fails on the shared Passport strings. No shared owner file was edited.
+
+The exact owner and companion patches are `PW13-PASSPORT-NEEDS.patch` and `PW13-PASSPORT-PANEL.patch`. The isolated full-panel candidate passes 52 schema/reader/session/pages/transport checks and strict types, and produces a 17-file, 482 KiB zip. The zip checker now follows all local module and CSS dependencies, including fonts and textures; its three regression tests pass. Complete candidate graph totals are 888,934 bytes Panel, 888,919 Mobile, 635,866 Config and 635,871 Live Config, all below 1 MB. The previous direct-link figures understated download size. See `PW13-PASSPORT-PATCH.md` for the exact handoff, commands, evidence and limits.
+
+This third PW13 turn again invoked the complete GPU batch with `--wait 30 --max 10`; it returned exit 3, disconnected Chrome, with no queued lease job or services. Shared contention is not a PW11 blocker. The single permitted fallback, `work/evidence/panel-window/PW13/passport-live-candidate@318x496.png`, was inspected at native size; the warm book, stamp and footer fit without horizontal overflow. It is a candidate layout fixture only. Own candidate Vite 5182, browser and capture lock were released.
+
+blocked: the same actual-worktree shared Passport zip rejection and disconnected GPU requirement remain after three consecutive PW13 goal turns. The concrete patch and all useful scoped packaging work are now reviewable. There is no later goal to select. Resume PW13 after owner application/capture recovery, also resolving the pending registration-owner and Tier 1 founding seams; all goal boxes stay unticked. Hosted Test has not run.
 
 ## Current implementation
 
@@ -14,7 +24,7 @@ The worker signs owner JWTs, GETs Twitch's segment, PUTs only when needed, then 
 
 Routine same-identity Twitch authorization refresh now retains unsaved edits and their original expected revision. Identity/role changes clear the form; stale requests cannot replace it. Product enumeration runs independently, so a hung Helper lookup cannot block settings or Live Hide. The strict settings parser also now rejects array-valued bands instead of coercing them to strings.
 
-## Verified
+## Previous Configuration checkpoint verification
 
 - The backend's 33 focused checks passed across settings, mirror SQL, publication and authentication. After the final priority correction, all eight mirror SQL checks passed, including a newer actual CAS save ahead of an overdue verified audit.
 - A broader five-file realm regression run passed 40/40: settings, mirror, gifts, service and internal HTTP. It uses disposable `panel_window_test_*` development schemas, real Postgres, existing allocation/writer/ingress and durable paid-gift paths. Its seven-test mirror suite preceded the additional priority case above; these counts are not additive.
@@ -32,9 +42,9 @@ REALM_DATABASE_TESTS=1 PANEL_BROWSER_TESTS=1 node \
   apps/api/src/panel/gifts/browser.integration.test.ts
 ```
 
-## Visual and packaging evidence
+## Previous Configuration visual and packaging evidence
 
-The single permitted SwiftShader fallback this turn is `work/evidence/panel-window/PW13/config-pending@318x496.png`, inspected at native size. Its 41 visible words exclude decorative glyphs. The pending notice and Check Twitch again button are readable in the wood/parchment composition; targets meet 44 px and there is no horizontal overflow. Config intentionally scrolls as a document. This is a fixture layout, not proof of real Twitch storage. Lower controls, Live Config and the mobile matrix still require GPU review. The earlier `config@318x496.png` remains historical evidence, not a replacement for that matrix.
+The previous Configuration checkpoint’s single permitted SwiftShader fallback is `work/evidence/panel-window/PW13/config-pending@318x496.png`, inspected at native size. Its 41 visible words exclude decorative glyphs. The pending notice and Check Twitch again button are readable in the wood/parchment composition; targets meet 44 px and there is no horizontal overflow. Config intentionally scrolls as a document. This is a fixture layout, not proof of real Twitch storage. Lower controls, Live Config and the mobile matrix still require GPU review. The earlier `config@318x496.png` remains historical evidence, not a replacement for that matrix.
 
 The full batch used `--wait 30 --max 10` and returned exit 3 immediately because GPU Chrome was disconnected. It created no live queued job or leased services. Shared lease contention is not a PW11 blocker. The batch includes PW11's street/painter/privacy sequence, PW12 gift states, and Config, pending Config, bands and Live Config at both sizes:
 
@@ -51,8 +61,8 @@ These are static views, so no fps run or GPU performance claim is needed. Do not
 ## Remaining acceptance
 
 - The extension owner identity cannot be bootstrapped from the two specified credential values. Health names `TWITCH_EXTENSION_OWNER_ID`; the original two-value outcome is still unmet. A request for the actual registration owner is pending; no destination-channel identity was guessed.
-- Main/Herald must supply the real founding entry with Tier 1 consent. The exact grants patch remains unapplied outside this lane. Front-door must supply the live-only Passport entry before packaging can pass. See `PW13-NEEDS.md`.
+- Main/Herald must supply the real founding entry with Tier 1 consent. The exact grants patch remains unapplied outside this lane. Main/front-door must review and apply the exact live-only Passport handoff before the actual worktree packaging can pass. See `PW13-NEEDS.md`.
 - Full GPU stills, real Twitch mobile evidence and the existing production effects seams remain open. New credentials, preferences and products never fabricate effect readiness.
 - Hosted Test has not run and C04's real purchase bar remains open. `HOSTED-TEST.md` has 15 steps and ends with the first real test-mode gift; local receipts and a test-only atomic effect dispatch do not satisfy that purchase bar.
 
-Next remains PW13. The ordered mirror request is resolved; continue the remaining owner, packaging and capture requirements without treating this checkpoint as lane completion. See `PW13-CONTRACT.md` and `references/configuration-outbox.md` for the design and its source study.
+Next remains PW13 after the recorded external seams change. The ordered mirror request is resolved and the packaging fix is demonstrated in an isolated candidate; this checkpoint is not lane completion. See `PW13-CONTRACT.md` and `references/configuration-outbox.md` for the design and its source study.

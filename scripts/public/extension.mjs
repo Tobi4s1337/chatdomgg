@@ -89,11 +89,33 @@ for (const view of VIEWS) {
   }
   if (/\son[a-z]+\s*=/i.test(html.replace(/<script\b[\s\S]*?<\/script>/gi, ''))) problems.push(`${view}: an inline event handler attribute`);
   if (/http-equiv\s*=\s*["']content-security-policy/i.test(html)) problems.push(`${view}: a CSP meta tag (Twitch sets the CSP)`);
-  // First load: the page, its scripts, preloaded modules and stylesheets (fonts and images load as they are drawn).
-  const loaded = new Set([view]);
-  for (const match of html.matchAll(/(?:src|href)\s*=\s*"\.\/([^"]+)"/g)) loaded.add(match[1]);
+  // Conservatively include every local dependency, including fonts/textures declared in CSS and lazy modules.
+  // A direct HTML-link sum understates the mobile download and lets a missing nested asset pass the checker.
+  const loaded = new Set(), pending = [view];
   let bytes = 0;
-  for (const asset of loaded) { try { bytes += (await stat(join(dist, asset))).size; } catch { problems.push(`${view}: refers to missing ${asset}`); } }
+  while (pending.length) {
+    const asset = pending.pop();
+    if (loaded.has(asset)) continue;
+    loaded.add(asset);
+    try {
+      bytes += (await stat(join(dist, asset))).size;
+      const type = extname(asset);
+      if (!['.html', '.js', '.css', '.svg'].includes(type)) continue;
+      const source = await readFile(join(dist, asset), 'utf8');
+      const references = type === '.js'
+        ? [...source.matchAll(/\b(?:from\s*|import\s*\(\s*|import\s*)['"]([^'"]+)['"]/g)].map(match => match[1])
+        : type === '.css'
+          ? [...source.matchAll(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^'"\s)]+))\s*\)|@import\s*['"]([^'"]+)['"]/g)].map(match => match[1] ?? match[2] ?? match[3] ?? match[4])
+          : [...source.matchAll(/(?:src|href|xlink:href)\s*=\s*['"]([^'"]+)['"]/g)].map(match => match[1]);
+      for (const reference of references) {
+        if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(reference)) continue;
+        const url = new URL(reference, `https://extension.invalid/${asset}`);
+        const dependency = decodeURIComponent(url.pathname.slice(1));
+        if (!dependency || !resolve(dist, dependency).startsWith(`${dist}/`) || dependency.includes('\\')) throw new Error('Invalid local dependency');
+        pending.push(dependency);
+      }
+    } catch { problems.push(`${view}: refers to missing or invalid ${asset}`); }
+  }
   if (bytes > FIRST_LOAD_LIMIT) problems.push(`${view}: first load ${(bytes / 1024).toFixed(0)} KB is over 1 MB`);
   report += `${view.padEnd(17)} first load ${(bytes / 1024).toFixed(0).padStart(4)} KB (${loaded.size} files)\n`;
 }
