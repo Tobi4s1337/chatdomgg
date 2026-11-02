@@ -2,7 +2,7 @@ import type { Geography, GeoRealm, Settler, SettlerStore } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
 import { SHIELD_ASPECT } from '../heraldry/geometry';
 import { Camera, DISTANCE_SCALE, distanceFor, NO_INSETS, type Box, type Distance, type Insets, type Viewport } from '../map/camera';
-import { CollisionGrid, comparePriority, type Rect } from '../map/collide';
+import { CollisionGrid, comparePriority, MARK_PX, underLettering, type Rect } from '../map/collide';
 import type { Stamp } from '../map/paint';
 import { decorBand, levelFor, parentOf, pyramidFor, tileBox, tilesFor, type Pyramid, type TileKey } from '../map/pyramid';
 import { formatMoment, formatTime, TIER_NAMES } from '../ui/format';
@@ -30,7 +30,7 @@ export const LABEL_PX = [15, 13, 12, 11.5] as const;
 export const SHIELD_PX = [15, 13, 12, 11] as const;
 export const SHIELD_LIMIT = 300;
 /** Survey-mark diameters in CSS px by tier, as the overlay's mark textures draw them. */
-export const MARK_PX = [9, 7, 5, 3.6] as const;
+export { MARK_PX };
 export const REALM_LABEL_FROM = DISTANCE_SCALE.continent * 0.4;
 /** The world file carries capitals and cities; towns and villages arrive per region and are never marked on a still. */
 const HEAD_TIERS = 2;
@@ -419,9 +419,12 @@ export function layoutStill(input: LayoutInput): StillLayout {
     });
   }
   if (!realmsPlaced) placeRealms(geo, camera, view, measure, take, texts);
+  // Names knock out the survey marks under them (map/collide underLettering, as the moving map does).
+  const lettering = texts.map((text): Rect => ({ x: text.x, y: text.y, w: text.w, h: text.h }));
+  const legible = marks.filter(mark => !mark.mark || mark.settler === selected || !underLettering(mark.box.x + mark.box.w / 2, mark.box.y + mark.box.h / 2, mark.settler.tierRank, lettering));
   // Holdings in the margin are placed (so the screen's own give way to them as the map's do) but are not drawn here:
   // a button for one would sit off screen, reachable by Tab and a screen reader, and scroll the still to it.
-  return { marks: marks.filter(mark => onScreen(mark.box, view)), texts, shields, names, tiers, claims };
+  return { marks: legible.filter(mark => onScreen(mark.box, view)), texts, shields, names, tiers, claims };
 }
 
 type Take = (rect: Rect) => boolean;

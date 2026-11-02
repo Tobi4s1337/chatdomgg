@@ -190,3 +190,40 @@ Verification:
 This is not a Safari or physical-device run. Tobias's phone pass should
 include: first action a mark selection (silent is expected), then any press
 (it must sound).
+
+## Names knock out the survey marks under them (follow-up)
+
+The default still at 1440×900 showed survey marks sitting inside the
+continent names: clusters of capital marks ran through "STREAMS IN RUSSIAN"
+and single dots sat between the spaced letters of "ENGLISH". The still drew
+its marks as buttons above the canvas lettering and never tested them against
+it. The moving map drew its lettering above the marks, but its paper halo only
+covers the stroke round each letter, so dots still showed between the spaced
+capitals.
+
+- **One rule, shared.** `underLettering()` and `LETTER_CLEARANCE` (3 px) live
+  in the Pixi-free `map/collide.ts`, next to `MARK_PX`, which both renderers
+  now import. The overlay's own copy of the mark sizes is gone. A survey mark
+  whose dot, plus that clearance, touches a language, archipelago or realm
+  name is lifted out, as a cartographer lifts a dot out of the lettering.
+- **Only small marks give way.** Stamps already claim space before or after
+  names in the collision grid and are unchanged. The selection and any forced
+  (found) holding are never lifted: selecting a lifted holding draws it first,
+  at its place, with its stamp and name. Lifted holdings stay findable by
+  search and come back as the camera moves in and the names move away.
+- **Decor under names stays.** Mountains and towers are baked into the land
+  tiles, and the paper halo is enough there, as on a printed map.
+
+Verification:
+- New compose test: a dense patch of cities is placed where the first name is
+  lettered. No drawn survey mark sits under lettering at 1440×900 or 390×844,
+  at least one city is really lifted, and selecting it draws it first. The
+  test fails with the filter removed.
+- New `underLettering` tests: inside, within the clearance by the mark's own
+  size, clear of the name, and nothing lettered.
+- 211 still and map tests (parity and overlay included), whole-repo `tsc`,
+  ESLint on the touched files, and the web and Surveyor builds pass.
+- Stills `work/evidence/atlas-map/am10-lettering-1440.png` and
+  `am10-lettering-390.png` were taken on the real retained survey through the
+  owned service and preview, and viewed. Every continent name reads clean,
+  with 135 / 70 marks drawn.

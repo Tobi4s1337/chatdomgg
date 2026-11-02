@@ -4,7 +4,7 @@ import { columns, HEAD_ROWS, makeChunk, makeNames, makeWorld, type Row } from '.
 import { geographyOf, SettlerStore, type Settler } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
 import { Camera, DISTANCE_SCALE, type Box } from '../map/camera';
-import { overlaps } from '../map/collide';
+import { overlaps, underLettering } from '../map/collide';
 import type { Stamp } from '../map/paint';
 import { levelFor, tileBox, tileKey } from '../map/pyramid';
 import { formatMoment } from '../ui/format';
@@ -171,6 +171,39 @@ describe('layoutStill', () => {
       // Crowded capitals fall back to survey marks rather than piling up.
       expect(result.marks.some((mark) => mark.mark)).toBe(true);
     }
+  });
+
+  it('lifts survey marks out of the lettering of a language or realm, but never the selection', () => {
+    // A dense patch of cities right where the first name is lettered (names go down before cities): most become marks.
+    const plainEnv = setup();
+    const v = stillView(plainEnv.geo.bounds, LAPTOP);
+    const first = layout(plainEnv).texts[0]!;
+    const at = v.camera.screenToWorld(first.x + first.w / 2, first.y + first.h / 2, LAPTOP);
+    const spanX = first.w / v.camera.scale;
+    const spanY = first.h / v.camera.scale;
+    const dense: Row[] = Array.from({ length: 160 }, (_, i) => ({
+      id: String(2_000_000 + i), login: `dense${i}`, name: `Dense ${i}`, tier: 1,
+      x: at.x - spanX * 0.6 + (i % 16) * spanX * 0.08, y: at.y - spanY * 0.6 + Math.floor(i / 16) * spanY * 0.12,
+      average: 40_000 - i, game: 0, region: 0, realm: 1,
+    }));
+    const world = makeWorld();
+    world.head = columns([...HEAD_ROWS, ...dense]);
+    const env = setup(world);
+    const lettered = (result: StillLayout) => result.texts.map((t) => ({ x: t.x, y: t.y, w: t.w, h: t.h }));
+    let knocked: Settler | null = null;
+    for (const view of [LAPTOP, PHONE]) {
+      const result = layout(env, view);
+      expect(result.texts.length).toBeGreaterThan(0);
+      for (const mark of result.marks.filter((m) => m.mark)) {
+        expect(underLettering(mark.box.x + mark.box.w / 2, mark.box.y + mark.box.h / 2, mark.settler.tierRank, lettered(result))).toBe(false);
+      }
+      const shown = new Set(result.marks.map((m) => m.settler));
+      knocked ??= dense.map((row) => env.store.byId.get(row.id)!).find((settler) => !shown.has(settler)) ?? null;
+    }
+    // Something really was lifted, and selecting it brings it back first, wherever it stands.
+    expect(knocked).not.toBeNull();
+    const selected = layout(env, LAPTOP, knocked);
+    expect(selected.marks[0]!.settler).toBe(knocked);
   });
 
   it('draws at most 300 shields; names go on without them', () => {

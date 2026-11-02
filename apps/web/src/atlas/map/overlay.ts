@@ -5,7 +5,7 @@ import type { Dab, LivePaint } from '../live/paint';
 import { pencilFlagImage, standardImage, type StandardImage } from './live-marks';
 import type { PreviewWorld } from '../data/preview';
 import { DISTANCE_SCALE, type Camera, type Viewport } from './camera';
-import { CollisionGrid, comparePriority, type Rect } from './collide';
+import { CollisionGrid, comparePriority, MARK_PX, underLettering, type Rect } from './collide';
 import type { Stamp } from './paint';
 import { HoldingLabels, onScreen, Placer, SHIELD_PAD, type Placed } from './placement';
 import { decorBand } from './pyramid';
@@ -141,7 +141,7 @@ interface StampTextures { ink: Texture; fill: Texture | null; aspect: number; an
 
 /** Survey marks: the small ink symbols old maps use for settlements too small to draw. */
 function markTexture(tierRank: number, pixelRatio: number): Texture {
-  const css = [9, 7, 5, 3.6][tierRank]!;
+  const css = MARK_PX[tierRank]!;
   const size = Math.ceil((css + 2) * pixelRatio);
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
@@ -210,6 +210,8 @@ export class Overlay {
   private readonly scratch: Settler[] = [];
   private readonly realmOrder: GeoRealm[];
   private readonly placer = new Placer();
+  /** Boxes of the names lettered this update (languages, archipelagos, realms): survey marks give way under them. */
+  private lettering: Rect[] = [];
   private readonly names = new HoldingLabels(this.placer);
   private frame = 0;
   /** Show newly placed things at once instead of fading them in (prefers-reduced-motion); the view keeps it current. */
@@ -350,6 +352,7 @@ export class Overlay {
     const raising = scale >= STANDARD_FROM;
     for (const entry of this.textCache.values()) entry.text.visible = false;
     const drawn: Drawn[] = [];
+    this.lettering = [];
     const radius = this.world.tiers.holdingRadius;
     const radii = [radius.capital, radius.city, radius.town, radius.village];
     const kingdom = scale >= DISTANCE_SCALE.kingdom;
@@ -448,6 +451,8 @@ export class Overlay {
         }
       }
       if (!marked) continue;
+      // Names knock out the survey marks under them; a forced (selected or found) holding always shows.
+      if (!isForced && underLettering(s.x, s.y, settler.tierRank, this.lettering)) continue;
       stats.marks++;
       placeMark(settler, s.x, s.y, 1);
       drawn.push({ settler, x: s.x, y: s.y, r: Math.max(5, r * scale) });
@@ -524,6 +529,7 @@ export class Overlay {
    */
   private placeArea(grid: CollisionGrid, key: string, candidates: readonly Rect[], ...texts: (Text | null)[]): Placed | null {
     const placed = this.placer.choose(grid, key, candidates);
+    if (placed) this.lettering.push(placed.rect);
     for (const text of texts) {
       if (!text) continue;
       if (placed) this.stats.labels++;
