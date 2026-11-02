@@ -11,9 +11,12 @@ import { chromium } from '@playwright/test';
 import { Client } from '@colyseus/sdk';
 import { createServer, preview } from 'vite';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
+import { listenLocalRealm } from './local-listener.mjs';
+import { captureSize } from './capture-size.mjs';
 
 const repo = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${repo}/work/evidence/gather`;
+const shotSizes = [captureSize()];
 const host = process.env.GATHER_HOST ?? '127.0.0.1';
 assert.ok(['127.0.0.1', '127.0.0.10'].includes(host), 'Only the two explicit local gather hosts are allowed');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -82,6 +85,8 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
 try {
   release = await acquireCaptureLock({ signal: cancellation.signal });
   lockAcquiredAt = Date.now();
+  report.lockAcquired = new Date(lockAcquiredAt).toISOString();
+  console.log(`[gather] capture lease acquired ${report.lockAcquired}`);
   lockDeadline = setTimeout(() => {
     cancellation.abort(new Error('Capture exceeded its four-and-a-half-minute budget.'));
     void browser?.close().catch(() => {});
@@ -105,7 +110,7 @@ try {
   const created = createRealmServer(services); realm = created.server;
   created.transport.app.post('/reference/session', response => response.writeHeader('Access-Control-Allow-Origin', '*')
     .writeHeader('Cache-Control', 'no-store').writeHeader('Content-Type', 'application/json').end(JSON.stringify(base.issue())));
-  await realm.listen(realmPort, host);
+  await listenLocalRealm(realm, created.transport, realmPort, host);
   const endpoint = `http://${host}:${realmPort}`;
   web = await preview({ root: `${repo}/apps/web`, configFile: `${repo}/apps/web/vite.config.ts`, logLevel: 'error',
     ...(process.env.GATHER_WEB_DIST ? { build: { outDir: process.env.GATHER_WEB_DIST } } : {}),
@@ -156,17 +161,16 @@ try {
   const setupError = await page.evaluate(() => window.__chatdomTavernError);
   assert.equal(setupError, undefined, `browser admission failed: ${setupError}`);
   try {
-    // A real visitor can sit as soon as the chair prompt is actionable; the test walker need not reach a particular grid point.
-    await page.waitForFunction(({ chair, table }) => window.__chatdomTavernLive?.interaction?.focus === chair
-      && window.__chatdomTavernLive?.interaction?.action === 'tavern' || window.__chatdomTavernLive?.seated === table
-      || window.__chatdomTavernError, { chair: `tavern:${tableId}:seat:${browserChair}`, table: tableId }, { timeout: 90_000 });
-    if (await page.evaluate(table => window.__chatdomTavernLive?.seated !== table, tableId)) await page.keyboard.press('KeyE');
-    await page.waitForFunction(table => window.__chatdomTavernLive?.seated === table || window.__chatdomTavernError, tableId, { timeout: 15_000 });
+    // The loopback driver finishes its real approach and sends the normal chair request. Do not race
+    // that acceptance with E: a just-accepted seat would interpret the delayed key as standing up.
+    await page.waitForFunction(table => window.__chatdomTavernLive?.seated === table
+      || window.__chatdomTavernError, tableId, { timeout: 90_000 });
   }
   catch (error) {
-    console.error('[gather] seat diagnostic', JSON.stringify(await page.evaluate(() => ({ live: window.__chatdomTavernLive, error: window.__chatdomTavernError }))));
+    report.seatFailure = await page.evaluate(() => ({ live: window.__chatdomTavernLive, error: window.__chatdomTavernError }));
+    console.error('[gather] seat diagnostic', JSON.stringify(report.seatFailure));
     await mkdir(output, { recursive: true });
-    for (const [width, height] of [[1440, 900], [390, 844]]) {
+    for (const [width, height] of shotSizes) {
       await page.setViewportSize({ width, height }); await sleep(800);
       const path = `${output}/${artifactPrefix}-walk@${width}x${height}.png`;
       await page.screenshot({ path }); console.error(`[gather] ${path}`);
@@ -305,7 +309,7 @@ try {
     moves++;
     if (!captured && moves >= 2 && game().phase === 'playing') {
       await mkdir(output, { recursive: true });
-      for (const [width, height] of [[1440, 900], [390, 844]]) {
+      for (const [width, height] of shotSizes) {
         await page.setViewportSize({ width, height });
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const path = `${output}/${artifactPrefix}-live@${width}x${height}.png`;
@@ -345,6 +349,7 @@ try {
   if (locked && kind === 'hearth-dice') report.mouseActions = { rolls: mouseRolls, holds: mouseHolds };
   report.result = structuredClone(game());
 } catch (error) {
+  process.exitCode = 1;
   report.failure = error instanceof Error ? error.stack : String(error);
   throw error;
 } finally {

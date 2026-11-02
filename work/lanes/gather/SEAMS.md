@@ -75,6 +75,11 @@ audio owner to the destination; agree the additive portal
 interaction before installing the door anchor. Until then `/-/tavern` is the same destination scene, with no fake
 transfer success. No tavern chairs are installed in the kingdom registry.
 
+**needs: play/render owner** review common citizen cost with approved looks on real GPU. The populated phone
+reference view measures 11 room draws plus 62 common citizen draws, 73 total, with eight connected walkers and
+three live games. Gather keeps the common renderer and actual bodies. This is no whole-scene draw or GPU claim;
+overlapping/clipped destination name labels remain gather visual debt. See `work/evidence/gather/ga10-room-budget.md`.
+
 **needs: integrator/session owner** provide a supported test entry/session issuer for the lane's isolated
 database-backed founded kingdom. The existing `/reference/session` route is memory-only and admits synthetic
 reference visitors; it cannot prove tobi4s_'s identity or durable session continuity. No credential values or live
@@ -136,6 +141,12 @@ export const GATHER_CHAT_ROUTE = '/internal/realm/gather/chat';
   authenticated test ingress with the same envelope.
 
 ## 4. Tavern room and realm hooks (gather writes; integrator reviews)
+
+**needs: integrator** the installed `uWebSocketsTransport.listen` drops `hostname` and reports readiness even
+when its native callback receives no socket. The core transport should forward an explicit hostname through
+`app.listen(hostname, port, callback)` and reject `!socket` before readiness, preserving native listener ownership.
+Gather's local multiplayer scripts temporarily forward only their own app setup and validate that bind; no
+production transport or dependency file is changed here. This is a host-isolation issue, not a game/session failure.
 
 - `apps/realm/src/server.ts`: one additive import and one registration,
   `tavern: defineRoom(createTavernRoom(services)).filterBy(['kingdomId'])`. There is no separate `gather` match

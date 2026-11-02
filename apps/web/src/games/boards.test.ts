@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { GatherFrame, PongView } from '@chatdom/shared';
 import { createTavernKit } from '../../../../packages/content/src/tavern';
-import { createTurnBoards } from './boards';
+import { createPongHighlights, createTurnBoards } from './boards';
 
 const pong = (paddles: [number, number]): PongView => ({ match: 'match', phase: 'rally', tick: 1, at: 1,
   serveAt: 0, ball: { x: .2, y: -.3, vx: 1, vy: 1 }, paddles, acknowledged: [0, 0], score: [0, 0],
@@ -65,5 +65,40 @@ describe('batched tavern boards', () => {
     close(instance(boxes, 2).position, [x, y + .046, z + .413]);
     expect(boxes.count).toBe(3);
     board.dispose();
+  });
+});
+
+describe('batched Pong highlights', () => {
+  it('shows only an authoritative rally ball alongside the unchanged marks and disposes resources', () => {
+    const root = new THREE.Group(), table = createTavernKit('hearth').tables.find(t => t.id === 'middle')!;
+    const highlights = createPongHighlights(root, [table]);
+    const mesh = root.getObjectByName('tavern:pong-highlights') as THREE.InstancedMesh;
+    const geometryDispose = vi.spyOn(mesh.geometry, 'dispose');
+    const materialDispose = vi.spyOn(mesh.material as THREE.Material, 'dispose');
+    expect(mesh.count).toBe(11);
+    const firstMark = instance(mesh, 0), [x, y, z] = table.centre;
+    close(firstMark.position, [x - .62, y + .019, z]);
+    close(firstMark.scale, [.012, .005, .9]);
+    close(firstMark.colour.toArray(), new THREE.Color('#bd955e').toArray());
+    highlights.frame(frame(pong([0, 0])));
+    expect(mesh.count).toBe(12);
+    const ball = instance(mesh, 11);
+    close(ball.position, [x + .2 * .62, y + .044, z + .3 * .28]);
+    close(ball.scale, [.0558, .0558, .0252]);
+    close(ball.colour.toArray(), new THREE.Color('#ffe7b8').toArray());
+    expect(mesh.boundingSphere!.radius).toBeGreaterThan(0);
+    highlights.frame({ at: 2, tables: [] });
+    expect(mesh.count).toBe(11);
+    highlights.dispose();
+    expect(root.children).toHaveLength(0);
+    expect(geometryDispose).toHaveBeenCalledOnce();
+    expect(materialDispose).toHaveBeenCalledOnce();
+  });
+  it('handles a room with no Pong tables', () => {
+    const root = new THREE.Group(), highlights = createPongHighlights(root, []);
+    const mesh = root.getObjectByName('tavern:pong-highlights') as THREE.InstancedMesh;
+    expect(mesh.count).toBe(0);
+    expect(mesh.boundingSphere!.isEmpty()).toBe(true);
+    highlights.dispose();
   });
 });

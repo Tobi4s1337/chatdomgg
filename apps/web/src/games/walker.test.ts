@@ -4,7 +4,7 @@ import { stepPlayer } from '@chatdom/world/movement';
 import { createTavernInterior, TAVERN_ENTRY } from '../../../realm/src/games/interior';
 import { seatApproachDriver } from './walker';
 
-it.each([1, 4, 8])('reaches every real chair with one test input sampled per %i fixed movement steps', stepsPerFrame => {
+it.each([1, 4, 8, 12, 15, 30])('reaches every real chair with one test input sampled per %i fixed movement steps', stepsPerFrame => {
   const { world, registry } = createTavernInterior();
   for (const target of registry.targets()) {
     const [x, y, z] = TAVERN_ENTRY.feet;

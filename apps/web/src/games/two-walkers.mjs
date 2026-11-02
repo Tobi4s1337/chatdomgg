@@ -11,12 +11,16 @@ import { chromium } from '@playwright/test';
 import { Client } from '@colyseus/sdk';
 import { createServer, preview } from 'vite';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
+import { listenLocalRealm } from './local-listener.mjs';
+import { captureSize } from './capture-size.mjs';
 
 const repo = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${repo}/work/evidence/gather`;
+const shotSizes = [captureSize()];
 const host = process.env.GATHER_HOST ?? '127.0.0.1';
 assert.ok(['127.0.0.1', '127.0.0.10'].includes(host), 'Only the two explicit local gather hosts are allowed');
 const lockedInput = process.env.GATHER_INPUT === 'locked';
+assert.notEqual(process.env.GATHER_ROOM_STUDIES, '1', 'Use capture.mjs in a separate lease for each room study.');
 const evidencePrefix = process.env.GATHER_EVIDENCE;
 assert.ok(evidencePrefix === undefined || /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(evidencePrefix), 'GATHER_EVIDENCE must be a lowercase, hyphen-separated filename prefix');
 const imagePrefix = `${evidencePrefix ?? 'ga10-pong'}-${lockedInput ? 'input' : 'live'}`;
@@ -76,6 +80,8 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
 try {
   release = await acquireCaptureLock({ signal: cancellation.signal });
   lockAcquiredAt = Date.now();
+  report.lockAcquired = new Date(lockAcquiredAt).toISOString();
+  console.log(`[gather] capture lease acquired ${report.lockAcquired}`);
   lockDeadline = setTimeout(() => {
     cancellation.abort(new Error('Capture exceeded its four-and-a-half-minute budget.'));
     void browser?.close().catch(() => {});
@@ -98,7 +104,7 @@ try {
   const created = createRealmServer(services); realm = created.server;
   created.transport.app.post('/reference/session', response => response.writeHeader('Access-Control-Allow-Origin', '*')
     .writeHeader('Cache-Control', 'no-store').writeHeader('Content-Type', 'application/json').end(JSON.stringify(base.issue())));
-  await realm.listen(realmPort, host);
+  await listenLocalRealm(realm, created.transport, realmPort, host);
   const endpoint = `http://${host}:${realmPort}`;
   web = await preview({ root: `${repo}/apps/web`, configFile: `${repo}/apps/web/vite.config.ts`, logLevel: 'error',
     ...(process.env.GATHER_WEB_DIST ? { build: { outDir: process.env.GATHER_WEB_DIST } } : {}),
@@ -149,17 +155,15 @@ try {
   const setupError = await page.evaluate(() => window.__chatdomTavernError);
   assert.equal(setupError, undefined, `browser admission failed: ${setupError}`);
   try {
-    // A real visitor can sit as soon as the chair prompt is actionable; the test walker need not reach a particular grid point.
-    await page.waitForFunction(() => window.__chatdomTavernLive?.interaction?.focus === 'tavern:middle:seat:2'
-      && window.__chatdomTavernLive?.interaction?.action === 'tavern' || window.__chatdomTavernLive?.seated === 'middle'
-      || window.__chatdomTavernError, null, { timeout: 50_000 });
-    if (await page.evaluate(() => window.__chatdomTavernLive?.seated !== 'middle')) await page.keyboard.press('KeyE');
-    await page.waitForFunction(() => window.__chatdomTavernLive?.seated === 'middle' || window.__chatdomTavernError, null, { timeout: 15_000 });
+    // Wait for the loopback walker's ordinary chair request to be accepted; an early prompt is not acceptance.
+    await page.waitForFunction(() => window.__chatdomTavernLive?.seated === 'middle'
+      || window.__chatdomTavernError, null, { timeout: 90_000 });
   }
   catch (error) {
-    console.error('[gather] seat diagnostic', JSON.stringify(await page.evaluate(() => ({ live: window.__chatdomTavernLive, error: window.__chatdomTavernError }))));
+    report.seatFailure = await page.evaluate(() => ({ live: window.__chatdomTavernLive, error: window.__chatdomTavernError }));
+    console.error('[gather] seat diagnostic', JSON.stringify(report.seatFailure));
     await mkdir(output, { recursive: true });
-    for (const [width, height] of lockedInput ? [] : [[1440, 900], [390, 844]]) {
+    for (const [width, height] of lockedInput ? [] : shotSizes) {
       await page.setViewportSize({ width, height }); await sleep(800);
       const path = `${output}/${evidencePrefix ? `${evidencePrefix}-walk-live` : 'ga10-walk-live'}@${width}x${height}.png`;
       await page.screenshot({ path }); console.error(`[gather] ${path}`);
@@ -205,7 +209,7 @@ try {
   } catch (error) {
     console.error('[gather] paddle diagnostic', JSON.stringify({ game: game(), live: await page.evaluate(() => window.__chatdomTavernLive) }));
     await mkdir(output, { recursive: true });
-    for (const [width, height] of lockedInput ? [] : [[1440, 900], [390, 844]]) {
+    for (const [width, height] of lockedInput ? [] : shotSizes) {
       await page.setViewportSize({ width, height }); await sleep(800);
       const path = `${output}/${imagePrefix}@${width}x${height}.png`;
       await page.screenshot({ path }); report.screenshots.push({ path, authorityPhase: game()?.phase, score: game()?.score }); console.log(`[gather] ${path} (${game()?.phase})`);
@@ -228,7 +232,7 @@ try {
   }
   await until(() => game()?.phase === 'rally', 'live rally');
   await mkdir(output, { recursive: true });
-  for (const [width, height] of [[1440, 900], [390, 844]]) {
+  for (const [width, height] of shotSizes) {
     await page.setViewportSize({ width, height });
     await sleep(800);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -266,30 +270,7 @@ try {
     await page.waitForFunction(() => window.__chatdomTavernLive?.seated !== 'middle', null, { timeout: 10_000 });
   }
   await checkSound(page, report);
-  // Optional short room studies reuse this owned browser/preview and the same bounded capture lease.
-  // Freeze the wire counters first so still photography cannot dilute the connected-game measurement.
   measurement.final = { at: Date.now(), sockets: measurement.sockets.map(counts => ({ ...counts })) };
-  if (process.env.GATHER_ROOM_STUDIES === '1') {
-    report.roomStudies = [];
-    for (const [view, width, height] of [['room', 1440, 900], ['room', 390, 844], ['bar', 1440, 900], ['table', 1440, 900]]) {
-      await page.setViewportSize({ width, height });
-      await page.goto(`http://${host}:${webPort}/-/tavern?view=${view}&still=1&hour=19`, { waitUntil: 'domcontentloaded' });
-      await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
-      if (view === 'room' && width === 1440) {
-        await page.getByRole('button', { name: 'Enable sound' }).click();
-        await page.waitForFunction(() => document.querySelector('.gather-tavern-sound')?.getAttribute('aria-pressed') === 'true');
-        await page.getByRole('button', { name: 'Mute sound' }).click();
-        await page.waitForFunction(() => document.querySelector('.gather-tavern-sound')?.getAttribute('aria-pressed') === 'false');
-        report.checks.push('The first Sound button gesture enabled the local common host; the second muted it.');
-      }
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth || document.documentElement.scrollHeight > window.innerHeight), false);
-      const path = `${output}/${evidencePrefix ?? 'ga10-pong'}-${view}-study@${width}x${height}.png`;
-      await page.screenshot({ path });
-      report.roomStudies.push({ view, width, height, path, scene: await page.evaluate(() => window.__chatdomTavern) });
-      console.log(`[gather] ${path}`);
-    }
-    assert.equal(errors.length, 0, `study browser errors: ${errors.join('; ')}`);
-  }
 } catch (error) {
   report.failure = error instanceof Error ? error.message : String(error);
   report.failureFrame = structuredClone(player?.state.tables ?? null);

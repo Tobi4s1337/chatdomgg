@@ -60,8 +60,11 @@ does not show an invented match. The working room/seat transport is tested separ
 
 GA10 remains open. Still required: play's generic portal transfer and safe return, approved exterior door anchors,
 full database-authenticated matches and portal evidence, durable result/tally integration, remaining browser failure-path and database restart evidence,
-headphone mix review, populated-room draw budget and real-GPU acceptance with eight walkers. The latest empty
-studies use 10 desktop / 11 phone draws; simultaneous live miniatures can add draws. See the lane PRD and `SEAMS.md`.
+headphone mix review and real-GPU acceptance with eight walkers. The later populated phone check shares Pong
+marks and ball in one batch: eight reference clients and three simultaneous games produce 11 room draws plus
+62 common citizen draws, 73 total. This establishes the room contribution only. Name overlap/clipping needs
+polish. The browser's west-chair-2 approach is blocked after three failures; the SDK obtains that same chair.
+See `work/evidence/gather/ga10-room-budget.md`, the lane PRD and `SEAMS.md` for evidence and limits.
 
 `work/evidence/gather/ga10-input-recovery.md` records the locked controls, actual cut/reconnect and page-refresh
 proof, the packet-order regressions, and their limits. The controlled same-person replacement experiment is
@@ -81,6 +84,7 @@ Run under `nice -n 10`:
 pnpm exec tsc -p work/lanes/gather/tsconfig.json
 pnpm exec eslint apps/realm/src/games apps/realm/src/server.ts apps/web/src/tavern apps/web/src/games packages/content/src/tavern packages/shared/src/games.ts
 pnpm exec vitest run apps/realm/src/games apps/web/src/games apps/web/src/tavern packages/content/src/tavern
+node --test apps/web/src/games/local-listener.test.mjs
 pnpm --filter @chatdom/realm build
 pnpm --filter @chatdom/web build
 node apps/realm/src/games/bench.mjs
@@ -111,7 +115,16 @@ Input and recovery evidence is recorded separately from the earlier native-contr
 `GATHER_HOST=127.0.0.10` selects the second explicitly permitted loopback host when other lanes occupy `.1`;
 it still probes only 5170–5189, excluding reserved 5187, and never touches their services. The local test-entry
 route permits only the exact configured loopback names/addresses, never a remote issuer or production origin.
-`GATHER_ROOM_STUDIES=1` appends four empty-room studies to a successful Pong proof within its capture lease.
+Each script takes one still per capture lease. `GATHER_VIEWPORT=desktop|phone` selects the standard size;
+run the other size separately with a distinct `GATHER_EVIDENCE` prefix. The room-study script also accepts
+`GATHER_VIEW=room|bar|table`. The old appended `GATHER_ROOM_STUDIES=1` series is refused; use separate calls.
+The multiplayer scripts share `games/local-listener.mjs`: the installed transport drops its hostname argument,
+so the operator forwards only its own native listen setup through the explicit host overload and checks the bind.
+This keeps the probed address and actual listener aligned while retaining the transport's own shutdown resource.
+`GATHER_WEB_DIST=/absolute/build GATHER_HOST=127.0.0.10 node apps/web/src/games/populated-room.mjs` checks eight
+connected reference clients, three simultaneous live games and actual room/citizen draw contributions. Its
+default is one phone still; use `GATHER_VIEWPORT=desktop` in a separate lease for the other size. It still uses
+memory-only test sessions and does not establish identity, portal or GPU acceptance.
 The multiplayer harnesses also inspect accepted sound cues and exercise the actual mute/enable control after
 standing. `nice -n 10 node apps/web/src/tavern/sound-study/run.mjs` renders the original materials through the
 common mixer into a 13-second WAV with numeric silence/resume checks; it does not claim headphone listening.

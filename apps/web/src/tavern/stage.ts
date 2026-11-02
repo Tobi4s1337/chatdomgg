@@ -21,6 +21,16 @@ export function createTavernStage(host: HTMLElement, options: { framing: TavernF
   const frames = new Set<(dt: number, now: number) => void>(), resizes = new Set<(width: number, height: number) => void>();
   let feet: (() => Vec3 | null) | undefined;
   let framing = options.framing, width = 1, height = 1, frame = 0, previous = 0, disposed = false;
+  let roomDraws = 0;
+  // Count submitted room draws, including zero-instance suppression and camera culling, separately
+  // from the shared citizen renderer. These callbacks observe renderer counters; they add no render pass.
+  const observeRoomDraws = (group: THREE.Object3D) => group.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return;
+    const before = object.onBeforeRender, after = object.onAfterRender;
+    let calls = 0;
+    object.onBeforeRender = function (...args) { before.apply(this, args); calls = renderer.info.render.calls; };
+    object.onAfterRender = function (...args) { roomDraws += renderer.info.render.calls - calls; after.apply(this, args); };
+  });
   function placeCamera() {
     const portrait = width < height;
     camera.aspect = width / height;
@@ -46,10 +56,10 @@ export function createTavernStage(host: HTMLElement, options: { framing: TavernF
     for (const listener of frames) listener(dt, at);
     tavern.update(options.still ? .1 : dt, feet ? feet() : [7, .125, 5], camera, options.hour);
     fire.update(time, { strength: 1, wind: .02 });
-    renderer.render(scene, camera);
+    roomDraws = 0; renderer.render(scene, camera);
     (window as Window & { __chatdomTavern?: unknown }).__chatdomTavern = {
       draws: renderer.info.render.calls, triangles: renderer.info.render.triangles, dynamicLights: 1,
-      bakedWarmSources: 4,
+      roomDraws, citizenDraws: renderer.info.render.calls - roomDraws, bakedWarmSources: 4,
     };
     frame = requestAnimationFrame(draw);
   }
@@ -61,6 +71,7 @@ export function createTavernStage(host: HTMLElement, options: { framing: TavernF
   const observer = new ResizeObserver(resize); observer.observe(host); resize();
   const ready = tavern.ready.then(() => {
     if (disposed) return;
+    observeRoomDraws(scene.getObjectByName('gather:tavern')!); observeRoomDraws(fire.group);
     // Settle the cutaway before marking the first meaningful frame ready.
     for (let i = 0; i < 12; i++) tavern.update(.1, [7, .125, 5], camera, options.hour);
     draw(0);

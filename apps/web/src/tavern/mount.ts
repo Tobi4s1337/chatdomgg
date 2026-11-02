@@ -5,7 +5,7 @@ import { rasterizeBlueprint, VoxelWorkerPool } from '@chatdom/voxel';
 import type { GatherFrame, Vec3 } from '@chatdom/shared';
 import { createTavernKit, type TavernKit } from '../../../../packages/content/src/tavern';
 import { tavernInteriorEnvironment, tavernLight, tavernLightSources } from './light';
-import { createTurnBoards, tableGame } from '../games/boards';
+import { createPongHighlights, createTurnBoards } from '../games/boards';
 
 export interface TavernMount {
   readonly kit: TavernKit;
@@ -48,36 +48,11 @@ export function mountTavern(scene: THREE.Scene, options: { style?: 'hearth' | 't
     mesh.name = `tavern:${key}`; root.add(mesh); layers.set(key, { mesh, material });
   })).then(() => undefined);
   // Live miniatures use the same public coordinates as the seated board. Empty table: paddles, no invented ball.
-  const ballMaterial = new THREE.MeshBasicMaterial({ color: '#ffe7b8' });
-  const ballGeometry = new THREE.BoxGeometry(.0558, .0558, .0252);
-  const pongTables = kit.tables.filter(table => tableGame(table.id) === 'pong');
   const turnBoards = createTurnBoards(root, kit.tables);
-  const balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, pongTables.length);
-  const markGeometry = new THREE.BoxGeometry(1, 1, 1), markMaterial = new THREE.MeshBasicMaterial({ color: '#bd955e' });
-  const marks = new THREE.InstancedMesh(markGeometry, markMaterial, pongTables.length * 11);
-  root.add(balls, marks); const matrix = new THREE.Matrix4();
-  let mark = 0;
-  for (const table of pongTables) {
-    const line = (x: number, z: number, w: number, d: number) => {
-      matrix.makeScale(w, .005, d); matrix.setPosition(table.centre[0] + x, table.centre[1] + .019, table.centre[2] + z);
-      marks.setMatrixAt(mark++, matrix);
-    };
-    line(-.62, 0, .012, .9); line(.62, 0, .012, .9); line(0, -.45, 1.25, .012); line(0, .45, 1.25, .012);
-    for (let x = -3; x <= 3; x++) line(x * .17, 0, .07, .012);
-  }
-  marks.instanceMatrix.needsUpdate = true; marks.computeBoundingSphere();
+  const highlights = createPongHighlights(root, kit.tables);
   const projectGames = (frame: GatherFrame) => {
     turnBoards.frame(frame, performance.now());
-    let ballCount = 0;
-    pongTables.forEach(table => {
-      const pong = frame.tables.find(t => t.table === table.id)?.pong;
-      if (pong && pong.phase === 'rally') {
-        matrix.makeTranslation(table.centre[0] + pong.ball.x * .62, table.centre[1] + .044, table.centre[2] - pong.ball.y * .28);
-        balls.setMatrixAt(ballCount++, matrix);
-      }
-    });
-    balls.count = ballCount; balls.instanceMatrix.needsUpdate = true;
-    balls.computeBoundingSphere();
+    highlights.frame(frame);
   };
   projectGames({ at: 0, tables: [] });
   return {
@@ -105,7 +80,7 @@ export function mountTavern(scene: THREE.Scene, options: { style?: 'hearth' | 't
     dispose() {
       disposed = true; pool.dispose(); turnBoards.dispose(); scene.remove(root);
       for (const layer of layers.values()) { layer.mesh.geometry.dispose(); layer.material.dispose(); }
-      layers.clear(); balls.dispose(); marks.dispose(); ballMaterial.dispose(); markMaterial.dispose(); markGeometry.dispose(); ballGeometry.dispose();
+      layers.clear(); highlights.dispose();
     },
   };
 }

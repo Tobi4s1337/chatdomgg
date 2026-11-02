@@ -14,6 +14,40 @@ const palette = {
   felt: colour(MAT.fabricMutedGreen), cream: colour(MAT.cream), red: colour(MAT.fabricRed),
   pongFelt: new THREE.Color('#29473f'), paddle: new THREE.Color('#e6bd7c'),
 };
+/** Basic-material markings and rally balls share one draw while retaining their individual colours. */
+export function createPongHighlights(root: THREE.Group, tables: readonly TavernTable[]): {
+  frame(frame: GatherFrame): void; dispose(): void;
+} {
+  const pongTables = tables.filter(table => tableGame(table.id) === 'pong');
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const mesh = new THREE.InstancedMesh(geometry, material, pongTables.length * 12);
+  mesh.name = 'tavern:pong-highlights';
+  root.add(mesh);
+  const matrix = new THREE.Matrix4();
+  const markColour = new THREE.Color('#bd955e'), ballColour = new THREE.Color('#ffe7b8');
+  function update(frame: GatherFrame) {
+    let count = 0;
+    function add(x: number, y: number, z: number, w: number, h: number, d: number, color: THREE.Color) {
+      matrix.makeScale(w, h, d); matrix.setPosition(x, y, z);
+      mesh.setMatrixAt(count, matrix); mesh.setColorAt(count++, color);
+    }
+    for (const table of pongTables) {
+      const [x, y, z] = table.centre;
+      const line = (dx: number, dz: number, w: number, d: number) => add(x + dx, y + .019, z + dz, w, .005, d, markColour);
+      line(-.62, 0, .012, .9); line(.62, 0, .012, .9); line(0, -.45, 1.25, .012); line(0, .45, 1.25, .012);
+      for (let n = -3; n <= 3; n++) line(n * .17, 0, .07, .012);
+      const pong = frame.tables.find(t => t.table === table.id)?.pong;
+      if (pong?.phase === 'rally') add(x + pong.ball.x * .62, y + .044, z - pong.ball.y * .28, .0558, .0558, .0252, ballColour);
+    }
+    mesh.count = count; mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }
+  update({ at: 0, tables: [] });
+  return { frame: update, dispose() { root.remove(mesh); mesh.dispose(); geometry.dispose(); material.dispose(); } };
+}
+
 interface SeenStones { view: StonesView; started: number; moving: number | null }
 interface SeenDice { view: DiceView; started: number }
 

@@ -53,10 +53,12 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
   }
   const destination = options.benchSeat && client.room.state.origin === 'simulated' ? registry.get(options.benchSeat) : undefined;
   const drive = destination ? seatApproachDriver(client.world, [client.predicted.x, client.predicted.y, client.predicted.z], destination.target.approach, TAVERN_ROOM_BOUNDS) : null;
+  let drivenInput: ReturnType<NonNullable<typeof drive>['input']> | null = null;
   let asked = false;
   const realm = { selfId: client.selfId, room: client.room, predicted: client.predicted, clearInput: () => client.clearInput?.(),
     tick(now: number, input: Parameters<TavernClient['tick']>[1]) {
       const sample = drive && !asked ? drive.input(client.predicted) : input;
+      drivenInput = drive && !asked ? sample : null;
       const poses = client.tick(now, sample);
       if (drive?.done && !asked && destination) {
         asked = true;
@@ -156,7 +158,8 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
       });
       if (destination && !asked) {
         if (session.snapshot().self.mode === 'seated') asked = true;
-        else if (interactions.debug.focus === destination.target.id && interactions.debug.action === 'tavern') asked = interactions.use();
+        // A visible prompt can precede the authority's next position patch. A sent request is not an
+        // accepted chair: finish the authored approach before the one bench request in realm.tick.
       }
       // Duplicate bootstrap must not leave a latent restore behind an already open view.
       if (tableView) retainedSeat.clear();
@@ -182,7 +185,8 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
       ready, connected: client.connected, disconnects: client.disconnects, reconnects: client.reconnects,
       ended: client.ended, resumeStored: client.resumeStored,
       self: controller.debug.self, input: controller.debug.input,
-      ...(drive ? { approach: { done: drive.done, requested: asked, predicted: { x: client.predicted.x, y: client.predicted.y, z: client.predicted.z } } } : {}),
+      ...(drive ? { approach: { done: drive.done, requested: asked, ...drive.progress, input: drivenInput,
+        predicted: { x: client.predicted.x, y: client.predicted.y, z: client.predicted.z }, authority: controller.debug.authority } } : {}),
       walkers: poses.map(pose => ({ id: pose.id, name: pose.name, x: pose.x, y: pose.y, z: pose.z, posture: pose.posture ?? 'standing' })),
       seated: selected, column, interaction: interactions.debug, tables: gameFrame.tables,
     };

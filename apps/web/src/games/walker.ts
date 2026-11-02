@@ -23,17 +23,26 @@ export function seatApproachDriver(world: CollisionWorld, start: Vec3, goal: Vec
   const route: Vec3[] = [goal];
   for (let at = target; parents[at] !== at; at = parents[at]!) route.push([(at % width) * cell, goal[1], Math.floor(at / width) * cell]);
   route.reverse();
+  // Preserve every corner, but do not steer toward each 12.5 cm cell along a straight aisle.
+  // A delayed browser frame can otherwise pass a cell and reverse forever on either side of it.
+  for (let i = route.length - 2; i > 0; i--) {
+    const a = route[i - 1]!, b = route[i]!, c = route[i + 1]!;
+    if ((a[0] === b[0] && b[0] === c[0]) || (a[2] === b[2] && b[2] === c[2])) route.splice(i, 1);
+  }
   let next = 0;
   return {
     get done() { return next === route.length; },
+    get progress() { return { waypoint: next, total: route.length, target: route[next] ? [...route[next]!] : null }; },
     input(body: Pick<PlayerState, 'x' | 'y' | 'z' | 'yaw'>): WalkInput {
       while (next < route.length && Math.hypot(body.x - route[next]![0], body.z - route[next]![2]) < .10) next++;
       const point = route[next];
       if (!point) return { moveX: 0, moveZ: 0, buttons: 0, yaw: body.yaw, collisionRevision: world.revision };
       const dx = point[0] - body.x, dz = point[2] - body.z, distance = Math.hypot(dx, dz);
-      // Inspection frames may cover eight fixed steps on software rendering. A slow test walk cannot skip
-      // a narrow waypoint between frames; real walking keeps its own full-speed controller unchanged.
-      return { moveX: Math.round(dx / distance * 20), moveZ: Math.round(dz / distance * 20), buttons: 0,
+      // Ease toward a corner over at least a second of held input (4 m/s at full input).
+      // This also covers half-second software frames and reconciliation delays without waypoint oscillation.
+      // Real visitors retain the existing full-speed walking controller; only the test approach uses this.
+      const speed = Math.min(20, Math.max(1, Math.floor(distance * 127 / 4)));
+      return { moveX: Math.round(dx / distance * speed), moveZ: Math.round(dz / distance * speed), buttons: 0,
         yaw: ((Math.round(Math.atan2(dx, dz) * 128 / Math.PI) % 256) + 256) % 256, collisionRevision: world.revision };
     },
   };
