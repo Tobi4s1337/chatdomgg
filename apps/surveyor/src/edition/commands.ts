@@ -16,7 +16,7 @@ import { editionContext, hideWithheld, settleNight, type NightResult } from './s
 import { acknowledgeHead, appendFoundingLog, appendSettlement, listEditions, readEditionFiles, writeNewEdition } from './store';
 import { currentNamesText, namesRefOf } from '../cartography/names-ref';
 import { readClaims, witnessedRoadRaids } from './claims';
-import { appendArrivals, arrivalsToCheck, checkArrivals, foundArrivals, readArrivals, type ArrivalCheck, type RaidRef } from './arrivals';
+import { appendArrivals, arrivalsToCheck, checkArrivals, absentArrivals, foundArrivals, readArrivals, type ArrivalCheck, type RaidRef } from './arrivals';
 import type { AtlasRaid } from '@chatdom/shared';
 import type { TwitchLookup } from '../directory/twitch-lookup';
 import { buildEditionPublication, editionAddress, ledgerPrefix, readPublished, writePublication, type ArrivedName } from './publish';
@@ -203,14 +203,15 @@ function loadSettle(dataDir: string, founderKeyPem: string | null, now: number, 
 function finishSettle(dataDir: string, load: Exclude<SettleLoad, { done: SettleResult }>, now: number, arrivals?: ArrivalCheck['summary']): SettleResult {
   const { id, key, allowRehearsal, files, report, manifest, records, revision } = load;
   const state = report.state!;
-  const since = state.lastNight?.asOf ?? 0;
   const ctx = editionContext(report.world!, loadTaxonomy(files.taxonomyText));
+  const answers = readArrivals(dataDir);
   const night = settleNight({
     number: id === 'ed-0' ? '0' : 'I', ctx, state, manifest,
     channels: records.channels, raidPairs: records.raidPairs, raidObservations: records.raidObservations, withheld: load.withheld,
     claims: readClaims(dataDir),
-    roadRaids: load.roadRaids.filter((raid) => raid.observedAt > since),
-    arrivals: foundArrivals(readArrivals(dataDir), manifest.asOf),
+    roadRaids: load.roadRaids,
+    arrivals: foundArrivals(answers, manifest.asOf),
+    absent: absentArrivals(answers, manifest.asOf),
   });
   const { text, next } = extendLedger(state, night.events);
   appendSettlement(dataDir, id, { files, text, next, revision, now }, key, { allowRehearsal });
@@ -375,9 +376,10 @@ export function runRehearsal(dataDir: string, number: EditionNumber, now: number
   for (const revision of revisions.slice(1)) {
     const { manifest, records } = readVerifiedRevision(dataDir, revision);
     const before = state.settlers;
+    const answers = readArrivals(dataDir);
     const night = settleNight({
       number, ctx, state, manifest, channels: records.channels, raidPairs: records.raidPairs, raidObservations: records.raidObservations,
-      withheld: withheld.ids, arrivals: foundArrivals(readArrivals(dataDir), manifest.asOf),
+      withheld: withheld.ids, arrivals: foundArrivals(answers, manifest.asOf), absent: absentArrivals(answers, manifest.asOf),
     });
     const { text, next } = extendLedger(state, night.events);
     ledgerText += text;

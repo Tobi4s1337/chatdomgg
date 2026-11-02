@@ -141,6 +141,51 @@ describe('land by raid for streams the survey never saw', () => {
   });
 });
 
+describe('land owed by a raid into a stream the survey observed', () => {
+  const asOf2 = ASOF1 + DAY;
+  const small = rev1.channels.find((channel) => channel.language === 'ja' && !channel.kingdomCandidate && !draft.state.owners.has(channel.kingdomId))!;
+  const raided = raid(raider, Number(small.kingdomId.slice(1)), ASOF1 + 2 * HOUR);
+  const closed: typeof ctx.land = Object.assign(Object.create(ctx.land) as typeof ctx.land, {
+    realmAt: (x: number, y: number) => (ctx.land.realmAt(x, y) === japan ? -1 : ctx.land.realmAt(x, y)),
+  });
+  const full = { ...ctx, land: closed, outerRealms: [] };
+  const settle = (context: typeof ctx, state: typeof draft.state, rev: ReturnType<typeof revision>, roadRaids: readonly (typeof raided.raid)[] = []) => settleNight({
+    number: 'I', ctx: context, state, manifest: rev.manifest, channels: rev.channels, raidPairs: [], raidObservations: rev.raidObservations, withheld: new Set(), roadRaids,
+  });
+
+  it('is granted at the pencil place on the first night with room, after the raid has left the night\'s window', () => {
+    // Night 2: the raid is tonight's, but the Japanese realm and the Outer Isles are full, so the grant is deferred.
+    const rev2 = revision({ asOf: asOf2, tag: 'observed-deferred', specs: BASE, raids: [raided] });
+    const deferred = settle(full, draft.state, rev2);
+    expect(deferred.summary).toMatchObject({ byRaid: 0, deferred: 1, unseenRaidTargets: 0 });
+    const state2 = extendLedger(draft.state, deferred.events).next;
+
+    // Night 3: the raid is older than the last night now; the recorder still holds it, and there is room again.
+    const rev3 = revision({ asOf: asOf2 + DAY, tag: 'observed-room', specs: BASE, raids: [raided] });
+    const third = settle(ctx, state2, rev3);
+    expect(third.summary).toMatchObject({ byRaid: 1, byRaidArrival: 0, deferred: 0 });
+    const grant = third.events.find((event) => event.kind === 'settle')!;
+    expect([grant.settler.kingdomId, grant.reason, grant.settler.holdingTier, grant.settler.point])
+      .toEqual([small.kingdomId, 'raid', 'hamlet', editionPencilPlace(ctx, draft.state, japan, small.kingdomId)]);
+    const state3 = extendLedger(state2, third.events).next;
+    expect(state3.settlers.slice(0, state2.settlers.length)).toEqual(state2.settlers);
+
+    // The same raid held only by the road ledger (raid-show's feed) is owed just the same.
+    const rev3road = revision({ asOf: asOf2 + DAY, tag: 'observed-road', specs: BASE });
+    expect(settle(ctx, state2, rev3road, [raided.raid]).summary).toMatchObject({ byRaid: 1, deferred: 0 });
+
+    // Held now: the old raid grants nothing again, from either source.
+    const rev4 = revision({ asOf: asOf2 + 2 * DAY, tag: 'observed-held', specs: BASE, raids: [raided] });
+    expect(settle(ctx, state3, rev4, [raided.raid]).summary).toMatchObject({ settled: 0, byRaid: 0, deferred: 0 });
+  });
+
+  it('is never owed for a raid from before the founding', () => {
+    const early = raid(raider, Number(small.kingdomId.slice(1)), ASOF1 - HOUR);
+    const rev2 = revision({ asOf: asOf2, tag: 'observed-early', specs: BASE, raids: [early] });
+    expect(settle(ctx, draft.state, rev2, [early.raid]).summary).toMatchObject({ byRaid: 0, deferred: 0 });
+  });
+});
+
 describe('which raided streams settlement asks Twitch about', () => {
   const state = draft.state;
   const ref = (to: string, at: number, from = raiderId): RaidRef => ({ id: `r:${from}:${to}:${at}`, fromKingdomId: from, toKingdomId: to, observedAt: at });
