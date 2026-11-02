@@ -16,6 +16,17 @@
     "../../../apps/web/src/interactions/places/AnvilVisit.tsx",
     "../../../apps/web/vite.config.ts",
     "../../../packages/content/src/forge-ornaments/**/*.ts",
+    "../../../apps/herald/src/forge/commands.ts",
+    "../../../apps/herald/src/ingest/ingest.test.ts",
+    "../../../packages/shared/src/forge-words.ts",
+    "../../../packages/shared/src/forge-words.test.ts",
+    "../../../packages/shared/src/forge.ts",
+    "../../../packages/shared/src/forge-chat.ts",
+    "../../../packages/shared/src/realm/herald.ts",
+    "../../../packages/world/src/realm/reducer.ts",
+    "../../../apps/realm/src/founded/scene.ts",
+    "../../../apps/realm/src/founded/scene.test.ts",
+    "../../../apps/realm/src/growth/**/*.ts",
     "vitest.checkpoint.config.ts"
   ]
 }

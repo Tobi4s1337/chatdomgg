@@ -40,6 +40,19 @@ describe('policy v7 quality', () => {
     expect(scoreForgeMeasure(measure).recognisability).toBeLessThan(0.75);
   });
 
+  it('keeps a wish that names no house part exact when the other reading names the part the plan used (v8)', () => {
+    // "A scallop shell on the roof": one reading names no part, the other the weathervane the plan chose.
+    const shell = draft('scallop-shell', 'weathervane');
+    const split = forgeResultMeasure({ words: { motif: 'scallop-shell', slot: 'none' }, result: { motif: 'scallop-shell', slot: 'weathervane' },
+      draft: shell, styleKit: { family: 'grove', revision: 2 }, sockets });
+    expect(agreedForgeWishSubject(split).slot).toBe('disputed');
+    expect(forgeMeasureDetailMatch(split)).toBe('met');
+    // A split that names a different part than the plan still stays unclear: one read never settles it.
+    const other = forgeResultMeasure({ words: { motif: 'scallop-shell', slot: 'none' }, result: { motif: 'scallop-shell', slot: 'chimney' },
+      draft: shell, styleKit: { family: 'grove', revision: 2 }, sockets });
+    expect(forgeMeasureDetailMatch(other)).toBe('unclear');
+  });
+
   it('marks an uncertified-readable motif as adapted, never exact', () => {
     const fox = { motif: 'sleeping-fox' as const, slot: 'chimney' as const };
     expect(forgeMotifCertificate('grove', 1, 'sleeping-fox', 'native')).toBe('unread');

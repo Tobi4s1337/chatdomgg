@@ -8,6 +8,7 @@ import { runForge } from '../run';
 import type { ForgeProviders } from '../providers';
 import { forgeDeliveryMessage } from '../wish-decision';
 import { bindForgeCandidate } from './candidate';
+import { forgeAuthorityDeferReason } from './defer';
 import type { KingdomForgeExecution } from './execution';
 import type {
   CommittedForgeAttachment, ForgeActivity, ForgeAttachment, ForgeAttempt, ForgeReservation,
@@ -29,6 +30,13 @@ const AUTHORITY_WAIT_MS = 5_000, AUDIT_WAIT_MS = 5_000, RELEASE_WAIT_MS = 5_000,
  * longer than the quick authority calls; giving up early leaves a landed piece reported as unchanged.
  */
 const COMMIT_WAIT_MS = 30_000;
+/**
+ * A reservation goes through the same writer queue as a commit. While the writer lands another maker's piece, the
+ * realm may turn a queued step away unstarted after its own queue wait (10 s); the window must outlast that wait.
+ */
+const RESERVE_WAIT_MS = 20_000;
+/** First pause before asking a busy writer again; it doubles up to `WRITER_RETRY_MAX_MS`. */
+const WRITER_RETRY_MS = 250, WRITER_RETRY_MAX_MS = 2_000;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 /** Bound even an adapter that ignores cancellation; late authority work must still check the revoked lease. */
@@ -49,6 +57,16 @@ function bounded<T>(work: () => Promise<T>, milliseconds: number, timeout: () =>
   });
 }
 
+/** A short wait that a cancelled run cuts off at once. */
+function pause(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new Error('Forge work was interrupted.')); return; }
+    const stop = () => { clearTimeout(timer); reject(new Error('Forge work was interrupted.')); };
+    const timer = setTimeout(() => { signal.removeEventListener('abort', stop); resolve(); }, milliseconds);
+    signal.addEventListener('abort', stop, { once: true });
+  });
+}
+
 export interface KingdomForgeOptions {
   /** Omission is a real cold forge. There is deliberately no in-memory authorizing fallback. */
   readonly authority?: KingdomForgeAuthority;
@@ -56,7 +74,23 @@ export interface KingdomForgeOptions {
   readonly record: (audit: KingdomForgeAudit) => Promise<void>;
   readonly publish: (event: ForgeActivity) => void;
   readonly now?: () => number;
+  /**
+   * Private operational note when a run stops on an exception: which step and whether its time budget ran out.
+   * Codes only, never words, people, drafts or provider output. A failing observer cannot change the outcome.
+   */
+  readonly fault?: (fault: KingdomForgeFault) => void;
 }
+
+export type KingdomForgeStep = 'reserve' | 'bind' | 'gates' | 'revalidate' | 'assemble' | 'prepare' | 'commit';
+export interface KingdomForgeFault {
+  readonly step: KingdomForgeStep;
+  readonly cause: 'time-budget' | 'interrupted' | 'dependency' | 'invalid';
+}
+const faultCause = (error: unknown): KingdomForgeFault['cause'] => {
+  const message = error instanceof Error ? error.message : '';
+  return message === 'Forge work exceeded its time budget.' ? 'time-budget' : message === 'Forge work was interrupted.'
+    || (error instanceof Error && error.name === 'AbortError') ? 'interrupted' : message === 'Forge dependency is unavailable.' ? 'dependency' : 'invalid';
+};
 
 /** Internal private reply extension; never added to an attachment or public activity. */
 export type KingdomForgeResult = KingdomForgeOutcome & { readonly privateMessage?: string };
@@ -97,6 +131,7 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
     let committed = false;
     let staged = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let step: KingdomForgeStep = 'reserve';
     const lease: KingdomForgeLease = {
       signal,
       current: () => !signal.aborted && incoming.current() && (!reservation || now() < reservation.expiresAt),
@@ -105,12 +140,26 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
       if (!lease.current()) abort.abort();
       signal.throwIfAborted();
     };
+    /**
+     * One writer step, asked again while the kingdom answers `unavailable`: its writer turned the step away unstarted
+     * (busy landing another piece) or is not held here for a moment, and nothing was written. The same attempt is
+     * idempotent in the realm, so asking again can never reserve or attach twice. Any other answer is final.
+     */
+    const writerStep = async <T extends object>(call: () => Promise<T>, windowMs: number): Promise<T> => {
+      const until = performance.now() + windowMs;
+      for (let wait = WRITER_RETRY_MS; ; wait = Math.min(wait * 2, WRITER_RETRY_MAX_MS)) {
+        const result = await bounded(call, Math.max(1, until - performance.now()), () => abort.abort(), signal);
+        if (forgeAuthorityDeferReason(result) !== 'unavailable' || performance.now() + wait >= until || !lease.current()) return result;
+        await pause(wait, signal);
+        checkCurrent();
+      }
+    };
     const execute = async (): Promise<KingdomForgeResult> => {
       try {
-        const reserved = await bounded(() => authority.reserve({
+        const reserved = await writerStep(() => authority.reserve({
           ...attempt, kingdomId: command.kingdomId, personId: command.personId, messageId: command.messageId,
           slot: command.slot, observedAt: command.observedAt,
-        }, lease), AUTHORITY_WAIT_MS, () => abort.abort(), signal);
+        }, lease), RESERVE_WAIT_MS);
         checkCurrent();
         if (reserved.kind !== 'reserved') return privateAuthorityResult(reserved);
         // Detach the authority's snapshot; later mutation cannot silently change what the judges inspected.
@@ -127,12 +176,14 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
         const styleKit = Object.freeze(forgeStyleKit(request.family));
         const fingerprint = homeFingerprint(request.home), homeDigest = digest(request.home);
         if (execution) {
+          step = 'bind';
           await bounded(() => execution.bind(reservation!, styleKit), AUDIT_WAIT_MS, () => abort.abort(), signal);
           checkCurrent();
         }
         timer = setTimeout(() => abort.abort(), Math.max(1, reservation.expiresAt - now())); timer.unref?.();
         let approved: Extract<ForgeRunEvent, { type: 'approved' }> | undefined;
         let stopped: Extract<ForgeRunEvent, { type: 'stopped' }> | undefined;
+        step = 'gates';
         const selection = await bounded(() => runForge(request, options.providers, event => {
           checkCurrent();
           if (event.type === 'stage') {
@@ -164,6 +215,7 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
         if (approval.hostFingerprint !== fingerprint) return { kind: 'held' };
 
         const reservationId = reservation.reservationId;
+        step = 'revalidate';
         const renewed = await bounded(() => authority.revalidate(attempt, reservationId, lease), AUTHORITY_WAIT_MS, () => abort.abort(), signal);
         checkCurrent();
         if (renewed.kind !== 'current') return privateAuthorityResult(renewed);
@@ -171,6 +223,7 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
           || renewed.native.family !== request.family || (renewed.native.hostProfile ?? 'street-home') !== (request.hostProfile ?? 'street-home')
           || digest(renewed.native.home) !== homeDigest
           || homeFingerprint(renewed.native.home) !== fingerprint) return { kind: 'held' };
+        step = 'assemble';
         const socket = findForgeSockets(request.home, request.hostProfile, styleKit.revision).find(candidate => candidate.kind === approval.draft.plan.kind);
         if (!socket) return { kind: 'held' };
         const assembled = assembleForge(approval.draft.plan, styleKit, socket);
@@ -188,12 +241,13 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
         const commit = { ...attempt, reservationId, expectedRevision, expectedHomeDigest: homeDigest,
           attachment: structuredClone(attachment), creation: { words: request.words } };
         if (execution) {
+          step = 'prepare';
           await bounded(() => execution.prepareCommit(commit, selection),
             AUDIT_WAIT_MS, () => abort.abort(), signal);
           checkCurrent();
         }
-        const result = await bounded(() => authority.commit(commit, lease),
-          COMMIT_WAIT_MS, () => abort.abort(), signal);
+        step = 'commit';
+        const result = await writerStep(() => authority.commit(commit, lease), COMMIT_WAIT_MS);
         if (result.kind !== 'committed') return privateAuthorityResult(result);
         // A cancellation after the transaction cannot undo a durable attachment. Its outbox/snapshot survives.
         committed = true;
@@ -203,7 +257,8 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
         return { kind: 'committed', attachment: publication,
           privateMessage: forgeDeliveryMessage(approval.draft, selection),
           published: lease.current() && publish({ type: 'committed', activityId, attachment: structuredClone(publication) }) };
-      } catch {
+      } catch (error) {
+        try { options.fault?.({ step, cause: faultCause(error) }); } catch { /* a private note cannot change the outcome */ }
         // A durable worker must reconcile its saved attempt before deciding that work failed or releasing it.
         if (execution) return { kind: 'recovery-needed', ...attempt };
         return { kind: incoming.signal.aborted || !incoming.current() ? 'canceled' : 'cold' };

@@ -8,3 +8,9 @@ export function forgeAuthorityDeferred(value: unknown): boolean {
   return typeof value === 'object' && value !== null && deferred in value
     && (value[deferred] === 'capacity' || value[deferred] === 'unavailable');
 }
+/** Why an authority answer was deferred, if it was. `unavailable` means the kingdom wrote nothing for this step. */
+export function forgeAuthorityDeferReason(value: unknown): ForgeAuthorityDeferReason | undefined {
+  if (typeof value !== 'object' || value === null || !(deferred in value)) return undefined;
+  const reason = value[deferred];
+  return reason === 'capacity' || reason === 'unavailable' ? reason : undefined;
+}

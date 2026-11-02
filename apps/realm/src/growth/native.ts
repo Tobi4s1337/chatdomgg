@@ -67,16 +67,18 @@ export function planNativeHomeGrowth(state: RealmPrivateState, homeId: string, p
     const target = native(placement, tier.data, targetRevision(placement)), attachments: NativeGrowth['attachments'][number][] = [];
     const fitted: Record<string, string> = {}, existing = Object.values(home.attachments);
     if (new Set(existing).size !== existing.length) return { kind: 'held', reason: 'unsafe-part' };
-    const sockets = existing.length ? findForgeSockets(target.blueprint) : [], kit = forgeStyleKit(home.family);
     for (const id of existing) {
       const part = Object.hasOwn(state.attachments, id) ? state.attachments[id] : undefined;
       if (!part?.attached || part.homeId !== home.id || part.ownerId !== home.ownerId
         || part.attachment.id !== id || part.attachment.family !== home.family
         || part.attachment.slot !== home.slot || part.attachment.kingdomId !== state.kingdomId
-        || part.attachment.kitId !== kit.id || part.attachment.kitRevision !== kit.revision
         || (part.attachment.hostProfile ?? 'street-home') !== 'street-home') {
         return { kind: 'held', reason: 'unsafe-part' };
       }
+      // Refit each part with the kit revision it was forged with; an unknown revision throws into the hold below.
+      const kit = forgeStyleKit(home.family, part.attachment.kitRevision);
+      if (part.attachment.kitId !== kit.id) return { kind: 'held', reason: 'unsafe-part' };
+      const sockets = findForgeSockets(target.blueprint, 'street-home', kit.revision);
       const socket = sockets.find(candidate => candidate.kind === part.attachment.draft.plan.kind && !Object.hasOwn(fitted, candidate.id));
       if (!socket) return { kind: 'held', reason: 'unsafe-part' };
       checkForge(assembleForge(part.attachment.draft.plan, kit, socket), target.blueprint);
