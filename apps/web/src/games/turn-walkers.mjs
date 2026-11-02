@@ -74,7 +74,7 @@ assert.ok(evidencePrefix === undefined || /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(evid
 const artifactPrefix = evidencePrefix ?? `ga10-${prefix}`;
 const report = { started: new Date().toISOString(), fixture: 'Temporary reference sessions with synthetic identities; memory only.',
   limitations: ['No kingdom-to-tavern transfer, Twitch identity, durable session, persistence or real-GPU performance is proven.',
-    'Screenshots use SwiftShader; no frame-rate claim.'], checks: [], scores: [], revisions: [], screenshots: [] };
+    'Screenshots use SwiftShader; no frame-rate claim.'], checks: [], scores: [], revisions: [], screenshots: [], soundedMoves: [] };
 let loader, realm, web, browser, release, motion, lockAcquiredAt, lockDeadline, measurement, player, spectator;
 const rooms = [];
 const cancellation = new AbortController();
@@ -261,7 +261,10 @@ try {
   let moves = 0, captured = false, browserMoves = 0, mouseRolls = 0, mouseHolds = 0;
   while (game().phase === 'playing' && moves < 200) {
     const current = game(), revision = current.revision;
-    const action = kind === 'stones' ? 'drop' : current.pot >= 10 || current.scores[current.turn] + current.pot >= 50 ? 'hold' : 'roll';
+    // Bank the browser's first positive pot to exercise a real right-click hold, then use the normal strategy.
+    const firstMouseHold = locked && kind === 'hearth-dice' && current.turn === 1 && !mouseHolds && current.pot > 0;
+    const action = kind === 'stones' ? 'drop' : firstMouseHold || current.pot >= 10 || current.scores[current.turn] + current.pot >= 50 ? 'hold' : 'roll';
+    let soundBefore = null;
     if (current.turn === 0) {
       player.room.send('move', { action, table: tableId, match: current.match, revision, id: `walker-${moves}`, ...(action === 'drop' ? { column: 0 } : {}) });
     } else {
@@ -272,6 +275,12 @@ try {
       }, { tableId, kind, revision }, { timeout: 15000 });
       await page.getByRole('status').filter({ hasText: 'Your turn' }).waitFor({ timeout: 15000 });
       if (game()?.revision !== revision) continue;
+      if (locked && kind === 'hearth-dice') {
+        // Pace checked moves like a person, rather than forcing attacks into an intentionally full voice budget.
+        await page.waitForFunction(() => window.__chatdomTavernSound?.audible && window.__chatdomTavernSound?.activeSources <= 2, null, { timeout: 15000 });
+        if (game()?.revision !== revision) continue;
+        soundBefore = await page.evaluate(() => window.__chatdomTavernSound.played);
+      }
       if (locked) {
         if (kind === 'stones') {
           const beforePosition = spectator.room.state.walkers.get([...spectator.room.state.walkers.keys()].find(id => id !== player.room.sessionId && id !== spectator.room.sessionId));
@@ -302,6 +311,10 @@ try {
     if (locked && current.turn !== 0 && kind === 'hearth-dice') {
       assert.equal(game().revision, revision + 1, 'browser move advances exactly once');
       assert.ok(action === 'roll' ? ['roll', 'bust'].includes(game().last) : game().last === 'hold', 'browser action was accepted, not a timeout');
+      const cue = action === 'roll' ? 'dice' : 'bank', before = soundBefore[cue] ?? 0;
+      await page.waitForFunction(({ cue, before }) => (window.__chatdomTavernSound?.played?.[cue] ?? 0) > before, { cue, before }, { timeout: 15000 });
+      const soundAfter = await page.evaluate(() => window.__chatdomTavernSound);
+      report.soundedMoves.push({ revision: game().revision, action, last: game().last, cue, before, after: soundAfter.played[cue] });
     }
     if (locked && current.turn !== 0 && kind === 'stones') {
       assert.equal(game().board.filter((cell, index) => index % 7 === 1 && cell !== 0).length, current.board.filter((cell, index) => index % 7 === 1 && cell !== 0).length + 1, 'SDK confirms browser drop in column 2');
@@ -325,6 +338,7 @@ try {
     }
   }
   assert.ok(browserMoves >= (locked ? 2 : 1), 'browser acted through actual controls, including locked mouse');
+  if (locked && kind === 'hearth-dice') assert.ok(mouseRolls > 0 && mouseHolds > 0, 'browser used both left-click roll and right-click hold');
   assert.equal(game().phase, 'finished', 'match completed within 200 moves');
   await until(() => watched()?.phase === 'finished' && watched().revision === game().revision, 'spectator final');
   assert.deepEqual(watched(), game(), 'spectator sees same public final');
