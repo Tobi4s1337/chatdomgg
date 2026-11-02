@@ -28,15 +28,17 @@ import { openPcPage, openSwiftShaderPage, type StagePage } from './incoming-show
  *     apps/realm/src/raid-gate/incoming-show.stage.test.ts
  * Env: RAID_SHOW_DIST (built web, default /tmp/rs-dist), RAID_SHOW_SIZE (1920x1080), RAID_SHOW_VIEWERS (140),
  * RAID_SHOW_SHOTS (`name@ms,...`: stills at ms after the raid; default `guests@12000`), RAID_SHOW_PREFIX (evidence file
- * prefix, default `stack-stream`). A raider's own browser cannot be staged here: the raid link admits only a live
- * kingdom (raid-gate/entry/adapter.ts), and this stack is SIMULATED; that view belongs to the real raid.
+ * prefix, default `stack-stream`, or `stack-walker` in the walker's view). RAID_SHOW_VIEW=walker shoots a raider's own
+ * browser instead of the stream: a third raider, Ash, signed in on the SIMULATED provider, opens the crier's link through
+ * the private `/-/raid-gate?guestWalk=` bench, which runs the production welcome entry admitting only this stack's
+ * simulated origin (the live `/raid/...` route admits only a live kingdom).
  * RAID_SHOW_GPU=1 runs inside `chatdom-pc-lease`: the preview is served on 5192 and Tobias's real-GPU Chrome opens it
  * through his tunnel (no capture lock). Otherwise headless SwiftShader here, inside one shared capture-lock hold.
  */
 const exec = promisify(execFile);
 const kingdomId = KingdomIdSchema.parse('129634568');
 const raiderId = KingdomIdSchema.parse('412000777');
-const wrenId = PersonIdSchema.parse('990100001'), tamsinId = PersonIdSchema.parse('990100002');
+const wrenId = PersonIdSchema.parse('990100001'), tamsinId = PersonIdSchema.parse('990100002'), ashId = PersonIdSchema.parse('990100003');
 const lane = (name: string, fallback: string) => process.env[name] ?? fallback;
 
 const unheld = (port: number) => new Promise<boolean>(resolve => {
@@ -54,7 +56,8 @@ describe.runIf(process.env.RAID_SHOW_STAGE === '1')('RS10 staged stream capture 
     const viewers = Number(lane('RAID_SHOW_VIEWERS', '140'));
     if (![3, 140, 10_000, 70_000].includes(viewers)) throw new Error('Choose a specified raid scale');
     const gpu = process.env.RAID_SHOW_GPU === '1';
-    const prefix = lane('RAID_SHOW_PREFIX', 'stack-stream');
+    const walkerView = lane('RAID_SHOW_VIEW', 'stream') === 'walker';
+    const prefix = lane('RAID_SHOW_PREFIX', walkerView ? 'stack-walker' : 'stack-stream');
     const shots = lane('RAID_SHOW_SHOTS', 'guests@12000').split(',').map(entry => {
       const [name, at] = entry.split('@');
       return { file: `${prefix}-${name}@${width}x${height}.png`, at: Number(at) };
@@ -132,6 +135,9 @@ describe.runIf(process.env.RAID_SHOW_STAGE === '1')('RS10 staged stream capture 
       // (The flow test signs in through the link itself; here it keeps the still near the caravan's passage.)
       const visitors = [{ person: wrenId, name: 'Wren' }, { person: tamsinId, name: 'Tamsin' }].map(entry => ({ ...entry, visitor: new ShowBrowser(base) }));
       for (const { visitor, person } of visitors) await visitor.signIn(person, '/-/realm');
+      // The walker's own browser: signed in like the others, its session handed to the page before it follows the link.
+      const ash = walkerView ? new ShowBrowser(base) : undefined;
+      if (ash) await ash.signIn(ashId, '/-/realm');
 
       // SwiftShader: one shared capture-lock hold, released within five minutes. GPU: the caller holds pc-lease.
       if (!gpu) {
@@ -158,9 +164,9 @@ describe.runIf(process.env.RAID_SHOW_STAGE === '1')('RS10 staged stream capture 
           throw error;
         } finally { clearInterval(ticker); }
       };
-      const route = `/stream?source=realm&kingdom=${kingdomId}`;
-      await opened.goto(`${base}${route}`); await ready(225_000);
-      const loadedMs = Date.now() - holdStarted;
+      let route = `/stream?source=realm&kingdom=${kingdomId}`;
+      if (!walkerView) { await opened.goto(`${base}${route}`); await ready(225_000); }
+      let loadedMs = Date.now() - holdStarted;
       // What the page itself shows of walkers, every quarter second, beside its longest frame in that quarter:
       // the realm's own trace (below) says what was sent, this says what a viewer saw.
       const pageTraceFrom = Date.now();
@@ -230,7 +236,7 @@ describe.runIf(process.env.RAID_SHOW_STAGE === '1')('RS10 staged stream capture 
         }
         walkerTrace.push(second);
       })().catch(() => {});
-      const shooting = shoot(raidSent);
+      let shooting: Promise<void> = walkerView ? Promise.resolve() : shoot(raidSent);
       shooting.catch(() => {});
       const row = (await pool.query('select observation, raid_id from realm_raid_observations')).rows[0] as { observation: string; raid_id: string };
       const observation = JSON.parse(row.observation) as { from: { kingdomId: string; login: string; name: string }; viewers: number };
@@ -242,6 +248,15 @@ describe.runIf(process.env.RAID_SHOW_STAGE === '1')('RS10 staged stream capture 
       const link = new URL(/https?:\/\/\S+/u.exec(line)![0]);
       expect(link.origin).toBe(base);
       const invitation = parseRaidWelcomePath(link.pathname)!;
+      if (ash) {
+        // Ash follows the crier's link in a browser: the page itself records the intent, takes its ticket and joins.
+        await opened.setCookies([...ash.cookies].map(([name, value]) => ({ name, value })), base);
+        route = `/-/raid-gate?guestWalk=${encodeURIComponent(link.pathname)}`;
+        await opened.goto(`${base}${route}`); mark('walker-page');
+        void ready(120_000).then(() => mark('walker-ready'), () => {});
+        shooting = shoot(raidSent); shooting.catch(() => {});
+      }
+      loadedMs = walkerView ? Date.now() - holdStarted : loadedMs;
       const walkers: { name: string; client: RealmClient }[] = [];
       for (const { visitor, name } of visitors) {
         await visitor.begin(invitation.kingdomId, invitation.raidId);
@@ -285,6 +300,7 @@ describe.runIf(process.env.RAID_SHOW_STAGE === '1')('RS10 staged stream capture 
       }
       expect(errors).toEqual([]);
       expect(poses.every(pose => pose.raidGuest?.fromKingdomId === raiderId)).toBe(true);
+      if (ash) console.log(`[stage] walker notice: ${JSON.stringify((taken.at(-1)?.scene as { notice?: unknown } | undefined)?.notice ?? null)}`);
     } finally {
       if (hold) clearTimeout(hold);
       await page?.close().catch(() => {});

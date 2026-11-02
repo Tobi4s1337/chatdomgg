@@ -69,6 +69,9 @@ export const RAID_GATE_FURNITURE = {
   brazier: .6, pole: .2,
   torches: { start: 4.2, spacing: 3.4, aside: [2.75, 3.05, 3.35] as const, notBefore: 1.2 + 1, post: .35 },
   chat: { aside: 5, spacing: 1.4, start: 1.6, slots: 32, stand: .3 },
+  // The dated pennant wall's candidate bays (RAID_PENNANT_WALL_LAYOUT): the bay's own footprint plus room to stand
+  // back and read it, so a guest never arrives with their face in a raider's cloth.
+  pennants: { rows: 12, spacing: 3.5, aside: 6, outward: [0, 3.5, 7] as const, bay: 1.5, reading: 1.2 },
 } as const;
 const FURNITURE_MARGIN = WALK_BODY.radius + .1;
 
@@ -84,6 +87,9 @@ export function raidGateFurnitureOf(route: readonly Vec3[]): readonly { x: numbe
   at(0, F.gate.poleAside, F.pole);
   for (const sign of [-1, 1]) at(F.gate.brazierIn, F.gate.brazierAside * sign, F.brazier);
   for (let slot = 0; slot < F.chat.slots; slot++) at(F.chat.start + Math.floor(slot / 2) * F.chat.spacing, F.chat.aside * (slot % 2 ? 1 : -1), F.chat.stand);
+  for (let row = 0; row < F.pennants.rows; row++) for (const side of [-1, 1]) for (const outward of F.pennants.outward) {
+    at(row === 0 ? 0 : Math.ceil(row / 2) * F.pennants.spacing * (row % 2 ? 1 : -1), side * (F.pennants.aside + outward), F.pennants.bay + F.pennants.reading);
+  }
   // Torch pairs stand along the road itself; which of the three offsets a pair takes depends on the ground the
   // browser finds, so every candidate is kept clear.
   const reach = SEARCH_RINGS * SPACING + 2;
@@ -103,6 +109,19 @@ export function raidGateFurnitureOf(route: readonly Vec3[]): readonly { x: numbe
     }
   }
   return pieces;
+}
+
+/**
+ * The point a guest arriving with the raid faces: out through the gate, down the road the caravan comes in on, so the
+ * walker's own camera (which settles behind them) sees the column ride towards them. World (x, z); null without a
+ * road. The room turns the seated walker towards it (SEAMS §11, the arrival facing).
+ */
+export const RAID_GUEST_LOOK_OUT = 12;
+export function raidGuestFaceToward(plan: SettlementPlan): readonly [number, number] | null {
+  const route = incomingRaidRouteOf(plan), gate = route?.[0], inward = route?.find(point => gate && Math.hypot(point[0] - gate[0], point[2] - gate[2]) > .05);
+  if (!gate || !inward) return null;
+  const length = Math.hypot(inward[0] - gate[0], inward[2] - gate[2]);
+  return [gate[0] - (inward[0] - gate[0]) / length * RAID_GUEST_LOOK_OUT, gate[2] - (inward[2] - gate[2]) / length * RAID_GUEST_LOOK_OUT];
 }
 
 /** Horizontal distance from the caravan's road line, including its straight approach outside the gate. */
@@ -185,7 +204,7 @@ export interface RaidGuestSpawnOptions {
 /** Read-only composition for RealmRoomServices.prepareSpawn. The room alone picks against current walkers. */
 export function createRaidGuestSpawn(options: RaidGuestSpawnOptions): NonNullable<RealmRoomServices['prepareSpawn']> {
   // Eight small coordinate lists, without retaining eight entire retired collision worlds.
-  const cache = new Map<string, { world: WeakRef<CollisionWorld>; positions: readonly Vec3[] }>();
+  const cache = new Map<string, { world: WeakRef<CollisionWorld>; positions: readonly Vec3[]; faceToward: readonly [number, number] | null }>();
   const now = options.clock ?? Date.now;
   return async (principal, context) => {
     const pending = await options.authority.pendingEntry({ version: 1, origin: principal.origin, entryId: principal.sessionId,
@@ -202,11 +221,13 @@ export function createRaidGuestSpawn(options: RaidGuestSpawnOptions): NonNullabl
     const key = JSON.stringify([principal.kingdomId, context.writerEpoch, context.layoutRevision, context.world.revision]);
     let cached = cache.get(key);
     if (!cached || cached.world.deref() !== context.world) {
-      cached = { world: new WeakRef(context.world), positions: raidGuestSpawnAnchors(snapshot!.plan, context.world) };
+      cached = { world: new WeakRef(context.world), positions: raidGuestSpawnAnchors(snapshot!.plan, context.world), faceToward: raidGuestFaceToward(snapshot!.plan) };
       cache.set(key, cached);
       while (cache.size > CACHE_GEOMETRIES) cache.delete(cache.keys().next().value!);
     }
-    return { positions: cached.positions, expiresAt: pending.expiresAt,
+    const preparation = { positions: cached.positions, expiresAt: pending.expiresAt,
       current: () => pending.expiresAt > now() && matches(options.current(principal.kingdomId)) };
+    // The arrival facing travels beside the port's fields until the room reads it (SEAMS §11 needs: arrival facing).
+    return cached.faceToward ? Object.assign(preparation, { faceToward: cached.faceToward }) : preparation;
   };
 }

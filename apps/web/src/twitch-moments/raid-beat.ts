@@ -114,16 +114,22 @@ export interface RaidBeat {
   readonly sleepAt: number;
   /** When the last wagon has gone up the castle road. */
   readonly endAt: number;
+  /**
+   * When this viewer joined a column already on the road (a raider following the welcome link, a reload mid-show):
+   * the beat keeps its true start, so the column is where it really is, and nothing before this moment is heard.
+   */
+  readonly joinedAt?: number;
 }
 
-export function planRaid(id: string, body: MomentBodyOf<'raid'>, startAt: number, name: (n: string) => string): RaidBeat {
+export function planRaid(id: string, body: MomentBodyOf<'raid'>, startAt: number, name: (n: string) => string, joinedAt?: number): RaidBeat {
   const b = RAID_BEAT, units = raidUnits(body.viewers), timing = raidScaleProfile(body.viewers);
   const lastThrough = b.arrive + (units - 1) * timing.pitch + timing.pass;
   const holdUntil = startAt + Math.max(b.minHold, lastThrough + b.holdAfter);
   const sleepAt = holdUntil + b.sleep;
   const endAt = Math.max(sleepAt + b.sleepFade, startAt + b.arrive + (units - 1) * timing.pitch + timing.travel) + 200;
   return { kind: 'raid', id, raidKey: body.raidKey, name: name(body.from.displayName), kingdomId: body.from.kingdomId, founded: body.founded,
-    viewers: body.viewers, units, timing, seed: seedOf(body.raidKey), startAt, holdUntil, sleepAt, endAt };
+    viewers: body.viewers, units, timing, seed: seedOf(body.raidKey), startAt, holdUntil, sleepAt, endAt,
+    ...(joinedAt !== undefined && joinedAt > startAt ? { joinedAt } : {}) };
 }
 
 /** What the view draws for one raid: times are ms into the beat, so the view never reads the kingdom clock. */
@@ -174,7 +180,8 @@ export function raidCues(beat: RaidBeat): AudioCueFrame[] {
   for (let i = 0; i < beat.units; i += step) cues.push({ id: `${beat.id}:roll:${i}`, cue: 'cart-roll', atMs: at(b.arrive + i * beat.timing.pitch), gain: i === 0 ? 0.95 : 0.7 });
   if (beat.units >= 5) cues.push({ id: `${beat.id}:drum`, cue: 'festival-drum', atMs: at(b.arrive + 500), gain: 0.65 });
   cues.push({ id: `${beat.id}:farewell`, cue: 'horn', atMs: beat.sleepAt - 600, gain: 0.45 });
-  return cues;
+  // A viewer who joined the column on the road never hears its earlier horn or wheels late.
+  return beat.joinedAt === undefined ? cues : cues.filter(cue => cue.atMs >= beat.joinedAt!);
 }
 
 /** The town turns to the gate as it wakes and cheers when the lead wagon comes through. */

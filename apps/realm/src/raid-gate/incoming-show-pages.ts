@@ -12,6 +12,8 @@ export interface StagePage {
   readonly errors: string[];
   readonly console: string[];
   goto(url: string): Promise<void>;
+  /** Hands a session signed in elsewhere on this stack to the page's own context (never Tobias's own cookies). */
+  setCookies(cookies: readonly { name: string; value: string }[], url: string): Promise<void>;
   evaluate<T>(fn: () => T | Promise<T>): Promise<T>;
   waitReady(ms: number): Promise<void>;
   screenshot(path: string): Promise<void>;
@@ -26,7 +28,9 @@ const READY = 'window.__chatdomReady === true';
 export async function openSwiftShaderPage(width: number, height: number): Promise<StagePage> {
   const { chromium } = await import('@playwright/test');
   const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-  const page = await browser.newPage({ viewport: { width, height } });
+  const phone = width < 600;
+  const context = await browser.newContext({ viewport: { width, height }, ...(phone ? { isMobile: true, hasTouch: true, deviceScaleFactor: 1 } : {}) });
+  const page = await context.newPage();
   const errors: string[] = [], lines: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error' || message.type() === 'warning') lines.push(`${message.type()}: ${message.text()}`.slice(0, 400)); });
@@ -37,6 +41,7 @@ export async function openSwiftShaderPage(width: number, height: number): Promis
   return {
     renderer, errors, console: lines,
     goto: async url => { await page.goto(url); },
+    setCookies: async (cookies, url) => { await context.addCookies(cookies.map(cookie => ({ ...cookie, url }))); },
     evaluate: fn => page.evaluate(fn),
     waitReady: async ms => { await page.waitForFunction(READY, null, { timeout: ms }); },
     screenshot: async path => { await page.screenshot({ path, timeout: 60_000 }); },
@@ -88,7 +93,8 @@ export async function openPcPage(width: number, height: number, cdp = process.en
     }
   });
   await on('Page.enable'); await on('Runtime.enable'); await on('Network.enable');
-  await on('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+  await on('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 600 });
+  if (width < 600) await on('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await on('Page.bringToFront');
   // A minimised window draws no frames, so the page would never say it is ready.
   try {
@@ -111,6 +117,7 @@ export async function openPcPage(width: number, height: number, cdp = process.en
   return {
     renderer, errors, console: lines,
     goto: async url => { await on('Page.navigate', { url }); await until(`document.readyState !== 'loading' && location.href !== 'about:blank'`, 60_000, `Load ${url}`); },
+    setCookies: async (cookies, url) => { for (const cookie of cookies) await on('Network.setCookie', { ...cookie, url, path: '/', httpOnly: true, sameSite: 'Lax' }); },
     evaluate: fn => run(`(${fn.toString()})()`),
     waitReady: ms => until(READY, ms, 'The page was not ready'),
     screenshot: async path => { const { data } = await on('Page.captureScreenshot', { format: 'png' }) as { data: string }; await writeFile(path, Buffer.from(data, 'base64')); },

@@ -12,18 +12,23 @@ export interface RaidWelcomeEntryOptions {
   pathname: string;
   fetcher: RealmFetch;
   /** The existing live entry source remains the only ticket and room authority. */
-  openKingdom(info: { kingdomId: ReturnType<typeof RealmEntryInfoSchema.parse>['kingdomId']; kingdomName: string }): KingdomEntrySource;
+  openKingdom(info: { kingdomId: ReturnType<typeof RealmEntryInfoSchema.parse>['kingdomId']; kingdomName: string; origin: 'live' | 'simulated' }): KingdomEntrySource;
   status(value: RaidWelcomeStatus): void;
   now?: () => number;
   pollMs?: number;
   confirmationMs?: number;
+  /**
+   * The origin this gate admits, `live` unless a private `/-/` bench passes `simulated` for its own lane stack. Every
+   * check below compares against this one value, so a live gate never admits simulated data and a bench never mixes.
+   */
+  origin?: 'live' | 'simulated';
 }
 
 /** A welcome link is an invitation. Only a successful room join followed by the private read greets a guest. */
 export function createRaidWelcomeEntry(options: RaidWelcomeEntryOptions): { open: KingdomEntrySource; enterOrdinarily(): void } {
   const route = parseRaidWelcomePath(options.pathname);
   if (!route) throw new RealmEntryError('refused', 'This raid invitation is not a kingdom gate.');
-  const { kingdomId, raidId } = route, now = options.now ?? Date.now;
+  const { kingdomId, raidId } = route, now = options.now ?? Date.now, origin = options.origin ?? 'live';
   const endpoint = `${RAID_GUEST_PREFIX}/${encodeURIComponent(kingdomId)}`;
   let ordinary = false;
   const request = async (path: string, signal: AbortSignal, init?: RequestInit) => {
@@ -41,7 +46,7 @@ export function createRaidWelcomeEntry(options: RaidWelcomeEntryOptions): { open
       throw new RealmEntryError('unauthenticated', 'Sign in with Twitch to walk into this kingdom.');
     }
     const info = RealmEntryInfoSchema.safeParse(await request(REALM_ENTRY_ROUTE.replace(':kingdomId', encodeURIComponent(kingdomId)), signal));
-    if (!info.success || info.data.kingdomId !== kingdomId || info.data.origin !== 'live') {
+    if (!info.success || info.data.kingdomId !== kingdomId || info.data.origin !== origin) {
       throw new RealmEntryError('unavailable', 'The kingdom’s approved name is not available yet.');
     }
     let invited = false;
@@ -72,7 +77,7 @@ export function createRaidWelcomeEntry(options: RaidWelcomeEntryOptions): { open
       }
     } else options.status({ kind: 'ordinary', message: 'Opening the kingdom for your visit.' });
     signal.throwIfAborted();
-    const connection = await options.openKingdom({ kingdomId, kingdomName: info.data.name })(signal);
+    const connection = await options.openKingdom({ kingdomId, kingdomName: info.data.name, origin })(signal);
     if (!invited) return connection;
     const confirmation = new AbortController();
     const abort = () => confirmation.abort();
@@ -95,7 +100,7 @@ export function createRaidWelcomeEntry(options: RaidWelcomeEntryOptions): { open
         if (!reply.success) throw new Error('The gate could not verify the arrival record.');
         if (reply.data.guest) {
           const guest = reply.data.guest, room = connection.client.room.state;
-          if (guest.raidId !== raidId || guest.kingdomId !== kingdomId || guest.to.kingdomId !== kingdomId || guest.origin !== 'live'
+          if (guest.raidId !== raidId || guest.kingdomId !== kingdomId || guest.to.kingdomId !== kingdomId || guest.origin !== origin
             || room.kingdomId !== kingdomId || room.origin !== guest.origin) throw new Error('The arrival record does not match this kingdom.');
           const name = room.walkers.get(connection.client.selfId)?.name;
           if (!name?.trim()) throw new Error('Your name has not arrived from the kingdom yet.');

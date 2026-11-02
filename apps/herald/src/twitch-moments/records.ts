@@ -134,8 +134,11 @@ export const BattleRecordSchema = z.strictObject({
 });
 export type BattleRecord = z.infer<typeof BattleRecordSchema>;
 
-/** Families with at most one current public fact. `order` (a start time) decides which occupant is newest. */
-export type CurrentSlot = 'hype' | 'battle' | 'poll';
+/**
+ * Families with at most one current public fact. `order` (a start time) decides which occupant is newest. The newest
+ * incoming raid holds `raid`, so a viewer who joins while its column is on the road finds it there (SEAMS §11).
+ */
+export type CurrentSlot = 'hype' | 'battle' | 'poll' | 'raid';
 export const CurrentSlotRecordSchema = z.strictObject({ version: z.literal(1), key: TokenSchema, order: EpochMsSchema });
 /** Claim families claimed only once their delivery changed something. */
 export type ChangeClaimFamily = 'observation' | 'battle-revision';

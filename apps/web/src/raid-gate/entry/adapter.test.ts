@@ -16,15 +16,16 @@ const projection = { version: 1, origin: 'live', raidId, kingdomId, from, to, pe
   entryId: '11111111-1111-4111-8111-111111111111', arrivedAt: now, raidOccurredAt: now - 1_000 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
-function harness(overrides: { session?: unknown; begin?: unknown; read?: unknown; status?: number; opening?: Promise<KingdomEntryConnection> } = {}) {
+function harness(overrides: { session?: unknown; begin?: unknown; read?: unknown; status?: number; opening?: Promise<KingdomEntryConnection>;
+  origin?: 'live' | 'simulated'; infoOrigin?: string; roomOrigin?: string } = {}) {
   const events: string[] = [], statuses: RaidWelcomeStatus[] = [];
   const dispose = vi.fn();
-  const connection = { client: { selfId: 'self', room: { state: { kingdomId, origin: 'live', walkers: new Map([['self', { name: 'Ash' }]]) } } }, dispose } as unknown as KingdomEntryConnection;
+  const connection = { client: { selfId: 'self', room: { state: { kingdomId, origin: overrides.roomOrigin ?? 'live', walkers: new Map([['self', { name: 'Ash' }]]) } } }, dispose } as unknown as KingdomEntryConnection;
   const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
     const event = path.endsWith('/session') ? 'session' : path.includes('/entry/') ? 'info' : init?.method === 'POST' ? 'begin' : 'read';
     events.push(event);
     if (event === 'session') return json(overrides.session ?? session);
-    if (event === 'info') return json({ version: 1, kingdomId, origin: 'live', name: 'Lanternmere' });
+    if (event === 'info') return json({ version: 1, kingdomId, origin: overrides.infoOrigin ?? 'live', name: 'Lanternmere' });
     if (event === 'begin') return json(overrides.begin ?? { version: 1, status: 'pending', invitation }, overrides.status ?? 200);
     return json(overrides.read ?? { version: 1, guest: null });
   });
@@ -33,7 +34,7 @@ function harness(overrides: { session?: unknown; begin?: unknown; read?: unknown
     return overrides.opening ? overrides.opening : connection;
   });
   const entry = createRaidWelcomeEntry({ pathname, fetcher, openKingdom, status: value => statuses.push(value), now: () => now,
-    pollMs: 1, confirmationMs: 3 });
+    pollMs: 1, confirmationMs: 3, ...(overrides.origin ? { origin: overrides.origin } : {}) });
   return { entry, events, statuses, fetcher, openKingdom, connection, dispose };
 }
 
@@ -116,6 +117,27 @@ describe('the raid welcome-link entry adapter', () => {
     await vi.waitFor(() => expect(test.statuses.at(-1)?.kind).toBe('unavailable'));
     expect(test.statuses.some(value => value.kind === 'confirmed')).toBe(false);
     expect(test.dispose).not.toHaveBeenCalled(); connection.dispose();
+  });
+
+  it('never admits a simulated kingdom at the live gate', async () => {
+    const test = harness({ infoOrigin: 'simulated' });
+    await expect(test.entry.open(new AbortController().signal)).rejects.toMatchObject({ status: 'unavailable' });
+    expect(test.events).toEqual(['session', 'info']); expect(test.openKingdom).not.toHaveBeenCalled();
+  });
+
+  it('lets a private bench gate admit only its own simulated stack, end to end', async () => {
+    const simulatedGuest = { ...projection, origin: 'simulated' };
+    const bench = harness({ origin: 'simulated', infoOrigin: 'simulated', roomOrigin: 'simulated', read: { version: 1, guest: simulatedGuest } });
+    const connection = await bench.entry.open(new AbortController().signal);
+    await vi.waitFor(() => expect(bench.statuses.at(-1)?.kind).toBe('confirmed'));
+    expect(bench.openKingdom.mock.calls[0]?.[0]).toMatchObject({ origin: 'simulated' });
+    connection.dispose();
+    const mixed = harness({ origin: 'simulated', infoOrigin: 'live' });
+    await expect(mixed.entry.open(new AbortController().signal)).rejects.toMatchObject({ status: 'unavailable' });
+    const liveGuest = harness({ origin: 'simulated', infoOrigin: 'simulated', roomOrigin: 'simulated', read: { version: 1, guest: projection } });
+    const other = await liveGuest.entry.open(new AbortController().signal);
+    await vi.waitFor(() => expect(liveGuest.statuses.at(-1)?.kind).toBe('unavailable'));
+    expect(liveGuest.statuses.some(value => value.kind === 'confirmed')).toBe(false); other.dispose();
   });
 
   it('cancels confirmation when its room is disposed', async () => {

@@ -11,6 +11,12 @@ import { Pool } from './train-view';
 export const RAID_PENNANT_WALL_RADIUS = 1.5;
 export const RAID_PENNANT_WALL_HEIGHT = 4.5;
 export const RAID_PENNANT_WALL_LIMIT = 12;
+/**
+ * Where the wall may stand, in the gate's frame: rows along the road (`row` 0 at the gate, then alternately inward
+ * and outward every `spacing`), each side, `aside` from the road plus each `outward` step. The realm keeps arriving
+ * guests clear of every candidate (apps/realm/src/raid-gate/guest-spawn.ts, RAID_GATE_FURNITURE.pennants).
+ */
+export const RAID_PENNANT_WALL_LAYOUT = { rows: 12, spacing: 3.5, aside: 6, outward: [0, 3.5, 7] } as const;
 
 /** A freestanding, grounded bay. All measurements are build cells, 0.125 m each. */
 export function raidPennantBayBlueprint(kit: BannerKit): VoxelBlueprint {
@@ -173,9 +179,10 @@ export function createRaidPennantWall(root: THREE.Group, host: Host) {
         if (best < Infinity) {
           const right = new THREE.Vector3(forward.z, 0, -forward.x);
           const candidates: Candidate[] = [];
-          for (let row = 0; row < 12; row++) for (const side of [-1, 1]) for (const outward of [0, 3.5, 7]) {
-            const along = row === 0 ? 0 : Math.ceil(row / 2) * 3.5 * (row % 2 ? 1 : -1);
-            candidates.push({ pos: origin.clone().addScaledVector(right, side * (6 + outward)).addScaledVector(forward, along), side });
+          const L = RAID_PENNANT_WALL_LAYOUT;
+          for (let row = 0; row < L.rows; row++) for (const side of [-1, 1]) for (const outward of L.outward) {
+            const along = row === 0 ? 0 : Math.ceil(row / 2) * L.spacing * (row % 2 ? 1 : -1);
+            candidates.push({ pos: origin.clone().addScaledVector(right, side * (L.aside + outward)).addScaledVector(forward, along), side });
           }
           candidates.sort((a, b) => a.pos.distanceToSquared(origin) - b.pos.distanceToSquared(origin));
           layout = { right, candidates };

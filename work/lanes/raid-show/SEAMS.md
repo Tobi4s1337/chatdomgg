@@ -226,11 +226,55 @@ Private visual exercise: `/-/raid-gate?incoming=1&browse=1&at=480000`, with the 
 
 **2026-11-02 — The column never passes under a cropped lens.** The close street-side shot (4 m aside, 6.5 m up) let every wagon and pony pair sweep past under the camera, cut by the picture's corner at more than half its height. The gate shot is now chosen by sweeping the column's actual envelope (a unit is 5.4 m long, 3 m wide, 5.6 m tall with its standard) along the actual road through every candidate view (`raid-shot.ts`): a view is kept only when no unit covers more than 45% of the picture's height while any of it shows (a unit already behind the lens counts down to the frame's foot), the eye never stands in or just over the column's path, and the standard's pole, crossbar and both braziers stay inside the picture. The crossbar must sit low enough for its caption card, and the land's horizon with some sky must be in the picture. Among the views that fit, the one showing the standard largest wins; the candidates are crane views over the street's edge 24–44 m inside the gate, 9.5–16 m up (portrait 10–17 m, 60° lens), aimed 3.2–6.5 m over the street just inside the gate (portrait 3.6–7.5 m). The sweep stops early on a refused view (about 45 ms once per raid focus). Units still leave the picture, as a procession does, but through its foot at a moderate size. The view uses the picture's real aspect, not a portrait flag. In the kingdom the moment host has no `validatePose`, so `mountKingdomRaidChat` installs a conservative standing check from the adopted plan (`kingdom/moments/raid-shot-clear.ts`): the eye stays 2 m over the ground and clear of every built home's lot (solid to 14 m, 1.2 m pad) and the castle's bounds (40 m), with the line to the aim unbroken by them. Trees are the scene's own and are not known to it.
 
+**2026-11-02 — The foreground stays open.** Asked with the picture's `{fov, aspect}`, the plan check also refuses a view whose near part is more than 8% filled by homes (counted to a 10 m roof) or the castle. The near part is measured as depth along the view, up to 80% of the way to the aim and never past 40 m, so a big roof to one side counts however far along its slanted ray it lies. `raidFittedShots` tries the fitted views at the world's own limit, then at 20% and 35% (`RAID_SHOT_FOREGROUND_TIERS`, passed as `frame.maxBlocked`), then on standing alone, then the loose views; each view is offered once. On the stage's own hamlet every fitted view looks down a street lined with houses, and the manor's roof stays at the left of the gate shot in the loosest tier too: the best view this street has, until the scene's own sightline (below) can rank by real voxels.
+
 **needs: grand-world — the scene's own sightline for the gate shot.** When the kingdom scene exposes its solid query, pass it as `validatePose` in the `createTwitchMomentView({...})` host of `kingdom/moments/index.ts` (one line: `validatePose: pose => sceneSightline(pose)`); the plan check above then becomes a pre-filter only, and trees and real roof heights decide.
 
 **Scale reads in the world, not in a number.** The town lights a torch avenue along its own street for the raid: one pair for a single treasured wagon, two at 140, five at 10,000 and six at 70,000 (`torchPairs`). Pairs stand from 4.2 m inside the gate every 3.4 m, catch in a wave from the gate inward after the braziers, and go out with the gate. Each post uses the chat lamp's conservative supported-ground sampler (§8): clear of streets, lots, squares and water, chosen once per raid and never re-guessed per frame. A side without supported ground has no torch; without any sampler, none are drawn. Columns of 10,000 and more also release sky lanterns over each wagon once it is through the gate (six per wagon at 10,000, nine from 50,000): bounded light (96 at most), deterministic from the beat, never people. Torches and sky lanterns have their own instance budgets, so a long column never starves the gate's fire or the chat lamps. The torch post is a registered prop part (2.25 m, .625 m foot) within both kits' production-meshed budgets.
 
 **2026-11-02 — Banner ponies make the column continuous.** Between the wagons of a longer column, caparisoned ponies are led two abreast, riderless, each in the raider's saddle cloth with a pennant of its arms on a saddle pole: no rows for a single wagon, one row per gap from two wagons, and two from six wagons (`bannerPonyRows`). The view keeps only as many rows as fit between one wagon's tailboard and the next wagon's pony on the actual road at the column's pace, with at least 0.3 m of air each way, so they never close on a wagon. They share the wagons' road, pace, fade and trot; all ponies share one bounded budget (`RAID_VIEW_LIMITS.ponies`, 120). The saddle pole is a registered prop part within both kits' budgets. Nobody rides; no person is invented. No host change is needed.
+
+**2026-11-02 — A raider who follows the link finds the column on the road.** Twitch raids land before anyone clicks the welcome link, so the raiders who walk in always join after the beat began. Until now a joiner saw nothing: the raid fact was never current state, and a restored snapshot was silent. raid-show's half is built:
+- Herald's `CurrentSlot` gains `raid`.
+- The moment controller (`twitch-moments/controller.ts`) joins a restored raid while its column is still on the road (before the gate sleeps). It keeps the realm's commit time as the start, so the column is where it really is, and drops every cue before the join (`RaidBeat.joinedAt`).
+- A beat this page was already playing keeps its own clock across a reconnect.
+- A recovered raid, or one committed after its 60-second window (a late delivery), restores nothing.
+- A live fact for the same raid is the same caravan.
+
+On the real GPU, a walker who joined 9.6 s after the raid saw the 10,000 column pass: 2, 4 and 6 wagons at 14, 24 and 36 s. The composed CLI-to-restart flow passes with it.
+
+**needs: integrator — keep the newest raid as the one current raid.** Realm moments and the outbox projection are the integrator's, so raid-show does not carry this change (it was applied here once and moved back out on review). Until it lands, the controller's join is inert: a raider who follows the link mid-column sees the gate and the wall but no caravan, and nothing else changes. With it applied, `records.integration`, `service.integration`, the projection tests and the composed flow passed in this worktree, and the walker stills in `work/evidence/raid-show/walker-view.md` were taken. Herald's `CurrentSlot` type already includes `raid` (this lane's file). The three lines:
+
+```diff
+--- apps/realm/src/moments/spectacles.ts   (case 'raid')
+-      return { outcome: 'applied', facts: [{ current: false, body }], summons: [] };
++      return { outcome: 'applied', facts: [{ current: true, slot: { name: 'raid', order: at }, body }], summons: [] };
+--- apps/realm/src/outbox/projection.ts
+-const SLOTTED: ReadonlySet<string> = new Set(['hype', 'battle', 'poll']);
++const SLOTTED: ReadonlySet<string> = new Set(['hype', 'battle', 'poll', 'raid']);
+--- apps/realm/src/moments/records.ts   (normalizedRecord)
+-    case 'current-slot': if (id === 'hype' || id === 'battle' || id === 'poll') return CurrentSlotRecordSchema.parse(value); break;
++    case 'current-slot': if (id === 'hype' || id === 'battle' || id === 'poll' || id === 'raid') return CurrentSlotRecordSchema.parse(value); break;
+```
+
+Only the bits case has the same `current: false` line; patch the raid case only. The slot holds one raid (the newest by occurrence); an older late report never displaces it.
+
+**needs: integrator (when play and gather land) — the arrival facing.** Not applied here: play (`door?.yaw`) and gather (`back?.yaw`) both rewrite this same `yaw:` line in their open work, so a third edit would only make a three-way conflict. Composed, the line reads `yaw: resume?.yaw ?? door?.yaw ?? back?.yaw ?? facingOf(preparation) ?? 0`. `createRaidGuestSpawn` already returns `faceToward` (world x, z, 12 m out through the gate on the caravan's approach, `raidGuestFaceToward`) beside the port's fields. The walk camera resets behind the walker's spawn yaw, so a guest facing out sees the column ride towards them. Without this patch, guests face yaw 0 and the column comes through their camera from behind (seen on the GPU).
+
+```diff
+--- apps/realm/src/ports.ts   (RealmSpawnPreparation)
+   current(): boolean;
++  /** Optional point (world x, z) a fresh arrival faces; a resumed pose keeps its own yaw. */
++  readonly faceToward?: readonly [number, number];
+ }
+--- apps/realm/src/kingdom-room.ts   (onJoin, new WalkerSchema)
+-        ... grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? 0, ...
++        ... grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? (preparation?.faceToward ? ((Math.round(Math.atan2(preparation.faceToward[0] - position[0], preparation.faceToward[1] - position[2]) / (Math.PI * 2) * 256) % 256) + 256) % 256 : 0), ...
+```
+
+The byte convention is the walk input's `facingByte` (`atan2(x, z) / TAU * 256`).
+
+**2026-11-02 — Guests keep clear of the pennant wall.** The realm's spawn furniture now includes every candidate bay of the dated wall (`RAID_PENNANT_WALL_LAYOUT`, mirrored in `RAID_GATE_FURNITURE.pennants` and compared by the cross-surface test), each with its footprint plus 1.2 m to stand back and read. On the GPU a walker had arrived with their face in a raider's cloth.
 
 **needs: grand-world / integrator — torch light and occupancy.** The avenue's flames are emissive cores, glows and ground pools only; they do not yet light walkers or façades through the scene's light field, and the posts are not registered with native occupancy. Supply both through the existing optional §8 support callback (the posts use the lamp footprint `{radius:.65,height:2.4}`) and expose the drawn sites by appending `raidTorchSites: view.raidTorchSites()` (already exported by the moment view; world coordinates of the moment layer, at most twelve per caravan, empty once the gate sleeps) to `createKingdomMoments.metrics()`; until then no native collision or real light is claimed for them.
 

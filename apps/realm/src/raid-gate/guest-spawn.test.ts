@@ -15,8 +15,9 @@ import { referenceServices, REFERENCE_KINGDOM } from '../reference';
 import { createRealmServer } from '../server';
 import { BRAZIER_CELLS, TORCH_CELLS } from '../../../web/src/twitch-moments/raid-art';
 import { CELL } from '../../../web/src/twitch-moments/banner';
+import { RAID_PENNANT_WALL_LAYOUT, RAID_PENNANT_WALL_RADIUS } from '../../../web/src/twitch-moments/raid-pennant-wall';
 import { RAID_CHAT_GATE_LAYOUT, RAID_GATE_LAYOUT, RAID_TORCH_LAYOUT } from '../../../web/src/twitch-moments/raid-view';
-import { createRaidGuestSpawn, incomingRaidGateOf, incomingRaidRouteOf, raidColumnDistance, raidGateFurnitureOf, raidGuestSpawnAnchors, RAID_COLUMN_CLEARANCE, RAID_GATE_FURNITURE } from './guest-spawn';
+import { createRaidGuestSpawn, incomingRaidGateOf, incomingRaidRouteOf, raidColumnDistance, raidGateFurnitureOf, raidGuestFaceToward, raidGuestSpawnAnchors, RAID_COLUMN_CLEARANCE, RAID_GATE_FURNITURE } from './guest-spawn';
 import type { RaidGuestAuthority } from './guests';
 
 const plan = generateSettlementPlan({ seed: 'raid-spawn-geometry', tier: 'hamlet', firstYear: 2025, year: 2026 });
@@ -83,6 +84,9 @@ describe('incoming guest geometry and read-only preparation', () => {
     expect(F.gate).toEqual(RAID_GATE_LAYOUT);
     expect(F.torches).toMatchObject({ start: RAID_TORCH_LAYOUT.start, spacing: RAID_TORCH_LAYOUT.spacing, aside: RAID_TORCH_LAYOUT.aside, notBefore: RAID_GATE_LAYOUT.brazierIn + 1 });
     expect(F.chat).toMatchObject({ aside: RAID_CHAT_GATE_LAYOUT.aside, spacing: RAID_CHAT_GATE_LAYOUT.spacing, start: RAID_CHAT_GATE_LAYOUT.start, slots: RAID_CHAT_GATE_LAYOUT.slots });
+    expect(F.pennants).toMatchObject({ rows: RAID_PENNANT_WALL_LAYOUT.rows, spacing: RAID_PENNANT_WALL_LAYOUT.spacing, aside: RAID_PENNANT_WALL_LAYOUT.aside,
+      outward: [...RAID_PENNANT_WALL_LAYOUT.outward] });
+    expect(F.pennants.bay).toBeGreaterThanOrEqual(RAID_PENNANT_WALL_RADIUS);
     expect(F.brazier).toBeGreaterThanOrEqual(Math.max(BRAZIER_CELLS.size[0], BRAZIER_CELLS.size[2]) * CELL / 2);
     expect(F.torches.post).toBeGreaterThanOrEqual(Math.max(TORCH_CELLS.size[0], TORCH_CELLS.size[2]) * CELL / 2);
     for (const seed of ['raid-gate-a', 'raid-gate-b', 'raid-spawn-geometry', 'SIMULATED-tobi4s-incoming-show']) {
@@ -104,6 +108,18 @@ describe('incoming guest geometry and read-only preparation', () => {
     }
   });
 
+  it('turns arriving guests to look out through the gate, down the road the caravan comes in on', () => {
+    for (const seed of ['raid-gate-a', 'SIMULATED-tobi4s-incoming-show']) {
+      const layout = generateSettlementPlan({ seed, tier: 'hamlet', firstYear: 2025, year: 2026 });
+      const route = incomingRaidRouteOf(layout)!, gate = route[0]!, toward = raidGuestFaceToward(layout)!;
+      // Outside the gate on the approach line: every roadside anchor inside the gate faces back past the gate.
+      expect(Math.hypot(toward[0] - gate[0], toward[1] - gate[2])).toBeCloseTo(12, 6);
+      expect(raidColumnDistance(route, toward[0], toward[1])).toBeLessThan(1e-6);
+      const inward = route[1]!;
+      expect((toward[0] - gate[0]) * (inward[0] - gate[0]) + (toward[1] - gate[2]) * (inward[2] - gate[2])).toBeLessThan(0);
+    }
+  });
+
   it('refuses absent ground, a blocked gate and isolated support with no clear egress', () => {
     expect(raidGuestSpawnAnchors(plan, { revision: 2, query: () => [] })).toEqual([]);
     const solid: SolidBox = { min: [-1_000, -100, -1_000], max: [1_000, 100, 1_000] };
@@ -122,6 +138,7 @@ describe('incoming guest geometry and read-only preparation', () => {
     const first = await prepare(principal, currentWorld()!);
     const second = await prepare({ ...principal, sessionId: randomUUID() }, currentWorld()!);
     expect(first!.positions).toBe(second!.positions); expect(pendingEntry).toHaveBeenCalledTimes(2);
+    expect((first as { faceToward?: unknown }).faceToward).toEqual(raidGuestFaceToward(plan));
     expect(pendingEntry.mock.calls[0]).toEqual([{ version: 1, origin: principal.origin, entryId: principal.sessionId,
       personId: principal.personId, kingdomId: principal.kingdomId, at: time }]);
     expect(first!.current()).toBe(true);
