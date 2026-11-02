@@ -178,7 +178,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         && [carried.x, carried.y, carried.z].every(Number.isFinite)
         && !embeddedSolids(carried, this.world).length && supported(carried, this.world) ? carried : undefined;
       // Just out of the tavern: outside its street door, facing out (gather's record of the leave; null otherwise).
-      const back = resume ? null : tavernReturnsFor(services)?.arrival(auth.kingdomId, auth.personId, this.world, Date.now()) ?? null;
+      const back = resume ? null : tavernReturnsFor(services)?.arrival(auth.kingdomId, auth.personId, this.world, Date.now(), this.state.walkers.values()) ?? null;
       const position = resume ? [resume.x, resume.y, resume.z] as const : back?.feet ?? this.handle.spawn(auth), body = {x:position[0],y:position[1],z:position[2]};
       if (!position.every(Number.isFinite) || embeddedSolids(body,this.world).length || !supported(body,this.world)) throw new ServerError(503,'The kingdom gate has no safe arrival yet');
       const replacedPrincipal = previous ? this.viewers.get(previous)?.auth : undefined;

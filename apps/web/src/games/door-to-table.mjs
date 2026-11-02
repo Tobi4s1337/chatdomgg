@@ -56,7 +56,7 @@ try {
   const load = path => loader.ssrLoadModule(path);
   const [{ createRealmServer }, { referenceServices, REFERENCE_KINGDOM }, shared, { KingdomRoomState }, { createTavernInterior, ARRIVAL_SPACING, TAVERN_ENTRY, TAVERN_EXIT },
     { seatApproachDriver }, { installGatherStore, MemoryGatherStore }, { tavernPortalFor }, worldPkg, { createGrowthState }, { createRealmState },
-    { createNativeTown, assembleFoundedScene, compileFoundedScene }, { stepPlayer }, { installTavernReturns }, { embeddedSolids, supported }] = await Promise.all([
+    { createNativeTown, assembleFoundedScene, compileFoundedScene }, { stepPlayer }, { installTavernReturns, RETURN_SPACING }, { embeddedSolids, supported }] = await Promise.all([
     load('/apps/realm/src/server.ts'), load('/apps/realm/src/reference.ts'), load('/packages/shared/src/index.ts'), load('/packages/shared/src/realm/index.ts'),
     load('/apps/realm/src/games/interior.ts'), load('/apps/web/src/games/walker.ts'), load('/apps/realm/src/games/store.ts'),
     load('/apps/realm/src/games/portal.ts'), load('/packages/world/src/index.ts'), load('/packages/world/src/growth/index.ts'),
@@ -458,8 +458,18 @@ try {
       const kingdom = await kingdomJoin(walker, fresh(walker.principal));
       walker.kingdom = kingdom;
       const body = kingdom.state.walkers.get(kingdom.sessionId), spawnYaw = body.yaw;
-      // Placed by the kingdom room itself: at the return anchor, already facing out, not at the gate.
-      assert.ok(Math.hypot(body.x - portal.returnAnchor.feet[0], body.z - portal.returnAnchor.feet[2]) < .01, `${walker.label} arrives at the return anchor`);
+      // Placed by the kingdom room itself, already facing out, not at the gate: at the return anchor when nobody
+      // stands there, otherwise at the nearest free spot beside it or a step further out, never inside anyone.
+      const [ax, , az] = portal.returnAnchor.feet, gapOf = (x, z) => Math.min(Infinity, ...[...kingdom.state.walkers]
+        .filter(([id]) => id !== kingdom.sessionId).map(([, w]) => Math.hypot(w.x - x, w.z - z)));
+      const anchorFree = gapOf(ax, az) >= RETURN_SPACING, fromAnchor = Math.hypot(body.x - ax, body.z - az);
+      if (anchorFree) assert.ok(fromAnchor < .01, `${walker.label} arrives at the free return anchor`);
+      else {
+        assert.ok(fromAnchor <= 2.3, `${walker.label} arrives beside the occupied return anchor (${fromAnchor.toFixed(2)} m)`);
+        assert.ok(gapOf(body.x, body.z) >= RETURN_SPACING, `${walker.label} arrives clear of everyone on the square`);
+        assert.ok((body.x - ax) * -portal.door.through[0] + (body.z - az) * -portal.door.through[1] >= -1e-6, `${walker.label} is never placed back towards the door`);
+      }
+      const spot = [body.x, body.y, body.z];
       assert.equal(spawnYaw, portal.returnAnchor.yaw, `${walker.label} arrives facing out`);
       // Standing still on the step, the walker first looks along the wall (so the square's view must change before
       // the check can pass, even where the spawn's default already faces out), then turns to the anchor's facing as
@@ -484,13 +494,13 @@ try {
       const actual = seen[0], returned = [actual.x, actual.y, actual.z], radians = actual.yaw * Math.PI / 128;
       const facing = Math.sin(radians) * portal.door.through[0] + Math.cos(radians) * portal.door.through[1];
       assert.ok(facing < -.999, `${walker.label} actually faces out (${facing.toFixed(4)})`);
-      assert.ok(Math.hypot(returned[0] - portal.returnAnchor.feet[0], returned[2] - portal.returnAnchor.feet[2]) < .01, `${walker.label} stands at the return anchor`);
+      assert.ok(Math.hypot(returned[0] - spot[0], returned[2] - spot[2]) < .01, `${walker.label} stands where the realm placed them`);
       assert.equal(insideTavernThreshold(portal.door, returned), false, 'the return is off the door');
       assert.equal(createThresholdWatch(portal.door)(returned), false, 'arriving outside never fires the door');
       assert.equal(actual.look, walker.principal.look, `${walker.label} keeps the same look`);
       assert.equal(samples.both, 0, `${walker.label} was never in both rooms`);
       assert.ok(samples.tavern > 0 && samples.square > 0, `${walker.label} was seen on both sides`);
-      return { feet: returned, spawnYaw, asideYaw: aside, actualYaw: actual.yaw, facingOut: +facing.toFixed(4), onSquare: seen.length, samples };
+      return { feet: returned, atAnchor: anchorFree, fromAnchor: +fromAnchor.toFixed(3), spawnYaw, asideYaw: aside, actualYaw: actual.yaw, facingOut: +facing.toFixed(4), onSquare: seen.length, samples };
     } finally { watching.stop(); }
   };
   for (const walker of [one, two, watcher]) report.walkers[walker.label].returned = await walkOut(walker);

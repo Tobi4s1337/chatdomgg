@@ -252,6 +252,10 @@ production transport or dependency file is changed here. This is a host-isolatio
   facing out once, later arrivals and strangers arrive at the gate). Both rooms of a kingdom must stay in one realm
   process (they do: `server.ts` registers both); a multi-process realm would need this record in the shared store.
   Play's `rejoin(arrival)` needs no join field for this: a plain fresh kingdom join is enough.
+  Amended 13:09: `arrival` takes the room's standing walkers as an optional fifth argument
+  (`this.state.walkers.values()` in `onJoin`, one argument added). The first person out takes the anchor; anyone
+  coming out while it is occupied takes the nearest spot at least 0.7 m from everyone, beside the door or a step
+  further out, reached on supported feet, facing out. Without the argument it behaves as before.
 - Socket tests bind their own loopback address through `games/test-socket.ts` (`127.0.0.10`), since the lane
   ports on 127.0.0.1 are usually held by other lanes.
 
