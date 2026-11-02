@@ -7,6 +7,9 @@ import type { SettlementPlan } from '@chatdom/world';
 import Kingdom from '../kingdom';
 import type { PotentialKingdomView } from '../kingdom/scene';
 import { readRealmJson } from '../realm/adapters/entry';
+import { walkHref } from '@chatdom/ui/site';
+import { readOpenKingdoms } from '../atlas/data/open-kingdoms';
+import { DoorRefusal, doorFailureWords, foundedDoor } from './door-words';
 import { HoldingError, holdingPlace, readDoorHolding, takeHandOff, type DoorHolding } from '../atlas/data/holding';
 import type { PreviewSource } from '../atlas/data/preview';
 import { DoorCartouche, type DoorStep } from '../atlas/ui/Door';
@@ -38,7 +41,7 @@ const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() =>
 export default function GenesisPreview() {
   const [view, setView] = createSignal<View>();
   const [error, setError] = createSignal<string>();
-  const [door, setDoor] = createSignal<{ id: string; name: string; subtitle: string }>();
+  const [door, setDoor] = createSignal<{ id: string; name: string; subtitle: string; eyebrow?: string }>();
   const [steps, setSteps] = createSignal<DoorStep[]>([]);
   const [phase, setPhase] = createSignal<'stamp' | 'ink' | 'wake' | 'gone'>('ink');
   const [waiting, setWaiting] = createSignal(false);
@@ -67,7 +70,9 @@ export default function GenesisPreview() {
       if (abort.signal.aborted) return;
       clearTimeout(raven);
       setWaiting(false);
-      setError(cause instanceof Error ? cause.message : 'The land could not be read.');
+      const failure = doorFailureWords(cause);
+      if (failure.log) console.warn('The door into this land could not open:', cause);
+      setError(failure.words);
     });
   });
 
@@ -81,6 +86,11 @@ export default function GenesisPreview() {
     // The holding: handed over by the Atlas card, or read from the survey this tab draws.
     let holding = takeHandOff(sessionStore(), id);
     setDoor({ id, name: holding?.name ?? channel?.name ?? 'A holding', subtitle: holding ? holdingPlace(holding) : 'Reading the Atlas' });
+    // A kingdom the front door opens is named on its door while its land is asked for (it has no survey holding).
+    if (!holding) void readOpenKingdoms().then(list => {
+      const kingdom = list.find(item => item.kingdomId === id);
+      if (kingdom) setDoor({ id, ...foundedDoor(kingdom) });
+    });
     // Adopted land is asked for first: a founded kingdom opens from its own bytes, whether or not the Atlas survey
     // has observed the channel (a small channel may never cross the survey's floor).
     step('The gate is opened');
@@ -91,12 +101,15 @@ export default function GenesisPreview() {
     if (response.ok) {
       const adopted = RealmFoundedManifestSchema.parse(body);
       resolveGenesisEntry({ broadcasterId: id }, adopted);
-      // Existing adopted bytes always win over procedural potential, including during metadata outages.
-      location.replace(`/stream?source=realm&kingdom=${encodeURIComponent(id)}`);
+      // Existing adopted bytes always win over procedural potential, including during metadata outages. A visitor who
+      // enters a founded kingdom has come to walk in it: its walk-in gate, which walks a signed-in visitor straight in
+      // and asks anyone else to sign in. (The stream view is the streamer's broadcast source, with no way on.)
+      location.replace(walkHref(id));
       return;
     }
     const unavailable = RealmApiErrorSchema.safeParse(body);
-    if (response.status !== 404 || !unavailable.success) throw new Error(unavailable.success ? unavailable.data.message : 'The adopted-land service is unavailable. Its outage cannot generate a replacement world.');
+    // Only the realm's 404 means "not founded"; any other answer is an outage, and an outage never draws a stand-in.
+    if (response.status !== 404 || !unavailable.success) throw new Error(unavailable.success ? unavailable.data.message : `The adopted-land read answered HTTP ${response.status}.`);
 
     // Only an unfounded holding is drawn from the survey.
     if (!holding) {
@@ -106,7 +119,7 @@ export default function GenesisPreview() {
       } catch (cause) {
         if (abort.signal.aborted) return;
         // The three composed kingdoms keep their own recorded facts and open without the survey.
-        if (!authored) throw cause instanceof HoldingError ? new Error(holdingMessage(cause)) : cause;
+        if (!authored) throw cause instanceof HoldingError ? new DoorRefusal(holdingMessage(cause)) : cause;
         setDoor({ id, name: authored.channel.name, subtitle: 'Drawn from its recorded survey' });
       }
       if (holding) setDoor({ id, name: holding.name, subtitle: holdingPlace(holding) });
@@ -202,7 +215,7 @@ export default function GenesisPreview() {
         onArrived={() => { rideDone = true; }} onUnavailable={() => { rideDone = true; setRaid(undefined); }} /></div>}
     </Show>
     <Show when={door()} fallback={<div class="genesis-wait"><p>CHATDOM · THE LAND BEYOND THE MAP</p><h1>Unfolding the land…</h1></div>}>
-      {current => <DoorCartouche id={current().id} name={current().name} subtitle={current().subtitle} steps={steps()}
+      {current => <DoorCartouche id={current().id} name={current().name} subtitle={current().subtitle} eyebrow={current().eyebrow} steps={steps()}
         phase={raid() && !view() ? 'ink' : phase()} waiting={waiting()} failure={error() ?? null} />}
     </Show>
   </>;

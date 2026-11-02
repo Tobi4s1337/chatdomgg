@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { DirectoryError, fetchSearch, type SearchReply, type SearchResult } from '../data/directory';
-import { findOpenKingdom } from '../data/open-kingdoms';
+import { findOpenKingdom, matchFoundedChannel, readOpenKingdoms } from '../data/open-kingdoms';
+import type { OpenKingdom } from '@chatdom/ui/site';
 import type { PreviewSource, PreviewWorld } from '../data/preview';
 import { mapNoun } from './edition';
 import { formatCount, SEARCH_PLACEHOLDER, TIER_NAMES } from './format';
@@ -60,6 +61,9 @@ export function Search(props: {
     const query = now.query;
     void findOpenKingdom(query).then(kingdom => { if (phase() === now) setOpenKingdom(kingdom ? { query, ...kingdom } : null); });
   });
+  // A channel the survey has not given land may still have a founded kingdom: its row says so, like its card.
+  const [founded, setFounded] = createSignal<readonly OpenKingdom[]>([]);
+  onMount(() => { void readOpenKingdoms().then(setFounded); });
   const [showSearching, setShowSearching] = createSignal(false);
   const [open, setOpen] = createSignal(false);
   const [active, setActive] = createSignal(0);
@@ -187,7 +191,8 @@ export function Search(props: {
     const realm = props.world.realms[result.channel.realm ?? -1];
     const land = region ? (region.kind === 'continent' && realm ? `${realm.name} · ${region.name}` : region.name) : null;
     if (result.channel.place === 'mapped') return [TIER_NAMES[result.channel.tier ?? 3], land].filter(Boolean).join(' · ');
-    return ['No land yet', land].filter(Boolean).join(' · ');
+    const kingdom = result.channel.login ? matchFoundedChannel(founded(), result.channel.login) : null;
+    return [kingdom ? `Founded · ${kingdom.name}` : 'No land yet', land].filter(Boolean).join(' · ');
   };
 
   return (

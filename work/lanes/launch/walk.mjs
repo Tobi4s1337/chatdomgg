@@ -65,14 +65,55 @@ const steps = {
     await page.waitForTimeout(2500);
     notes.push(`enter link: ${await page.locator('.atlas-door').first().getAttribute('href').catch(() => 'none')}`);
   },
+  // A stranger lands on /map cold: what can they act on after three seconds, and how many clicks to a kingdom?
+  async coldmap(page, notes, size) {
+    const started = Date.now();
+    await page.goto(`${target}/map`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(Math.max(0, 3000 - (Date.now() - started)));
+    await page.screenshot({ path: join(out, `coldmap-3s@${size}.png`) }).catch(() => {});
+    const visible = await page.evaluate(() => [...document.querySelectorAll('a, button, input')]
+      .filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight && window.getComputedStyle(el).visibility !== 'hidden'; })
+      .map(el => (el.getAttribute('aria-label') || el.innerText || el.getAttribute('placeholder') || el.tagName).replace(/\s+/g, ' ').trim().slice(0, 60))
+      .filter(Boolean));
+    notes.push(`at 3 s: ${visible.join(' · ')}`);
+    await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 }).catch(() => notes.push('map never said ready'));
+    notes.push(`ready after ${((Date.now() - started) / 1000).toFixed(1)} s`);
+    await page.locator('.atlas-search input[type=search]').waitFor({ state: 'visible', timeout: 60_000 })
+      .then(() => notes.push(`search field visible after ${((Date.now() - started) / 1000).toFixed(1)} s`))
+      .catch(() => notes.push('search field never visible in 60 s'));
+    notes.push(`survey seal: ${(await page.locator('.atlas-survey-seal').innerText().catch(() => 'none')).replace(/\s+/g, ' ')}`);
+    const way = page.locator('a[href^="/kingdom/"], a[href*="walk=1"]').filter({ visible: true });
+    notes.push(`visible ways in after ready: ${(await way.allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim()).join(' · ') || 'none'}`);
+  },
+  // The whole way from a cold /map to the walk-in gate, as a stranger clicks it: search, the row, Enter on the card.
+  async coldpath(page, notes) {
+    const started = Date.now(), at = () => `${((Date.now() - started) / 1000).toFixed(1)} s`;
+    let clicks = 0;
+    await page.goto(`${target}/map`, { waitUntil: 'domcontentloaded' });
+    const input = page.locator('.atlas-search input[type=search]');
+    await input.waitFor({ state: 'visible', timeout: 90_000 });
+    await input.click(); clicks++;
+    await input.pressSequentially(LOGIN, { delay: 60 });
+    const row = page.locator('.atlas-search-result').first();
+    await row.waitFor({ state: 'visible', timeout: 20_000 });
+    notes.push(`row at ${at()}: ${(await row.innerText()).replace(/\s+/g, ' ')}`);
+    await row.click(); clicks++;
+    const enter = page.locator('a[href^="/kingdom/"]').filter({ visible: true }).first();
+    await enter.waitFor({ state: 'visible', timeout: 30_000 });
+    notes.push(`card at ${at()}: ${(await enter.innerText()).replace(/\s+/g, ' ')}`);
+    await enter.click(); clicks++;
+    await page.waitForSelector('.ke-gate[data-gate]', { timeout: 60_000 });
+    await page.waitForTimeout(3000);
+    notes.push(`gate at ${at()} after ${clicks} clicks and the login typed: ${await page.locator('.ke-gate').getAttribute('data-gate')} at ${page.url().slice(target.length)}`);
+  },
   async kingdom(page, notes) {
     const started = Date.now();
     await page.goto(`${target}/kingdom/${KINGDOM}`, { waitUntil: 'domcontentloaded' });
-    // A founded kingdom hands over to its live land at /stream; wait for that hand-over before waiting for a frame.
-    await page.waitForURL(/\/stream\?/, { timeout: 30_000 }).catch(() => {});
-    await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 150_000 }).catch(() => notes.push('kingdom never said ready in 150 s'));
-    notes.push(`ready after ${((Date.now() - started) / 1000).toFixed(1)} s (SwiftShader) at ${page.url().slice(target.length)}`);
+    // A founded kingdom hands a visitor over to its walk-in gate: signed out, the gate asks for Twitch.
+    await page.waitForURL(/[?&]walk=1/, { timeout: 30_000 }).catch(() => notes.push('no hand-over to the walk-in gate'));
+    await page.waitForSelector('.ke-gate[data-gate]', { timeout: 60_000 }).catch(() => notes.push('no gate drawn'));
     await page.waitForTimeout(4000);
+    notes.push(`after ${((Date.now() - started) / 1000).toFixed(1)} s at ${page.url().slice(target.length)}, gate ${await page.locator('.ke-gate').getAttribute('data-gate').catch(() => 'none')}`);
   },
   async panel(page) {
     await page.goto(`${target}/panel`, { waitUntil: 'networkidle' });
@@ -142,7 +183,7 @@ try {
       page.on('requestfailed', request => { if (request.url().startsWith(target)) entry.requests.push(`failed ${request.url().slice(target.length)} ${request.failure()?.errorText}`); });
       page.on('response', response => { if (response.url().startsWith(target) && response.status() >= 400) entry.requests.push(`${response.status()} ${response.url().slice(target.length)}`); });
       const started = Date.now();
-      try { await steps[name](page, entry.notes); } catch (error) { entry.notes.push(`step failed: ${String(error.message ?? error).split('\n')[0]}`); }
+      try { await steps[name](page, entry.notes, `${width}x${height}`); } catch (error) { entry.notes.push(`step failed: ${String(error.message ?? error).split('\n')[0]}`); }
       const text = await page.evaluate(() => document.body?.innerText ?? '').catch(() => '');
       for (const line of text.split('\n')) if (DEV_WORDS.test(line)) entry.words.push(line.trim().slice(0, 200));
       entry.title = await page.title().catch(() => '');

@@ -369,6 +369,18 @@ REALM_SIMULATED=1 REALM_STORAGE=memory REALM_PORT=5191 pnpm --filter @chatdom/re
 Do not start a second process on an occupied port. The actual kingdom entry above consumes its founded collision
 world through realm wiring; the separate reference court remains a labelled diagnostic.
 
+### PL13 mouse look replay (`replay/`)
+
+```sh
+node apps/web/src/walk/replay/replay.mjs --target local --port <free 5170-5186>   # headless Chrome and Firefox, capture lock
+chatdom-pc-lease -- node apps/web/src/walk/replay/replay.mjs --bundle <dir>       # real GPU Chrome, web 5192 (build with --build-only first)
+```
+
+The real walk controller, look.ts and the shoulder rig in a real browser at its own refresh rate, fed Tobias's recorded
+Firefox X11 stream, synthetic echo streams (lock begun far from and near the centre), a steady 1000 Hz turn and a fast
+flick, every event at its own time and drawn on the next animation frame. The table gives the turn per count and any
+turn after the hand stops. The lock is a stand-in, so the run never takes the cursor of the machine it runs on.
+
 ### PL10 stills (`stills/`)
 
 ```sh
