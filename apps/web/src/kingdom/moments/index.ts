@@ -89,7 +89,7 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
       lease = current; abort.addEventListener('abort', () => current.release(), { once: true }); return current;
     } },
   });
-  mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock: () => now, plan, ground: options.ground ?? ((x, z) => terrainHeight(plan, x, z)) });
+  mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock: () => now, plan, ground: options.ground ?? ((x, z) => terrainHeight(plan, x, z)), party: { scene, material } });
   const disconnect = controller.connect(feed);
   const dispose = () => {
     if (disposed) return;
