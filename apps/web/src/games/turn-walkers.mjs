@@ -102,9 +102,11 @@ try {
     loader.ssrLoadModule('/apps/realm/src/auth/reconnect-harness.ts'), loader.ssrLoadModule('/apps/realm/src/games/stones.ts'),
   ]);
   const base = referenceServices();
+  // GATHER_ACROSS_LOOK=pointed-hat dresses the seated SDK player in the tallest bench look (tavern/bench-looks.ts).
+  const tallTickets = new Set();
   const services = { ...base, auth: { ...base.auth, authenticate: async join => {
     const principal = await base.auth.authenticate(join);
-    return { ...principal, look: starterCitizenLook(principal.personId) };
+    return { ...principal, look: tallTickets.has(join.ticket) ? 'bench-pointed-hat' : starterCitizenLook(principal.personId) };
   } } };
   installGatherStore(services, new MemoryGatherStore());
   const created = createRealmServer(services); realm = created.server;
@@ -117,8 +119,10 @@ try {
     preview: { host, port: webPort, strictPort: true,
       proxy: { '/live-realm-data': { target: endpoint, ws: true, rewrite: path => path.replace(/^\/live-realm-data/, '') } } } });
   const sdk = new Client(endpoint);
-  const join = async () => {
-    const room = await sdk.joinOrCreate('tavern', base.issue(), TavernRoomState);
+  const join = async (tall = false) => {
+    const ticket = base.issue();
+    if (tall) tallTickets.add(ticket.ticket);
+    const room = await sdk.joinOrCreate('tavern', ticket, TavernRoomState);
     room.reconnection.enabled = false; rooms.push(room);
     const state = { tables: null, self: null, receipt: null };
     for (const type of ['interior', 'transient', 'receipt']) room.onMessage(type, () => {});
@@ -129,7 +133,13 @@ try {
     await until(() => state.tables && state.self && room.state.walkers.get(room.sessionId), 'headless room bootstrap');
     return { room, state };
   };
-  player = await join(); spectator = await join();
+  const acrossLook = process.env.GATHER_ACROSS_LOOK;
+  assert.ok(acrossLook === undefined || acrossLook === 'pointed-hat', 'GATHER_ACROSS_LOOK may only be pointed-hat');
+  player = await join(acrossLook === 'pointed-hat'); spectator = await join();
+  if (acrossLook) {
+    assert.equal(player.room.state.walkers.get(player.room.sessionId).look, 'bench-pointed-hat');
+    report.checks.push('The seated SDK player wears the pointed hat, the tallest worn silhouette, across the table.');
+  }
   assert.equal(player.room.roomId, spectator.room.roomId);
   const interior = createTavernInterior(), target = interior.registry.get(`tavern:${tableId}:seat:${ownChair}`);
   assert.ok(target, 'authored chair exists');

@@ -48,7 +48,8 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
   const avatar = createVoxelMaterial(MATERIALS, 'avatar');
   const light = tavernLight(tavernLightSources(kit.hearth)); avatar.setLight(light);
   avatar.setEnvironment(tavernInteriorEnvironment(19));
-  const looks = createDefaultCitizenLooks(), people = await createCitizenRenderer(stage.scene, { registry: MATERIALS, material: avatar, looks, capacity: 128 });
+  const bench = client.room.state.origin === 'simulated' ? (await import('./bench-looks')).benchCitizenLooks() : [];
+  const looks = [...createDefaultCitizenLooks(), ...bench], people = await createCitizenRenderer(stage.scene, { registry: MATERIALS, material: avatar, looks, capacity: 128 });
   if ([...client.room.state.walkers.values()].some(walker => !looks.some(look => look.id === walker.look))) {
     people.dispose(); avatar.dispose(); throw new Error('A citizen’s clothes could not be opened. Enter again shortly.');
   }
