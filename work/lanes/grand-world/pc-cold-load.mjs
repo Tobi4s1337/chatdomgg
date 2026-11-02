@@ -22,7 +22,7 @@ import { writeFileSync } from 'node:fs';
 const CDP = 'http://127.0.0.1:9333';
 const args = process.argv.slice(2);
 const flag = name => { const i = args.indexOf(`--${name}`); return i < 0 ? undefined : args[i + 1]; };
-const [url, out] = args.filter((a, i) => !a.startsWith('--') && !['--size', '--seconds', '--timeout', '--shot', '--settle', '--pose'].includes(args[i - 1]));
+const [url, out] = args.filter((a, i) => !a.startsWith('--') && !['--size', '--seconds', '--timeout', '--shot', '--settle', '--pose', '--profile'].includes(args[i - 1]));
 const today = /^http:\/\/localhost:5190\//.test(url ?? '');
 if (!(today || /^http:\/\/(localhost|127\.0\.0\.1):5192\//.test(url ?? '')) || !out) throw new Error('usage: <http://localhost:5192/... | http://127.0.0.1:5192/... | http://localhost:5190/...> <out.json> [--cold]');
 const origin = new URL(url).origin;
@@ -32,6 +32,9 @@ const [width, height] = (flag('size') ?? '1920x1080').split('x').map(Number);
 const seconds = Number(flag('seconds') ?? 10), timeout = Number(flag('timeout') ?? 150) * 1000;
 // --shot <png> [--settle S]: after the frame record, wait S more seconds, record the land state and capture the page.
 const shot = flag('shot'), settle = Number(flag('settle') ?? 0);
+// --profile <out.cpuprofile>: sample the page's main thread from navigation to readiness (1 ms interval) and keep
+// the performance marks the page recorded; open the profile in DevTools' Performance panel.
+const profile = flag('profile');
 // --pose ex,ey,ez,tx,ty,tz,fov: before the shot, hold the director and apply this fixed evidence pose through the
 // scene's own capture pose (eye-level views on the real founded plan; never a production camera).
 const poseText = flag('pose'), pose = poseText ? poseText.split(',').map(Number) : null;
@@ -66,9 +69,18 @@ function traced(message) {
   } else if (message.method === 'Network.loadingFinished') r.end = at(p.timestamp);
   else if (message.method === 'Network.loadingFailed') { r.end = at(p.timestamp); r.failed = p.errorText; }
 }
+const consoleLines = [];
+let navigatedWall = null;
 ws.onmessage = event => {
   const message = JSON.parse(event.data);
   if (message.method?.startsWith('Network.')) traced(message);
+  // The page's own errors and warnings, with their time from navigation (worker errors arrive as exceptions).
+  if (message.method === 'Runtime.consoleAPICalled' && ['error', 'warning', 'assert'].includes(message.params.type) && consoleLines.length < 200)
+    consoleLines.push({ wall: Date.now(), type: message.params.type,
+      text: message.params.args.map(a => a.value ?? a.description ?? a.type).join(' ').slice(0, 600) });
+  if (message.method === 'Runtime.exceptionThrown' && consoleLines.length < 200)
+    consoleLines.push({ wall: Date.now(), type: 'exception',
+      text: (message.params.exceptionDetails.exception?.description ?? message.params.exceptionDetails.text ?? '').slice(0, 900) });
   const waiter = pending.get(message.id);
   if (!waiter) return;
   pending.delete(message.id);
@@ -94,12 +106,27 @@ try {
   await s('Page.enable'); await s('Runtime.enable'); await s('Network.enable');
   await s('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
   await s('Page.bringToFront');
+  // A minimized window draws no frames: nothing would ever open.
+  try {
+    const { windowId, bounds } = await send('Browser.getWindowForTarget', { targetId });
+    report.window = bounds?.windowState ?? null;
+    if (bounds?.windowState === 'minimized') await send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+  } catch {}
   report.renderer = await evaluate(`(() => { const gl = document.createElement('canvas').getContext('webgl2');
     const e = gl && gl.getExtension('WEBGL_debug_renderer_info'); return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : 'unknown'; })()`);
   if (cold) {
     await s('Network.clearBrowserCache');
     await s('Storage.clearDataForOrigin', { origin, storageTypes: 'all' });
   }
+  // Watches every WebGL context and the page's frame clock without creating contexts of its own.
+  await s('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+    const contexts = []; const get = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { const c = get.call(this, kind, ...rest); if (c && /webgl/.test(kind) && !contexts.includes(c)) contexts.push(c); return c; };
+    window.__probeContexts = contexts; window.__probeFrames = 0;
+    const tick = () => { window.__probeFrames++; requestAnimationFrame(tick); }; requestAnimationFrame(tick);
+  })()` });
+  if (profile) { await s('Profiler.enable'); await s('Profiler.setSamplingInterval', { interval: 1000 }); await s('Profiler.start'); }
+  navigatedWall = Date.now();
   await s('Page.navigate', { url });
   const start = Date.now();
   const probe = `(() => {
@@ -107,7 +134,11 @@ try {
     let land = null; try { land = canvas ? JSON.parse(canvas.dataset.hostedLand) : null; } catch {}
     const nav = performance.getEntriesByType('navigation')[0];
     const paint = Object.fromEntries(performance.getEntriesByType('paint').map(p => [p.name, Math.round(p.startTime)]));
-    return { now: Math.round(performance.now()), visible: document.visibilityState, ready: window.__chatdomReady === true, curtain: !!document.querySelector('.stream-curtain'),
+    const lost = (window.__probeContexts ?? []).filter(gl => gl.isContextLost()).length;
+    const frames = window.__probeFrames ?? null;
+    const steps = performance.getEntriesByType('mark').filter(m => /^(gw11|chatdom:open):/.test(m.name)).map(m => m.name.replace(/^\w+:/, '') + '@' + Math.round(m.startTime));
+    const status = (document.querySelector('.stream-curtain,.kingdom-gate,.opening')?.textContent ?? '').replace(/\\s+/g, ' ').trim().slice(0, 160);
+    return { now: Math.round(performance.now()), visible: document.visibilityState, lost, frames, steps, status, ready: window.__chatdomReady === true, curtain: !!document.querySelector('.stream-curtain'),
       phase: window.__chatdomStream?.phase ?? null, paint, responseEnd: nav ? Math.round(nav.responseEnd) : null,
       land: land && { phase: land.phase, covered: land.covered, regions: land.regions, exactRegions: land.exactRegions,
         initialCoverageReady: land.initialCoverageReady, initialNetworkBytes: land.initialNetworkBytes, networkBytes: land.networkBytes,
@@ -129,6 +160,13 @@ try {
   const last = report.samples.at(-1);
   report.marks = { ...marks, firstPaint: last?.paint['first-paint'] ?? null, firstContentfulPaint: last?.paint['first-contentful-paint'] ?? null };
   report.final = last;
+  if (profile) {
+    const { profile: data } = await s('Profiler.stop');
+    writeFileSync(profile, JSON.stringify(data));
+    report.profile = profile;
+  }
+  report.pageMarks = await evaluate(`performance.getEntriesByType('mark').concat(performance.getEntriesByType('measure'))
+    .map(m => ({ name: m.name, at: Math.round(m.startTime), ms: Math.round(m.duration), detail: m.detail ?? null }))`).catch(() => null);
   if (marks.ready === undefined) throw new Error(`not ready after ${timeout / 1000}s`);
   await sleep(1000);
   report.frames = await evaluate(`new Promise(resolve => { const t = []; let last = performance.now(); const end = last + ${seconds} * 1000;
@@ -166,6 +204,7 @@ try {
   report.requests = { total: all.length, unfinished: all.filter(r => r.end === undefined).length, land: land.length,
     landUnfinished: land.filter(r => r.end === undefined).length,
     list: all.filter(r => !land.includes(r) || land.indexOf(r) < 10 || r.end === undefined) };
+  report.console = consoleLines.map(({ wall, ...line }) => ({ at: navigatedWall === null ? null : wall - navigatedWall, ...line }));
   writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`);
   await send('Target.closeTarget', { targetId }).catch(() => {});
   ws.close();

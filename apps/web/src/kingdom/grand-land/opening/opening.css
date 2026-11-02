@@ -1,0 +1,100 @@
+@font-face { font-family: 'IM Fell English SC'; font-style: normal; font-weight: 400; font-display: block; src: url('../../../atlas/assets/fonts/im-fell-english-sc.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400 900; font-display: block; src: url('../../../atlas/assets/fonts/alegreya-roman-latin.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 400 900; font-display: block; src: url('../../../atlas/assets/fonts/alegreya-italic-latin.woff2') format('woff2'); }
+
+/* The table the map is unrolled on: night blue, lit by one warm lamp from the upper left. */
+.opening {
+  position: absolute; inset: 0; z-index: 6; overflow: hidden; pointer-events: auto;
+  background:
+    radial-gradient(ellipse 70% 60% at 22% 12%, #ffb3591c, transparent 70%),
+    radial-gradient(ellipse at 50% 42%, #2c2b3b, #141722 78%);
+  transition: opacity .7s ease, visibility 0s linear .7s;
+  font-family: 'Alegreya', Georgia, serif; color: #2f2216;
+}
+.opening.opening-leaving { opacity: 0; visibility: hidden; }
+.opening.opening-leaving .opening-sheet { transform: translate(-50%, -50%) scale(1.035); filter: blur(1.5px); }
+
+.opening-sheet {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(1180px, 90vw); height: min(840px, 86vh);
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: clamp(6px, 1.4vh, 16px);
+  padding: clamp(18px, 3.2vh, 40px) clamp(20px, 3vw, 46px) clamp(16px, 2.6vh, 32px);
+  transition: transform .7s cubic-bezier(.3, .6, .2, 1), filter .7s ease;
+  animation: opening-unroll 1.15s cubic-bezier(.22, .7, .18, 1) both;
+}
+.opening-paper {
+  position: absolute; inset: 0; z-index: -1; border-radius: 2px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .32 0 0 0 0 .22 0 0 0 0 .1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.38'/%3E%3C/svg%3E"),
+    radial-gradient(circle at 16% 24%, #9c6d3a1c, transparent 16%),
+    radial-gradient(circle at 84% 72%, #9c6d3a16, transparent 20%),
+    radial-gradient(circle at 70% 14%, #8a5d2c10, transparent 12%),
+    radial-gradient(ellipse 120% 110% at 50% 46%, transparent 52%, #7a54283d 88%, #4f33175e 100%),
+    linear-gradient(176deg, #f0e2c1, #e8d6ae 55%, #e2cc9f);
+  box-shadow: 0 34px 90px #05060cb0, 0 6px 18px #05060c70, inset 0 0 0 1px #6e4d2a33;
+}
+.opening-paper::before {
+  content: ''; position: absolute; inset: clamp(8px, 1.2vh, 14px);
+  border: 1px solid #5a3f2363; outline: 1px solid #5a3f2330; outline-offset: 4px; pointer-events: none;
+}
+.opening-roll {
+  position: absolute; left: -1.2%; right: -1.2%; height: clamp(22px, 3.4vh, 34px); top: 100%;
+  border-radius: 40px; pointer-events: none; opacity: 0;
+  background: linear-gradient(180deg, #8d7550, #f3e6c6 32%, #e2cfa4 52%, #a68b5f 80%, #5c4a30);
+  box-shadow: 0 8px 18px #0008;
+  animation: opening-roll 1.15s cubic-bezier(.22, .7, .18, 1) both;
+}
+@keyframes opening-unroll {
+  from { clip-path: inset(-4% -4% 93% -4%); }
+  to { clip-path: inset(-4% -4% -4% -4%); }
+}
+@keyframes opening-roll {
+  0% { top: 4%; opacity: 1; }
+  88% { opacity: 1; }
+  100% { top: calc(100% - clamp(11px, 1.7vh, 17px)); opacity: 0; }
+}
+
+.opening-cartouche { text-align: center; padding-top: clamp(4px, 1vh, 10px); }
+.opening-eyebrow {
+  margin: 0 0 2px; font: 600 clamp(11px, 1.15vh, 13px)/1.2 'Alegreya', Georgia, serif; font-variant: small-caps;
+  letter-spacing: .32em; text-transform: lowercase; color: #6b4d2e;
+}
+.opening-name {
+  margin: 0; font: 400 clamp(32px, 5.2vh, 58px)/1.02 'IM Fell English SC', Georgia, serif; letter-spacing: .02em; color: #2c1f13;
+  min-height: 1em;
+}
+.opening-cartouche::after {
+  content: ''; display: block; width: min(320px, 50%); height: 9px; margin: clamp(4px, .9vh, 9px) auto 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 9'%3E%3Cpath d='M0 4.5H150M170 4.5H320' stroke='%233a2a1a' stroke-opacity='.6' stroke-width='1'/%3E%3Cpath d='M160 .5 164 4.5 160 8.5 156 4.5Z' fill='%233a2a1a'/%3E%3Ccircle cx='147' cy='4.5' r='1.2' fill='%233a2a1a'/%3E%3Ccircle cx='173' cy='4.5' r='1.2' fill='%233a2a1a'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+
+.opening-map { position: relative; min-height: 0; }
+.opening-map canvas { position: absolute; inset: 0; width: 100%; height: 100%; mix-blend-mode: multiply; }
+.opening-compass {
+  position: absolute; right: 1%; bottom: 2%; width: clamp(34px, 5.4vh, 56px); height: auto; overflow: visible;
+  fill: none; stroke: #3a2a1a; stroke-width: .8; opacity: .8;
+}
+.opening-compass .opening-north { fill: #7a2f1c; stroke: none; }
+.opening-compass text { font: 7px 'IM Fell English SC', Georgia, serif; fill: #3a2a1a; stroke: none; text-anchor: middle; }
+
+.opening-legend { text-align: center; min-height: 3.6em; }
+.opening-line { margin: 0; font: italic 400 clamp(16px, 2.15vh, 22px)/1.3 'Alegreya', Georgia, serif; color: #33241a; }
+.opening-line.opening-new { animation: opening-ink .6s ease both; }
+.opening-detail {
+  margin: 3px 0 0; min-height: 1.3em; font: 500 clamp(11px, 1.4vh, 14px)/1.3 'Alegreya', Georgia, serif;
+  font-variant: small-caps; font-variant-numeric: tabular-nums oldstyle-nums; letter-spacing: .07em; color: #6a5036;
+}
+.opening-rule { width: min(260px, 56%); height: 1px; margin: clamp(6px, 1vh, 10px) auto 0; background: #3a2a1a2a; }
+.opening-rule i { display: block; height: 100%; background: #2f2216; transform: scaleX(0); transform-origin: left; transition: transform .45s ease; }
+.opening-failed .opening-line { color: #7a2f1c; }
+/* Opacity and transform only, so the compositor runs it even while the kingdom's opening holds the main thread. */
+@keyframes opening-ink { from { opacity: .15; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+@media (max-aspect-ratio: 4/5) {
+  .opening-sheet { width: 92vw; height: 84vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .opening-sheet, .opening-roll, .opening-line.opening-new { animation: none; }
+  .opening-roll { display: none; }
+  .opening, .opening-sheet { transition: none; }
+}

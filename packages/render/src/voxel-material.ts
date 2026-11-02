@@ -6,6 +6,8 @@ import type { Environment } from './atmosphere';
 export interface VoxelRenderState {
   material:THREE.ShaderMaterial;
   setEnvironment(grade:Environment):void;
+  /** How much low valley haze the material lays over distance, and where the clear street ends. */
+  setAir?(air:LandAir):void;
   setLight(volume:LightVolume):void;
   setFarLight(volume:LightVolume):void;
   setBeaconLight(volume:LightVolume):void;
@@ -39,6 +41,9 @@ export function geometryFromChunks(chunks:readonly AssetChunkMesh[],lattice:Voxe
 
 /** Base density for the voxel material's height haze and aerial perspective. */
 const VOXEL_FOG_SCALE=.72;
+/** The low haze and clear radius of the voxel fog. The small native land keeps the default. */
+export interface LandAir { readonly lowHaze:number; readonly clear:number }
+export const NATIVE_LAND_AIR:LandAir={lowHaze:2.2,clear:65};
 
 export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLattice):VoxelRenderState {
   const palette=new Float32Array(65536*4);
@@ -49,7 +54,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
   let farLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);farLightTexture.format=THREE.RedFormat;farLightTexture.needsUpdate=true;
   let beaconLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);beaconLightTexture.format=THREE.RedFormat;beaconLightTexture.needsUpdate=true;
   let heightTexture=new THREE.DataTexture(new Float32Array(1),1,1,THREE.RedFormat,THREE.FloatType);heightTexture.needsUpdate=true;
-  const uniforms={uSmithyPower:{value:0},uSmithyOrigin:{value:new THREE.Vector3()},uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uShadow:{value:new THREE.Color()},uGlow:{value:new THREE.Color()},uFogDensity:{value:.00115},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uBeaconPosition:{value:new THREE.Vector3()},uBeaconStrength:{value:0},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
+  const uniforms={uSmithyPower:{value:0},uSmithyOrigin:{value:new THREE.Vector3()},uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uShadow:{value:new THREE.Color()},uGlow:{value:new THREE.Color()},uFogDensity:{value:.00115},uLowHaze:{value:NATIVE_LAND_AIR.lowHaze},uHazeClear:{value:NATIVE_LAND_AIR.clear},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uBeaconPosition:{value:new THREE.Vector3()},uBeaconStrength:{value:0},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
   const material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms,alphaToCoverage:true,vertexShader:`
     in uint aPacked; in uint aMaterial;
     out float vLodFade;
@@ -81,7 +86,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     uniform sampler2D uPalette;uniform sampler3D uLight,uFarLight,uBeaconLight;
     uniform vec3 uSmithyOrigin; uniform float uSmithyPower;
     uniform vec3 uSun,uAmbient,uSunDirection,uFog,uShadow,uGlow,uSkyZenith,uSkyHorizon,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent,uBeaconPosition;
-    uniform float uSunIntensity,uAmbientIntensity,uFogDensity,uNight,uFarCell,uBeaconCell,uBeaconStrength,uTerrain,uShoreLevel;
+    uniform float uSunIntensity,uAmbientIntensity,uFogDensity,uLowHaze,uHazeClear,uNight,uFarCell,uBeaconCell,uBeaconStrength,uTerrain,uShoreLevel;
     uniform float uGlassKind,uGlassDither;
     uniform vec3 uTerrainSoil,uTerrainGrass;uniform vec4 uShoreBounds;
     in vec3 vWorld,vNormal;in float vAo,vSky,vLodFade;flat in uint vMaterial;
@@ -330,7 +335,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       float heightIntegral=abs(heightRay)<.001?1.+heightRay*.5:(exp(heightRay)-1.)/heightRay;
       float lowHaze=exp(-max(cameraPosition.y,0.)*.028)*heightIntegral;
       // A little high air remains over the ridges, so their silhouettes recede too.
-      float opticalDepth=max(distanceToCamera-65.,0.)*uFogDensity*(.65+2.2*lowHaze);
+      float opticalDepth=max(distanceToCamera-uHazeClear,0.)*uFogDensity*(.65+uLowHaze*lowHaze);
       float fogAmount=1.-exp(-opticalDepth);
       // Distance takes the sky's colour, warmer where the view runs toward a low sun.
       vec3 view=normalize(vec3(vWorld.x-cameraPosition.x,0.,vWorld.z-cameraPosition.z)+vec3(.0001,0.,0.));
@@ -351,7 +356,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     const samples=target?target.samples:renderer.getContext().getContextAttributes()?.antialias?4:0;
     uniforms.uGlassDither.value=samples>0?0:1;
   };
-return {material,setEnvironment(g){uniforms.uSun.value.set(g.sun);uniforms.uAmbient.value.set(g.ambient);uniforms.uFog.value.set(g.fog);uniforms.uSkyZenith.value.set(g.zenith);uniforms.uSkyHorizon.value.set(g.horizon);uniforms.uShadow.value.set(g.shadow);uniforms.uGlow.value.set(g.glow);uniforms.uFogDensity.value=g.fogDensity*VOXEL_FOG_SCALE;uniforms.uSunDirection.value.set(...g.sunDirection);uniforms.uSunIntensity.value=g.sunIntensity;uniforms.uAmbientIntensity.value=g.ambientIntensity;uniforms.uNight.value=g.night;},
+return {material,setEnvironment(g){uniforms.uSun.value.set(g.sun);uniforms.uAmbient.value.set(g.ambient);uniforms.uFog.value.set(g.fog);uniforms.uSkyZenith.value.set(g.zenith);uniforms.uSkyHorizon.value.set(g.horizon);uniforms.uShadow.value.set(g.shadow);uniforms.uGlow.value.set(g.glow);uniforms.uFogDensity.value=g.fogDensity*VOXEL_FOG_SCALE;uniforms.uSunDirection.value.set(...g.sunDirection);uniforms.uSunIntensity.value=g.sunIntensity;uniforms.uAmbientIntensity.value=g.ambientIntensity;uniforms.uNight.value=g.night;},setAir(air){uniforms.uLowHaze.value=air.lowHaze;uniforms.uHazeClear.value=air.clear;},
     setLight(v){lightTexture=uploadVolume(lightTexture,v);uniforms.uLight.value=lightTexture;uniforms.uLightOrigin.value.set(...v.origin);uniforms.uLightExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);},
     setFarLight(v){farLightTexture=uploadVolume(farLightTexture,v);uniforms.uFarLight.value=farLightTexture;uniforms.uFarOrigin.value.set(...v.origin);uniforms.uFarExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uFarCell.value=v.cellSize;},
     setBeaconSource(position,strength){uniforms.uBeaconPosition.value.set(...position);uniforms.uBeaconStrength.value=THREE.MathUtils.clamp(strength,0,1);},

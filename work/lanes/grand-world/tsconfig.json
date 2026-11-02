@@ -2,6 +2,7 @@
   "extends": "../../../tsconfig.json",
   "include": [
     "../../../apps/web/src/kingdom/scene.ts",
+    "../../../apps/web/src/kingdom/terrain-founded*.ts",
     "../../../apps/web/src/grand/**/*.ts",
     "../../../apps/web/src/grand/**/*.tsx",
     "../../../apps/web/src/kingdom/grand-land/**/*.ts",
@@ -17,6 +18,8 @@
     "../../../packages/world/src/grand-adoption/pier-fishing-candidates*.ts",
     "../../../packages/voxel/src/collision/**/*.ts",
     "../../../packages/world/src/grand/**/*.ts",
-    "../../../apps/realm/src/land/**/*.ts"
+    "../../../apps/realm/src/land/**/*.ts",
+    "../../../apps/realm/src/bootstrap/durable.ts",
+    "../../../apps/realm/src/main.ts"
   ]
 }

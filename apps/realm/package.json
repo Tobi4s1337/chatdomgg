@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build --logLevel warn",
+    "build:land": "vite build --config src/land/vite.config.ts --logLevel warn",
     "start": "node --env-file-if-exists=../../.env dist/realm.mjs"
   },
   "dependencies": {

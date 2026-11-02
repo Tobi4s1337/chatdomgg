@@ -313,3 +313,16 @@ export function createAtmosphere(scene: THREE.Scene): {
     },
   };
 }
+
+/**
+ * The air over a grand land. The small native land was framed close, so its fog thickens fast past the street
+ * and its low valley haze hides a painted horizon. A grand land shows real ranges, a mere and the sea kilometres
+ * away: they recede through thinner, clearer air so they stay crisp and saturated, while the hour still sets the
+ * colour of that air. `density` scales the hour's fog density for every consumer (voxel, water, built-in fog);
+ * `lowHaze` and `clear` go to the voxel materials' `setAir`.
+ */
+export interface LandAirProfile { readonly density: number; readonly lowHaze: number; readonly clear: number }
+export const GRAND_LAND_AIR: LandAirProfile = { density: 0.5, lowHaze: 0.8, clear: 150 };
+export function withLandAir<T extends { fogDensity: number }>(environment: T, air: LandAirProfile | null): T {
+  return air ? { ...environment, fogDensity: environment.fogDensity * air.density } : environment;
+}
