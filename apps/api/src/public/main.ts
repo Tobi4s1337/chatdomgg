@@ -158,6 +158,9 @@ async function route(request: IncomingMessage, response: ServerResponse) {
     case 'dock':
       if (!await (await import('../dock')).handleDock(request, response, { pool, config: auth })) unavailableJson(response, 404, 'No such route');
       return;
+    case 'atlas-owner':
+      if (!await (await import('../atlas-owner')).handleAtlasOwner(request, response, { pool, config: auth })) unavailableJson(response, 404, 'No such route');
+      return;
     case 'realm': proxyHttp(config.realm.target, request, response, config.proto, config.trustedProxies); return;
     case 'panel': await panel(request, response, url.pathname); return;
     case 'door-data': await doorData(response); return;

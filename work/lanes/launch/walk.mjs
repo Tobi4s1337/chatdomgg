@@ -99,6 +99,29 @@ const steps = {
     await page.goto(`${target}/kingdom/no-such-place`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(6000);
   },
+  // Failures a stranger can reach by a stale link or a refused Twitch sign-in: each must read as a calm, worded state.
+  async expired(page) {
+    await page.goto(`${target}/?signin=expired`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1500);
+  },
+  async forgeexpired(page) {
+    await page.goto(`${target}/?walk=1&kingdom=${KINGDOM}&forgeChat=expired`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(12000);
+  },
+  async walknowhere(page) {
+    await page.goto(`${target}/?walk=1&kingdom=999999999999`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(12000);
+  },
+  async kingdomunknown(page) {
+    await page.goto(`${target}/kingdom/999999999999`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(10000);
+  },
+  async mapnowhere(page, notes) {
+    await page.goto(`${target}/map/zz_no_such_channel_zz`, { waitUntil: 'networkidle' });
+    await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 }).catch(() => {});
+    await page.waitForTimeout(4000);
+    notes.push(`card: ${(await page.locator('.atlas-card, .atlas-search-state').first().innerText().catch(() => 'none')).replace(/\s+/g, ' ').slice(0, 160)}`);
+  },
 };
 
 const chosen = only.length ? only : Object.keys(steps);

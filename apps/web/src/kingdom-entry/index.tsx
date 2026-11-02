@@ -1,10 +1,10 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
-import { RealmEntryInfoSchema, REALM_ENTRY_ROUTE } from '@chatdom/shared/realm';
+import { REALM_ENTRY_ROUTE } from '@chatdom/shared/realm';
 import { Icon, SignInSeal, SiteFooter } from '@chatdom/ui';
 import { announceSignInOutcome, brandLink, readSealSession, refreshSeals, SESSION_EVENT, walkReturnView, type Session } from '@chatdom/ui/site';
 import { RealmEntryError, realmEntryFailureMessage } from '../realm/adapters/entry';
-import { gateKingdom, gateWords, type GateState } from './gate';
+import { gateKingdom, gateName, gateWords, type GateState } from './gate';
 import type { KingdomEntryArrival, KingdomEntryConnection, KingdomEntrySource } from './types';
 import '@chatdom/ui/kit.css';
 import '@chatdom/ui/fonts.css';
@@ -17,13 +17,11 @@ export { gateKingdom, gateWords, type GateState } from './gate';
 /** How long a door waits for the room to confirm the leave before saying so (play then tries again). */
 const DOOR_LEAVE_MS = 8_000;
 
-/** The approved public name of the kingdom, if the realm can say it; the gate reads well without it. */
-async function kingdomName(kingdomId: string, signal: AbortSignal): Promise<string | null> {
+/** The kingdom's approved name as the realm says it (see `gateName`); the gate reads well without it. */
+async function kingdomName(kingdomId: string, signal: AbortSignal): Promise<string | null | 'nowhere'> {
   try {
     const response = await fetch(REALM_ENTRY_ROUTE.replace(':kingdomId', kingdomId), { signal, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } });
-    if (!response.ok) return null;
-    const info = RealmEntryInfoSchema.safeParse(await response.json());
-    return info.success && info.data.kingdomId === kingdomId ? info.data.name : null;
+    return gateName(kingdomId, response.status, response.ok ? await response.json() : null);
   } catch { return null; }
 }
 
@@ -40,6 +38,8 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
   const [state, setState] = createSignal<GateState>(!kingdomId && !staged ? 'lost' : 'opening');
   const [notice, setNotice] = createSignal<string>();
   const [said, setSaid] = createSignal<string>();
+  // The last failure's own words, kept for the portal's way back; a visitor reads them only for a refusal.
+  let cause: string | undefined;
   const [name, setName] = createSignal<string | null>(null);
   let host!: HTMLDivElement;
   let generation = 0, closed = false;
@@ -64,7 +64,7 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
     const current = generation, controller = new AbortController();
     request = controller;
     setState('opening');
-    setSaid(undefined);
+    setSaid(undefined); cause = undefined;
     try {
       // The engine and the entry come in together; neither waits on the other.
       const [{ default: Kingdom }, next] = await Promise.all([import('../kingdom'), props.open(controller.signal, arrival)]);
@@ -82,7 +82,7 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
             entry: next.entry, endpoint: next.endpoint, title: next.kingdomName,
             // Safe to repeat: resolves once the room has really let you go, rejects only while it may still hold you.
             leave: () => leaveRoom(next),
-            rejoin: async ({ portal }) => { if (!await open(false, { portal })) throw new Error(said() ?? 'The way back is not open yet.'); },
+            rejoin: async ({ portal }) => { if (!await open(false, { portal })) throw new Error(cause ?? 'The way back is not open yet.'); },
           } } : {}) }} />, host);
       setNotice(next.notice);
       setState('connected');
@@ -97,7 +97,11 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
         void refreshSeals();
         return false;
       }
-      setSaid(realmEntryFailureMessage(error));
+      cause = realmEntryFailureMessage(error);
+      // A refusal is the realm speaking to the visitor; any other cause (a proxy page, a timeout, a parser) is for the
+      // log: the closed gate's own words say what happened and what to do.
+      if (status === 'refused') setSaid(cause);
+      else console.warn('The walk-in gate could not open:', cause);
       setState(status === 'refused' ? 'refused' : 'closed');
       return false;
     }
@@ -118,11 +122,14 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
 
   async function begin() {
     if (state() === 'lost') return;
-    if (kingdomId) void kingdomName(kingdomId, naming.signal).then(found => { if (found) setName(found); });
+    if (kingdomId) void kingdomName(kingdomId, naming.signal).then(found => {
+      if (found === 'nowhere') { if (!closed) { release(); setState('nowhere'); } }
+      else if (found) setName(found);
+    });
     // The staged rehearsal is a development bench with its own reference sign-in; it skips the session check.
     if (!staged) {
       const { session } = await readSealSession();
-      if (closed) return;
+      if (closed || state() === 'nowhere') return;
       if (session.status === 'anonymous') { setState('waiting'); return; }
     }
     void open();
@@ -130,7 +137,7 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
 
   const onSession = (event: Event) => {
     // Signed out from the gate's own seal: the visit is over, and the gate offers the seal again.
-    if ((event as CustomEvent<Session>).detail?.status === 'anonymous' && state() !== 'lost') { release(); setState('waiting'); }
+    if ((event as CustomEvent<Session>).detail?.status === 'anonymous' && state() !== 'lost' && state() !== 'nowhere') { release(); setState('waiting'); }
   };
 
   onMount(() => {
@@ -153,7 +160,7 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
         <div class="ke-sky" aria-hidden="true" />
         <header class="ke-top">
           <span class="ke-brand" innerHTML={brandLink()} />
-          <Show when={state() !== 'waiting' && state() !== 'lost'}>
+          <Show when={state() !== 'waiting' && state() !== 'lost' && state() !== 'nowhere'}>
             <SignInSeal size="header" returnPath="/" view={keep} way={() => ({ href: '/map', words: 'Open the Atlas', short: 'The map' })} />
           </Show>
         </header>
@@ -171,7 +178,7 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
                 <SignInSeal size="large" returnPath="/" view={keep} way={() => null} />
                 {mapWay('Look around the Atlas first', false)}
               </Show>
-              <Show when={state() === 'lost'}>
+              <Show when={state() === 'lost' || state() === 'nowhere'}>
                 {mapWay('Open the Atlas', true)}
                 <a class="ke-way ke-way-quiet" href="/"><Icon name="home" />The front page</a>
               </Show>

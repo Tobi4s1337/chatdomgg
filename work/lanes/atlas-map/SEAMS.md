@@ -551,3 +551,18 @@ git apply work/lanes/atlas-map/gateway-visitor-address.integrator.patch   # own 
   `lane/integrator` with the launch merge. On this host Traefik reaches the gateway from `172.18.0.4` (bridge
   `172.18.0.0/16`), not from docker0, so the setting is `PUBLIC_TRUSTED_PROXIES=172.18.0.0/16` (launch `SEAMS.md`,
   `deploy: 3`).
+- 2 Nov (LA10, session 4): one stale link stopped channel search for everyone. Twitch answers `GET /helix/users?id=`
+  for an ID that cannot exist (e.g. `999999999999`) with **400 Bad Identifiers**; the lookup's `call()` took every
+  throw as an outage, backed off and refused every visitor's lookup for 1–64 s (`2147483647`, which Twitch answers
+  200 with no data, then got `503 lookup-upstream` too). Now a single-identity `users` read refused with 400 is an
+  absent channel (cached for an hour like any miss, no backoff); a batch's 400 still counts as a failure, since it does
+  not say which ID was bad (`apps/surveyor/src/directory/twitch-lookup.ts`, test added). Live after the Atlas
+  service is rebuilt from the merge.
+- 2 Nov (LA10, session 4): `/kingdom/<id>` for a channel the register does not know (its card answers 404) said "The
+  Atlas could not be read just now, so the road into this land is closed"; a card `not-found` is now the calm
+  `missing` holding ("This channel has no holding on the current survey of the Atlas."). Other card failures still
+  read as unavailable (`apps/web/src/atlas/data/holding.ts`, new `holding-read.test.ts`).
+- 2 Nov (LA10, session 4, operator note 19:45): `atlas-owner-api.integrator.patch` is applied on `lane/launch` as it is
+  (`git apply --check` clean; `atlas-owner/index.test.ts` and `public/` 138 tests pass, typecheck and lint clean), so
+  it reaches `lane/integrator` with the launch merge; the `needs:` above is closed by that merge. The env lines for the
+  hide flow are launch `SEAMS.md` `deploy: 6` (pointing at your steps 2–3).

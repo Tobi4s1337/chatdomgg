@@ -14,7 +14,8 @@ export function mountEntryRoutes(
     const parsed = KingdomIdSchema.safeParse(rawKingdomId);
     if (!parsed.success) throw new FoundedReadError(400, 'The kingdom identifier is invalid.');
     const kingdomId = parsed.data, name = names.get(kingdomId);
-    if (name === undefined) throw new FoundedReadError(503, 'This kingdom has no approved entry name configured.');
+    // A kingdom this host has not approved for walking in is not here for visitors: the gate says the road leads nowhere.
+    if (name === undefined) throw new FoundedReadError(404, 'No kingdom with this address is open to visitors.');
     const info = RealmEntryInfoSchema.safeParse({ version: 1, kingdomId, origin, name });
     if (!info.success) throw new FoundedReadError(503, 'This kingdom entry name is unavailable.');
     const manifest = await founded.manifest(kingdomId, request);
