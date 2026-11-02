@@ -128,6 +128,67 @@ const WINDOWS_FLICKS: Record<string, readonly number[]> = {
   '60 Hz there and back': [320, 780, 300, -310, -790, -305, 2],
 };
 
+/** A small seeded generator, so the hands below are the same on every run. */
+function seeded(seed: number) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; }; }
+
+/**
+ * Firefox on X11 as the lab recorded it, for any starting point: every real move is followed by the hidden cursor's
+ * offset from the centre, which moves with the hand. `start` is that offset when the lock began (near the centre when
+ * the person clicked near the middle). Some echoes never come (`missEvery`), and some moves never come but their echo
+ * does (`hiddenEvery`, as [-971,107], [-971,106] in the recording): the hand that counts is what was reported.
+ */
+function echoingFirefox(start: readonly [number, number], moves: readonly (readonly [number, number])[], options: { missEvery?: number; hiddenEvery?: number } = {}) {
+  const events: [number, number][] = [];
+  let offset = { x: start[0], y: start[1] };
+  const hand = { dx: 0, dy: 0 };
+  moves.forEach(([x, y], n) => {
+    offset = { x: offset.x + x, y: offset.y + y };
+    if (options.hiddenEvery && n % options.hiddenEvery === options.hiddenEvery - 1) { events.push([offset.x, offset.y]); return; }
+    events.push([x, y]); hand.dx += x; hand.dy += y;
+    if (!options.missEvery || n % options.missEvery !== options.missEvery - 1) events.push([offset.x, offset.y]);
+  });
+  return { events, hand };
+}
+/** A hand moving steadily at `pace` counts a move, with a small vertical wander. */
+function steadyHand(pace: number, count: number, sign = 1): [number, number][] {
+  return Array.from({ length: count }, (_, n) => (n % 4 === 3 ? [0, n % 8 === 3 ? 1 : -1] : [sign * pace, 0]));
+}
+/** Runs events through a filter at 343 Hz, taking every frame, and returns the turn it gave. */
+function turnOf(events: readonly (readonly [number, number])[]) {
+  const filter = createEchoFilter();
+  let at = 0;
+  const turn = { dx: 0, dy: 0 };
+  events.forEach(([x, y], n) => {
+    filter.push(x, y, at += 1.5);
+    if (n % 2) { const taken = filter.take(at); turn.dx += taken.dx; turn.dy += taken.dy; }
+  });
+  const last = filter.take(at + 1000);
+  return { dx: turn.dx + last.dx, dy: turn.dy + last.dy, echoes: filter.echoes };
+}
+
+/**
+ * Hands that make no echoes, as Chrome and Firefox on Windows deliver them: speed that changes smoothly, polled at
+ * 1000 Hz and gathered into frames of steady or uneven length, from a creep to a fast sweep, with Firefox-on-Windows
+ * re-centre pairs scattered through half of them.
+ */
+function realHand(seed: number): [number, number][] {
+  const random = seeded(seed), peak = [2, 8, 30, 120, 600][seed % 5]!, events: [number, number][] = [];
+  let vx = 0, vy = 0, ax = 0, ay = 0, carry = { x: 0, y: 0 }, gathered = { x: 0, y: 0 };
+  for (let ms = 0; ms < 1500; ms++) {
+    if (ms % 50 === 0) { ax = (random() - .5) * peak / 25; ay = (random() - .5) * peak / 60; }
+    vx = Math.max(-peak, Math.min(peak, vx + ax)); vy = Math.max(-peak / 2, Math.min(peak / 2, vy + ay));
+    if (random() < .1) vx *= .5;
+    carry = { x: carry.x + vx, y: carry.y + vy };
+    const x = Math.trunc(carry.x), y = Math.trunc(carry.y);
+    carry = { x: carry.x - x, y: carry.y - y };
+    gathered = { x: gathered.x + x, y: gathered.y + y };
+    if (seed % 2 && random() < .01) { const a = Math.round(50 + random() * 400) * (random() < .5 ? 1 : -1); events.push([a, 0], [-a, 0]); }
+    const frame = seed % 3 === 0 ? (random() < .5 ? 1 : 3) : seed % 3 === 1 ? 3 : 1;
+    if (ms % frame === 0 && (gathered.x || gathered.y)) { events.push([gathered.x, gathered.y]); gathered = { x: 0, y: 0 }; }
+  }
+  return events;
+}
+
 describe('the re-centre echo (Firefox on X11)', () => {
   it('turns by the hand only on Tobias\'s recorded trace: every fake re-centre event is dropped', () => {
     expect(FIREFOX_X11_HAND).toEqual({ dx: 4, dy: -3 });
@@ -155,6 +216,41 @@ describe('the re-centre echo (Firefox on X11)', () => {
       expect(filter.echoes).toBe(0);
     });
   }
+  for (const start of [[0, 0], [3, -2], [12, 5], [40, 12], [-150, 60], [190, -5], [199, 199]] as const) {
+    it(`turns by the hand when the lock began with the cursor near the centre (offset ${start.join(', ')})`, () => {
+      for (const pace of [1, 3, 10, 25]) {
+        const { events, hand } = echoingFirefox(start, steadyHand(pace, 300));
+        const turn = turnOf(events);
+        expect({ pace, dx: Math.abs(turn.dx - hand.dx) <= 3, dy: Math.abs(turn.dy - hand.dy) <= 1 }).toEqual({ pace, dx: true, dy: true });
+        expect(turn.echoes).toBeGreaterThan(290);
+      }
+    });
+  }
+  it('follows the offset across the centre and out the other side', () => {
+    for (const pace of [1, 2, 5]) {
+      const { events, hand } = echoingFirefox([-120, 30], steadyHand(pace, 240 / pace + 40));
+      const turn = turnOf(events);
+      expect({ pace, dx: turn.dx - hand.dx, dy: turn.dy - hand.dy }).toEqual({ pace, dx: 0, dy: 0 });
+    }
+  });
+  it('keeps up when an echo never comes, or a move never comes but its echo does', () => {
+    for (const start of [[-978, 105], [-300, 40], [60, -20], [8, 3]] as const) {
+      for (const options of [{ missEvery: 9 }, { hiddenEvery: 7 }, { missEvery: 11, hiddenEvery: 13 }]) {
+        const { events, hand } = echoingFirefox(start, steadyHand(2, 400), options);
+        const turn = turnOf(events);
+        expect({ start, options, dx: Math.abs(turn.dx - hand.dx) <= 3, dy: Math.abs(turn.dy - hand.dy) <= 3 })
+          .toEqual({ start, options, dx: true, dy: true });
+      }
+    }
+  });
+  it('never takes a real hand for echoes: 600 hands from a creep to a sweep keep every count', () => {
+    for (let seed = 1; seed <= 600; seed++) {
+      const events = realHand(seed);
+      const turn = turnOf(events);
+      const hand = events.reduce((sum, [x, y]) => ({ dx: sum.dx + x, dy: sum.dy + y }), { dx: 0, dy: 0 });
+      expect({ seed, ...turn }).toEqual({ seed, ...hand, echoes: 0 });
+    }
+  });
   it('holds a large event for at most one 60 Hz frame and gives it back whole', () => {
     const filter = createEchoFilter();
     filter.push(700, 0, 0);
