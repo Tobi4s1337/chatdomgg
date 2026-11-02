@@ -37,8 +37,10 @@ gather does not edit play's files or implement a second generic transfer control
   in metres and the walker's yaw byte (zero faces +Z, 64 faces +X). `door` and `exit` are walk-through thresholds,
   `{ min, max, through }`: an axis-aligned volume of feet positions, crossed in the unit horizontal direction
   `through`. The frozen interaction target kinds have no portal, so the door is crossed, never pressed: "crossing its
-  door" in the founder's words. `createThresholdWatch(threshold)` fires once per crossing, only after the body was seen
-  outside, so a spawn or reconnect on a threshold never fires.
+  door" in the founder's words. `createThresholdWatch(threshold)` fires once per crossing in the `through` direction
+  only: it arms when the body is seen off the threshold on its approach side (before the near face) and fires when it
+  then steps on, or clears it in one step squarely across the doorway's span. A spawn or reconnect on a threshold,
+  stepping on from beside it and walking in backwards from the far side never fire (2026-11-02).
   - Kingdom frame: `tavernPortalFor(kingdomId, scene, world)` (exported from `apps/web/src/tavern/index.tsx`; the
     same derivation is `apps/realm/src/games/portal.ts` for the realm) reads the installed
     `civic:growth:v1:tavern` placement and its own blueprint. It finds the body-height carve through the public face,
@@ -75,7 +77,29 @@ gather does not edit play's files or implement a second generic transfer control
 - The surface restores a retained chair's framing only after a fresh authoritative bootstrap. It does not
   recreate an abandoned local interaction. E/Esc and the HUD's stand action go through the existing interaction
   owner and server seat release. The carved game HUD is within the surface; moving it to play's HUD slot remains
-  pending play's confirmed adapter. No `play-slot.ts` implementation is claimed.
+  pending play's confirmed adapter.
+- **The destination for play's `PortalDestination` (`apps/web/src/tavern/play-slot.ts`, 2026-11-02).** Play's B1b
+  (on `lane/play`, `play/portal.ts`) confirmed the descriptor and `mount(host, visit) → { ready, dispose }`. Gather
+  implements its side against structural copies of those types, so neither branch imports the other:
+  - `tavernPortalDescriptor(portal)` turns a derived `TavernPortal` into play's `PortalDescriptor`: `entryAnchor`
+    from `entry`, `returnAnchor` from `returnAnchor`, title "The tavern". Yaw bytes become radians in the same
+    frame (zero faces +Z, π/2 faces +X: `byte × π / 128`). If the kingdom source spawns by yaw byte, it converts back.
+  - `watchTavernDoor(portal, enter)` is the crossing for the kingdom walk: feed it the predicted feet every frame and
+    call `enterPortal(descriptor)` from `enter`. Play's `registerPortalDoor` prompt may stay as the click/touch way in.
+  - `createTavernDestination({ audio, requestInput?, storage? })` returns `{ room: 'tavern', title, mount }`. `mount`
+    renders `TavernRoomSurface` into play's host with `open: () => connectTavern(visit.endpoint, visit.entry)` (a
+    fresh ticket from `visit.entry.ticket()`). `ready` resolves when the walk reports you placed in the room
+    (authoritative state, interior, tables, self and scene) and rejects if it never opens. The interior doorway
+    calls `visit.leave()`; a connection that ends unrestorably after arrival calls `visit.fail(reason)`. A visit
+    that has ended steers nothing. `dispose` unmounts, then resolves only once every connection the visit opened
+    has really let go (`TavernClient.leave()`, which awaits the SDK's leave; a connection already gone counts) and
+    rejects while one may still hold you, so play's retry calls it again. An open still in flight when disposed
+    is left as soon as it lands. `requestInput` defaults to the tavern's own pointer-lock lease on its seated canvas.
+  - The wiring is one line in play's `apps/web/src/play/providers.ts` once `play/portal.ts` is on the integration
+    branch: `registerPortalDestination(createTavernDestination({ audio: <play's retained KingdomAudio> }));` plus,
+    in the kingdom walk, `const descriptor = tavernPortalDescriptor(portal)`, `registerPortalDoor(descriptor)` and
+    `watchTavernDoor(portal, () => void enterPortal(descriptor))` on the predicted feet, where
+    `portal = tavernPortalFor(kingdomId, scene, world)`. Gather does not write these lines into play's files.
 - All three games consume that lease. Stones uses mouse motion or arrows to select, click/Enter/Space to drop,
   and 1–7 for a direct column. Dice uses click/R to roll and right-click/H to hold. Enter/Space also starts a
   ready table. Pong uses mouse/A/D/arrows and Enter/Space to start. E/Esc remain with the interaction owner;

@@ -3,7 +3,10 @@ import type { GameInputLease } from '../games/input';
 const PONG_KEYS = ['KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight', 'Enter', 'Space'];
 const TURN_KEYS = ['ArrowLeft', 'ArrowRight', 'Enter', 'Space', 'KeyR', 'KeyH', ...Array.from({ length: 7 }, (_, i) => [`Digit${i + 1}`, `Numpad${i + 1}`]).flat()];
 const owners = new WeakMap<HTMLCanvasElement, symbol>();
-/** Local inspection adapter only. Integrated play supplies its own requestInput lease. */
+/**
+ * The tavern's own pointer-lock lease on its seated canvas: the room route uses it, and so does the portal
+ * destination unless play hands it a lease of its own.
+ */
 export function requestBenchGameInput(surface: HTMLCanvasElement, reason = 'pong'): GameInputLease {
   const gameKeys = new Set(reason.startsWith('pong') ? PONG_KEYS : TURN_KEYS);
   const owner = Symbol('table input'); owners.set(surface, owner);

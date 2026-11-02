@@ -168,16 +168,31 @@ export function insideTavernThreshold(threshold: TavernThreshold, feet: readonly
   return feet.every((v, i) => Number.isFinite(v) && v >= threshold.min[i]! && v <= threshold.max[i]!);
 }
 /**
- * Edge-triggered crossing with hysteresis: it fires once on entering, and only after the walker was seen outside
- * the threshold. Arriving on a threshold (a spawn, a reconnect) never fires until they step off and back on.
+ * Where feet lie against a threshold, read in its own frame: `along` the `through` direction (before the near face,
+ * within, or past the far face) and `across` it (within the doorway's span or beside it).
+ */
+function thresholdSide(threshold: TavernThreshold, feet: readonly [number, number, number]) {
+  const [tx, tz] = threshold.through, xs = [threshold.min[0], threshold.max[0]], zs = [threshold.min[2], threshold.max[2]];
+  const along = xs.flatMap(x => zs.map(z => x * tx + z * tz)), across = xs.flatMap(x => zs.map(z => z * tx - x * tz));
+  const a = feet[0]! * tx + feet[2]! * tz, c = feet[2]! * tx - feet[0]! * tz;
+  return { before: a < Math.min(...along), past: a > Math.max(...along), within: c >= Math.min(...across) && c <= Math.max(...across) };
+}
+/**
+ * Edge-triggered crossing with hysteresis, in the `through` direction only. It arms when the walker is seen on the
+ * approach side, before the near face, and fires once when they then step onto it (or clear past it, squarely
+ * across the doorway's span, within a single step). Arriving on a threshold (a spawn, a reconnect), stepping on
+ * from beside it or walking in backwards from the far side never fires; the walker comes round to the approach
+ * side first.
  */
 export function createThresholdWatch(threshold: TavernThreshold): (feet: readonly [number, number, number]) => boolean {
-  let armed = false, inside = true;
+  let armed = false;
   return feet => {
-    const now = insideTavernThreshold(threshold, feet), crossed = armed && now && !inside;
-    if (!now) armed = true;
-    if (crossed) armed = false;
-    inside = now;
+    if (!feet.every(Number.isFinite)) return false;
+    const now = insideTavernThreshold(threshold, feet), side = thresholdSide(threshold, feet);
+    const crossed = armed && side.within && (now || side.past);
+    // Only a sample off the doorway on its approach side arms the next crossing; any other sample disarms. A body
+    // sliding round a jamb from slightly aside still counts: the collision only lets it in through the near face.
+    armed = !now && side.before;
     return crossed;
   };
 }

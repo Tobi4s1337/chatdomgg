@@ -29,6 +29,10 @@ export function TavernRoomSurface(props: {
   readonly benchSeat?: string;
   /** The walker crossed the interior doorway. The portal owner returns them to the kingdom's exterior door. */
   readonly leave?: () => void;
+  /** You stand in the room: authoritative state and scene are both in. Called once per opened connection. */
+  readonly onReady?: () => void;
+  /** The room cannot go on: it would not open, or the connection ended and the chair could not be restored. */
+  readonly onTerminal?: (reason: string) => void;
 }) {
   let root: HTMLDivElement | undefined, host: HTMLDivElement | undefined, stage: ReturnType<typeof createTavernStage> | undefined;
   let sound: TavernSound | undefined, offSound: (() => void) | undefined, offGesture: (() => void) | undefined;
@@ -89,7 +93,12 @@ export function TavernRoomSurface(props: {
       const opened = await props.open();
       if (disposed) { opened.dispose(); return; }
       client = opened;
-      const update = () => { setFrame(client!.tables); setLink({ connected: client!.connected, ended: client!.ended }); if (!client!.connected) sound?.quiet(); else observeSound?.(); };
+      let announced = false, ended = false;
+      const update = () => {
+        setFrame(client!.tables); setLink({ connected: client!.connected, ended: client!.ended });
+        if (!client!.connected) sound?.quiet(); else observeSound?.();
+        if (client!.ended && !ended) { ended = true; props.onTerminal?.('Your connection ended. Your chair could not be restored.'); }
+      };
       const offUpdate = client.subscribe(update), offExit = client.onExit(() => { sound?.quiet(); props.leave?.(); });
       update(); off = () => { offUpdate(); offExit(); };
       const scene = await sceneReady!;
@@ -102,6 +111,7 @@ export function TavernRoomSurface(props: {
         onState(next) {
           setState(next);
           if (next.ready) (window as Window & { __chatdomReady?: boolean }).__chatdomReady = true;
+          if (next.ready && !announced) { announced = true; props.onReady?.(); }
         } });
       if (disposed) { walk.dispose(); return; }
       sound = createTavernSound(() => audibleTavernHost(props.audio), stage!.tavern.kit);
@@ -125,7 +135,9 @@ export function TavernRoomSurface(props: {
     } catch (error) {
       if (disposed) return;
       setFailed(true); client?.dispose();
-      (window as Window & { __chatdomTavernError?: string }).__chatdomTavernError = error instanceof Error ? error.message : 'The tavern could not be opened.';
+      const reason = error instanceof Error ? error.message : 'The tavern could not be opened.';
+      (window as Window & { __chatdomTavernError?: string }).__chatdomTavernError = reason;
+      props.onTerminal?.(reason);
     } finally { installing = false; }
   };
   onMount(() => {

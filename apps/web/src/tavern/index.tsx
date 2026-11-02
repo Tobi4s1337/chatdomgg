@@ -14,6 +14,7 @@ export { mountTavern, type TavernMount } from './mount';
 export { TavernRoomSurface } from './Surface';
 export { connectTavern, type TavernClient } from './client';
 export { tavernPortalFor } from './portal';
+export { createTavernDestination, tavernPortalDescriptor, watchTavernDoor } from './play-slot';
 
 /** A room inspection route. No staged people or pretend games enter this surface. */
 export default function TavernBench() {

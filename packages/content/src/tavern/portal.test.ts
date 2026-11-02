@@ -55,6 +55,54 @@ describe('the tavern door portal', () => {
     expect(watch([Number.NaN, .125, 9.4])).toBe(false);
   });
 
+  it('fires only in the through direction: never from beside the doorway or backwards from beyond it', () => {
+    const [x0, , z0] = TAVERN_INTERIOR_EXIT.min, [x1, , z1] = TAVERN_INTERIOR_EXIT.max, cx = (x0 + x1) / 2, y = .125;
+    // From the side: standing beside the opening, then stepping across onto it.
+    const side = createThresholdWatch(TAVERN_INTERIOR_EXIT);
+    expect(side([x1 + .4, y, z0 + .1])).toBe(false);
+    expect(side([x1 - .1, y, z0 + .1])).toBe(false);
+    expect(side([cx, y, z0 + .1])).toBe(false);
+    // Backwards: from beyond the far face onto the threshold, and on into the room.
+    const reverse = createThresholdWatch(TAVERN_INTERIOR_EXIT);
+    expect(reverse([cx, y, z1 + .3])).toBe(false);
+    expect(reverse([cx, y, z1 - .05])).toBe(false);
+    expect(reverse([cx, y, z0 + .05])).toBe(false);
+    // Backing out of the near face and stepping in again is a real crossing.
+    expect(reverse([cx, y, z0 - .3])).toBe(false);
+    expect(reverse([cx, y, z0 + .05])).toBe(true);
+    // A step long enough to clear the whole threshold still counts once, if it starts squarely in front.
+    const leap = createThresholdWatch(TAVERN_INTERIOR_EXIT);
+    expect(leap([cx, y, z0 - .2])).toBe(false);
+    expect(leap([cx, y, z1 + .2])).toBe(true);
+    expect(leap([cx, y, z1 + .4])).toBe(false);
+    // Round the jamb: from just aside on the approach side, slid onto the opening by the collision.
+    const jamb = createThresholdWatch(TAVERN_INTERIOR_EXIT);
+    expect(jamb([x1 + .2, y, z0 - .1])).toBe(false);
+    expect(jamb([x1 - .3, y, z0 + .1])).toBe(true);
+    // Diagonal from in front of the jamb, ending beside the opening: not a crossing.
+    const diagonal = createThresholdWatch(TAVERN_INTERIOR_EXIT);
+    expect(diagonal([cx, y, z0 - .2])).toBe(false);
+    expect(diagonal([x1 + .5, y, z1 + .2])).toBe(false);
+  });
+
+  it('honours the direction for every exterior turn', () => {
+    const form = createGrowthCivicForm('tavern', 'hearth', 1);
+    for (const rotation of [0, 1, 2, 3] as const) {
+      const position: Vec3 = [12.5, 3, -40], { threshold } = exteriorTavernDoorway({ position, rotation }, form)!;
+      const street = turnPoint(position, rotation, [4, .375, 3.625]), opening = turnPoint(position, rotation, [4, .375, 2.875]);
+      const hollow = turnPoint(position, rotation, [4, .375, 1]), beside = turnPoint(position, rotation, [2.5, .375, 2.875]);
+      const inward = createThresholdWatch(threshold);
+      expect(inward(street), `turn ${rotation}`).toBe(false);
+      expect(inward(opening), `turn ${rotation}`).toBe(true);
+      const backwards = createThresholdWatch(threshold);
+      expect(backwards(hollow), `turn ${rotation}`).toBe(false);
+      expect(backwards(opening), `turn ${rotation}`).toBe(false);
+      const sideways = createThresholdWatch(threshold);
+      expect(sideways(beside), `turn ${rotation}`).toBe(false);
+      expect(sideways(opening), `turn ${rotation}`).toBe(false);
+    }
+  });
+
   it('offers no door for an absent tavern or a blocked forecourt, and refuses a stale collision revision', () => {
     const kingdomId = KingdomIdSchema.parse('900000004'), form = createGrowthCivicForm('tavern', 'hearth', 1);
     const open: CollisionWorld = { revision: 3, query: () => [] };

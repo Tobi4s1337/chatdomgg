@@ -32,6 +32,11 @@ export interface TavernClient extends WalkRealm {
   serverNow(): number;
   gameFrame(now: number): GatherFrame;
   dispose(): void;
+  /**
+   * Dispose and resolve once the room has really let this walker go (a connection already gone counts). Rejects only
+   * while it may still hold them; calling it again retries the same leave.
+   */
+  leave(): Promise<void>;
 }
 
 /** Same entry session as walking, fresh destination ticket, and a distinct reconnect partition. */
@@ -50,6 +55,9 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
   if (room.roomId !== `t:${entry.kingdomId}`) { void room.leave(); throw new Error('The door opened into another tavern.'); }
   const listeners = new Set<() => void>(), exits = new Set<() => void>(), offs: (() => void)[] = [];
   let disposed = false, connected = true, ended = false, interior: GatherInterior | null = null;
+  // The SDK resolves a second leave at once with the first one's code, so a retry never sends twice.
+  let leaving: Promise<void> | undefined;
+  const letGo = () => room.leave().then(() => undefined);
   let transportUp = true, resuming = false, resumeStateSeen = false, disconnects = 0, reconnects = 0;
   const resumeParts = new Set<string>();
   let checkResume = () => {};
@@ -157,7 +165,7 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
   room.onStateChange(freshState);
   room.onDrop(dropped); room.onLeave(left); room.onReconnect(rejoined); remember();
   let request = 0;
-  return {
+  const client: TavernClient = {
     selfId: room.sessionId, room, interior: installed, world, predicted, presentations,
     get connected() { return !disposed && connected; }, get self() { return self; }, get tables() { return tables; },
     get ended() { return ended; },
@@ -214,7 +222,15 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
       if (disposed) return; disposed = true; connected = false;
       offs.forEach(off => off()); room.onDrop.remove(dropped); room.onLeave.remove(left); room.onReconnect.remove(rejoined);
       room.onStateChange.remove(freshState);
-      listeners.clear(); exits.clear(); reconciler.dispose(); predict.dispose(); storage?.removeItem(key); void room.leave();
+      listeners.clear(); exits.clear(); reconciler.dispose(); predict.dispose(); storage?.removeItem(key); leaving = letGo();
+      // Standalone disposal has no awaiting caller; leave() still observes the original rejection.
+      void leaving.catch(() => undefined);
+    },
+    leave() {
+      client.dispose();
+      leaving ??= letGo();
+      return leaving.catch(error => { leaving = undefined; throw error; });
     },
   };
+  return client;
 }

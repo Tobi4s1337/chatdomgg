@@ -80,6 +80,49 @@ describe('turn table authority and checkpoints', () => {
     expect(view(again, 'middle').pong).toMatchObject({ phase: 'interrupted', winner: null, reason: 'restart' });
   });
 
+  it('interrupts Pong once when startup loses the acknowledgement and its read-back, and keeps the turn games exact', async () => {
+    const memory = new MemoryGatherStore(), commands: string[] = [];
+    const healthy: GatherStore = { load: k => memory.load(k), commit: async (...args) => {
+      const result = await memory.commit(...args); if (result === 'committed') commands.push(args[3].id); return result; } };
+    const live = new GatherTables(TAVERN_TABLES, { store: healthy, kingdom: 'startup' });
+    await sit(live, a, 'middle', '1'); await sit(live, b, 'middle', '2'); await start(live, 'middle');
+    await sit(live, c, 'west', '1'); await sit(live, PersonIdSchema.parse('4'), 'west', '2'); await start(live, 'west', c);
+    const s = view(live, 'west').stones!;
+    expect(await live.move(c, { table: 'west', match: s.match, revision: s.revision, id: 'west-drop', action: 'drop', column: 3 }, 150)).toBe(true);
+    await sit(live, PersonIdSchema.parse('5'), 'hearth', '1'); await sit(live, PersonIdSchema.parse('6'), 'hearth', '3');
+    await start(live, 'hearth', PersonIdSchema.parse('5'));
+    const d = view(live, 'hearth').dice!;
+    expect(await live.move(PersonIdSchema.parse('5'), { table: 'hearth', match: d.match, revision: d.revision, id: 'hearth-roll', action: 'roll' }, 160)).toBe(true);
+    await live.close();
+    const saved = new Map((await memory.load('startup')).map(snapshot => [snapshot.table, snapshot]));
+    const stonesBefore = view(live, 'west').stones!, diceBefore = view(live, 'hearth').dice!;
+
+    // The first startup's interruption commits, but its acknowledgement is lost and the read-back fails too.
+    let loads = 0;
+    const flaky: GatherStore = {
+      load: async k => { if (++loads > 1) throw Error('read lost'); return memory.load(k); },
+      commit: async (...args) => { const result = await healthy.commit(...args); if (args[3].id.startsWith('restart:')) throw Error('acknowledgement lost'); return result; },
+    };
+    const first = new GatherTables(TAVERN_TABLES, { store: flaky, kingdom: 'startup' });
+    await expect(first.restore(200)).rejects.toThrow();
+    await first.close();
+    expect(commands.filter(id => id.startsWith('restart:'))).toHaveLength(1);
+
+    // A fresh startup finds the interruption durable and never writes it twice.
+    const fresh = new GatherTables(TAVERN_TABLES, { store: healthy, kingdom: 'startup' }); await fresh.restore(210);
+    expect(commands.filter(id => id.startsWith('restart:'))).toHaveLength(1);
+    expect(view(fresh, 'middle').pong).toMatchObject({ phase: 'interrupted', winner: null, reason: 'restart' });
+    // The turn games are untouched: same public state and turn clock, same private draw sequence.
+    expect(view(fresh, 'west').stones).toEqual(stonesBefore);
+    expect(view(fresh, 'west').stones!.deadline).toBe(stonesBefore.deadline);
+    expect(view(fresh, 'hearth').dice).toEqual(diceBefore);
+    const after = new Map((await memory.load('startup')).map(snapshot => [snapshot.table, snapshot]));
+    expect(after.get('west')).toEqual(saved.get('west'));
+    expect(after.get('hearth')).toEqual(saved.get('hearth'));
+    expect(after.get('middle')!.version).toBe(saved.get('middle')!.version + 1);
+    await fresh.close();
+  });
+
   it('does not publish failed rolls and retries the same random draw', async () => {
     const memory = new MemoryGatherStore(); let fail = false;
     const store: GatherStore = { load: k => memory.load(k), commit: async (...args) => { if (fail) throw Error('injected'); return memory.commit(...args); } };
