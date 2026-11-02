@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { Camera, MAX_SCALE, NO_INSETS, type Box, type Insets, type Viewport } from './camera';
-import { centreForFocus, FLIGHT, focusOf, insideFree, planAnchoredZoom, planFlight, type CameraState } from './motion';
+import { centreForFocus, FLIGHT, focusOf, HERO_DRIFT_STEP_PX, heroDrift, insideFree, planAnchoredZoom, planFlight, screenShift, type CameraState } from './motion';
 
 /** The bounds of a real survey preview (world units). */
 const BOUNDS: Box = { minX: -1230, minY: -1445, maxX: 1360, maxY: 878 };
@@ -183,5 +183,49 @@ describe('focus and padding', () => {
     expect(s.x).toBeLessThan(LAPTOP.width);
     expect(s.y).toBeGreaterThan(0);
     expect(s.y).toBeLessThan(LAPTOP.height);
+  });
+});
+
+describe('hero drift', () => {
+  const base: CameraState = { x: 120, y: -340, scale: 1.1 };
+  const HERO: Viewport = { width: 1920, height: 1080 };
+
+  it('stays within its bounds and starts at its base', () => {
+    expect(heroDrift(base, 0)).toEqual(base);
+    for (let s = 0; s < 4_000; s += 7) {
+      const at = heroDrift(base, s);
+      expect(Math.abs(at.x - base.x) * base.scale).toBeLessThanOrEqual(36 + 1e-9);
+      expect(Math.abs(at.y - base.y) * base.scale).toBeLessThanOrEqual(22 + 1e-9);
+      expect(Math.abs(at.scale / base.scale - 1)).toBeLessThanOrEqual(0.018 + 1e-12);
+    }
+  });
+
+  it('measures a shift, a zoom and their sum in device pixels', () => {
+    expect(screenShift(base, base, HERO, 2)).toBe(0);
+    expect(screenShift(base, { ...base, x: base.x + 1 / base.scale }, HERO, 1)).toBeCloseTo(1, 9);
+    expect(screenShift(base, { ...base, x: base.x + 1 / base.scale }, HERO, 2)).toBeCloseTo(2, 9);
+    const corner = Math.hypot(1920, 1080) / 2;
+    expect(screenShift(base, { ...base, scale: base.scale * 1.001 }, HERO, 1)).toBeCloseTo(corner * 0.001, 6);
+  });
+
+  it('asks for a few frames a second at 60 Hz, never a frame each, and never a visible step', () => {
+    // The loop's own rule, frame by frame over ten minutes: draw only once the view moved a quarter device pixel.
+    for (const [view, ratio] of [[HERO, 1], [HERO, 2], [PHONE, 3]] as const) {
+      let drawn = heroDrift(base, 0);
+      let draws = 0;
+      let largest = 0;
+      const frames = 60 * 600;
+      for (let f = 1; f <= frames; f++) {
+        const next = heroDrift(base, f / 60);
+        const step = screenShift(drawn, next, view, ratio);
+        if (step < HERO_DRIFT_STEP_PX) continue;
+        largest = Math.max(largest, step);
+        drawn = next;
+        draws++;
+      }
+      expect(draws).toBeGreaterThan(0);
+      expect(draws / 600).toBeLessThan(6);
+      expect(largest).toBeLessThan(HERO_DRIFT_STEP_PX + 0.05);
+    }
   });
 });
