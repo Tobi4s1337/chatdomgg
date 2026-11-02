@@ -1,10 +1,11 @@
+import type { StepGround } from './cues/steps';
 export type AudioCue = 'wood' | 'light' | 'wave' | 'beacon'
   | 'step' | 'place' | 'remove' | 'material';
 export type AudioMaterial = 'wood' | 'stone' | 'earth' | 'metal' | 'glass' | 'fabric';
 export type AudioControlSurface = 'wood' | 'brass' | 'parchment';
 export interface AudioSettings { muted: boolean; volume: number }
 export interface AudioCueOptions {
-  material?: AudioMaterial;
+  material?: AudioMaterial | StepGround; // a ground (grass, sand…) only for `step`
   ui?: AudioControlSurface; // used only by the legacy wood/control family
   pan?: number; // listener-relative [-1, 1]
   distance?: number; // listener-relative metres

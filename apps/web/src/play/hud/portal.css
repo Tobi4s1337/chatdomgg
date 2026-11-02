@@ -1,0 +1,81 @@
+/* The door between two rooms: a dusk curtain with lamplight through an open door, over a stage for the room beyond. */
+.pl-portal { position: fixed; inset: 0; z-index: 1000; pointer-events: none; }
+.pl-portal-stage { position: absolute; inset: 0; pointer-events: auto; }
+.pl-portal-stage:empty { pointer-events: none; }
+
+.pl-portal-curtain { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; opacity: 0;
+  background: radial-gradient(ellipse 70% 60% at 50% 56%, #3a2414 0%, #1e120a 58%, #0d0805 100%);
+  transition: opacity 560ms cubic-bezier(.4, 0, .2, 1); }
+.pl-portal-glow { position: absolute; left: 50%; top: 54%; width: min(120vmin, 1100px); aspect-ratio: 1; translate: -50% -50%; scale: .55;
+  border-radius: 50%; opacity: 0; mix-blend-mode: screen;
+  background: radial-gradient(circle, #ffd58c66 0%, #f0a25433 26%, #b4602414 48%, transparent 66%);
+  transition: scale 640ms cubic-bezier(.2, .7, .2, 1), opacity 560ms ease; }
+.pl-portal-card { position: relative; display: grid; justify-items: center; gap: 0; padding: 24px; text-align: center;
+  translate: 0 10px; opacity: 0; transition: translate 520ms cubic-bezier(.2, .7, .2, 1) 80ms, opacity 420ms ease 80ms; }
+
+.pl-portal-door { width: clamp(92px, 13vmin, 136px); height: auto; overflow: visible; margin-bottom: 18px;
+  filter: drop-shadow(0 0 22px #f2b76555) drop-shadow(0 3px 0 #0000008c); }
+.pl-portal-opening { opacity: .96; }
+.pl-portal-spill { fill: #f2b7652e; }
+.pl-portal-leaf { transform-box: view-box; transform-origin: 24px 0; transform: scaleX(1);
+  transition: transform 620ms cubic-bezier(.3, .6, .2, 1) 60ms; }
+.pl-portal-leaf-wood { fill: #5b3b27; stroke: #24160d; stroke-width: 1.4; stroke-linejoin: round; }
+.pl-portal-plank { fill: none; stroke: #2e1d12; stroke-width: 1.2; }
+.pl-portal-ring { fill: none; stroke: var(--cd-brass); stroke-width: 1.4; }
+.pl-portal-arch { fill: none; stroke: var(--cd-brass); stroke-width: 3.2; stroke-linecap: round; }
+.pl-portal-arch-inner { stroke: var(--cd-brass-lo); stroke-width: 1.4; }
+.pl-portal-keystone { fill: var(--cd-brass); stroke: var(--cd-brass-lo); stroke-width: 1; }
+.pl-portal-sill { stroke: var(--cd-brass-lo); stroke-width: 2.4; stroke-linecap: round; }
+
+.pl-portal-label { margin: 0 0 6px; font: 15px/1.1 var(--cd-face-label); letter-spacing: .14em; color: var(--cd-brass-hi); text-shadow: 0 1px 0 #000a; }
+.pl-portal-title { margin: 0; max-width: 18ch; font: 400 clamp(34px, 5.2vmin, 54px)/1.05 var(--cd-face-story); color: var(--cd-cream);
+  text-shadow: 0 0 26px #f2b76540, 0 2px 0 #0009; text-wrap: balance; }
+.pl-portal-rule { width: 132px; height: 9px; margin-top: 16px;
+  background: linear-gradient(90deg, transparent, var(--cd-brass-lo) 22%, var(--cd-brass) 50%, var(--cd-brass-lo) 78%, transparent) center / 100% 1.5px no-repeat; position: relative; }
+.pl-portal-rule::after { content: ''; position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; translate: -50% -50%; rotate: 45deg;
+  background: var(--cd-brass); box-shadow: 0 0 0 1.5px #1e120a, 0 0 10px #f2b76580; }
+.pl-portal-words { max-width: 36ch; margin: 16px 0 0; font: 18px/1.45 var(--cd-face-body); color: var(--cd-cream-soft); }
+/* The one control on the curtain: a carved wooden plate with brass edge, the kit's materials. */
+.pl-portal-retry { pointer-events: auto; appearance: none; display: inline-flex; align-items: center; justify-content: center; margin-top: 24px;
+  min-height: 54px; padding: 0 28px; cursor: pointer; color: var(--cd-cream); border: 1px solid var(--cd-wood-edge); border-radius: 9px;
+  font: 20px/1 var(--cd-face-story); text-shadow: 0 1px 0 #1d1109;
+  background: linear-gradient(176deg, var(--cd-wood-hi), var(--cd-wood) 46%, var(--cd-wood-lo));
+  box-shadow: inset 0 1px 0 #ffe1b44d, inset 0 -3px 0 #0000005c, inset 0 0 0 3px #00000014, 0 0 0 1px #c99f5b59, 0 3px 0 #2a1a0e, 0 6px 14px #00000066;
+  transition: transform .1s ease, filter .15s ease; }
+.pl-portal-retry:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.pl-portal-retry:active { transform: translateY(2px); box-shadow: inset 0 1px 0 #ffe1b42e, inset 0 2px 5px #00000040, 0 0 0 1px #c99f5b59, 0 1px 0 #2a1a0e; }
+.pl-portal-retry:focus { outline: none; }
+.pl-portal-retry:focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); }
+
+/* Closed: the street goes dark and the door stands open onto lamplight. */
+.pl-portal[data-state='closed'] .pl-portal-curtain { opacity: 1; pointer-events: auto; }
+.pl-portal[data-state='closed'] .pl-portal-glow { opacity: 1; scale: 1; }
+.pl-portal[data-state='closed'] .pl-portal-card { opacity: 1; translate: 0 0; }
+.pl-portal[data-state='closed'] .pl-portal-leaf { transform: scaleX(.16); }
+
+/* Opening: you step into the light, which swells past you and lets the room through. */
+.pl-portal[data-state='opening'] .pl-portal-curtain { opacity: 0; transition: opacity 720ms cubic-bezier(.5, 0, .3, 1) 120ms; }
+.pl-portal[data-state='opening'] .pl-portal-glow { opacity: 1; scale: 2.8; transition: scale 820ms cubic-bezier(.4, 0, .2, 1); }
+.pl-portal[data-state='opening'] .pl-portal-card { opacity: 0; translate: 0 -8px; scale: 1.06;
+  transition: opacity 300ms ease, translate 520ms ease, scale 620ms cubic-bezier(.4, 0, .2, 1); }
+.pl-portal[data-state='opening'] .pl-portal-leaf { transform: scaleX(.16); }
+
+/* A short line on the opened scene when the door would not open, on parchment. */
+.pl-portal-note { position: absolute; left: 50%; bottom: max(28px, env(safe-area-inset-bottom)); translate: -50% 12px; max-width: min(88vw, 520px);
+  margin: 0; padding: 10px 18px; border: 1px solid var(--cd-brass-lo); border-radius: 8px; opacity: 0;
+  font: 17px/1.35 var(--cd-face-body); color: var(--cd-ink); text-align: center;
+  background: linear-gradient(176deg, var(--cd-parch-hi), var(--cd-parch) 60%, var(--cd-parch-lo));
+  box-shadow: inset 0 1px 0 #fffaf0, 0 2px 0 #7c5a2a8c, 0 10px 24px #0000004d; transition: opacity 360ms ease, translate 420ms cubic-bezier(.2, .7, .2, 1); }
+.pl-portal-note[data-shown='true'] { opacity: 1; translate: -50% 0; }
+
+.pl-portal[data-reduced='true'] :is(.pl-portal-curtain, .pl-portal-glow, .pl-portal-card, .pl-portal-leaf, .pl-portal-note) {
+  transition-duration: 160ms !important; transition-delay: 0s !important; }
+.pl-portal[data-reduced='true'] .pl-portal-glow { scale: 1 !important; }
+.pl-portal[data-reduced='true'] .pl-portal-card { translate: 0 0 !important; scale: 1 !important; }
+.pl-portal[data-reduced='true'] .pl-portal-leaf { transform: scaleX(.16) !important; }
+
+@media (max-width: 520px) {
+  .pl-portal-title { font-size: 34px; }
+  .pl-portal-words { font-size: 16px; }
+}
+.pl-portal :is(.pl-portal-retry, .pl-portal-words)[hidden] { display: none; }

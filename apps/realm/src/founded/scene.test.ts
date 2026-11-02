@@ -152,7 +152,7 @@ describe('founded scene (spec 38 R1-R3)', () => {
     await bad({ ...state, homes: { [plot.id]: { ...home, slot: home.slot + 1 } } });
     await bad({ ...state, homes: { 'plot:elsewhere': { ...home, id: 'plot:elsewhere', attachments: {} } }, attachments: {} });
     await bad({ ...state, attachments: { ...state.attachments, 'run-b': { ...state.attachments['run-b']!, attachment: { ...state.attachments['run-b']!.attachment, origin: [0, 0, 0] } } } });
-    await bad({ ...state, attachments: { ...state.attachments, 'run-b': { ...state.attachments['run-b']!, attachment: { ...state.attachments['run-b']!.attachment, kitRevision: 2 } } } });
+    await bad({ ...state, attachments: { ...state.attachments, 'run-b': { ...state.attachments['run-b']!, attachment: { ...state.attachments['run-b']!.attachment, kitRevision: 9 } } } });
     await bad({ ...state, kingdomId: KingdomIdSchema.parse('900000003') });
     await expect(assemble(empty, { collisionRevision: 2 ** 32 })).rejects.toBeInstanceOf(FoundedSceneError);
     await expect(assembleFoundedScene({ kingdomId, plan: { ...plan, revision: 'settlement:other' }, state: empty, native, collisionRevision: 1 })).rejects.toBeInstanceOf(FoundedSceneError);

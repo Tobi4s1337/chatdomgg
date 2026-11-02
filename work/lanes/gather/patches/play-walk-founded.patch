@@ -1,0 +1,58 @@
+--- a/apps/web/src/kingdom/walk-scene.ts
++++ b/apps/web/src/kingdom/walk-scene.ts
+@@ -150,6 +150,7 @@
+         // The kingdom page always lends its hour; dusk is the page's own opening hour when a host lends none.
+         hour: () => binding.play?.hour?.() ?? 19.5,
+         kingdomName: binding.play?.kingdomName ?? '',
++        founded, world: currentWorld,
+         audio: () => sound.audio?.() ?? null,
+         overlayHost: host,
+       },
+--- a/apps/web/src/play/features.ts
++++ b/apps/web/src/play/features.ts
+@@ -1,4 +1,6 @@
+ import type { KingdomAudio } from '@chatdom/audio';
++import type { CollisionWorld } from '@chatdom/shared/realm';
++import type { RealmFoundedScene } from '@chatdom/world';
+ import { onSlotsChanged, walkFeatures, type PlayContext, type WalkFeatureContext, type WalkFeatureProvider } from './slots';
+ import type { PlayWorld } from './tools';
+ 
+@@ -12,6 +14,8 @@
+   walkers(): ReturnType<WalkFeatureContext['walkers']>;
+   hour(): number;
+   readonly kingdomName: string;
++  readonly founded?: RealmFoundedScene;
++  world?(): CollisionWorld | null;
+   audio(): KingdomAudio | null;
+   /** Where the features' overlay goes: the walk's HUD host. The overlay sits under the HUD pieces. */
+   readonly overlayHost: HTMLElement;
+@@ -54,6 +58,8 @@
+     walkers: () => features.walkers(),
+     hour: () => features.hour(),
+     kingdomName: features.kingdomName,
++    ...(features.founded ? { founded: features.founded } : {}),
++    ...(features.world ? { world: () => features.world!() } : {}),
+     overlay,
+     audio: () => features.audio(),
+     onFrame(listener) {
+--- a/apps/web/src/play/slots.ts
++++ b/apps/web/src/play/slots.ts
+@@ -1,6 +1,8 @@
+ import type { Camera, Matrix4, Object3D, Scene } from 'three';
+ import type { KingdomAudio } from '@chatdom/audio';
+ import type { KingdomId, Vec3 } from '@chatdom/shared';
++import type { CollisionWorld } from '@chatdom/shared/realm';
++import type { RealmFoundedScene } from '@chatdom/world';
+ import type { PlaceOpener } from '../interactions/places/openers';
+ 
+ /**
+@@ -166,6 +168,9 @@
+   hour(): number;
+   /** The kingdom's approved name; empty when it has none. */
+   readonly kingdomName: string;
++  /** The installed scene this walk stands on, and its collision world for the room's current revision (null while it changes). */
++  readonly founded?: RealmFoundedScene;
++  world?(): CollisionWorld | null;
+   /** A full-window, pointer-transparent layer over the world, under the HUD pieces. */
+   readonly overlay: HTMLElement;
+   /** The kingdom's own audio, once a gesture has unlocked it and while it may sound; null otherwise. */

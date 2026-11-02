@@ -1,9 +1,14 @@
 .walk-people-labels{position:absolute;inset:0;pointer-events:none;z-index:4}
-.walk-person-label{position:absolute;transform:translate(-50%,-100%);white-space:nowrap;color:#ffedca;font:14px Georgia,serif;text-shadow:0 1px 3px #221d26,0 2px 8px #171d28}
-.walk-person-you{margin-left:7px;font:italic 12px Georgia,serif;color:#e1c79d}
-.walk-person-label.is-speech{box-sizing:border-box;min-width:100px;max-width:210px;padding:9px 13px 11px;border:1px solid #b89865;border-radius:14px 14px 14px 3px;background:#f1dfb7;color:#443c32;box-shadow:0 3px 13px #171d2840;text-align:center;text-shadow:none;white-space:normal;overflow-wrap:anywhere;font:15px/1.25 Georgia,serif}
+/* Placed every frame by transform from the top-left corner; nothing here moves a label on its own. */
+.walk-person-label{position:absolute;left:0;top:0;will-change:transform,opacity;white-space:nowrap;color:#ffedca;font:14px var(--cd-face-body,Georgia,serif);text-shadow:0 1px 3px #221d26,0 2px 8px #171d28}
+.walk-person-you{margin-left:7px;font:italic 12px var(--cd-face-body,Georgia,serif);color:#e1c79d}
+.walk-person-label.is-speech{box-sizing:border-box;min-width:100px;max-width:210px;padding:9px 13px 11px;border:1px solid #b89865;border-radius:14px 14px 14px 3px;background:#f1dfb7;color:#443c32;box-shadow:0 3px 13px #171d2840;text-align:center;text-shadow:none;white-space:normal;overflow-wrap:anywhere;font:15px/1.25 var(--cd-face-body,Georgia,serif)}
 .walk-person-label.is-speech::after{content:'';position:absolute;left:50%;bottom:-5px;width:10px;height:10px;box-sizing:border-box;background:#f1dfb7;border-right:1px solid #b89865;border-bottom:1px solid #b89865;transform:translateX(-50%) rotate(45deg)}
-.walk-person-speaker{display:block;margin-bottom:3px;font:var(--cd-type-min,11px)/1.1 var(--cd-face-label,Georgia,serif);letter-spacing:.06em;color:#765437}
+/* A line from a lit home: the same parchment, warmed by the window it rises from. */
+.walk-person-label.is-home{border-color:#c49a5c;box-shadow:0 3px 13px #171d2840,0 0 22px #ffb44d33}
+.walk-person-label.is-home::after{border-color:#c49a5c}
+.walk-person-speaker{display:block;margin-bottom:3px;font:var(--cd-type-min,12px)/1.1 var(--cd-face-label,Georgia,serif);letter-spacing:.06em;color:#765437}
+.walk-person-window{display:inline-block;width:7px;height:9px;margin-right:5px;vertical-align:-1px;box-sizing:border-box;border:1px solid #8a6238;border-radius:4px 4px 1px 1px;background:linear-gradient(#ffdd8a,#f2a846);box-shadow:0 0 5px #ffb54d99}
 .walk-person-label p{margin:0}.walk-person-label img{display:inline-block;width:24px;height:24px;vertical-align:middle}
 @media(max-width:700px){.walk-person-label:not(.is-speech){font-size:12px}}
 .layout-strip .stream-people-labels{height:28.125cqw;top:calc(50cqh - 28.125cqw * .62);bottom:auto}

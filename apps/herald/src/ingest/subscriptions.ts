@@ -64,8 +64,9 @@ export function planSubscriptions(ids: PlanIds): SubscriptionPlan[] {
     { type: 'channel.hype_train.begin', version: '2', condition: stream, capability: 'hype', required: false },
     { type: 'channel.hype_train.progress', version: '2', condition: stream, capability: 'hype', required: false },
     { type: 'channel.hype_train.end', version: '2', condition: stream, capability: 'hype', required: false },
-    // Incoming raids need no grant: the app token may read any channel's raids.
+    // Both directions need only the app token; starting a raid has a separate user grant.
     { type: 'channel.raid', version: '1', condition: { to_broadcaster_user_id: ids.broadcasterId }, capability: 'stream', required: false },
+    { type: 'channel.raid', version: '1', condition: { from_broadcaster_user_id: ids.broadcasterId }, capability: 'stream', required: false },
     // The broadcaster reads their own followers as their own moderator.
     { type: 'channel.follow', version: '2', condition: { broadcaster_user_id: ids.broadcasterId, moderator_user_id: ids.broadcasterId }, capability: 'follows', required: false },
     { type: 'channel.channel_points_custom_reward_redemption.add', version: '1', condition: stream, capability: 'rewards', required: false },
@@ -83,8 +84,19 @@ export function planSubscriptions(ids: PlanIds): SubscriptionPlan[] {
  */
 export type CoverageState = 'enabled' | 'unauthorized' | 'missing_grant' | 'conflict' | 'version_removed' | 'limit_reached' | 'disabled' | 'failed' | 'unknown';
 
+/** Coverage identity must distinguish the two independent channel.raid subscriptions. */
+export function subscriptionIdentity(plan: Pick<SubscriptionRequest, 'type' | 'condition'>): {
+  readonly key: string; readonly direction: 'incoming' | 'outgoing' | null;
+} {
+  if (plan.type !== 'channel.raid') return { key: plan.type, direction: null };
+  const direction = plan.condition.from_broadcaster_user_id ? 'outgoing' : 'incoming';
+  return { key: `${plan.type}:${direction}`, direction };
+}
+
 export interface SubscriptionCoverage {
+  readonly key: string;
   readonly type: HeraldEventType;
+  readonly direction: 'incoming' | 'outgoing' | null;
   readonly required: boolean;
   readonly state: CoverageState;
   /** For `disabled`: Twitch's status code (`authorization_revoked`, `user_removed`, …). */
@@ -120,7 +132,7 @@ export async function reconcileSubscriptions(options: {
   const coverage: SubscriptionCoverage[] = [];
 
   for (const plan of plans) {
-    const state = (value: CoverageState, reason: string | null = null) => coverage.push({ type: plan.type, required: plan.required, state: value, reason });
+    const state = (value: CoverageState, reason: string | null = null) => coverage.push({ ...subscriptionIdentity(plan), type: plan.type, required: plan.required, state: value, reason });
     const matching = listed.filter(subscription => matchesRequest(subscription, plan));
     if (matching.some(subscription => subscription.status === 'enabled')) {
       state('enabled');

@@ -15,9 +15,10 @@ export interface MountedDragon {
 
 /** The actual registered sleeping-dragon assembly, exactly as it lands in the kingdom. */
 export function mountSleepingDragon(home: VoxelBlueprint, style: StyleKey): MountedDragon {
-  const socket = findForgeSockets(home).find(s => s.kind === 'chimney');
+  const kit = forgeStyleKit(style);
+  const socket = findForgeSockets(home, 'street-home', kit.revision).find(s => s.kind === 'chimney');
   if (!socket) throw new Error(`${home.id} offers no chimney socket for the dragon.`);
-  const assembled: AssembledForge = assembleForge({ version: 1, kind: 'chimney', motif: 'sleeping-dragon' }, forgeStyleKit(style), socket);
+  const assembled: AssembledForge = assembleForge({ version: 1, kind: 'chimney', motif: 'sleeping-dragon' }, kit, socket);
   return { blueprint: assembled.blueprint, emitter: add(assembled.emitter, socket.origin), socket };
 }
 

@@ -1,0 +1,616 @@
+{
+  "method": "Helix Get Users with an app token, batches of 100 logins; absent means no account with that login was returned",
+  "checkedAt": "2026-11-01T22:25:05.389Z",
+  "logins": [
+    {
+      "login": "nachteule_42",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "stillwasser_",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "funkenflug_jo",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "kaffeesatz_kalle",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "moonpie_mara",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "zwiebelfisch_hb",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "rubberducky_dev",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "kartoffelkiste_7",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "semikolon_sophie",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "nullpointer_nik",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "gleisdreieck_ost",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "fennek_jule",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "deploy_am_freitag",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "der_brezelbaron",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "mausklick_mia",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "flexbox_felix",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "css_hexe",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "spaetzle_coder",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "async_annika",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "waschbaer_willi",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "tomasz_wrzos",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "ana_bolachinha",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "igel_im_herbst",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "merge_konflikt",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "hafermilch_hanna",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "yuki_hoshizora",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "dagny_fjord",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "segfault_sven",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "leuchtturm_lisa",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "pixelpusher_pia",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "kraehennest_ol",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "regex_rita",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "emre_kahve",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "quarkbaellchen_22",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "localhost_lars",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "tabs_not_spaces_",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "mirka_vltava",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "holzwurm_hb",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "sternschnuppe_88",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "apfelstrudel_anna",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "vim_escape_plan",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "gummistiefel_g",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "the404cat",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "matti_saunamaki",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "dachsbau_dennis",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "keksdose_kim",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "giulia_pesto",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "lowkey_owl_07",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "frostbyte_krk",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "sudo_make_sandwich",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "marzipan_marie_",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "orbital_waffel",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "darkmode_dani",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "zugvogel_zoe",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "pablo_tostada",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "mossy_mango_mu",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "schlafmuetze_sam",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "maultasche_max",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "tannenzapfen_t",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "funkloch_fritz",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "laubfrosch_lu",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "eichhoernchen_ella",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "brotkruemel_b",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "rotkehlchen_rk",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "ahornsirup_anke",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "butterbrot_bernd",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "nebelhorn_nils",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "kieselstein_kiel",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "tischtennis_tom",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "wolkenkratzer_k",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "schnurrbart_ben",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "kuchenkruemel_k",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "regenschirm23",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "kaesekuchen_kai",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "ostseebrise_",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "gurkenglas_gerd",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "pfannkuchen_paul",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "div_soup",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "git_gud_greta",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "typo_in_prod",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "npm_install_life",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "z_index_9999",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "ctrlz_carla",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "webpack_wolf",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "devtools_dora",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "refactor_rainer",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "bugfix_bea",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "shader_schnecke",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "leo_aux_croissants",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "noor_codes_",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "aino_koivu",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "ines_bocadillo",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "sleepyraccoon_04",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "pebble_paws_pdx",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "toasted_marsh_mal",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "quietmeadow_",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "lilac_lantern",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "cozyfox_04",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "tealkettle_",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "umbra_moth",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "dustbunny_dev",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "minty_moose_mo",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "clover_kat_ie",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "hazelnut_hans",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "lindwurm_lea",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "fischbroetchen_fin",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "halbmond_hugo",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "pinselstrich_pb",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "rosepetal_rae",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "kittenmittens_k",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "thornbush_tess",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "catnap_carmen",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "sundae_sprinkle",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "bramble_bee_",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "pixel_peony",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "hatkid_hugs",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "glitterglitch_gg",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "marmalade_mo",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "fuzzy_slipper_",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "lunarmoth_lou",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "velvet_teapot",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    },
+    {
+      "login": "bubblegum_bard_b",
+      "absent": true,
+      "checkedAt": "2026-11-01T22:25:05.389Z"
+    }
+  ]
+}

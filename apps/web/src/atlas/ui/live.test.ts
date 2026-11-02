@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import type { LiveSource, LiveStatus } from '../live/feed';
 import { liveLine, type LiveSummary } from './live-line';

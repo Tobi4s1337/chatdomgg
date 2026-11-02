@@ -1,5 +1,5 @@
 import type { AuthReport } from '../auth/authority';
-import type { AuthorizeOutcome } from '../auth/authorize';
+import type { AuthorizeOutcome, RaidControl } from '../auth/authorize';
 import type { Blocker, Capability, Role } from '../auth/grants';
 import { ROLE_SCOPES } from '../auth/grants';
 import type { ConfigProblem } from '../config';
@@ -15,6 +15,8 @@ const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   follows: 'follows',
   rewards: 'kingdom rewards',
   polls: 'polls and decrees',
+  raids: 'Raid Gate controls',
+  shield: 'Shield Mode notices',
 };
 const CAPABILITY_USE: Readonly<Record<Capability, string>> = {
   chat: 'a message lights its author\'s window; deletes and clears put it out',
@@ -26,6 +28,8 @@ const CAPABILITY_USE: Readonly<Record<Capability, string>> = {
   follows: 'a follower is settled on the edge of town and a sapling is planted by their door',
   rewards: 'channel points ring the bell, call a festival, plant a tree or show your home',
   polls: 'a poll stands as a decree board in the plaza; a colours decree is carried out',
+  raids: 'the monarch may start or cancel a raid from this kingdom',
+  shield: 'the gate follows the channel\'s Shield Mode',
 };
 const FILTER = 'pnpm --filter @chatdom/herald';
 
@@ -65,7 +69,7 @@ export function formatAuthReport(report: AuthReport): string[] {
   }
   const steps = setupSteps(report);
   lines.push('');
-  if (steps.length === 0) lines.push('Every Herald read capability is authorized.');
+  if (steps.length === 0) lines.push('Every Herald capability is authorized.');
   else {
     lines.push('Setup');
     steps.forEach((step, index) => lines.push(`  ${index + 1}. ${step}`));
@@ -119,9 +123,21 @@ function setupSteps(report: AuthReport): string[] {
   return steps;
 }
 
+const RAID_CONTROL: Readonly<Record<Exclude<RaidControl, 'held'>, string>> = {
+  key_missing: 'The raid control cannot be held until HERALD_TOKEN_KEY is set (32 random bytes, base64). Set it, then run authorize --role broadcaster again.',
+  key_invalid: 'The raid control cannot be held: HERALD_TOKEN_KEY is not 32 bytes of base64. Fix it, then run authorize --role broadcaster again.',
+  not_granted: 'The raid control is not held: Twitch returned no refresh token with channel:manage:raids. Run authorize --role broadcaster again.',
+  unstored: 'The raid control is not held: the sealed record could not be written to Herald\'s data directory (it must be owner-only and outside the repository).',
+};
+
 export function formatAuthorizeOutcome(outcome: AuthorizeOutcome): string[] {
   switch (outcome.status) {
-    case 'recorded': return [`Recorded: ${outcome.login} granted ${outcome.scopes.join(' ')}. The sign-in tokens were discarded, not stored.`, `Next: ${FILTER} check:auth`];
+    case 'recorded': return [
+      outcome.raidControl === 'held'
+        ? `Recorded: ${outcome.login} granted ${outcome.scopes.join(' ')}. The raid control is held: the refresh token is sealed in Herald's data directory, and the access token was discarded.`
+        : `Recorded: ${outcome.login} granted ${outcome.scopes.join(' ')}. The sign-in tokens were discarded, not stored.`,
+      ...(outcome.raidControl && outcome.raidControl !== 'held' ? [RAID_CONTROL[outcome.raidControl]] : []),
+      `Next: ${FILTER} check:auth`];
     case 'not_ready': return ['Not ready to ask for consent:', ...outcome.reasons.map(reason => `  ${reason}`)];
     case 'denied': return ['Consent was declined on Twitch. Nothing was granted.'];
     case 'wrong_account': return [`A different Twitch account completed consent; this step needs ${outcome.expected}. Its grant is not used by Herald and can be removed under Twitch Settings → Connections. Sign out of Twitch and run authorize again.`];

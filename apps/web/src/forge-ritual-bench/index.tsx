@@ -48,7 +48,7 @@ const PARTS = [['chimney', 'Dragon chimney'], ['lantern', 'Moon lantern'], ['wea
 const KITS = [['hearth', 'Hearth'], ['tide', 'Tide'], ['grove', 'Grove']] as const;
 const RITUAL_ID = 'bench-simulated-ritual';
 
-/** A SIMULATED review bench for the Forge ritual's presentation, around main's real assembled part. */
+/** A review bench for the Forge ritual's presentation, around main's real assembled part. */
 export default function ForgeRitualBench() {
   let host!: HTMLDivElement;
   let disposed = false, world: RitualWorld | undefined, presentation: ForgePresentation | undefined, raf = 0;
@@ -189,7 +189,6 @@ export default function ForgeRitualBench() {
       <span class="ritual-eyebrow">CHATDOM · THE FORGE</span>
       <strong>{title() || 'The Forge ritual'}</strong>
       <p class="ritual-caption" aria-live="polite">{caption()}</p>
-      <small class="ritual-simulated">SIMULATED · local timing, no live judges</small>
     </header>
     <Show when={input() && !status()}>
       <div class="ritual-controls" role="group" aria-label="Ritual review controls">
@@ -209,13 +208,13 @@ export default function ForgeRitualBench() {
         <div class="ritual-row ritual-sound">
           <button aria-pressed={soundOn() && !muted()} onClick={() => void toggleSound()} aria-label={soundOn() && !muted() ? 'Mute the forge' : 'Hear the forge'}>{!soundOn() ? 'Sound on' : muted() ? 'Unmute' : 'Mute'}</button>
           <input type="range" min="0" max="1" step="0.01" value={volume()} aria-label="Forge volume" disabled={!soundOn()} onInput={e => { setVolume(Number(e.currentTarget.value)); sound.setMix({ volume: volume() }); }} />
-          <button disabled={!soundOn()} onClick={() => sound.refusal(0)} title="A SIMULATED refusal beat: the forge coughs">Cough</button>
+          <button disabled={!soundOn()} onClick={() => sound.refusal(0)} title="Preview the forge's refusal sound">Cough</button>
         </div>
         <div class="ritual-row ritual-pick">
           <select aria-label="Part" value={input()!.part} onChange={e => navigate('part', e.currentTarget.value)}><For each={PARTS}>{([value, label]) => <option value={value}>{label}</option>}</For></select>
           <select aria-label="Kingdom kit" value={input()!.family} onChange={e => navigate('family', e.currentTarget.value)}><For each={KITS}>{([value, label]) => <option value={value}>{label}</option>}</For></select>
         </div>
-        <p class="ritual-note">SIMULATED local run around a real forged part. Nothing is judged, attached or saved here.<Show when={second()}> A SIMULATED second anvil is heard alongside.</Show></p>
+        <p class="ritual-note">Preview the ritual around a real forged part. This bench does not judge wishes or attach or save pieces.<Show when={second()}> A second anvil is heard alongside.</Show></p>
       </div>
     </Show>
     <Show when={status()}><div class="ritual-status" role={failed() ? 'alert' : 'status'}><strong>{failed() ? 'The anvil could not be lit' : 'At the anvil'}</strong><p>{status()}</p></div></Show>

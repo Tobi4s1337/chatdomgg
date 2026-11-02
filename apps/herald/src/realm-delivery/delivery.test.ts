@@ -1,4 +1,4 @@
-import { KingdomIdSchema, PersonIdSchema, type PresenceInput } from '@chatdom/shared';
+import { CHAT_COMMAND_ROUTE, ChatCommandEnvelopeSchema, KingdomIdSchema, PersonIdSchema, PresenceInputSchema, type PresenceInput } from '@chatdom/shared';
 import { RealmHeraldEnvelopeSchema, type RealmMomentObservation, type RealmStrike } from '@chatdom/shared/realm';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,6 +9,7 @@ import { planSubscriptions, type HeraldEventType } from '../ingest/subscriptions
 import { MemoryBindingStore } from '../source/bindings';
 import { PresenceSource } from '../source/source';
 import { MAX_SPECTACLES, MAX_STRIKES_IN_FLIGHT, RealmDelivery, SPECTACLE_LIFETIME_MS } from './delivery';
+import { RAID_OBSERVATION_ROUTE, RaidObservationEnvelopeSchema, type RaidObservation } from '../../../api/src/raid-gate/observations';
 
 it('signs person-bound transient delivery, sends cleanup immediately, and retries only normalized durable evidence after restart', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'chatdom-herald-delivery-'));
@@ -55,7 +56,7 @@ it('signs person-bound transient delivery, sends cleanup immediately, and retrie
     deliver('channel.chat.message_delete', { target_user_id: '789', message_id: 'wish-1' });
     deliver('channel.chat.clear_user_messages', { target_user_id: '789' });
     deliver('channel.chat.clear', {});
-    await vi.waitFor(() => expect(sender.health().counters.accepted).toBe(4));
+    await vi.waitFor(() => expect(sender.health().counters.accepted).toBe(7));
     source.setAvailable(false, 'chat_delivery_down');
     await source.close();
     await vi.waitFor(() => expect(sender.health().transient).toBe(0));
@@ -68,7 +69,10 @@ it('signs person-bound transient delivery, sends cleanup immediately, and retrie
     expect(retained.length).toBeGreaterThan(3);
     expect(retained.join('')).not.toContain('ordinary speech');
     expect(retained.join('')).not.toContain('copper dragon');
-    const normalized = retained.map(text => JSON.parse(text) as PresenceInput);
+    const stored: unknown[] = retained.map(text => JSON.parse(text));
+    const normalized = stored.flatMap(input => { const parsed = PresenceInputSchema.safeParse(input); return parsed.success ? [parsed.data] : []; });
+    const cleanups = stored.flatMap(input => { const parsed = ChatCommandEnvelopeSchema.safeParse(input); return parsed.success ? [parsed.data] : []; });
+    expect(cleanups).toHaveLength(3);
     expect(normalized.some(input => input.kind === 'source-lost')).toBe(true);
     expect(normalized.some(input => input.kind === 'remove')).toBe(true);
     const beforeRestart = attempts.length;
@@ -77,8 +81,9 @@ it('signs person-bound transient delivery, sends cleanup immediately, and retrie
     await sender.flush();
     expect(sender.health().pending).toBe(0);
     expect(attempts.slice(beforeRestart)).toHaveLength(files.length);
-    expect(attempts.slice(beforeRestart).every(attempt => attempt.path.endsWith('/ingress'))).toBe(true);
-    const replayed = attempts.slice(beforeRestart).map(attempt => attempt.body.observation as PresenceInput);
+    expect(attempts.slice(beforeRestart).every(attempt => attempt.path.endsWith('/ingress') || attempt.path === CHAT_COMMAND_ROUTE)).toBe(true);
+    expect(attempts.slice(beforeRestart).filter(attempt => attempt.path === CHAT_COMMAND_ROUTE).map(attempt => attempt.body)).toEqual(cleanups);
+    const replayed = attempts.slice(beforeRestart).filter(attempt => attempt.path.endsWith('/ingress')).map(attempt => attempt.body.observation as PresenceInput);
     expect(replayed.map(input => input.id).sort()).toEqual(normalized.map(input => input.id).sort());
     expect(replayed[0]?.kind).toBe('remove');
     expect((await readdir(directory)).filter(file => file.endsWith('.json'))).toEqual([]);
@@ -314,5 +319,100 @@ describe('spectacles', () => {
       expect(sender.health()).toMatchObject({ pending: 0, counters: { accepted: 0, retries: 0 } });
       expect(await r.files()).toEqual([]);
     } finally { await sender.close(); await r.cleanup(); }
+  });
+});
+
+describe('durable raid observations', () => {
+  const start = 1_800_000_000_000, kingdomId = KingdomIdSchema.parse('123');
+  const raid = (origin: 'live' | 'simulated' = 'live'): RaidObservation => ({ version: 1, id: 'eventsub-exact-raid-id', origin,
+    kingdomId, direction: 'outgoing', occurredAt: start - 100, receivedAt: start,
+    from: { kingdomId, login: 'simulated_source', name: 'SIMULATED Source' },
+    to: { kingdomId: KingdomIdSchema.parse('555'), login: 'simulated_destination', name: 'SIMULATED Destination' }, viewers: 70_000 });
+
+  it.each(['live', 'simulated'] as const)('retains %s evidence beyond spectacle age, survives a lost answer and restart, and never blocks presence retries', async origin => {
+    const directory = await mkdtemp(join(tmpdir(), 'chatdom-raid-delivery-'));
+    let now = start, available = false, loseAnswer = false;
+    const received = new Set<string>();
+    const attempts: Array<{ path: string; body: Record<string, unknown> }> = [];
+    const request: typeof fetch = async (url, init) => {
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer simulated-service-secret-000000000000');
+      const path = new URL(String(url)).pathname, body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      attempts.push({ path, body });
+      if ('raid' in body) {
+        expect(path).toBe(RAID_OBSERVATION_ROUTE);
+        const observation = RaidObservationEnvelopeSchema.parse(body).raid;
+        if (!available) return Response.json({ status: 'busy' }, { status: 503 });
+        const duplicate = received.has(observation.id); received.add(observation.id);
+        if (loseAnswer) throw new Error('SIMULATED answer lost after realm commit');
+        return Response.json({ status: duplicate ? 'duplicate' : 'accepted' }, { status: 202 });
+      }
+      expect(path).toBe('/internal/realm/ingress');
+      return Response.json({ status: 'accepted' }, { status: 202 });
+    };
+    const options = { url: 'http://127.0.0.1:5191', secret: 'simulated-service-secret-000000000000', directory,
+      origin, fetch: request, now: () => now, retryMs: 60_000 };
+    let sender = await RealmDelivery.open(options);
+    try {
+      const input = raid(origin), envelope = { version: 1, raid: input };
+      await sender.raid(input); await sender.flush();
+      expect(sender.health()).toMatchObject({ raids: 1, pending: 1, fault: 'delivery', counters: { accepted: 1, retries: 1 } });
+      await sender.observation({ version: 1, id: 'stream:start', kingdomId, origin, observedAt: now, kind: 'stream', live: true, sessionId: 'SIMULATED' });
+      await sender.flush();
+      expect(attempts.filter(attempt => 'observation' in attempt.body)).toHaveLength(1);
+      expect(sender.health()).toMatchObject({ raids: 1, fault: 'delivery', counters: { delivered: 1 } });
+      now += SPECTACLE_LIFETIME_MS + 60_000;
+      await sender.flush();
+      expect(sender.health()).toMatchObject({ raids: 1, counters: { expired: 0 } });
+      available = true; loseAnswer = true; now += 60_000;
+      await sender.flush();
+      expect(received.size).toBe(1);
+      expect(sender.health()).toMatchObject({ raids: 1, counters: { expired: 0 } });
+      await sender.close();
+      const files = (await readdir(directory)).filter(file => file.endsWith('.json'));
+      expect(files).toHaveLength(1);
+      expect(JSON.parse(await readFile(join(directory, files[0]!), 'utf8'))).toEqual(envelope);
+      loseAnswer = false; now += 24 * 60 * 60_000;
+      sender = await RealmDelivery.open(options); await sender.flush();
+      expect(sender.health()).toMatchObject({ raids: 0, pending: 0, fault: null, counters: { delivered: 1, expired: 0 } });
+      expect(received.size).toBe(1);
+      expect(attempts.filter(attempt => 'raid' in attempt.body).every(attempt => JSON.stringify(attempt.body) === JSON.stringify(envelope))).toBe(true);
+      expect((await readdir(directory)).filter(file => file.endsWith('.json'))).toEqual([]);
+      await sender.close();
+      await expect(sender.raid(input)).rejects.toThrow('closed');
+      expect(sender.health().counters.refused).toBe(1);
+    } finally { await sender.close(); await rm(directory, { recursive: true, force: true }); }
+  });
+
+  it('rejects raid overflow without claiming acceptance and leaves capacity for presence', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'chatdom-raid-capacity-'));
+    const sender = await RealmDelivery.open({ url: 'http://127.0.0.1:5191', secret: 'simulated-service-secret-000000000000',
+      directory, origin: 'live', now: () => start, retryMs: 60_000,
+      fetch: async () => Response.json({ status: 'busy' }, { status: 503 }) });
+    try {
+      for (let index = 0; index < MAX_SPECTACLES; index++) await sender.raid({ ...raid(), id: `raid-${index}` });
+      await expect(sender.raid({ ...raid(), id: 'overflow' })).rejects.toThrow('capacity');
+      expect(sender.health()).toMatchObject({ raids: MAX_SPECTACLES, counters: { accepted: MAX_SPECTACLES, refused: 1 } });
+      await sender.observation({ version: 1, id: 'presence', kingdomId, kind: 'stream', origin: 'live', observedAt: start, live: true, sessionId: 'SIMULATED' });
+      expect(sender.health().counters.accepted).toBe(MAX_SPECTACLES + 1);
+    } finally { await sender.close(); await rm(directory, { recursive: true, force: true }); }
+  }, 60_000);
+
+  it('delivers a raid while presence is waiting for its own retry', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'chatdom-raid-presence-retry-'));
+    const attempts: string[] = [];
+    const sender = await RealmDelivery.open({ url: 'http://127.0.0.1:5191', secret: 'simulated-service-secret-000000000000',
+      directory, origin: 'live', now: () => start, retryMs: 60_000, fetch: async (url) => {
+        const path = new URL(String(url)).pathname; attempts.push(path);
+        return path === RAID_OBSERVATION_ROUTE ? Response.json({ status: 'accepted' }, { status: 202 })
+          : Response.json({ status: 'busy' }, { status: 503 });
+      } });
+    try {
+      await sender.observation({ version: 1, id: 'presence', kingdomId, kind: 'stream', origin: 'live', observedAt: start, live: true, sessionId: 'SIMULATED' });
+      await sender.flush();
+      expect(sender.health()).toMatchObject({ pending: 1, counters: { retries: 1 } });
+      await sender.raid(raid()); await sender.flush();
+      expect(attempts).toEqual(['/internal/realm/ingress', RAID_OBSERVATION_ROUTE]);
+      expect(sender.health()).toMatchObject({ pending: 1, raids: 0, fault: 'delivery', counters: { delivered: 1 } });
+    } finally { await sender.close(); await rm(directory, { recursive: true, force: true }); }
   });
 });

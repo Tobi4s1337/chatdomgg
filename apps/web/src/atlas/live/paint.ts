@@ -1,8 +1,9 @@
 import { ATLAS_SPECTACLE } from '@chatdom/shared';
 import type { Settler, SettlerStore } from '../data/model';
-import type { PreviewWorld } from '../data/preview';
+import { holdingRadii, type PreviewWorld } from '../data/preview';
 import type { LiveFrame } from './feed';
-import { LandIndex, nearestFreeSlot, Occupancy, pencilTarget, type RealmCircle } from './pencil';
+import { PencilPlaces, pencilTarget, type PencilRegionPlaces } from '../../../../surveyor/src/cartography/pencil-place';
+import type { RealmCircle } from '../../../../surveyor/src/cartography/slots';
 
 /**
  * What the live layer paints, derived from the last coherent frame (Spec 01 R8, Atlas.md §5.1). Pure state with an
@@ -52,15 +53,29 @@ export function chooseSpectacle(candidates: readonly { ordinal: number; founded:
   return best && { ordinal: best.ordinal, spectacle: best.spectacle };
 }
 
+/** Where an interrupted region placement resumes: the dab index and, mid-search, that dab's stepwise search. */
+interface PencilCursor { region: number; next: number; steps: Generator<void, { x: number; y: number } | null, void> | null }
+
+/** The holdings a region's pencil places keep clear of: its founding holdings, withheld ones included (their ground stays). */
+export function pencilBase(settlers: readonly Settler[], region: number, radii: readonly number[]): { x: number; y: number; r: number }[] {
+  const out: { x: number; y: number; r: number }[] = [];
+  for (const settler of settlers) {
+    if (settler.region === region && settler.foundingHolding) out.push({ x: settler.x, y: settler.y, r: radii[settler.tierRank]! });
+  }
+  return out;
+}
+
 export class LivePaint {
   private classes: Uint8Array;
   private starts = new Map<number, number | null>();
   private readonly drying = new Map<number, Drying>();
   private readonly dryingDabs = new Map<string, Dab & { from: number }>();
   private readonly realmCircles: RealmCircle[];
-  private land: LandIndex | null = null;
-  private readonly placedRegions = new Map<number, number>();
+  private pencil: PencilPlaces | null = null;
+  private readonly pencilRegions = new Map<number, PencilRegionPlaces>();
   private queue: number[] = [];
+  /** The region being placed, the next dab to look at and the unfinished search of the current one. */
+  private cursor: PencilCursor | null = null;
   dabs: Dab[] = [];
   frame: LiveFrame | null = null;
   /** Bumped when anything drawn changes; the view redraws on it. */
@@ -126,7 +141,7 @@ export class LivePaint {
       previous.delete(input.channelHash);
       // Back on air while its last flag was still drying: one dab, not a live one over a fading one.
       this.dryingDabs.delete(input.channelHash);
-      // Keep a known place until the region is placed again, so a dab does not hop back to its raw target.
+      // Live membership never changes a provisional point on the same immutable region.
       if (old && old.realm === input.realmIndex) return { ...old, startedAt: input.startedAt };
       const target = pencilTarget(input.channelHash, realm);
       return { hash: input.channelHash, realm: input.realmIndex, region: realm.region, startedAt: input.startedAt, x: target.x, y: target.y, placed: false };
@@ -137,8 +152,8 @@ export class LivePaint {
     this.dabs = dabs;
     this.frame = frame;
     this.liveCount = live;
-    this.placedRegions.clear();
-    this.queue = [...new Set(dabs.map((dab) => dab.region))];
+    this.queue = [...new Set(dabs.filter(dab => !dab.placed).map(dab => dab.region))];
+    this.cursor = null;
     this.version++;
   }
 
@@ -186,57 +201,79 @@ export class LivePaint {
     return Infinity;
   }
 
-  /** The land index is built once, on first need (it walks every coast). */
-  private landIndex(): LandIndex {
-    this.land ??= new LandIndex(this.rings, this.realmCircles);
-    return this.land;
+  /**
+   * One coast index per world and one occupancy index per complete immutable region. In an edition only its founding
+   * holdings are the base, as the service's search uses them: a hamlet granted on a later night never moves a dab.
+   */
+  private placesFor(region: number): PencilRegionPlaces | null {
+    const cached = this.pencilRegions.get(region);
+    if (cached) return cached;
+    // Waiting for the chunk avoids both a moving dab and disagreement with server-side search placement.
+    if (!this.store.hasRegion(region) && this.world.regions[region]?.chunk.records !== 0) return null;
+    this.pencil ??= new PencilPlaces(this.world, this.rings);
+    const holdings = pencilBase(this.store.all, region, holdingRadii(this.world));
+    const places = this.pencil.forRegion(region, holdings);
+    this.pencilRegions.set(region, places);
+    return places;
   }
 
-  /** A region's places were computed without its towns and villages; place again now they are known. */
+  /** A complete region can now be placed once, including its towns, villages, founding hamlets and withheld holdings. */
   regionLoaded(region: number): void {
-    if (!this.placedRegions.has(region)) return;
-    this.placedRegions.delete(region);
+    if (this.pencilRegions.has(region) || !this.dabs.some(dab => dab.region === region)) return;
     if (!this.queue.includes(region)) this.queue.unshift(region);
   }
 
   /**
    * Places dabs region by region within a time budget, regions in `first` (those in view) before the rest. Returns
-   * true while work remains. Dabs of one realm take free slots in their canonical order (realm, then hash).
+   * true while work remains. Each dab depends only on its hash, realm and complete permanent holdings. The budget is
+   * kept inside a region too: a crowded region is finished over several calls in the same dab order, so one call
+   * never holds the main thread much past its budget.
    */
   work(budgetMs: number, first: ReadonlySet<number> = new Set()): boolean {
-    if (!this.queue.length) return false;
-    const start = performance.now();
+    if (!this.queue.length && !this.cursor) return false;
+    const deadline = performance.now() + budgetMs;
     this.queue.sort((a, b) => Number(first.has(b)) - Number(first.has(a)));
     let changed = false;
-    while (this.queue.length && performance.now() - start < budgetMs) {
-      const region = this.queue.shift()!;
-      this.placeRegion(region);
+    while (performance.now() < deadline) {
+      if (!this.cursor) {
+        const region = this.queue.shift();
+        if (region === undefined) break;
+        this.cursor = { region, next: 0, steps: null };
+      }
       changed = true;
+      if (this.placeRegion(this.cursor, deadline)) this.cursor = null;
     }
     if (changed) this.version++;
-    return this.queue.length > 0;
+    return this.queue.length > 0 || this.cursor !== null;
   }
 
-  private placeRegion(region: number): void {
-    const land = this.landIndex();
-    const occupancy = new Occupancy();
-    const radii = this.world.tiers.holdingRadius;
-    const r = [radii.capital, radii.city, radii.town, radii.village];
-    for (const settler of this.store.all) if (settler.region === region) occupancy.add(settler.x, settler.y, r[settler.tierRank]!);
-    const taken = new Set<string>();
-    for (const dab of this.dabs) {
-      if (dab.region !== region) continue;
-      const realm = this.realmCircles[dab.realm]!;
-      const slot = nearestFreeSlot(land, occupancy, taken, realm, pencilTarget(dab.hash, realm));
-      if (!slot) {
-        dab.placed = false;
-        continue;
+  /** Places the cursor's region from its next dab on; true once the region is done. */
+  private placeRegion(cursor: PencilCursor, deadline: number): boolean {
+    const places = this.placesFor(cursor.region);
+    if (!places) return true;
+    const dabs = this.dabs;
+    for (; cursor.next < dabs.length; cursor.next++) {
+      const dab = dabs[cursor.next]!;
+      if (dab.region !== cursor.region || dab.placed) continue;
+      // One dab's search can cross a whole crowded region, so it too is taken a bounded step at a time.
+      const steps = cursor.steps ??= places.placeSteps(dab.hash, dab.realm);
+      let step = steps.next();
+      while (!step.done) {
+        if (performance.now() >= deadline) return false;
+        step = steps.next();
       }
-      taken.add(`${slot.i}:${slot.j}`);
-      dab.x = slot.x;
-      dab.y = slot.y;
-      dab.placed = true;
+      cursor.steps = null;
+      const slot = step.value;
+      if (slot) {
+        dab.x = slot.x;
+        dab.y = slot.y;
+        dab.placed = true;
+      } else dab.placed = false;
+      if (performance.now() >= deadline) {
+        cursor.next++;
+        return cursor.next >= dabs.length;
+      }
     }
-    this.placedRegions.set(region, this.store.version);
+    return true;
   }
 }

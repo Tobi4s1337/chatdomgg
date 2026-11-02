@@ -1,6 +1,6 @@
 /**
  * The durable `ItemTransferRepository` (spec 23 R9, RG10). Gift offers and transfer lineage live in the lane's own tables
- * (`realm_raid_gifts`, `realm_raid_item_transfers` in `realm-migration.sql`) through the gate adapter's serializable
+ * (`realm_raid_gifts`, `realm_raid_item_transfers` in `0011_realm_raid_gate.sql`) through the gate adapter's serializable
  * compare-and-set helpers. The things themselves stay in main's item authority, reached through `ItemRows` on the same
  * connection, so the offer, the ownership move and the lineage commit together or not at all. It keeps the exact rules
  * of `gift-memory.ts`, which the gift suite runs against:

@@ -1,5 +1,6 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { CollisionGrid, comparePriority, overlaps, type Rect } from './collide';
+import { blockPieces, CollisionGrid, comparePriority, LEFT_OF_MARK, LETTER_CLEARANCE, MARK_PX, overlaps, SHIELD_GAP, underLettering, type Rect } from './collide';
 
 function seeded(seed: number): () => number {
   let s = seed >>> 0;
@@ -130,6 +131,21 @@ describe('comparePriority', () => {
     ]);
   });
 
+  it('never lets a hamlet outrank a village, whatever its audience', () => {
+    expect(comparePriority(holding(4, 24, '1'), holding(3, 25, '999999999'))).toBeGreaterThan(0);
+    expect(comparePriority(holding(4, 4_000, '1'), holding(3, 25, '999999999'))).toBeGreaterThan(0);
+    expect([holding(4, 900, '2'), holding(3, 25, '7'), holding(4, 12, '1')].sort(comparePriority))
+      .toEqual([holding(3, 25, '7'), holding(4, 900, '2'), holding(4, 12, '1')]);
+  });
+
+  it('marks a hamlet a step smaller than a village, so it gives way under lettering only where its dot would touch', () => {
+    expect(MARK_PX).toHaveLength(5);
+    expect(MARK_PX[4]).toBeLessThan(MARK_PX[3]);
+    const name: Rect = { x: 300, y: 100, w: 80, h: 30 };
+    expect(underLettering(300 - MARK_PX[4] / 2 - LETTER_CLEARANCE + 0.5, 115, 4, [name])).toBe(true);
+    expect(underLettering(300 - MARK_PX[3] / 2 - LETTER_CLEARANCE + 0.1, 115, 4, [name])).toBe(false);
+  });
+
   it('orders channel IDs numerically, not as text', () => {
     expect(comparePriority(holding(2, 50, '99'), holding(2, 50, '100'))).toBeLessThan(0);
     expect(comparePriority(holding(2, 50, '36926489'), holding(2, 50, '207813352'))).toBeLessThan(0);
@@ -165,5 +181,38 @@ describe('comparePriority', () => {
     // Sorted output is consistent with pairwise comparison (transitivity over the chain).
     const chain = [...items].sort(comparePriority);
     for (let i = 1; i < chain.length; i++) expect(comparePriority(chain[i - 1]!, chain[i]!)).toBeLessThanOrEqual(0);
+  });
+});
+
+describe('underLettering', () => {
+  const name: Rect = { x: 100, y: 100, w: 200, h: 30 };
+  it('lifts a survey mark inside a name or within its clearance, by the mark’s own size', () => {
+    expect(underLettering(200, 115, 0, [name])).toBe(true);
+    // Just outside the right edge, but the capital's mark plus clearance still reaches in.
+    expect(underLettering(300 + MARK_PX[0] / 2 + LETTER_CLEARANCE - 0.5, 115, 0, [name])).toBe(true);
+    // A village's smaller mark at the same spot clears it.
+    expect(underLettering(300 + MARK_PX[0] / 2 + LETTER_CLEARANCE - 0.5, 115, 3, [name])).toBe(false);
+    expect(underLettering(200, 160, 0, [name])).toBe(false);
+  });
+  it('never lifts anything when nothing is lettered', () => {
+    expect(underLettering(200, 115, 0, [])).toBe(false);
+  });
+});
+
+describe('blockPieces', () => {
+  const rect: Rect = { x: 100, y: 50, w: 80, h: 18 };
+
+  it('puts the shield first and the name after the gap on every side but the left', () => {
+    for (const side of [0, 1, 3]) expect(blockPieces(rect, side, true, 12)).toEqual({ nameX: 100 + 12 + SHIELD_GAP, shieldX: 100 });
+    expect(blockPieces(rect, 0, false, 12)).toEqual({ nameX: 112, shieldX: 100 });
+  });
+
+  it('mirrors the block left of the mark, so the shield stays beside the holding', () => {
+    expect(blockPieces(rect, LEFT_OF_MARK, true, 12)).toEqual({ nameX: 100, shieldX: 168 });
+    expect(blockPieces(rect, LEFT_OF_MARK, false, 12)).toEqual({ nameX: 100, shieldX: 168 });
+  });
+
+  it('gives a name alone the whole block', () => {
+    for (const side of [0, 1, 2, 3]) expect(blockPieces(rect, side, true, null)).toEqual({ nameX: 100, shieldX: null });
   });
 });

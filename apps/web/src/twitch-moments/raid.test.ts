@@ -4,8 +4,8 @@ import { KingdomIdSchema } from '@chatdom/shared';
 import { shieldDesign } from '../atlas/heraldry/design';
 import type { CameraPose } from './contracts';
 import { createTwitchMoments, type MomentFrame } from './controller';
-import { bannerRuns, raiderArms, tributeOf } from './raid-art';
-import { RAID_BEAT, RAID_DETAIL, RAID_LIMITS, gatePose, raidLine, raidUnits, wagonElapsed, wagonPose } from './raid-beat';
+import { bannerRuns, raiderArms, adornmentsOf } from './raid-art';
+import { RAID_BEAT, RAID_DETAIL, RAID_LIMITS, gatePose, raidLine, raidUnits, raidScaleProfile, wagonElapsed, wagonPose } from './raid-beat';
 import { createTwitchMomentView, type CameraLease, type GiftRoute, type MomentViewHost, type PlaceAnchor } from './view';
 
 const KINGDOM = KingdomIdSchema.parse('424242');
@@ -32,12 +32,12 @@ function controller(origin: 'live' | 'simulated' = 'simulated', current: unknown
 }
 
 describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
-  it('sizes the caravan on a log curve and says Twitch\'s count honestly', () => {
+  it('sizes the caravan on a log curve without airing a viewer count', () => {
     expect([1, 3, 10, 50, 140, 1000, 10_000, 10_000_000].map(raidUnits)).toEqual([1, 1, 2, 3, 4, 6, 9, 12]);
     for (let v = 1; v < 200_000; v = Math.ceil(v * 1.3)) expect(raidUnits(v + 1)).toBeGreaterThanOrEqual(raidUnits(v));
-    expect(raidLine(1)).toBe('A raid of one');
-    expect(raidLine(140)).toBe('A raid of 140');
-    expect(raidLine(10_000)).toBe('A raid of 10,000');
+    expect(raidLine(1)).toBe('Colours from the road');
+    expect(raidLine(140)).toBe('Colours from the road');
+    expect(raidLine(10_000)).toBe('Lanterns fill the road');
   });
 
   it('admits a raid once, captions it at the gate, takes the shot and lets it go', () => {
@@ -53,7 +53,7 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     expect(early.captions).toEqual([]);
 
     const titled = moments.sample(START + 6000);
-    expect(titled.captions).toEqual([expect.objectContaining({ at: { kind: 'place', place: 'gate' }, title: 'Mossbrook rides in', line: 'A raid of 140',
+    expect(titled.captions).toEqual([expect.objectContaining({ at: { kind: 'place', place: 'gate' }, title: 'Mossbrook rides in', line: 'Colours from the road',
       detail: RAID_DETAIL, opacity: 1 })]);
     expect(titled.stage).toMatchObject({ subject: { kind: 'place', place: 'gate' } });
     const cues = titled.audio.map(c => c.cue);
@@ -62,14 +62,15 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     expect(cues).not.toContain('festival-drum');
 
     // The shot holds until the column is through the gate, then the wagons ride on without it.
-    const hold = RAID_BEAT.arrive + 3 * RAID_BEAT.pitch + RAID_BEAT.pass + RAID_BEAT.holdAfter;
+    const timing = raidScaleProfile(140);
+    const hold = RAID_BEAT.arrive + 3 * timing.pitch + timing.pass + RAID_BEAT.holdAfter;
     expect(moments.sample(START + hold - 10).focus).not.toBeNull();
     const after = moments.sample(START + hold + 1500);
     expect(after.focus).toBeNull();
     expect(after.captions).toEqual([]);
     expect(after.raids).toHaveLength(1);
     // And at the end of the road nothing of it remains.
-    const gone = START + RAID_BEAT.arrive + 3 * RAID_BEAT.pitch + RAID_BEAT.travel + 500;
+    const gone = START + RAID_BEAT.arrive + 3 * timing.pitch + timing.travel + 500;
     expect(moments.sample(gone).raids).toEqual([]);
     at(gone);
     expect(moments.currentFacts()).toEqual([]);
@@ -85,8 +86,8 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     expect(moments.sample(START + 5000).raids).toHaveLength(1);
   });
 
-  it('restores silently: a raid in a reset snapshot or recovered is never welcomed again', () => {
-    const { moments } = controller('simulated', [raid(START - 2000, { seq: 3, raidKey: 'old' })], 3);
+  it('restores silently: a finished raid in a reset snapshot or a recovered one is never welcomed again', () => {
+    const { moments } = controller('simulated', [raid(START - 10 * 60_000, { seq: 3, raidKey: 'old' })], 3);
     expect(moments.currentFacts()).toEqual([]);
     expect(moments.sample(START + 4000).raids).toEqual([]);
     expect(moments.receiveFact('e1', raid(START, { seq: 4, origin: 'recovered', raidKey: 'later' }))).toEqual({ accepted: true });
@@ -95,6 +96,29 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     expect(frame.raids).toEqual([]);
     expect(frame.audio).toEqual([]);
     expect(frame.focus).toBeNull();
+  });
+
+  it('joins a column still on the road where it is, hearing nothing it missed and never replaying the gate', () => {
+    const committed = START - 20_000;
+    const { moments } = controller('simulated', [raid(committed, { seq: 5, raidKey: 'road', viewers: 10_000 })], 5);
+    const frame = moments.sample(START + 1000);
+    expect(frame.raids).toHaveLength(1);
+    expect(frame.raids[0]).toMatchObject({ key: 'road', t: 21_000, units: raidUnits(10_000) });
+    expect(frame.audio.length).toBeGreaterThan(0);
+    expect(frame.audio.every(cue => cue.atMs >= START)).toBe(true);
+    expect(frame.audio.map(cue => cue.cue)).not.toContain('cloth-unfurl');
+    // The same raid arriving again as a live fact is the same caravan.
+    expect(moments.receiveFact('e1', raid(committed, { seq: 6, raidKey: 'road', viewers: 10_000 }))).toEqual({ accepted: true });
+    expect(moments.sample(START + 2000).raids).toHaveLength(1);
+    // A reconnect mid-show keeps the beat this page was already playing.
+    expect(moments.reset({ epoch: 'e1', asOf: START + 3000, throughSeq: 6, current: [raid(committed, { seq: 5, raidKey: 'road', viewers: 10_000 })] })).toEqual({ accepted: true });
+    expect(moments.sample(START + 3000).raids[0]).toMatchObject({ key: 'road', t: 23_000 });
+  });
+
+  it('never stages a late-delivered raid from a snapshot', () => {
+    const late = { ...raid(START - 5000, { seq: 7, raidKey: 'late', displayUntil: START - 4000 }), committedAt: START - 2000 };
+    const { moments } = controller('simulated', [late], 7);
+    expect(moments.sample(START + 1000).raids).toEqual([]);
   });
 
   it('keeps origins apart and labels the simulated', () => {
@@ -124,14 +148,14 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     const first = moments.sample(START + 5000);
     expect(first.raids.map(r => r.key)).toEqual(['one']);
     expect(first.raids[0]!.units).toBe(1);
-    expect(first.captions[0]).toMatchObject({ title: 'Wrenfield rides in', line: 'A raid of 3' });
+    expect(first.captions[0]).toMatchObject({ title: 'Wrenfield rides in', line: 'Colours from the road' });
     // The second wakes the gate only after the first gate has gone to sleep.
     const sleepGone = RAID_BEAT.minHold + RAID_BEAT.sleep + RAID_BEAT.sleepFade;
     expect(moments.sample(START + sleepGone - 50).raids.map(r => r.key)).toEqual(['one']);
     const both = moments.sample(START + sleepGone + 6000);
     expect(both.raids.map(r => r.key)).toEqual(['one', 'two']);
     expect(both.raids[1]!.units).toBe(9);
-    expect(both.captions[0]).toMatchObject({ title: 'Highmoor rides in', line: 'A raid of 10,000' });
+    expect(both.captions[0]).toMatchObject({ title: 'Highmoor rides in', line: 'Lanterns fill the road' });
     expect(both.audio.map(c => c.cue)).toContain('festival-drum');
     expect(both.raids.length).toBeLessThanOrEqual(RAID_LIMITS.caravans);
   });
@@ -194,10 +218,10 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     expect(raiderArms('not-a-channel')).toBeNull();
   });
 
-  it('loads wagons with tribute and nobody riding', () => {
-    expect(tributeOf('covered', 7, 1)).toEqual([]);
-    expect(tributeOf('lead', 7, 0).length).toBeGreaterThan(0);
-    for (let seed = 0; seed < 20; seed++) expect(tributeOf('tribute', seed, 2).length).toBeLessThanOrEqual(8);
+  it('fits wagons with lanterns and cloth and nobody riding', () => {
+    expect(adornmentsOf('covered', 7, 1)).toEqual([]);
+    expect(adornmentsOf('lead', 7, 0).length).toBeGreaterThan(0);
+    for (let seed = 0; seed < 20; seed++) expect(adornmentsOf('lantern', seed, 2).map(seat => seat.kind)).toEqual(['lantern-rack', 'lantern-rack']);
   });
 });
 
@@ -234,33 +258,34 @@ describe('Incoming raid in the view', () => {
     // Played at the frame rate, every cue sounds once near its time.
     for (let t = 600; t <= 3000; t += 100) frameAt(START + t);
     expect(view.stats()['raid.lights']).toBeGreaterThan(4);
-    for (let t = 3100; t < RAID_BEAT.arrive + 4 * RAID_BEAT.pitch; t += 100) frameAt(START + t);
-    const mid = frameAt(START + RAID_BEAT.arrive + 4 * RAID_BEAT.pitch);
+    const timing = raidScaleProfile(1000);
+    for (let t = 3100; t < RAID_BEAT.arrive + 4 * timing.pitch; t += 100) frameAt(START + t);
+    const mid = frameAt(START + RAID_BEAT.arrive + 4 * timing.pitch);
     expect(view.stats()['raid.wagons']).toBeGreaterThanOrEqual(4);
     expect(view.stats()['raid.instances'] as number).toBeGreaterThan(50);
     expect(played).toEqual(expect.arrayContaining(['horn', 'cloth-unfurl', 'cart-roll', 'festival-drum']));
     expect(played.filter(c => c === 'horn')).toHaveLength(1);
 
-    // The shot stands over the road inside the town, looking back to the gate.
+    // The shot stands over the real road well inside the town, aimed back at the gate, looking out at the column.
     const shot = writes.at(-1)!;
-    expect(shot.eye[0]).toBeGreaterThan(-30);
+    expect(shot.eye[0]).toBeGreaterThanOrEqual(-12);
     expect(shot.eye[1]).toBeGreaterThan(3);
-    expect(shot.target[0]).toBeLessThan(shot.eye[0]);
+    expect(shot.target[0]).toBeLessThanOrEqual(-24);
     const eye = new THREE.PerspectiveCamera(shot.fov, 1920 / 1080, 0.5, 400);
     eye.position.set(...shot.eye); eye.lookAt(...shot.target); eye.updateMatrixWorld(); eye.updateProjectionMatrix();
     const labels = view.labels(eye);
-    expect(labels).toEqual([expect.objectContaining({ title: 'Mossbrook rides in', line: 'A raid of 1,000' })]);
+    expect(labels).toEqual([expect.objectContaining({ title: 'Mossbrook rides in', line: 'Colours from the road' })]);
     expect(labels[0]!.y).toBeGreaterThan(0);
     expect(mid.raids[0]!.units).toBe(6);
 
     // After the hold the camera goes home; the gate sleeps; at the end of the road the layer is empty.
-    const hold = RAID_BEAT.arrive + 5 * RAID_BEAT.pitch + RAID_BEAT.pass + RAID_BEAT.holdAfter;
+    const hold = RAID_BEAT.arrive + 5 * timing.pitch + timing.pass + RAID_BEAT.holdAfter;
     frameAt(START + hold + 2000);
     expect(view.stats().leased).toBe(false);
     expect(camera()).toEqual(prior);
     frameAt(START + hold + RAID_BEAT.sleep + RAID_BEAT.sleepFade + 100);
     expect(view.stats()['raid.gate']).toBe(0);
-    frameAt(START + RAID_BEAT.arrive + 5 * RAID_BEAT.pitch + RAID_BEAT.travel + 400);
+    frameAt(START + RAID_BEAT.arrive + 5 * timing.pitch + timing.travel + 400);
     expect(view.stats()).toMatchObject({ 'raid.caravans': 0, 'raid.wagons': 0, 'raid.instances': 0, 'raid.lights': 0 });
 
     view.dispose();

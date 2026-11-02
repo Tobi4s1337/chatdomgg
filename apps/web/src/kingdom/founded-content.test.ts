@@ -1,4 +1,8 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+
+// Binding validation does not mount either UI; keep their TSX out of the node-only test.
+vi.mock('../interactions', () => ({}));
+vi.mock('../play', () => ({}));
 import { createCastleModule, MATERIALS } from '@chatdom/content';
 import { VOXEL_FIXTURE } from '@chatdom/shared/world-fixtures';
 import { generateSettlementPlan, type RealmFoundedScene } from '@chatdom/world';

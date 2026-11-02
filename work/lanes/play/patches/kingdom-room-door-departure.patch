@@ -1,0 +1,23 @@
+diff --git a/apps/realm/src/kingdom-room.ts b/apps/realm/src/kingdom-room.ts
+index 66eda907..51a94af6 100644
+--- a/apps/realm/src/kingdom-room.ts
++++ b/apps/realm/src/kingdom-room.ts
+@@ -1,4 +1,4 @@
+-import { ClientState, Room, ServerError, type Client } from '@colyseus/core';
++import { ClientState, CloseCode, Room, ServerError, type Client } from '@colyseus/core';
+ import { KingdomIdSchema } from '@chatdom/shared';
+ import { KingdomRoomState, WalkerSchema, WalkInputSchema, RealmJoinSchema, RealmIntentSchema, kingdomRoomId,
+   sanitizeRealmWalkInput, type RealmPrincipal, type RealmReceipt } from '@chatdom/shared/realm';
+@@ -227,8 +227,10 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
+     }
+     onLeave(client: Client<{ auth: RealmPrincipal }>, code?: number) {
+       observer.closed('leave', code);
+-      // Only the person's own current walker leaving counts as walking out (a second tab replacing it does not).
+-      if (client.auth && this.control.get(client.auth.personId) === client.sessionId) portalArrivalsFor(services)?.departed(this.handle.kingdomId, client.auth.personId);
++      // Only the person's own current walker leaving on purpose counts as walking out, from where it stood (a second tab
++      // replacing it, a dropped socket whose grace ran out or a seat the server ended does not).
++      const leaving = client.auth && code === CloseCode.CONSENTED && this.control.get(client.auth.personId) === client.sessionId ? this.state.walkers.get(client.sessionId) : undefined;
++      if (client.auth && leaving) portalArrivalsFor(services)?.departed(this.handle.kingdomId, client.auth.personId, [leaving.x, leaving.y, leaving.z]);
+       this.removeWalker(client.sessionId, client.auth);
+     }
+     private doorArrival(auth: RealmPrincipal, options: unknown) {

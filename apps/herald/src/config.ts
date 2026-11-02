@@ -5,6 +5,8 @@ import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { parseEnv } from 'node:util';
+import { decodeTokenKey } from './raid-gate/raid-authority-store';
+import { RAID_GATE_SECRET_PATTERN } from './raid-gate/raid-authority';
 import { kingdomFromSettings } from './source/kingdom';
 import { HERALD_PORT } from './source/server';
 
@@ -35,6 +37,13 @@ export interface HeraldConfig {
   readonly port: number;
   /** The presentation layout whose home slots windows bind to; must match main's preview. */
   readonly kingdom: KingdomConfig;
+  /**
+   * `HERALD_TOKEN_KEY`: 32 random bytes, base64. Seals the broadcaster's refresh token at rest; without it Herald
+   * cannot hold the raid control. Absent from configs built before the raid authority existed.
+   */
+  readonly tokenKey?: Secret | null;
+  /** `HERALD_RAID_GATE_SECRET`: the API's bearer for the private raid route. Unset, the route refuses everything. */
+  readonly raidGateSecret?: Secret | null;
   readonly problems: readonly ConfigProblem[];
   readonly secretsFile: string;
   readonly settingsFile: string;
@@ -122,6 +131,18 @@ export async function loadConfig(sources: ConfigSources = {}): Promise<HeraldCon
     if (value >= 1024 && value <= 65535 && value !== AUTHORIZE_CALLBACK_PORT) port = value;
     else problems.push({ key: 'HERALD_PORT', issue: 'invalid' });
   }
+  const rawTokenKey = setting('HERALD_TOKEN_KEY');
+  let tokenKey: Secret | null = null;
+  if (rawTokenKey !== null) {
+    if (decodeTokenKey(rawTokenKey)) tokenKey = new Secret(rawTokenKey);
+    else problems.push({ key: 'HERALD_TOKEN_KEY', issue: 'invalid' });
+  }
+  const rawGateSecret = setting('HERALD_RAID_GATE_SECRET');
+  let raidGateSecret: Secret | null = null;
+  if (rawGateSecret !== null) {
+    if (RAID_GATE_SECRET_PATTERN.test(rawGateSecret)) raidGateSecret = new Secret(rawGateSecret);
+    else problems.push({ key: 'HERALD_RAID_GATE_SECRET', issue: 'invalid' });
+  }
   const kingdom = kingdomFromSettings(setting, channelLogin, sources.year ?? new Date().getUTCFullYear());
   problems.push(...kingdom.problems);
 
@@ -141,7 +162,7 @@ export async function loadConfig(sources: ConfigSources = {}): Promise<HeraldCon
     problems.push({ key: 'HERALD_TWITCH_ENV_FILE', issue: isMissingFile(error) ? 'missing' : 'unreadable' });
   }
 
-  return { channelLogin, channelLoginDefaulted: rawChannel === null, readerLogin, redirectUri, credentials, conduitId, dataDir, port, kingdom: kingdom.config, problems, secretsFile, settingsFile };
+  return { channelLogin, channelLoginDefaulted: rawChannel === null, readerLogin, redirectUri, credentials, conduitId, dataDir, port, kingdom: kingdom.config, tokenKey, raidGateSecret, problems, secretsFile, settingsFile };
 }
 
 /** A redirect URI Twitch could have registered: absolute https, or http on a loopback host. No query or fragment. */

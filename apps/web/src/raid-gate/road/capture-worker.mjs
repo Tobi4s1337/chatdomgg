@@ -3,7 +3,7 @@
 //   node apps/web/src/raid-gate/road/capture.mjs [--stills] [--sequence] [--fps 8] [--size 1920x1080] [--reduced]
 // The presentation clock is frozen (`capture=1`) and seeked frame by frame, so every frame is exact however slowly
 // SwiftShader draws. Each frame waits for what it shows to be really drawn: the kingdom's light, the map's tiles, the
-// destination's world. Uses the shared capture lock, one Chromium at a time. Everything on screen says SIMULATED.
+// destination's world. Uses the shared capture lock, one Chromium at a time. Private fixtures retain simulated origins without visible provenance chips.
 import { chromium } from '@playwright/test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';

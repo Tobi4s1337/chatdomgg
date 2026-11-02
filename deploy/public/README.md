@@ -1,6 +1,6 @@
 # chatdom.io: the public host
 
-One process on one port serves everything a visitor touches: the front door, the web app (walking, the showcase,
+One process on one port serves everything a visitor touches: the story page and the legal pages, the web app (walking,
 the Atlas, the stream view), Twitch sign-in, the Twitch panel's backend, and the realm with its realtime socket.
 The realm runs as a supervised child on loopback and is restarted if it stops. Homes, sessions and kingdoms live
 in Postgres and the founded directory, so a restart loses nothing; walkers reconnect on their own.
@@ -12,7 +12,7 @@ pnpm install --frozen-lockfile
 node scripts/public/build.mjs
 ```
 
-This builds the realm, the web app with its front door, and the server bundle. It precompresses the static files
+This builds the realm, the web app with its site pages, and the server bundle. It precompresses the static files
 and writes the Twitch panel zip to `deploy/public/dist/chatdom-panel-<version>.zip`, checked against Twitch's
 hosted-asset rules. See [EXTENSION-STEPS.md](EXTENSION-STEPS.md) for the zip.
 
@@ -82,7 +82,8 @@ never appear in logs or errors.
 | `PUBLIC_FORGE_TARGET` | unset | `http://host:port` of the Forge service, served as `/forge-data` |
 | `PUBLIC_PANEL_EXTRA_ORIGINS` | unset | More origins allowed to call the panel backend (Local Test on `https://localhost:8080`) |
 | `PUBLIC_DATABASE_POOL` | `20` | Postgres connections held by the public server |
-| `REALM_AUTH_MODE` | `live` | `simulated` runs sign-in with simulated people (shown as SIMULATED on every page) |
+| `REALM_AUTH_MODE` | `live` | `simulated` runs sign-in with development people, for loopback testing only. The server refuses to start with it on an `https` `REALM_PUBLIC_ORIGIN` |
+| `PUBLIC_INDEXING` | `closed` | Whether search engines may list chatdom.io. `closed`: every answer carries `X-Robots-Tag: noindex, nofollow`, `/robots.txt` disallows everything and `/sitemap.xml` is empty. `open`: pages carry no robots header, `/robots.txt` allows the product pages and disallows `/api/`, `/live-realm-data/`, `/map-data/`, `/presence-data/`, `/forge-data/`, `/internal/` and `/-/`, and the sitemap lists `/`, `/map`, `/how-it-works`, `/imprint`, `/privacy` and `/terms`. Service, sign-in and 404 answers stay noindex either way. Once it is deployed, Traefik's `chatdom-public-noindex` middleware is removed so this is the only control |
 | `PUBLIC_WEB_ROOT` | `apps/web/dist` | The built web app |
 
 ## One realm per schema
@@ -92,8 +93,10 @@ host already runs the live realm, set `PUBLIC_REALM_TARGET` to it instead of sta
 
 ## What is public
 
-The front door at `/` (with the showcase one click away), the walk at `/?walk=1&kingdom=<id>` (sign-in first),
-the stream view at `/stream`, `/showcase`, `/map`, `/kingdom/<id>`, sign-in under `/api/realm/`, the realm's
+The story page at `/`, `/how-it-works`, `/imprint`, `/privacy` and `/terms` (static pages from `apps/web/dist/site/`),
+`/robots.txt` and `/sitemap.xml`, the walk at `/?walk=1&kingdom=<id>` (sign-in first), the stream view at `/stream`,
+`/map`, `/kingdom/<id>`, sign-in under `/api/realm/`, the realm's
 `founded`, `entry` and `watch` reads and its socket under `/live-realm-data/`, and the panel backend under
 `/api/panel/v1/`. Nothing else is served: no internal or ingress routes, no bench or reference pages, no source
-maps. Unknown paths get the front door with status 404.
+maps. Unknown paths, and any page address asking for staged data (`source=simulated`, `fixture=`), get the
+not-found page with status 404. `/showcase` answers with a permanent redirect to `/`.

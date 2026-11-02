@@ -11,8 +11,10 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 | Durable records and the CAS transaction port | `apps/api/src/raid-gate/repository.ts` | Gate pointer, raid action, party member |
 | Application: gate status, preview, join, leave, read-action, close, start, Twitch cancel, reconcile | `apps/api/src/raid-gate/application.ts` | Real. Travel, passport and gift ops answer `denied: unavailable` until their task lands |
 | Witnessed departure: `ingestRaid`, `recover` | `apps/api/src/raid-gate/application.ts` | Server-only; lands a correlated raid once and hands it to the Atlas road ingestion |
+| Verified raid evidence and recovery | `apps/realm/src/raid-gate/{observations,http}.ts` | Mounted on the existing realm listener; immutable history, roads and pennants, with current incoming beats through the existing moment authority |
+| Raid welcome and crier setting | `apps/realm/src/raid-gate/crier.ts`, `apps/herald/src/raid-gate/crier.ts` | Witnessed job, irreversible claim, bot-only source-channel send and distinct sent/refused/unknown receipts; real sending operationally disabled until the authorized live run |
 | Outbox for Twitch writes and the road handoff | `apps/api/src/raid-gate/repository.ts` | `queued` sendable, `claimed` reconcile-only, `settled` |
-| Durable repository over the realm schema | `apps/api/src/raid-gate/postgres-repository.ts`, `realm-migration.sql` | Serializable CAS; every row passes its strict reader |
+| Durable repository over the realm schema | `apps/api/src/raid-gate/postgres-repository.ts`, `0011_realm_raid_gate.sql` | Serializable CAS; every row passes its strict reader |
 | Session principal from realm-auth's cookie | `apps/api/src/raid-gate/session.ts` | Role derived on the server: monarch by Twitch identity, citizen by deed, otherwise guest |
 | Live policy | `apps/api/src/raid-gate/policy.ts` | Session and broadcaster from the realm; live, grant, consent and Atlas verdict are required ports |
 | Composition and node adapter | `apps/api/src/raid-gate/service.ts` | `createRaidGateService(...)` → `{ matches, serve, close }` |
@@ -21,14 +23,14 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 | Controller | `controller.ts` | Deterministic under an injected clock; late replies ignored |
 | Gate board | `RaidGatePane.tsx`, `Seal.tsx`, `raid-gate.css` | Desktop dock, phone sheet |
 | Route `/-/raid-gate` | `index.tsx` | Unbound by default: "The gate is shut here" |
-| Bench `/-/raid-gate?bench=simulated` | `bench.ts` | The real application in the page; SIMULATED everywhere |
+| Bench `/-/raid-gate?bench=simulated` | `bench.ts` | The real application with private fixtures and internal simulated origins; no visible provenance chips |
 | Travel coordinator: reserve, prepare, commit once, reconcile, cancel, return, recover | `apps/realm/src/raid-gate/coordinator.ts` | Real; fenced whereabouts, arrival evidence, source released only after the destination's acknowledgment |
-| Travel records and their durable repository | `apps/realm/src/raid-gate/records.ts`, `postgres-repository.ts` | Travel, arrival, whereabouts; tables in `realm-migration.sql` |
+| Travel records and their durable repository | `apps/realm/src/raid-gate/records.ts`, `postgres-repository.ts` | Travel, arrival, whereabouts; tables in `0011_realm_raid_gate.sql` |
 | March check for raid journeys | `createRaidMarchCheck` in `apps/api/src/raid-gate/application.ts` | Joined, landed, this raid, within five minutes |
 | SIMULATED room transport (tests and bench only) | `apps/realm/src/raid-gate/simulated-rooms.ts` | Fencing generation, idempotent holds, refuses a commit after reconcile |
 | Journey board | `RaidGatePane.tsx` (`TravelBoard`) | Stages from the authority, overrun, confirming, arrived, home, turned back, refused |
 | Gift policy and the welcome: offer, accept, refuse, `{op:'welcome'}` | `apps/api/src/raid-gate/gifts.ts` | Real. One item transaction moves the thing, writes its lineage and settles the offer; retries return the same receipt |
-| Durable gift storage and host directory | `apps/api/src/raid-gate/gift-postgres.ts`, `gift-hosts.ts`; tables in `realm-migration.sql` | Offers and lineage are ours; the things stay in main's item authority behind `ItemRows` |
+| Durable gift storage and host directory | `apps/api/src/raid-gate/gift-postgres.ts`, `gift-hosts.ts`; tables in `0011_realm_raid_gate.sql` | Offers and lineage are ours; the things stay in main's item authority behind `ItemRows` |
 | Arrival evidence for gifts | `apps/realm/src/raid-gate/arrivals.ts` | Present = the whereabouts still name this arrival in its kingdom, unfenced |
 | SIMULATED item store (tests and bench only) | `apps/api/src/raid-gate/gift-memory.ts` | Can fail before commit or lose its answer after commit |
 | Welcome controller | `welcome.ts` | Created by the gate controller once a raid journey commits as a visitor; lost presses re-sent under the same request |
@@ -39,9 +41,12 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 
 Short version, with the pieces above:
 
-1. Register `apps/api/src/raid-gate/realm-migration.sql` unchanged as
-   `apps/realm/src/persistence/migrations/0009_realm_raid_gate.sql`, then delete the `?raw` fallback in
-   `postgres.integration.test.ts` and run it once with `REALM_DATABASE_TESTS=1`.
+1. Apply the registered `apps/realm/src/persistence/migrations/0011_realm_raid_gate.sql` to the target schema
+   before starting the new realm or API build. The realm requires exactly its registered migration checksums;
+   startup does not apply migrations. The gate and travel Postgres suites use this registered migration directly
+   with `REALM_DATABASE_TESTS=1`, without manually creating tables outside the migration ledger. Use
+   `--no-fsModuleCache` when running these suites after adding a migration: the test runner's persistent transform
+   cache can otherwise retain an earlier expansion of the migration file list.
 2. In `apps/api/src/main.ts`:
    ```ts
    const raidGate = createRaidGateService({
@@ -59,11 +64,15 @@ Short version, with the pieces above:
    says `unknown` when it cannot tell) and `roads` (the Atlas's `AtlasRoadIngress`, idempotent by raid ID). Without
    `raids` the gate gathers but `start` answers `unavailable`; without `roads` witnessed raids wait in the outbox.
    The service runs `recover()` every 15 s and once at start-up; `close()` stops it.
-   In the verified EventSub ingress, for every `channel.raid` whose `from_broadcaster_user_id` is a kingdom with a
-   gate request the transport sent, call
-   `raidGate.application.ingestRaid({ raid, upstreamEventId: messageId, actionRequestId, receivedAt })` with
-   `raid.source = 'herald'` and observed evidence. `actionRequestId` is the request whose start the transport sent
-   for that source and target; pass `null` when it cannot tell, and the gate will not land anything on it. `grants` (the source's `channel:manage:raids` state, telling revoked apart from never connected),
+   Verified EventSub raid delivery is now mounted separately: Herald's durable outbox sends the strict
+   `RaidObservationEnvelopeSchema` to `/internal/realm/raid-gate/observe`. The realm freezes the source/target
+   request correlation on first receipt, then commits the history, outgoing landing and delivered road outbox
+   together. Do not also send it through the legacy spectacle path or the API's `ingestRaid`. On live origins,
+   `raid.source = 'herald'`; simulated evidence is isolated. Incoming beats keep the original event ID through the
+   existing moment writer and expire after 60 seconds; history and roads do not expire. The feed/pennant route,
+   migration `0011b` and cursor contract are in `work/lanes/raid-show/SEAMS.md` §2. API change subscribers still need
+   cross-process revision refresh when the API gate is mounted: realm landing cannot notify an in-process API listener.
+   `grants` (the source's `channel:manage:raids` state, telling revoked apart from never connected),
    `consent` (the monarch's Twitch-write switch) and `directory` (Atlas classification and whether this source may
    raid the target) have no store yet; they are main's.
 3. Travel (RG09). Bind a `RealmTravelTransport` over the realm's rooms (`apps/realm/src/raid-gate/ports.ts` states the
@@ -126,6 +135,24 @@ The longer contract each port honours:
 The route stays unbound until (1)–(7) exist. It shows the honest "The gate is shut here" state and offers no
 action it cannot perform.
 
+## Incoming welcome (RS10)
+
+`herald mock` now uses a recording-only crier through the real realm claim/receipt protocol. Its private `/health`
+includes the bounded recorded lines. The CLI-to-Postgres test in
+`apps/realm/src/raid-gate/crier-flow.integration.test.ts` triggers a signed raid into `129634568`, asserts one welcome
+with its raid key, then restarts services and confirms no replay while roads and pennants remain. Run gated database
+checks with `REALM_DATABASE_TESTS=1` and `--no-fsModuleCache` after adding migrations.
+
+The realm requires an explicit `REALM_PUBLIC_ORIGIN` to mount private crier routes. Live Herald additionally needs
+`HERALD_RAID_CRIER_ENABLED=1`, fresh bot/broadcaster grants and tobi4s_'s exact channel identity. It never sends as
+the broadcaster or to another shared-chat channel. Keep real writes disabled until the authorized RS13 session.
+Unknown outcomes never repost; only receipts retry. A welcome URL remains an invitation, never proof of arrival.
+
+The broadcaster's authenticated setting route works on the standalone API. The public gateway needs front-door's
+exact additive dispatch patch in `work/lanes/raid-show/SEAMS.md`; its route allowlist alone is not a handler. Apply
+`0011c_realm_raid_crier.sql` before deploying bundles that carry it. Guest entry and raid stamp authority remain
+separate RS10 work; sending a line awards neither.
+
 ## The raid road (RR10)
 
 One continuous journey from one gate to the other, at dusk: `/-/raid-gate?bench=simulated&road=1`.
@@ -138,7 +165,7 @@ One continuous journey from one gate to the other, at dusk: `/-/raid-gate?bench=
 | The arrival, in the world | `road/arrival-feed.ts` | When the column reaches the destination and its world wakes, the road hands the destination scene's `momentFeed` the witnessed raid as one SIMULATED `twitch.moment` raid fact: the kingdom's own raid arrival wakes its gate under the leaving kingdom's banner, lights the braziers, rolls the caravan in (sized by Twitch's count) and takes the gate shot. The welcome's words and the gate board sit over it; no figure is drawn on top |
 | The road on the Atlas | `../atlas/road/` | `openRoadAtlas` finds both holdings in the survey, plans one deterministic road (a sea lane when the lands differ), and draws it in ink as the column walks: pencilled ahead, trodden behind. The torch column is a mark, sized by the log of the travellers, never a roster; torches are pigment dabs (the Atlas has no night) |
 | Journey camera | `../atlas/road/shot.ts` | Rises out of the source drawing, rides close, pulls back to hold the whole road, closes in on arrival and dives into the destination |
-| The route | `road/RaidRoad.tsx`, `road/road.css` | The real gate application on the SIMULATED bench (`bench.ts` takes a `BenchCast`), both kingdoms' worlds at dusk, the map between them, the gate board while the gate acts; every surface says SIMULATED |
+| The route | `road/RaidRoad.tsx`, `road/road.css` | The real gate application on the SIMULATED bench (`bench.ts` takes a `BenchCast`), both kingdoms' worlds at dusk, the map between them, the gate board while the gate acts; fixtures remain private with internal simulated origins |
 | Captures | `road/capture.mjs` | `node apps/web/src/raid-gate/road/capture.mjs --only gate\|road\|welcome [--reduced]` after `pnpm build`: one still per lease of the shared capture lock. The presentation clock is frozen (`capture=1`) and seeked, and the page's `Date.now` is pinned to it, so the kingdoms' own moments are seeked too |
 
 What main binds for the live road:
@@ -157,3 +184,7 @@ What main binds for the live road:
    viewer's identity), the first carrying the source's banner, the rest a pennant and a torch lit through the light
    field, walking in from `placeAnchor('gate')` for an incoming raid, and out through it for a gate-party frame
    `{ phase: 'gather' | 'setout', marchers, progress }`, plus the gate anchor's screen point for the words.
+
+## Decisions
+
+- 2026-11-02: The 2026-11-01 founder decision 25 removes visible simulation labels, including private benches and accessibility text. Internal simulated origins, feed isolation and transport guards remain unchanged. Private fixtures remain on `/-/` routes.

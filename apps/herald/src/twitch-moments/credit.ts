@@ -1,3 +1,4 @@
+import { sha256Text } from '../../../../packages/emotes/src/sha256';
 import { TokenSchema, type KingdomId, type PersonId } from '@chatdom/shared';
 import { CreditSchema, type Credit } from '../../../web/src/twitch-moments/contracts';
 import type { CitizenDirectory } from './ports';
@@ -49,6 +50,8 @@ export const PROVIDER_TOKEN_MAX = 100;
  * optional family prefix. Characters outside the token alphabet become `-`; an over-long ID is digested.
  */
 export function providerToken(prefix: string | null, id: string): string {
+  // Raids share one identity with the gate/road/passport authority; the public raid key omits the provider ID.
+  if (prefix === 'raid') return `raid.${sha256Text(id)}`;
   const clean = id.replace(/[^A-Za-z0-9_.:-]/gu, '-');
   const head = prefix === null ? '' : `${prefix}.`;
   const body = head.length + clean.length <= PROVIDER_TOKEN_MAX && /^[A-Za-z0-9]/u.test(head || clean) ? clean : `h${digest(id)}`;

@@ -125,7 +125,7 @@ battles, cider and ale.
 
 | What | Main risks | Gate before (words) | Check after (result) | Who decides | On stream |
 |---|---|---|---|---|---|
-| **Forge items**, prompted builds (Draft-a-Home, wonder templates) and raid tributes | A harmful idea; a harmless prompt yielding a bad name or plaque; IP; real people | Filters, moderation endpoint and Luna; scope (one of 18 slots); soften or refuse | Beauty check; contact sheet to Luna; name and plaque as displayed to the text checks. Wonder templates also need the monarch | Judges; the Watch for holds; the monarch's unforge key | The reveal, after both checks; the maker's name lands with the seal |
+| **Forge items**, prompted builds (Draft-a-Home, wonder templates) | A harmful idea; a harmless prompt yielding a bad name or plaque; IP; real people | Filters, moderation endpoint and Luna; scope (one of 18 slots); soften or refuse | Beauty check; contact sheet to Luna; name and plaque as displayed to the text checks. Wonder templates also need the monarch | Judges; the Watch for holds; the monarch's unforge key | The reveal, after both checks; the maker's name lands with the seal |
 | **Genesis** (the founding, live on stream) | Generated names, mottos and street names; a typed motto; emote statues; settlers' and followers' names over doors | Every generated word through the text checks before the ceremony shows it; the streamer's own name or motto checked as they type | Statues and crest to Luna before they are offered; a name that fails the name check shows as "a settler" | The streamer, live | Each reveal only after its check (§6, case 10) |
 | **Hand-built homes and yards** (free voxels) | Symbols, words and obscene shapes in blocks | Drafts are private. Publishing free voxels is for returning citizens (a return visit or 30 days of follow); newcomers use starter homes, pieces and Forge parts | At publish: shape detectors, Luna, Terra if unsure. The last approved version stays live meanwhile, as on Fortnite islands [V](https://dev.epicgames.com/documentation/en-us/fortnite/island-moderation-tips-and-faqs-in-fortnite-creative) | Judges; the Watch | Housewarming only for a passed version |
 | **Wards and shared builds** | A symbol spread over plots; griefing a shared canvas | Wonders and the Folly fill voted templates only | A top-down ward composite daily and every 20 publishes; wonder zones each minute while active | The Watch; all plots involved held together | Wide shots, impostors and the Atlas drawing are baked only from passed versions; the drawing is checked whole before it replaces the stamps (`Atlas.md`) |
@@ -632,6 +632,8 @@ The founder answered every question this file asked.
 **Still open:** nothing in this file's scope. Voice, harassment, bans and the law wait in §7.
 
 ## Change log
+
+- **2026-11-02 — Founder raid-show decisions 25 and 45.** Incoming caravans carry banners, lanterns and cloth; there is no raid tribute. Staged fixtures stay on private `/-/` benches, retain internal simulated provenance and never enter live feeds. No visible SIMULATED chip is required or shown.
 
 - **2026-10-29: first version.** Safety for what people make: principles, every kind of made thing, the judges (Luna
   on Decisions, the moderation endpoint, Terra as a second opinion, gates outside the Codex run), the decision moment,

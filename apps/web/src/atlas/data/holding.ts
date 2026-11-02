@@ -1,6 +1,8 @@
+import { languageName } from '../../../../surveyor/src/cartography/language-labels';
+import { landLabel } from '../../../../surveyor/src/cartography/realm-labels';
 import { fetchCard, type CardReply } from './directory';
 import { loadPreview, type StorageLike } from './load';
-import { SettlerStore, type Settler } from './model';
+import { realmWord, SettlerStore, type Settler } from './model';
 import { fetchChunk, fetchNames, type PreviewSource, type PreviewWorld, type RealmKind } from './preview';
 
 /**
@@ -43,7 +45,7 @@ export function doorHolding(settler: Settler, world: PreviewWorld): DoorHolding 
     version: 1, id: settler.id, login: settler.login, name: settler.name, freshUntil: settler.freshUntil, tier: settler.tier, average: settler.average,
     game: settler.game === null ? null : { id: game?.gameId ?? null, name: settler.game },
     realm: { kind: realm?.kind ?? 'crossroads', family: realm && realm.family >= 0 ? world.families[realm.family]?.id ?? null : null, name: settler.realmName },
-    region: { language: region?.language ?? null, name: region?.englishName ?? region?.name ?? '' },
+    region: { language: region?.language ?? null, name: region?.language ? languageName(region.language).label : region ? landLabel('outer') : '' },
     x: settler.x, y: settler.y,
     survey: { preview: world.id, revision: world.revision, asOf: world.asOf, windowHours: world.window.hours },
   };
@@ -53,7 +55,7 @@ export function doorHolding(settler: Settler, world: PreviewWorld): DoorHolding 
  * dominant game, so its last live category is deliberately not used as survey evidence. */
 export function waitingDoorHolding(card: CardReply, world: PreviewWorld): DoorHolding | null {
   const face = card.channel;
-  if (card.preview !== world.id || card.revision !== world.revision || face.place !== 'waiting'
+  if (card.average === null || card.preview !== world.id || card.revision !== world.revision || face.place !== 'waiting'
     || !face.name || !face.login || face.freshUntil === null || face.freshUntil <= Date.now()
     || face.region === null || face.realm === null) return null;
   const realm = world.realms[face.realm];
@@ -62,8 +64,8 @@ export function waitingDoorHolding(card: CardReply, world: PreviewWorld): DoorHo
   return {
     version: 1, id: face.id, login: face.login, name: face.name, freshUntil: face.freshUntil,
     tier: null, average: card.average, game: null,
-    realm: { kind: realm.kind, family: realm.family >= 0 ? world.families[realm.family]?.id ?? null : null, name: realm.name },
-    region: { language: region.language, name: region.englishName ?? region.name }, x: null, y: null,
+    realm: { kind: realm.kind, family: realm.family >= 0 ? world.families[realm.family]?.id ?? null : null, name: realmWord(world, face.realm) },
+    region: { language: region.language, name: region.language ? languageName(region.language).label : landLabel('outer') }, x: null, y: null,
     survey: { preview: world.id, revision: world.revision, asOf: world.asOf, windowHours: world.window.hours },
   };
 }
@@ -110,7 +112,7 @@ export async function readDoorHolding(source: PreviewSource, storage: StorageLik
       if ((error as Error).name === 'AbortError') throw error;
       throw new HoldingError('unavailable', 'The Atlas could not be read just now.');
     }
-    throw new HoldingError('missing', 'This channel has no public entry on the current survey of the Atlas.');
+    throw new HoldingError('missing', world.status === 'edition' ? `This channel has no public entry in ${world.label} of the Atlas.` : 'This channel has no public entry on the current survey of the Atlas.');
   }
   const holding = doorHolding(settler, world);
   if (!holding) throw new HoldingError('withheld', 'This holding is not shown on the Atlas.');
@@ -139,7 +141,7 @@ export function takeHandOff(storage: StorageLike | null, id: string, now = Date.
   }
 }
 
-const TIER_LABEL: Record<Settler['tier'], string> = { capital: 'A capital', city: 'A city', town: 'A town', village: 'A village' };
+const TIER_LABEL: Record<Settler['tier'], string> = { capital: 'A capital', city: 'A city', town: 'A town', village: 'A village', hamlet: 'A hamlet' };
 
 /** Where the holding stands, in a line: "A town in the realm of Shooters", "A village on the isle of Polski". */
 export function holdingPlace(holding: Pick<DoorHolding, 'tier' | 'realm' | 'region'>): string {

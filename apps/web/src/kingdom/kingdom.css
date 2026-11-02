@@ -16,6 +16,9 @@
 .kingdom-walking .kingdom-subtitle,.kingdom-walking .kingdom-caption,.kingdom-walking .realm-mark{display:none}
 .walk-overlook{position:absolute;right:24px;bottom:24px;z-index:3;padding:9px 13px;border:1px solid #a8875855;border-radius:4px;background:#32291ee8;color:#edd4ad;font:12px Georgia,serif;cursor:pointer;box-shadow:0 3px 0 #1b1a1a99}
 .walk-overlook:focus-visible{outline:2px solid #edc98e;outline-offset:3px}
+/* On touch the play HUD's ledger book holds the bottom-right corner; the overlook steps up into the free band between
+   it and Jump, staying on the right so it never enters the left-thumb stick region. */
+.kingdom:has(.pl-hud[data-cursor='touch']) .walk-overlook{right:16px;bottom:calc(112px + env(safe-area-inset-bottom))}
 @media(max-width:700px){.kingdom-walking .kingdom-seal{top:72px}.kingdom-walking .kingdom-heading h1{font-size:25px}.walk-overlook{right:16px;bottom:20px;font-size:11px}.walker-name{font-size:12px}}
 
 /* A simulated feed has one quiet corner disclosure; other feed warnings retain their seal. */

@@ -1,6 +1,7 @@
 import { geographyOf, SettlerStore, type Settler } from '../data/model';
 import { fetchChunk, fetchNames, fetchPointer, fetchWorld, type PreviewSource, type PreviewWorld } from '../data/preview';
 import { MapView, type MapStats } from '../map/view';
+import { mapNoun } from '../ui/edition';
 import { caravanCount, columnTail } from './caravan';
 import { planRoad, rideSeconds, type RoadPath } from './geometry';
 import { RoadLayer } from './layer';
@@ -77,8 +78,8 @@ export interface RoadAtlas {
  * bare land and no road may name it. A holding whose name the survey is not serving just now (names are served only
  * while fresh) is still there: the road is drawn to it, unnamed on the map, and the caller names it.
  */
-export function roadHolding(settler: Settler | null, which: 'raiding' | 'raided'): RoadHolding {
-  if (!settler) throw new RoadAtlasError('missing', `The ${which} channel has no holding on this survey of the Atlas.`);
+export function roadHolding(settler: Settler | null, which: 'raiding' | 'raided', map: 'survey' | 'edition' = 'survey'): RoadHolding {
+  if (!settler) throw new RoadAtlasError('missing', `The ${which} channel has no holding on this ${map} of the Atlas.`);
   if (settler.withheld) throw new RoadAtlasError('withheld', `The ${which} channel is not shown on the Atlas.`);
   return { id: settler.id, name: settler.name, login: settler.login, x: settler.x, y: settler.y, tier: settler.tier, realmName: settler.realmName, region: settler.region };
 }
@@ -112,8 +113,8 @@ export async function openRoadAtlas(host: HTMLElement, options: {
   }
   const store = new SettlerStore(world);
   store.applyNames(await fetchNames(source, world, signal));
-  const from = roadHolding(await findHolding(store, world, source, options.from, signal), 'raiding');
-  const to = roadHolding(await findHolding(store, world, source, options.to, signal), 'raided');
+  const from = roadHolding(await findHolding(store, world, source, options.from, signal), 'raiding', mapNoun(world));
+  const to = roadHolding(await findHolding(store, world, source, options.to, signal), 'raided', mapNoun(world));
   const geo = geographyOf(world);
   const path = planRoad(from, to, `${from.id}>${to.id}`, from.region !== to.region);
   const span = Math.hypot(geo.bounds.maxX - geo.bounds.minX, geo.bounds.maxY - geo.bounds.minY);

@@ -1,4 +1,4 @@
-import { PersonIdSchema, PRESENCE_LEASE_MS, type KingdomId, type PersonId } from '@chatdom/shared';
+import { FORGE_WISH_WORDS_MAX, PersonIdSchema, PRESENCE_LEASE_MS, type KingdomId, type PersonId } from '@chatdom/shared';
 import type { PresenceSource } from '../source/source';
 
 /** Private creation input. This is never part of a presence frame, health report or public event. */
@@ -33,7 +33,7 @@ export function extractForgeWords(raw: unknown): string | null {
   if (!message || typeof message !== 'object' || !('text' in message) || typeof message.text !== 'string' || message.text.length > 500) return null;
   const match = /^!forge\s+([\s\S]+)$/i.exec(message.text.trim());
   const words = match?.[1]?.trim();
-  return words && words.length <= 240 ? words : null;
+  return words && words.length <= FORGE_WISH_WORDS_MAX ? words : null;
 }
 
 interface Work { readonly command: ForgeChatCommand; readonly abort: AbortController; readonly timer: ReturnType<typeof setTimeout>; current(): boolean }
@@ -60,7 +60,7 @@ export class ForgeCommandHandoff {
     if (this.#disposed || this.#work.size >= MAX_PENDING || this.#work.has(input.messageId)) return;
     if (!Number.isFinite(input.observedAt) || input.observedAt > this.now() || this.now() - input.observedAt >= PRESENCE_LEASE_MS) return;
     const personId = PersonIdSchema.parse(input.personId), slot = this.source.boundSlot(personId);
-    if (slot === null || input.words.length < 1 || input.words.length > 240) return;
+    if (slot === null || input.words.length < 1 || input.words.length > FORGE_WISH_WORDS_MAX) return;
     const command: ForgeChatCommand = { ...input, personId, slot, kingdomId: this.source.kingdomId };
     const sessionId = this.application.broadcast.sessionId;
     const generation = this.application.broadcast.generation;

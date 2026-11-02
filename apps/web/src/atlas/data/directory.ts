@@ -1,6 +1,8 @@
 import { sha256, toHex, utf8 } from '../heraldry/sha256';
+import { PORTRAIT_MAX_AGE_MS, PORTRAIT_URL, type ChannelPortrait } from './portrait';
+export type { ChannelPortrait } from './portrait';
 import {
-  array, CHANNEL_ID, epoch, fail, int, literal, nullable, oneOf, PREVIEW_ID, REVISION, shape, strict, text, type Check,
+  array, CHANNEL_ID, epoch, fail, int, literal, nullable, oneOf, PREVIEW_ID, REVISION, shape, strict, text, TIER_CODES, type Check,
   type PreviewSource,
 } from './preview';
 
@@ -26,7 +28,8 @@ export interface ChannelFace {
   realm: number | null;
 }
 
-export interface SearchResult { channel: ChannelFace; average: number; language: string }
+export interface PencilPosition { x: number; y: number }
+export interface SearchResult { channel: ChannelFace; portrait?: ChannelPortrait | null; position?: PencilPosition; average: number | null; language: string }
 
 interface Reply { version: 1; preview: string; revision: string; servedAt: number; asOf: number }
 
@@ -35,6 +38,7 @@ export interface SearchReply extends Reply {
   key: string;
   results: SearchResult[];
   more: boolean;
+  unavailable?: 'disabled' | 'limited' | 'upstream';
 }
 
 export interface RoadWindow { from: number; to: number }
@@ -45,12 +49,14 @@ export interface StreamFacts { live: boolean; game: string | null; title: string
 export interface CardReply extends Reply {
   kind: 'chatdom-atlas-card';
   channel: ChannelFace;
-  average: number;
+  portrait?: ChannelPortrait | null;
+  position?: PencilPosition;
+  average: number | null;
   language: string;
-  firstSeenAt: number;
-  lastLiveAt: number;
+  firstSeenAt: number | null;
+  lastLiveAt: number | null;
   stream: StreamFacts | null;
-  roads: { window: RoadWindow; total: number; strongest: CardRoad[] };
+  roads: { window: RoadWindow; total: number; strongest: CardRoad[] } | null;
   coverage: Coverage;
 }
 
@@ -89,7 +95,15 @@ const DAB = /^[a-f0-9]{16}$/;
 
 const MAX_INT = Number.MAX_SAFE_INTEGER;
 const uint = int(0, MAX_INT);
-const face: Check = (value, path) => {
+export const portrait: Check = (value, path) => {
+  if (value === undefined || value === null) return;
+  strict(value, path, { url: text(256, PORTRAIT_URL), freshUntil: epoch });
+};
+function checkPortraitAge(picture: ChannelPortrait | null | undefined, servedAt: number, path: string): void {
+  if (picture && picture.freshUntil > servedAt + PORTRAIT_MAX_AGE_MS + 60_000) fail(path, 'a picture expiring within its source day');
+}
+/** A channel face exactly as the service projects it (shared by the road, finder and caravan replies). */
+export const face: Check = (value, path) => {
   const f = strict(value, path, {
     id: text(32, CHANNEL_ID),
     login: nullable(text(64, /^[a-z0-9_]+$/)),
@@ -97,7 +111,8 @@ const face: Check = (value, path) => {
     freshUntil: nullable(epoch),
     place: oneOf(['mapped', 'waiting', 'unseen']),
     ordinal: nullable(uint),
-    tier: nullable(int(0, 3)),
+    // An edition's hamlets (tier 4) are mapped land too.
+    tier: nullable(int(0, TIER_CODES.length - 1)),
     region: nullable(int(0, 65_535)),
     realm: nullable(int(0, 65_535)),
   }) as unknown as ChannelFace;
@@ -119,17 +134,26 @@ const window: Check = shape({ from: epoch, to: epoch });
 const coverage: Check = shape({ raidWatch: shape({ enabled: (v, p) => void (typeof v !== 'boolean' && fail(p, 'a boolean')), watching: uint, liveCandidates: uint }), contentLabels: literal('not-collected') });
 const tally: Check = shape({ raids: int(1, MAX_INT), travellers: uint, lastAt: epoch });
 const language = text(16);
+const position: Check = (value, path) => {
+  if (value === undefined) return;
+  const coordinate: Check = (n, p) => { if (typeof n !== 'number' || !Number.isFinite(n) || Math.abs(n) > 100_000) fail(p, 'a finite map coordinate'); };
+  strict(value, path, { x: coordinate, y: coordinate });
+};
 
 export function validateSearch(value: unknown, preview: string): SearchReply {
   strict(value, 'search', {
     ...reply(preview, 'chatdom-atlas-search'),
     key: text(200),
-    results: array(shape({ channel: face, average: uint, language }), MAX_RESULTS),
+    results: array(shape({ channel: face, portrait, position, average: nullable(uint), language }), MAX_RESULTS),
     more: (v, p) => void (typeof v !== 'boolean' && fail(p, 'a boolean')),
+    unavailable: (v, p) => { if (v !== undefined) oneOf(['disabled', 'limited', 'upstream'])(v, p); },
   });
   const search = value as SearchReply;
+  if (search.unavailable && search.results.length) fail('search.unavailable', 'only on an empty answer');
   // Search finds named channels only: an unnamed or unseen result would be a reply that broke its own rule.
   search.results.forEach((result, i) => {
+    if (result.position && result.channel.place !== 'waiting') fail(`search.results[${i}].position`, 'only for a channel without a holding');
+    checkPortraitAge(result.portrait, search.servedAt, `search.results[${i}].portrait`);
     if (result.channel.name === null || result.channel.place === 'unseen') fail(`search.results[${i}]`, 'a named, observed channel');
   });
   return search;
@@ -139,10 +163,12 @@ export function validateCard(value: unknown, preview: string): CardReply {
   strict(value, 'card', {
     ...reply(preview, 'chatdom-atlas-card'),
     channel: face,
-    average: uint,
+    portrait,
+    position,
+    average: nullable(uint),
     language,
-    firstSeenAt: epoch,
-    lastLiveAt: epoch,
+    firstSeenAt: nullable(epoch),
+    lastLiveAt: nullable(epoch),
     stream: nullable(shape({
       live: (v, p) => void (typeof v !== 'boolean' && fail(p, 'a boolean')),
       game: nullable(text(256)),
@@ -150,10 +176,12 @@ export function validateCard(value: unknown, preview: string): CardReply {
       viewers: nullable(uint),
       startedAt: nullable(epoch),
     })),
-    roads: shape({ window, total: uint, strongest: array(shape({ other: face, sent: uint, received: uint, travellers: uint, lastAt: epoch }), 3) }),
+    roads: nullable(shape({ window, total: uint, strongest: array(shape({ other: face, sent: uint, received: uint, travellers: uint, lastAt: epoch }), 3) })),
     coverage,
   });
   const card = value as CardReply;
+  if (card.position && card.channel.place !== 'waiting') fail('card.position', 'only for a channel without a holding');
+  checkPortraitAge(card.portrait, card.servedAt, 'card.portrait');
   if (card.channel.place === 'unseen') fail('card.channel', 'an observed channel');
   return card;
 }
@@ -176,7 +204,7 @@ export function dabHashOf(channelId: string): string {
   return toHex(sha256(utf8(channelId))).slice(0, 16);
 }
 
-async function getJson(source: PreviewSource, url: string, signal?: AbortSignal): Promise<unknown> {
+export async function getJson(source: PreviewSource, url: string, signal?: AbortSignal): Promise<unknown> {
   if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError');
   const local = new AbortController();
   let timedOut = false;
@@ -205,7 +233,8 @@ async function getJson(source: PreviewSource, url: string, signal?: AbortSignal)
       return lost(error);
     }
     if (!response.ok) {
-      if (response.status === 404) throw new DirectoryError('not-found', 'Not in this survey’s public register.');
+      if (response.status === 404) throw new DirectoryError('not-found', 'Not on the map yet.');
+      if (response.status === 503 && /"lookup-disabled"/.test(body)) throw new DirectoryError('not-found', 'Not on the map yet.');
       if (response.status === 400) throw new DirectoryError('bad-query', 'The register cannot search for that.');
       if (response.status === 503 && /"warming"/.test(body)) {
         throw new DirectoryError('warming', 'The register is still being read.', Math.min(30, Math.max(1, Number(response.headers.get('retry-after')) || 5)));
@@ -224,7 +253,7 @@ async function getJson(source: PreviewSource, url: string, signal?: AbortSignal)
   }
 }
 
-function checked<T>(validate: (value: unknown, preview: string) => T, value: unknown, preview: string): T {
+export function checked<T>(validate: (value: unknown, preview: string) => T, value: unknown, preview: string): T {
   try {
     return validate(value, preview);
   } catch (error) {
@@ -238,7 +267,7 @@ function base(source: PreviewSource, preview: string): string {
 }
 
 export async function fetchSearch(source: PreviewSource, preview: string, query: string, signal?: AbortSignal): Promise<SearchReply> {
-  const value = await getJson(source, `${base(source, preview)}/search?q=${encodeURIComponent(query.slice(0, 120))}`, signal);
+  const value = await getJson(source, `${base(source, preview)}/search?q=${encodeURIComponent(query.slice(0, 120))}&portraits=1&lookup=1`, signal);
   return checked(validateSearch, value, preview);
 }
 
@@ -256,7 +285,7 @@ function lookupPath(lookup: Lookup): string {
 }
 
 export async function fetchCard(source: PreviewSource, preview: string, lookup: Lookup, signal?: AbortSignal): Promise<CardReply> {
-  const value = await getJson(source, `${base(source, preview)}/card/${lookupPath(lookup)}`, signal);
+  const value = await getJson(source, `${base(source, preview)}/card/${lookupPath(lookup)}?portraits=1&lookup=1`, signal);
   const card = checked(validateCard, value, preview);
   if ('id' in lookup && card.channel.id !== lookup.id) throw new DirectoryError('invalid', 'The card belongs to another channel.');
   if ('login' in lookup && card.channel.login !== lookup.login) throw new DirectoryError('invalid', 'The card belongs to another login.');

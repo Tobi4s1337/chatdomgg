@@ -1,0 +1,848 @@
+{
+  "title": "Chatdom teaser: the kingdom's own ambience",
+  "generated": "2026-11-01T22:43:23.580Z",
+  "media": "/srv/chatdom/media/teaser/audio/ambience",
+  "sampleRate": 48000,
+  "formats": {
+    "edit": "WAV, 48 kHz, stereo, 24-bit PCM (media .../ambience/edit/)",
+    "raw": "WAV, 48 kHz, stereo, 32-bit float, as rendered (media .../ambience/raw/; bed layers in raw/layers/)"
+  },
+  "levels": "Beds: linear gain to -28 LUFS integrated, true peak kept below -6 dBTP. Hero sounds: linear gain so the true peak sits at -6 dBTP. Measured with ffmpeg ebur128 (peak=true) and astats.",
+  "rerender": {
+    "all": "cd /srv/chatdom/teaser && nice -n 19 node apps/studio/sound/ambience/render.mjs",
+    "remixOnly": "nice -n 19 node apps/studio/sound/ambience/render.mjs --mix-only",
+    "oneLayer": "nice -n 19 node apps/studio/sound/ambience/render.mjs <layer-name> (for example evening-fire)",
+    "how": "Builds the bench page (apps/studio/sound/ambience/index.html, main.ts) with Vite, takes the shared capture lock, renders every layer in headless Chromium through OfflineAudioContext on the first free capture port, closes the browser and server and releases the lock, then mixes, loops, measures and normalises in Node with ffmpeg (nice -n 19, -threads 4). Deterministic: every render is seeded."
+  },
+  "notes": [
+    "Soul audio (packages/audio/src/soul, renderSoulAudio) is not used: it always plays its own music (lute, and strings, woodwind and choir with presence) and has no switch to turn that off, which would clash with the score. The Genesis land layer it reuses for birds, harbour and water is used directly instead.",
+    "The Genesis land has no people in it by design (population: real-presence-only). The evening murmur and the fire are therefore authored for the teaser in apps/studio/sound/ambience (murmur.ts, fire.ts) and are labelled so; they are not package sounds.",
+    "Door: the kingdom has no door cue (packages/audio cues are wood, light, wave, beacon, step, place, remove, material; the moment cues have none either). No door sound was made.",
+    "The bell buoy is the Genesis land's own call (rung by the swell; the light mist in the night bed makes it speak more often). Whether it rings, and when, comes from the seed.",
+    "Owls and blackbirds come from the meadow soul of the observed fixture 4363967; the coastal fixture 63920635 would give oystercatchers and curlews instead and no owl.",
+    "Inputs are chosen for the teaser shots (hour, weather, ear position, the Forge schedule, the passers-by): they are not events from a real kingdom."
+  ],
+  "renderSession": {
+    "rendered": "2026-11-01T22:30:40.593Z",
+    "buildFingerprint": "bcd97b86329e95d6",
+    "consoleErrors": []
+  },
+  "files": [
+    {
+      "id": "bed-evening-town",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/bed-evening-town.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/bed-evening-town.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/bed-evening-town.png",
+      "what": "Evening town bed, a seamless 30 s loop. Dusk on the harbour town: the sea breaking left and right and lapping at the quay, rigging and hulls, a few gulls, blackbirds and a wood pigeon settling, a frog by the water, crickets just starting; people talking a street away (now and then a laugh), a hearth crackling through an open window, three passers-by on the cobbles and the boardwalk.",
+      "shots": "S01 the channel at dusk; S05-S07 the Way Home at golden hour (the walk to their door, the window lights, the door opens); S08 chat becomes lights, under the window wave.",
+      "source": [
+        {
+          "layer": "evening-land",
+          "gainDb": 6,
+          "module": "packages/audio/src/genesis-biomes/offline.ts",
+          "function": "renderGenesisSoundscape",
+          "settings": {
+            "recipe": "compileChannelGenesis(OBSERVED_GENESIS_FIXTURES, broadcasterId 4363967) (packages/world/src/genesis; the observed meadow-soul fixture)",
+            "landscape": "coastal-harbour",
+            "hour": 19.5,
+            "weather": {
+              "wind": 0.3,
+              "rain": 0,
+              "snow": 0,
+              "storm": 0,
+              "fog": 0,
+              "wet": 0
+            },
+            "listener": "70 m from the harbour shore point towards the nearest forest edge, 3 m up",
+            "realmOffsetSeconds": "174 (a window of realm time chosen from a 300 s survey for its calls)",
+            "postProcess": "in the bed mix: 2nd-order Butterworth high-pass at 35 Hz",
+            "mix": "kingdom profile, master 0.4225 (the kingdom default)",
+            "preroll": "8 s rendered and discarded so every bed has eased in",
+            "realmClockBaseMs": 1793377944392
+          },
+          "licence": "Original procedural synthesis authored in this repository (packages/audio/src/genesis-biomes); no recordings (packages/audio/src/genesis-biomes/THIRD_PARTY.md)."
+        },
+        {
+          "layer": "evening-murmur",
+          "gainDb": -10.5,
+          "module": "apps/studio/sound/ambience/murmur.ts",
+          "function": "renderMurmur",
+          "settings": {
+            "seed": 32350,
+            "talkers": 12,
+            "airHz": 1400
+          },
+          "licence": "Original procedural synthesis authored for the teaser in this repository (apps/studio/sound/ambience); no recordings."
+        },
+        {
+          "layer": "evening-fire",
+          "gainDb": -2.4,
+          "module": "apps/studio/sound/ambience/fire.ts",
+          "function": "renderFire",
+          "settings": {
+            "seed": 20135,
+            "size": 0.3,
+            "distance": 0.55,
+            "pan": -0.35
+          },
+          "licence": "Original procedural synthesis authored for the teaser in this repository (apps/studio/sound/ambience); no recordings."
+        },
+        {
+          "layer": "evening-steps",
+          "gainDb": 8,
+          "module": "packages/audio/src/offline.ts",
+          "function": "renderKingdomAudio",
+          "settings": {
+            "cue": "step",
+            "steps": 34,
+            "materials": [
+              "stone",
+              "wood"
+            ],
+            "distanceMetres": [
+              4.87,
+              22
+            ],
+            "volume": 0.65,
+            "random": "seeded (22505)",
+            "script": "three passers-by, see LAYER_TASKS evening-steps in render.mjs"
+          },
+          "licence": "Footsteps: packages/audio `step` cue, original synthesis (packages/audio/src/cues/materials) layered with recorded footsteps from Kenney \"Impact Sounds\" 1.0 (footstep-concrete, footstep-wood), CC0 1.0 (Kenney Vleugels, kenney.nl), per packages/audio/THIRD_PARTY.md."
+        }
+      ],
+      "licence": "Original procedural synthesis authored in this repository (packages/audio/src/genesis-biomes); no recordings (packages/audio/src/genesis-biomes/THIRD_PARTY.md). Original procedural synthesis authored for the teaser in this repository (apps/studio/sound/ambience); no recordings. Footsteps: packages/audio `step` cue, original synthesis (packages/audio/src/cues/materials) layered with recorded footsteps from Kenney \"Impact Sounds\" 1.0 (footstep-concrete, footstep-wood), CC0 1.0 (Kenney Vleugels, kenney.nl), per packages/audio/THIRD_PARTY.md.",
+      "durationSeconds": 30,
+      "loop": "Seamless loop: rendered 34 s, the last 4 s cross-faded (equal power) into the first 4 s. No fade in or out; loop it or fade it in the edit.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": 0.9,
+        "rule": "integrated loudness to -28 LUFS (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -28,
+        "truePeakDbtp": -11.1,
+        "loudnessRangeLu": 3.4,
+        "samplePeakDbfs": -11.050889,
+        "shortTermLufs": {
+          "min": -29.6,
+          "max": -25.7,
+          "sd": 1.1
+        },
+        "dcOffset": 0,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -28.9,
+        "truePeakDbtp": -12
+      },
+      "heard": [
+        {
+          "t": 1.01,
+          "what": "gull (185 m)"
+        },
+        {
+          "t": 1.55,
+          "what": "rigging (67 m)"
+        },
+        {
+          "t": 4.05,
+          "what": "slap (54 m)"
+        },
+        {
+          "t": 6.17,
+          "what": "footsteps on cobbles, 6.2-13.1 s"
+        },
+        {
+          "t": 6.36,
+          "what": "blackbird (84 m)"
+        },
+        {
+          "t": 6.43,
+          "what": "gull (127 m)"
+        },
+        {
+          "t": 9.62,
+          "what": "frog (220 m)"
+        },
+        {
+          "t": 11.82,
+          "what": "rigging (72 m)"
+        },
+        {
+          "t": 14.46,
+          "what": "blackbird (99 m)"
+        },
+        {
+          "t": 14.74,
+          "what": "slap (66 m)"
+        },
+        {
+          "t": 15.37,
+          "what": "footsteps on cobbles, 15.4-21.2 s"
+        },
+        {
+          "t": 16.57,
+          "what": "gull (175 m)"
+        },
+        {
+          "t": 18.03,
+          "what": "woodpigeon (58 m)"
+        },
+        {
+          "t": 19.9,
+          "what": "blackbird (110 m)"
+        },
+        {
+          "t": 21.57,
+          "what": "footsteps on boards, 21.6-25.6 s"
+        }
+      ],
+      "seam": {
+        "jump": 0.000886,
+        "medianStep": 0.00238,
+        "note": "largest last-to-first sample jump vs the median sample-to-sample step"
+      }
+    },
+    {
+      "id": "bed-night-town",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/bed-night-town.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/bed-night-town.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/bed-night-town.png",
+      "what": "Night town bed, a seamless 30 s loop. The harbour at night in a light sea mist: soft sea and wind, the hull and rigging, crickets, an owl in the trees, the bell buoy offshore rung by the swell, and a brazier fire burning near the ear (more roar than the hearth). No people.",
+      "shots": "S17 the gate wakes (braziers, walkers gathering); S20 arrival at a town whose lights come on; S22 the night town close.",
+      "source": [
+        {
+          "layer": "night-land",
+          "gainDb": 6.8,
+          "module": "packages/audio/src/genesis-biomes/offline.ts",
+          "function": "renderGenesisSoundscape",
+          "settings": {
+            "recipe": "compileChannelGenesis(OBSERVED_GENESIS_FIXTURES, broadcasterId 4363967) (packages/world/src/genesis; the observed meadow-soul fixture)",
+            "landscape": "coastal-harbour",
+            "hour": 23.2,
+            "weather": {
+              "wind": 0.28,
+              "rain": 0,
+              "snow": 0,
+              "storm": 0,
+              "fog": 0.35,
+              "wet": 0
+            },
+            "listener": "70 m from the harbour shore point towards the nearest forest edge, 3 m up",
+            "realmOffsetSeconds": "237 (a window of realm time chosen from a 300 s survey for its calls)",
+            "postProcess": "in the bed mix: 2nd-order Butterworth high-pass at 35 Hz",
+            "mix": "kingdom profile, master 0.4225 (the kingdom default)",
+            "preroll": "8 s rendered and discarded so every bed has eased in",
+            "realmClockBaseMs": 1793377944392
+          },
+          "licence": "Original procedural synthesis authored in this repository (packages/audio/src/genesis-biomes); no recordings (packages/audio/src/genesis-biomes/THIRD_PARTY.md)."
+        },
+        {
+          "layer": "night-fire",
+          "gainDb": -2.5,
+          "module": "apps/studio/sound/ambience/fire.ts",
+          "function": "renderFire",
+          "settings": {
+            "seed": 45733,
+            "size": 0.75,
+            "distance": 0.4,
+            "pan": 0.3
+          },
+          "licence": "Original procedural synthesis authored for the teaser in this repository (apps/studio/sound/ambience); no recordings."
+        }
+      ],
+      "licence": "Original procedural synthesis authored in this repository (packages/audio/src/genesis-biomes); no recordings (packages/audio/src/genesis-biomes/THIRD_PARTY.md). Original procedural synthesis authored for the teaser in this repository (apps/studio/sound/ambience); no recordings.",
+      "durationSeconds": 30,
+      "loop": "Seamless loop: rendered 34 s, the last 4 s cross-faded (equal power) into the first 4 s. No fade in or out; loop it or fade it in the edit.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": 1.1,
+        "rule": "integrated loudness to -28 LUFS (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -28,
+        "truePeakDbtp": -11.2,
+        "loudnessRangeLu": 4.4,
+        "samplePeakDbfs": -11.259556,
+        "shortTermLufs": {
+          "min": -30.7,
+          "max": -25.6,
+          "sd": 1.5
+        },
+        "dcOffset": 0,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -29.1,
+        "truePeakDbtp": -12.3
+      },
+      "heard": [
+        {
+          "t": 0.44,
+          "what": "mooring (67 m)"
+        },
+        {
+          "t": 1.45,
+          "what": "plop (208 m)"
+        },
+        {
+          "t": 4.08,
+          "what": "hull (71 m)"
+        },
+        {
+          "t": 5.27,
+          "what": "owl (92 m)"
+        },
+        {
+          "t": 8.52,
+          "what": "slap (63 m)"
+        },
+        {
+          "t": 11.46,
+          "what": "buoy (107 m)"
+        },
+        {
+          "t": 20.69,
+          "what": "slap (69 m)"
+        },
+        {
+          "t": 23.09,
+          "what": "buoy (107 m)"
+        }
+      ],
+      "seam": {
+        "jump": 0.00252,
+        "medianStep": 0.00221,
+        "note": "largest last-to-first sample jump vs the median sample-to-sample step"
+      }
+    },
+    {
+      "id": "hero-light",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/hero-light.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/hero-light.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/hero-light.png",
+      "what": "One window lighting because someone came home: a fingertip of glass, the wick catching in a soft puff, a warm glow blooming into one note of the palette.",
+      "shots": "S06 the window lights on the Way Home; S20 single windows coming on.",
+      "source": {
+        "module": "packages/audio/src/offline.ts",
+        "function": "renderKingdomAudio",
+        "settings": {
+          "cues": [
+            "light"
+          ],
+          "at": [
+            0.05
+          ],
+          "volume": 0.65,
+          "random": "seeded (11)"
+        },
+        "licence": "Original synthesis authored in this repository (packages/audio/src/cues) layered with recorded foley from Kenney \"Impact Sounds\" 1.0 (impact-glass-light), CC0 1.0 (Kenney Vleugels, kenney.nl), as listed in packages/audio/THIRD_PARTY.md."
+      },
+      "licence": "Original synthesis authored in this repository (packages/audio/src/cues) layered with recorded foley from Kenney \"Impact Sounds\" 1.0 (impact-glass-light), CC0 1.0 (Kenney Vleugels, kenney.nl), as listed in packages/audio/THIRD_PARTY.md.",
+      "durationSeconds": 2.66,
+      "loop": "One-shot; starts 50 ms in, silent tail trimmed to 150 ms with a 50 ms fade.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": 18.7,
+        "rule": "true peak to -6 dBTP (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -18,
+        "truePeakDbtp": -6,
+        "loudnessRangeLu": 0,
+        "samplePeakDbfs": -5.995797,
+        "shortTermLufs": null,
+        "dcOffset": 0,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -36.7,
+        "truePeakDbtp": -24.7
+      }
+    },
+    {
+      "id": "hero-wave",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/hero-wave.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/hero-wave.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/hero-wave.png",
+      "what": "A street lighting up behind the first window: five more windows catch one after another, travelling across the stereo field, their glows gathering into one soft chord with a warm undertone.",
+      "shots": "S08 chat becomes lights (the window wave); S20 the town lighting up.",
+      "source": {
+        "module": "packages/audio/src/offline.ts",
+        "function": "renderKingdomAudio",
+        "settings": {
+          "cues": [
+            "wave"
+          ],
+          "at": [
+            0.05
+          ],
+          "volume": 0.65,
+          "random": "seeded (12)"
+        },
+        "licence": "Original synthesis authored in this repository (packages/audio/src/cues) layered with recorded foley from Kenney \"Impact Sounds\" 1.0 (impact-glass-light), CC0 1.0 (Kenney Vleugels, kenney.nl), as listed in packages/audio/THIRD_PARTY.md."
+      },
+      "licence": "Original synthesis authored in this repository (packages/audio/src/cues) layered with recorded foley from Kenney \"Impact Sounds\" 1.0 (impact-glass-light), CC0 1.0 (Kenney Vleugels, kenney.nl), as listed in packages/audio/THIRD_PARTY.md.",
+      "durationSeconds": 3.57,
+      "loop": "One-shot; starts 50 ms in, silent tail trimmed to 150 ms with a 50 ms fade.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": 16.3,
+        "rule": "true peak to -6 dBTP (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -19.2,
+        "truePeakDbtp": -6,
+        "loudnessRangeLu": 1,
+        "samplePeakDbfs": -6.050894,
+        "shortTermLufs": {
+          "min": -22.7,
+          "max": -21.7,
+          "sd": 0.4
+        },
+        "dcOffset": 0,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -35.2,
+        "truePeakDbtp": -22.3
+      }
+    },
+    {
+      "id": "hero-beacon",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/hero-beacon.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/hero-beacon.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/hero-beacon.png",
+      "what": "The castle beacon: a torch set down into the brazier (a low, dull wooden knock), the oil catching in a rising whoomph with sparks, the castle windows catching, and one broad warm chord rising from the bottom up to a crest and back to quiet inside five seconds.",
+      "shots": "S17 the gate braziers catch.",
+      "source": {
+        "module": "packages/audio/src/offline.ts",
+        "function": "renderKingdomAudio",
+        "settings": {
+          "cues": [
+            "beacon"
+          ],
+          "at": [
+            0.05
+          ],
+          "volume": 0.65,
+          "random": "seeded (13)"
+        },
+        "licence": "Original synthesis authored in this repository (packages/audio/src/cues) layered with recorded foley from Kenney \"Impact Sounds\" 1.0 (impact-plank-medium and impact-glass-light), CC0 1.0 (Kenney Vleugels, kenney.nl), as listed in packages/audio/THIRD_PARTY.md."
+      },
+      "licence": "Original synthesis authored in this repository (packages/audio/src/cues) layered with recorded foley from Kenney \"Impact Sounds\" 1.0 (impact-plank-medium and impact-glass-light), CC0 1.0 (Kenney Vleugels, kenney.nl), as listed in packages/audio/THIRD_PARTY.md.",
+      "durationSeconds": 5.12,
+      "loop": "One-shot; starts 50 ms in, silent tail trimmed to 150 ms with a 50 ms fade.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": 14.9,
+        "rule": "true peak to -6 dBTP (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -17.4,
+        "truePeakDbtp": -6,
+        "loudnessRangeLu": 11.3,
+        "samplePeakDbfs": -5.992254,
+        "shortTermLufs": {
+          "min": -30,
+          "max": -17.7,
+          "sd": 4.2
+        },
+        "dcOffset": 0,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -32.3,
+        "truePeakDbtp": -20.9
+      }
+    },
+    {
+      "id": "hero-crowd-murmur",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/hero-crowd-murmur.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/hero-crowd-murmur.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/hero-crowd-murmur.png",
+      "what": "The town turning to look: a crowd \"ooh\" that rises to a peak about 1.5 s in and lets go.",
+      "shots": "S14 the raid arrives, just before the crowd erupts.",
+      "source": {
+        "module": "apps/web/src/twitch-moments/sound.ts",
+        "function": "createProceduralMomentSound(...).play",
+        "settings": {
+          "cues": [
+            "crowd-murmur"
+          ],
+          "gain": 1,
+          "context": "OfflineAudioContext; the port's wall-clock disconnect timer is held back while scheduling (offline rendering runs on its own clock)"
+        },
+        "licence": "Original procedural synthesis authored in this repository (apps/web/src/twitch-moments/sound.ts); no samples, recordings or downloaded audio."
+      },
+      "licence": "Original procedural synthesis authored in this repository (apps/web/src/twitch-moments/sound.ts); no samples, recordings or downloaded audio.",
+      "durationSeconds": 3.4,
+      "loop": "One-shot; starts 50 ms in, silent tail trimmed to 150 ms with a 50 ms fade.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": 4.1,
+        "rule": "true peak to -6 dBTP (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -19.7,
+        "truePeakDbtp": -6,
+        "loudnessRangeLu": 0,
+        "samplePeakDbfs": -5.985885,
+        "shortTermLufs": {
+          "min": -21.6,
+          "max": -21.6,
+          "sd": 0
+        },
+        "dcOffset": 0,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -23.8,
+        "truePeakDbtp": -10.1
+      }
+    },
+    {
+      "id": "hero-crowd-cheer",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/hero-crowd-cheer.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/hero-crowd-cheer.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/hero-crowd-cheer.png",
+      "what": "The crowd erupting: a bright \"aah\" that leaps and falls away, with hands clapping across the street.",
+      "shots": "S14-S15 the crowd erupts for the raid.",
+      "source": {
+        "module": "apps/web/src/twitch-moments/sound.ts",
+        "function": "createProceduralMomentSound(...).play",
+        "settings": {
+          "cues": [
+            "crowd-cheer"
+          ],
+          "gain": 1,
+          "context": "OfflineAudioContext; the port's wall-clock disconnect timer is held back while scheduling (offline rendering runs on its own clock)"
+        },
+        "licence": "Original procedural synthesis authored in this repository (apps/web/src/twitch-moments/sound.ts); no samples, recordings or downloaded audio."
+      },
+      "licence": "Original procedural synthesis authored in this repository (apps/web/src/twitch-moments/sound.ts); no samples, recordings or downloaded audio.",
+      "durationSeconds": 3.95,
+      "loop": "One-shot; starts 50 ms in, silent tail trimmed to 150 ms with a 50 ms fade.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": 0.4,
+        "rule": "true peak to -6 dBTP (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -19.6,
+        "truePeakDbtp": -6,
+        "loudnessRangeLu": 4.9,
+        "samplePeakDbfs": -5.956141,
+        "shortTermLufs": {
+          "min": -26,
+          "max": -21.1,
+          "sd": 1.7
+        },
+        "dcOffset": -0.000002,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -20,
+        "truePeakDbtp": -6.4
+      }
+    },
+    {
+      "id": "hero-horn",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/hero-horn.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/hero-horn.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/hero-horn.png",
+      "what": "A short brass horn call from the gate, a rising fourth (D to G), the filter opening like a lip buzz.",
+      "shots": "S14-S16 the raid horn.",
+      "source": {
+        "module": "apps/web/src/twitch-moments/sound.ts",
+        "function": "createProceduralMomentSound(...).play",
+        "settings": {
+          "cues": [
+            "horn"
+          ],
+          "gain": 1,
+          "context": "OfflineAudioContext; the port's wall-clock disconnect timer is held back while scheduling (offline rendering runs on its own clock)"
+        },
+        "licence": "Original procedural synthesis authored in this repository (apps/web/src/twitch-moments/sound.ts); no samples, recordings or downloaded audio."
+      },
+      "licence": "Original procedural synthesis authored in this repository (apps/web/src/twitch-moments/sound.ts); no samples, recordings or downloaded audio.",
+      "durationSeconds": 2.07,
+      "loop": "One-shot; starts 50 ms in, silent tail trimmed to 150 ms with a 50 ms fade.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": -4.8,
+        "rule": "true peak to -6 dBTP (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -15.2,
+        "truePeakDbtp": -6,
+        "loudnessRangeLu": 0,
+        "samplePeakDbfs": -5.999156,
+        "shortTermLufs": null,
+        "dcOffset": 0.000102,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -10.4,
+        "truePeakDbtp": -1.2
+      }
+    },
+    {
+      "id": "hero-cart-roll",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/hero-cart-roll.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/hero-cart-roll.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/hero-cart-roll.png",
+      "what": "A cart rolling in: wooden wheels on packed earth, a low rumble that swells and fades, with a pony's soft hoof clops on top.",
+      "shots": "S15-S16 the caravan through the gate.",
+      "source": {
+        "module": "apps/web/src/twitch-moments/sound.ts",
+        "function": "createProceduralMomentSound(...).play",
+        "settings": {
+          "cues": [
+            "cart-roll"
+          ],
+          "gain": 1,
+          "context": "OfflineAudioContext; the port's wall-clock disconnect timer is held back while scheduling (offline rendering runs on its own clock)"
+        },
+        "licence": "Original procedural synthesis authored in this repository (apps/web/src/twitch-moments/sound.ts); no samples, recordings or downloaded audio."
+      },
+      "licence": "Original procedural synthesis authored in this repository (apps/web/src/twitch-moments/sound.ts); no samples, recordings or downloaded audio.",
+      "durationSeconds": 3.92,
+      "loop": "One-shot; starts 50 ms in, silent tail trimmed to 150 ms with a 50 ms fade.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": 9.3,
+        "rule": "true peak to -6 dBTP (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -21.8,
+        "truePeakDbtp": -6,
+        "loudnessRangeLu": 1.6,
+        "samplePeakDbfs": -6.034948,
+        "shortTermLufs": {
+          "min": -23,
+          "max": -21.4,
+          "sd": 0.5
+        },
+        "dcOffset": -0.001676,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -31.1,
+        "truePeakDbtp": -15.3
+      }
+    },
+    {
+      "id": "hero-festival-drum",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/hero-festival-drum.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/hero-festival-drum.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/hero-festival-drum.png",
+      "what": "A festive frame-drum figure with a tambourine: low open strokes, quick high slaps, jingles on the offbeats and a shaken roll into the last big stroke.",
+      "shots": "S15-S16 under the caravan, if the score leaves room for it.",
+      "source": {
+        "module": "apps/web/src/twitch-moments/sound.ts",
+        "function": "createProceduralMomentSound(...).play",
+        "settings": {
+          "cues": [
+            "festival-drum"
+          ],
+          "gain": 1,
+          "context": "OfflineAudioContext; the port's wall-clock disconnect timer is held back while scheduling (offline rendering runs on its own clock)"
+        },
+        "licence": "Original procedural synthesis authored in this repository (apps/web/src/twitch-moments/sound.ts); no samples, recordings or downloaded audio."
+      },
+      "licence": "Original procedural synthesis authored in this repository (apps/web/src/twitch-moments/sound.ts); no samples, recordings or downloaded audio.",
+      "durationSeconds": 2.47,
+      "loop": "One-shot; starts 50 ms in, silent tail trimmed to 150 ms with a 50 ms fade.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": -1.1,
+        "rule": "true peak to -6 dBTP (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -23.1,
+        "truePeakDbtp": -6,
+        "loudnessRangeLu": 0,
+        "samplePeakDbfs": -5.995756,
+        "shortTermLufs": null,
+        "dcOffset": 0.000272,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -22,
+        "truePeakDbtp": -4.9
+      }
+    },
+    {
+      "id": "hero-forge-strike",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/hero-forge-strike.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/hero-forge-strike.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/hero-forge-strike.png",
+      "what": "The Forge strike: the hammer lifting, the swing, the impact (about 1.0 s in) with the dull squash of hot iron and a body thump, then the anvil ringing out for about 7 s with sparks crackling away.",
+      "shots": "S11 the Forge strike.",
+      "source": {
+        "module": "packages/audio/src/forge/offline.ts",
+        "function": "renderForgeAudio",
+        "settings": {
+          "frames": "ForgeRitualFrame on the authored FORGE_SPANS schedule (packages/audio/src/forge/conductor.ts), elapsed 11.75 s to 12.7 s, source 'simulated', 60 frames a second",
+          "after": "null frames (the anvil is clear): what rings, rings out; nothing new starts",
+          "mix": "volume 1",
+          "lead": "0.4 s of silence before the first frame"
+        },
+        "licence": "Original procedural synthesis authored in this repository (packages/audio/src/forge); no recordings or third-party code (packages/audio/src/forge/README.md, Credits)."
+      },
+      "licence": "Original procedural synthesis authored in this repository (packages/audio/src/forge); no recordings or third-party code (packages/audio/src/forge/README.md, Credits).",
+      "durationSeconds": 7.63,
+      "loop": "One-shot; starts 50 ms in, silent tail trimmed to 150 ms with a 50 ms fade.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": -2.5,
+        "rule": "true peak to -6 dBTP (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -26.1,
+        "truePeakDbtp": -6,
+        "loudnessRangeLu": 23.2,
+        "samplePeakDbfs": -7.460153,
+        "shortTermLufs": {
+          "min": -65.3,
+          "max": -28.5,
+          "sd": 12.5
+        },
+        "dcOffset": 0,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -23.8,
+        "truePeakDbtp": -3.5
+      }
+    },
+    {
+      "id": "hero-forge-landing",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/hero-forge-landing.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/hero-forge-landing.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/hero-forge-landing.png",
+      "what": "The Forge flight and landing: the release thump, air following the part along its arc, the contact on the roof (about 3.4 s in) with tiles chattering and dust settling, one small timber creak.",
+      "shots": "S12 the forged thing lands.",
+      "source": {
+        "module": "packages/audio/src/forge/offline.ts",
+        "function": "renderForgeAudio",
+        "settings": {
+          "frames": "ForgeRitualFrame on the authored FORGE_SPANS schedule (packages/audio/src/forge/conductor.ts), elapsed 15.5 s to 21 s, source 'simulated', 60 frames a second",
+          "after": "the ended landed frame (ritual over)",
+          "mix": "volume 1",
+          "lead": "0.3 s of silence before the first frame"
+        },
+        "licence": "Original procedural synthesis authored in this repository (packages/audio/src/forge); no recordings or third-party code (packages/audio/src/forge/README.md, Credits)."
+      },
+      "licence": "Original procedural synthesis authored in this repository (packages/audio/src/forge); no recordings or third-party code (packages/audio/src/forge/README.md, Credits).",
+      "durationSeconds": 4.86,
+      "loop": "One-shot; starts 50 ms in, silent tail trimmed to 150 ms with a 50 ms fade.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": -0.5,
+        "rule": "true peak to -6 dBTP (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -25.4,
+        "truePeakDbtp": -6,
+        "loudnessRangeLu": 12.8,
+        "samplePeakDbfs": -5.954608,
+        "shortTermLufs": {
+          "min": -40.1,
+          "max": -27.3,
+          "sd": 5.1
+        },
+        "dcOffset": -0.000001,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -24.9,
+        "truePeakDbtp": -5.5
+      }
+    },
+    {
+      "id": "hero-forge-ritual",
+      "file": "/srv/chatdom/media/teaser/audio/ambience/edit/hero-forge-ritual.wav",
+      "raw": "/srv/chatdom/media/teaser/audio/ambience/raw/hero-forge-ritual.wav",
+      "spectrogram": "/srv/chatdom/media/teaser/audio/ambience/spectrograms/hero-forge-ritual.png",
+      "what": "The whole Forge ritual on its authored 21 s schedule: the words (bellows breath, rune glints, the gather), the blueprint latch, the pour (clanks, molten bubbles), the seal (wax, press, ribbon, hammer lift), the strike and ring, the quench and cooling ticks, the flight and the landing.",
+      "shots": "S10-S12 the Forge, as a guide track or to cut pieces from.",
+      "source": {
+        "module": "packages/audio/src/forge/offline.ts",
+        "function": "renderForgeAudio",
+        "settings": {
+          "frames": "ForgeRitualFrame on the authored FORGE_SPANS schedule (packages/audio/src/forge/conductor.ts), elapsed 0 s to 21 s, source 'simulated', 60 frames a second",
+          "after": "the ended landed frame (ritual over)",
+          "mix": "volume 1",
+          "lead": "0.5 s of silence before the first frame"
+        },
+        "licence": "Original procedural synthesis authored in this repository (packages/audio/src/forge); no recordings or third-party code (packages/audio/src/forge/README.md, Credits)."
+      },
+      "licence": "Original procedural synthesis authored in this repository (packages/audio/src/forge); no recordings or third-party code (packages/audio/src/forge/README.md, Credits).",
+      "durationSeconds": 20.54,
+      "loop": "One-shot; starts 50 ms in, silent tail trimmed to 150 ms with a 50 ms fade.",
+      "format": {
+        "edit": "WAV, 48 kHz, stereo, 24-bit PCM",
+        "raw": "WAV, 48 kHz, stereo, 32-bit float"
+      },
+      "normalisation": {
+        "gainDb": -1.3,
+        "rule": "true peak to -6 dBTP (linear gain)"
+      },
+      "loudness": {
+        "integratedLufs": -30.6,
+        "truePeakDbtp": -6,
+        "loudnessRangeLu": 13.4,
+        "samplePeakDbfs": -6.028332,
+        "shortTermLufs": {
+          "min": -41.5,
+          "max": -26.9,
+          "sd": 4.6
+        },
+        "dcOffset": 0,
+        "flatFactor": 0
+      },
+      "rawLoudness": {
+        "integratedLufs": -29.3,
+        "truePeakDbtp": -4.7
+      }
+    }
+  ]
+}

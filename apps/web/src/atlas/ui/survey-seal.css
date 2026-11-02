@@ -1,0 +1,23 @@
+.atlas .atlas-survey-seal { position: relative; flex: none; margin-left: auto; }
+.atlas .atlas-survey-button { display: flex; align-items: center; gap: 5px; min-height: 40px; padding: 1px 0 1px 5px; border: 0; background: none; color: var(--cd-cream); cursor: pointer; text-align: left; touch-action: manipulation; }
+.atlas .atlas-survey-wax { --cd-wax: #934b38; width: 30px; height: 30px; }
+/* A founded edition: a deeper wax, a fine outer rim and a brass-struck crown. A rehearsal keeps the survey's wax. */
+.atlas .atlas-survey-seal[data-seal-kind='edition'] .atlas-survey-wax { --cd-wax: #7e2b21; }
+.atlas .atlas-survey-seal[data-seal-kind='edition'] .cd-seal-glyph { stroke: color-mix(in srgb, var(--cd-brass-hi) 82%, var(--cd-wax)); fill: color-mix(in srgb, var(--cd-brass) 26%, transparent); }
+.atlas .atlas-survey-rim-fine { stroke-width: .55; opacity: .8; }
+.atlas .atlas-survey-seal[data-seal-kind='edition'] .atlas-survey-rim-fine { stroke: color-mix(in srgb, var(--cd-brass) 55%, var(--cd-wax)); }
+.atlas .atlas-survey-rehearsal { font-style: italic; color: var(--cd-cream-soft); }
+.atlas .atlas-survey-words { display: grid; gap: 2px; font: 400 12px/1.2 var(--cd-face-body); font-variant-numeric: lining-nums tabular-nums; }
+.atlas .atlas-survey-words > span { white-space: nowrap; }
+.atlas .atlas-survey-live { color: var(--cd-cream-soft); font-size: 12px; }
+.atlas .atlas-survey-seal[data-tone='fresh'] .atlas-survey-live { color: var(--cd-brass-hi); }
+.atlas .atlas-survey-button:active .atlas-survey-wax { transform: translateY(1px) scale(.94); }
+.atlas .atlas-survey-button:focus-visible { outline: 2px solid var(--cd-brass-hi); outline-offset: 2px; border-radius: 2px; }
+.atlas .atlas-survey-hint { position: absolute; z-index: 8; top: calc(100% + 16px); right: 0; width: max-content; max-width: min(280px, calc(100vw - 44px)); padding: 9px 12px; color: var(--cd-ink); font: 14px/1.25 var(--cd-face-body); background: var(--cd-parch-hi); border: 1px solid var(--cd-brass-lo); border-radius: 3px; box-shadow: inset 0 0 0 2px var(--cd-parch), 0 5px 12px #38261a44; }
+.atlas .atlas-sound-toggle { display: grid; place-items: center; width: 40px; height: 40px; padding: 7px; color: var(--cd-brass-hi); background: linear-gradient(160deg,var(--cd-wood-hi),var(--cd-wood-lo)); border: 1px solid var(--cd-wood-edge); border-radius: 5px; box-shadow: inset 0 1px #f4dc9d55,0 2px #24160d66; cursor: pointer; }
+.atlas .atlas-sound-toggle svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.atlas .atlas-sound-toggle:focus-visible { outline: 2px solid var(--cd-brass-hi); outline-offset: 2px; box-shadow: 0 0 0 4px var(--cd-wood-lo); }
+.atlas .atlas-sound-toggle:active { transform: translateY(1px); }
+.atlas .atlas-footer-slot { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2; }
+@media (max-width: 420px) { .atlas .atlas-survey-wax { width: 26px; height: 26px; } .atlas .atlas-survey-button { gap: 4px; padding-left: 0; } }
+@media (prefers-reduced-motion: reduce) { .atlas .atlas-survey-button:active .atlas-survey-wax { transform: none; } }

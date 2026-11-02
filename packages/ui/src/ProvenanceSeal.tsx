@@ -1,7 +1,7 @@
 import { For, Show, type JSX } from 'solid-js';
 import { provenanceLines, type Provenance } from './provenance';
 
-/** The glyph pressed into each wax seal: a stage curtain, a turning glass, a flame, a moon, a cracked seal. */
+/** The glyph pressed into each wax seal: a stage curtain (an owner's staged detail), a turning glass, a flame, a moon, a cracked seal. */
 function SealGlyph(props: { state: Provenance }): JSX.Element {
   switch (props.state) {
     case 'simulated': return <path d="M5 5.5h10M6 5.5c0 4 1.2 7 3 8.6M14 5.5c0 4-1.2 7-3 8.6M6 5.5v9M14 5.5v9" />;
@@ -22,12 +22,17 @@ function Seal(props: { state: Provenance; small?: boolean }): JSX.Element {
 
 /**
  * One quiet parchment slip that tells where the people on this surface come from. Purely presentational: the
- * owner passes the real feed state and any practice content; the seal never infers either.
+ * owner passes the real feed state, whether staged content is on screen and any product note; the seal never
+ * infers any of them. A real feed always presses its one line. With no lines (a staged night without an owner's
+ * detail) the element stays in place, with the same role and data attributes for stable references, but is
+ * hidden so nothing shows. `data-practice` stays `true` whenever the owner reports staged content.
  */
 export function ProvenanceSeal(props: { state: Provenance; simulated?: boolean; detail?: string; class?: string }): JSX.Element {
   const lines = () => provenanceLines(props);
+  const empty = () => lines().length === 0;
   return <div class={`cd-provenance${props.class ? ` ${props.class}` : ''}`} role="status" aria-atomic="true"
-    data-provenance={props.state} data-practice={lines().some(line => line.seal === 'simulated') ? 'true' : undefined}>
+    data-provenance={props.state} data-practice={props.state === 'simulated' || props.simulated ? 'true' : undefined}
+    hidden={empty()} style={{ display: empty() ? 'none' : undefined }}>
     <For each={lines()}>{(line, index) => <p class="cd-provenance-line" data-seal={line.seal}>
       <Seal state={line.seal} small={index() > 0} />
       <span class="cd-provenance-words"><strong class="cd-provenance-word">{line.word}</strong><Show when={line.note}><small class="cd-provenance-note">{line.note}</small></Show></span>

@@ -1,5 +1,5 @@
 // One actual-town still or short clip per capture-lock acquisition. Three real SDK connections;
-// test identities and the temporary memory-only room are explicitly SIMULATED, never real Twitch claims.
+// test identities live only in the temporary memory-only room and are never real Twitch claims.
 import { chromium } from '@playwright/test';
 import { createServer } from 'vite';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -18,12 +18,12 @@ const { values } = parseArgs({ options: { width: { type: 'string', default: '144
 const width = Number(values.width), height = Number(values.height);
 assert.ok([[1440, 900], [390, 844]].some(([w, h]) => w === width && h === height), 'Use a standard web size');
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
-const report = { origin: 'SIMULATED', width, height, clip: values.clip, offline: values.offline, errors: [], clients: [], checks: [], output: '' };
+const report = { origin: 'dev test town', width, height, clip: values.clip, offline: values.offline, errors: [], clients: [], checks: [], output: '' };
 let loader, web, realm, browser, offline, page, release;
 let complete = false, stage = 'waiting for capture lock';
 const cancellation = new globalThis.AbortController();
 for (const name of ['SIGINT', 'SIGTERM', 'SIGUSR2']) process.once(name, () => {
-  console.error(`SIMULATED town: received ${name} during ${stage}`);
+  console.error(`Test town: received ${name} during ${stage}`);
   cancellation.abort(new Error(`Town capture cancelled by ${name}`)); void browser?.close().catch(() => {});
 });
 const freePorts = async count => {
@@ -41,7 +41,7 @@ process.once('exit', code => {
   if (complete) return;
   // A transport's process-level signal handler can exit before our async finally/catch runs.
   // Preserve the observed stage and never report a missing artifact as a successful capture.
-  console.error(`SIMULATED town: exited during ${stage}; capture incomplete`);
+  console.error(`Test town: exited during ${stage}; capture incomplete`);
   try { writeFileSync(`${output}.failure.json`, JSON.stringify({ ...report, stage, failure: `Process exited ${code} before capture completion` }, null, 2)); } catch { /* output directory may not exist yet */ }
   if (code === 0) process.exitCode = 1;
 });
@@ -52,14 +52,14 @@ try {
   await freePorts(values.offline ? 1 : 2);
   // Pure CPU preparation needs neither a browser nor a listener. Keep it outside the shared capture slot.
   stage = 'compiling full collision';
-  console.log('SIMULATED town: preparing full collision before capture admission');
+  console.log('Test town: preparing full collision before capture admission');
   loader = await createServer({ root: repo, configFile: false, appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, entries: [] }, server: { middlewareMode: true, hmr: false, ws: false } });
   const [{ createRealmServer }, { referenceServices }, { createSimulatedTownWalkFixture }] = await Promise.all([
     loader.ssrLoadModule('/apps/realm/src/server.ts'), loader.ssrLoadModule('/apps/realm/src/reference.ts'), loader.ssrLoadModule('/apps/web/src/walk/town-fixture.ts'),
   ]);
   const fixture = createSimulatedTownWalkFixture();
   report.fixture = { manifest: fixture.manifest, placements: fixture.scene.placements.length, limitation: fixture.limitation };
-  console.log(`SIMULATED town: compiled ${fixture.scene.placements.length} native placements`);
+  console.log(`Test town: compiled ${fixture.scene.placements.length} native placements`);
   cancellation.signal.throwIfAborted();
   stage = 'waiting for capture lock';
   release = await acquireCaptureLock({ signal: cancellation.signal });
@@ -70,7 +70,7 @@ try {
   let spawnIndex = 0, effects;
   const created = createRealmServer({ auth: { ...base.auth, authenticate: async join => {
     const principal = await base.auth.authenticate(join), index = Number(principal.personId) - 990000001;
-    return { ...principal, publicName: `SIMULATED ${['Juniper', 'Wren', 'Rowan'][index % 3]}`, look: ['tide', 'grove', 'clay'][index % 3] };
+    return { ...principal, publicName: `${['Juniper', 'Wren', 'Rowan'][index % 3]}`, look: ['tide', 'grove', 'clay'][index % 3] };
   } }, open: async id => {
     const handle = await base.open(id);
     return { ...handle, layoutRevision: fixture.scene.layoutRevision, world: fixture.world,
@@ -84,14 +84,14 @@ try {
   created.transport.app.post('/reference/session', response => response.writeHeader('Access-Control-Allow-Origin', '*').writeHeader('Cache-Control', 'no-store')
     .writeHeader('Content-Type', 'application/json').end(JSON.stringify(base.issue())));
   await realm.listen(realmPort, '127.0.0.1');
-  console.log(`SIMULATED town: owned memory realm listening on ${realmPort}`);
+  console.log(`Test town: owned memory realm listening on ${realmPort}`);
   stage = 'compiling and opening browser page';
   const main = `import { render } from 'solid-js/web'; import { createComponent } from 'solid-js'; import './style.css'; import Kingdom from './kingdom';
     import { connectRealm } from './realm/client'; import { compileFoundedScene } from '@chatdom/world/founded-collision';
     window.__walkingTogetherDependencies = { connectRealm, compileFoundedScene };
     const raw = await (await fetch('/__walk-town/scene')).text(); const fixture = await (await fetch('/__walk-town/fixture')).json();
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), n => n.toString(16).padStart(2,'0')).join('');
-    if(hash!==fixture.manifest.sceneHash)throw new Error('SIMULATED town scene hash mismatch');
+    if(hash!==fixture.manifest.sceneHash)throw new Error('Test town scene hash mismatch');
     render(()=>createComponent(Kingdom,{founded:JSON.parse(raw)}),document.getElementById('root'));`;
   const plugin = { name: 'simulated-town-walk-evidence', enforce: 'pre',
     transform(_code, id) { if (id.split('?')[0] === `${repo}apps/web/src/main.tsx`) return { code: main, map: null }; },
@@ -109,12 +109,12 @@ try {
       server: { host: '127.0.0.1', port: webPort, strictPort: true, hmr: false } });
     await web.listen();
   }
-  stage = 'launching Chrome'; console.log(`SIMULATED town: ${stage}`);
+  stage = 'launching Chrome'; console.log(`Test town: ${stage}`);
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, isMobile: width === 390, hasTouch: width === 390,
     ...(values.clip ? { recordVideo: { dir: `${values.out}/raw-video`, size: { width, height } } } : {}) });
   if (values.offline) {
-    stage = 'building offline page'; console.log(`SIMULATED town: ${stage}`);
+    stage = 'building offline page'; console.log(`Test town: ${stage}`);
     offline = await createOfflineReview(context, '/index.html', values.out, { plugins: [plugin], allowedOrigins: [endpoint] });
     // Chrome protects loopback access from an HTTPS page. Grant only this isolated evidence origin;
     // routing still permits network requests solely to the realm listener owned by this capture.
@@ -126,16 +126,16 @@ try {
       return route.fulfill({ status: body === null ? 404 : 200, contentType: 'application/json', body: body ?? 'null' });
     });
   }
-  stage = 'creating browser page'; console.log(`SIMULATED town: ${stage}`);
+  stage = 'creating browser page'; console.log(`Test town: ${stage}`);
   page = await context.newPage();
-  page.on('pageerror', error => { report.errors.push(error.message); console.error('SIMULATED town browser:', error.message); });
+  page.on('pageerror', error => { report.errors.push(error.message); console.error('Test town browser:', error.message); });
   page.on('console', message => { if (message.type() === 'error' && !message.location().url.endsWith('/favicon.ico')) report.errors.push(message.text()); });
-  stage = 'opening Kingdom'; console.log(`SIMULATED town: ${stage}`);
+  stage = 'opening Kingdom'; console.log(`Test town: ${stage}`);
   const response = await page.goto(`${offline?.origin ?? `http://127.0.0.1:${webPort}`}/?walk=1&source=simulated&hour=19.5&time=30`, { waitUntil: 'commit' });
   assert.equal(response?.ok(), true, `Kingdom document returned HTTP ${response?.status()}`);
-  stage = 'waiting for Kingdom ready'; console.log(`SIMULATED town: ${stage}`);
+  stage = 'waiting for Kingdom ready'; console.log(`Test town: ${stage}`);
   await page.waitForFunction(() => window.__chatdomReady === true && window.__chatdomKingdom?.stats.ready, null, { timeout: 240_000 });
-  console.log('SIMULATED town: actual Kingdom rendered; connecting three SDK clients');
+  console.log('Test town: actual Kingdom rendered; connecting three SDK clients');
   stage = 'connecting three SDK clients';
   report.clients = await page.evaluate(async ({ endpoint }) => {
     const { connectRealm, compileFoundedScene } = window.__walkingTogetherDependencies;
@@ -154,13 +154,12 @@ try {
     return clients.map(client => ({ id: client.selfId, roomId: client.room.roomId, name: client.room.state.walkers.get(client.selfId).name }));
   }, { endpoint }).catch(error => { throw new Error(`Town binding failed: ${error.message}`); });
   assert.equal(new Set(report.clients.map(client => client.id)).size, 3);
-  console.log('SIMULATED town: three distinct SDK clients attached');
+  console.log('Test town: three distinct SDK clients attached');
   stage = 'waiting for walkers and settled lighting';
   await page.waitForFunction(() => window.__chatdomWalk?.ready === true && window.__chatdomWalk.walkers === 3, null, { timeout: 120_000 });
-  await page.getByText(/SIMULATED/).first().waitFor({ state: 'visible' });
   await page.locator('.walker-name, .walk-person-label[data-walker][aria-hidden="false"]').first().waitFor({ state: 'visible', timeout: 30_000 });
   await page.waitForFunction(() => window.__chatdomKingdom.stats.fieldSettled, null, { timeout: 180_000 });
-  console.log('SIMULATED town: lighting settled; exercising actual keyboard and peer inputs');
+  console.log('Test town: lighting settled; exercising actual keyboard and peer inputs');
   stage = 'exercising keyboard and peer inputs';
   const before = await page.evaluate(() => ({ ...window.__chatdomWalk.authority }));
   await page.evaluate(() => { window.__walkingTogetherTown.moving = true; });

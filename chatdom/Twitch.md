@@ -185,7 +185,7 @@ power, P is the panel and 0 is public data. "Without it" is what a channel gets 
 | Play | Poll | A decree board in the plaza | The decree, carried out if it is ours | The kingdom | 2, 3 | Chat vote |
 | Play | Prediction | An odds board in the tavern | The result on the table's record | Nobody | 2, 3 | Free guesses |
 | Play | `!` commands | The world answers | Per command | You | 1 | Always there |
-| Travel | Raid in | A caravan under the raider's banner; a forged tribute | A road on the Atlas; the raider's pennant on the gate | The raiding kingdom | 1 | Always there |
+| Travel | Raid in | A caravan under the raider's banner and colours | A road on the Atlas; the raider's pennant on the gate | The raiding kingdom | 1 | Always there |
 | Travel | Raid out | The Raid Gate: the kingdom rides out | A road on the Atlas | The kingdom | 3 | Twitch's own raid |
 | Travel | Raid train | A carriage under each earlier kingdom's banner | A named line on the Atlas | Every kingdom on it | 1 | Always there |
 | Travel | Shared chat | A bridge opens; guests cross | A bridge on the Atlas | Both kingdoms | 1 | Always there |
@@ -530,8 +530,6 @@ This section is about what happens inside the kingdom.
 
 **A raid arrives.**
 - A caravan comes through the gate under the raiding kingdom's banner and colours, sized by the log of the viewer count.
-  Codex forges a tribute themed on the raiding channel, and it stands in the plaza for the night
-  (`docs/08-depth-items-cosmetics.md` §5).
 - Raiders who chat become guests, their bubbles carrying the raider's crest. Twitch never says who rode with a raid,
   only how many [V].
 - The Herald posts one line with the kingdom's link, so raiders can walk in with one-click sign-in.
@@ -721,7 +719,7 @@ A mid-sized kingdom, lumi's, on a Thursday with 1,200 viewers. The same night in
 | 19:04 | 300 chatters, 600 in the chatters list | 900 lights; bubbles near the camera | "900 lights tonight"; your light | Presence minutes |
 | 19:06 | A first-time chatter introduces herself | The gate lamp lights with her name; the crier welcomes her | | Her tent |
 | 19:20 | A quiet viewer taps "Light your lantern" | Her light takes her name; merged into "6 lights came on" | Her home card appears | Her history, now hers |
-| 19:35 | Raid from fernwood, 140 viewers | A caravan under fernwood's banner; the tribute is forged; one Herald line with the link | "Raiders: walk in" | A road on the Atlas; fernwood's pennant on the gate |
+| 19:35 | Raid from fernwood, 140 viewers | A caravan under fernwood's banner; lanterns at the gate; one Herald line with the link | "Raiders: walk in" | A road on the Atlas; fernwood's pennant on the gate |
 | 20:05 | 20 gift subs | Parcels rain on Lakeside, sealed with the giver's name | | Parcels in 20 homes |
 | 20:20 | A 500-Bit cheer | A volley over the castle bursts into the channel's emotes | | Only the night's chapter |
 | 20:40 | The monarch issues a decree | A poll: "Name the new bridge"; the decree board in the plaza | The decree shown | The bridge's name |
@@ -926,7 +924,7 @@ What follows:
 - Put "Twitch" in any of our names.
 - Keep chat text, or re-host clips and video.
 - Let money draw the map.
-- Show a simulated event without saying SIMULATED (`Tech.md` §14).
+- Let a simulated event enter a live feed. Staged fixtures stay on private `/-/` benches with internal origin provenance and no visible simulation chip.
 
 ## 20. Retired and retiring Twitch features
 
@@ -1013,6 +1011,8 @@ Earlier reports this file builds on: `docs/research/bits-and-ingame-effects.md`,
 `docs/10`, `docs/11-atlas-map-of-twitch.md`, `docs/12-atlas-lean-spec.md`.
 
 ## Change log
+
+- **2026-11-02 — Founder raid-show decisions 25 and 45.** Incoming caravans carry banners, lanterns and cloth; there is no raid tribute. Staged fixtures stay on private `/-/` benches, retain internal simulated provenance and never enter live feeds. No visible SIMULATED chip is required or shown.
 
 - **29 October 2026: first version.**
   - Written from `ChatDom.md`, `Tech.md` §6 and §7, the depth documents and a fresh check of Twitch's rules.

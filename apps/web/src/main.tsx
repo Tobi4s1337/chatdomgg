@@ -15,6 +15,10 @@ const atlas = import.meta.glob<{ default: Component }>('./atlas/index.tsx');
 const loadAtlas = atlas['./atlas/index.tsx'];
 const laneViews = import.meta.glob<{ default: Component }>(['../../panel/src/Panel.tsx', './stream/index.tsx', './avatar-bench/index.tsx', './forge-bench/index.tsx', './audio-bench/index.tsx', './template-bench/index.tsx', './citizen-behaviour-bench/index.tsx', './forge-ritual-bench/index.tsx', './forge-refusal-bench/index.tsx', './citizen-card/index.tsx', './twitch-moments-bench/index.tsx', './campfire/index.tsx', './tavern/index.tsx', './raid-gate/index.tsx', './emotes/index.tsx', './passport/index.tsx', './grand/index.tsx']);
 const lanePaths: Record<string, string> = {
+  '/-/panel-painter': (laneViews['./panel-painter/index.tsx'] = () => import('./panel-painter/index'), './panel-painter/index.tsx'),
+  '/-/pier': (laneViews['./fishing/index.tsx'] = () => import('./fishing/index'), './fishing/index.tsx'),
+  ...(/^\/raid\/[1-9][0-9]{0,31}\/[a-f0-9]{32}\/[a-f0-9]{32}$/u.test(location.pathname) ? { [location.pathname]: (laneViews['./raid-gate/entry/index.tsx'] = () => import('./raid-gate/entry'), './raid-gate/entry/index.tsx') } : {}),
+  '/-/atlas-embed': (laneViews['./atlas/bench/index.tsx'] = () => import('./atlas/bench/index'), './atlas/bench/index.tsx'),
   '/-/soul': (laneViews['./soul/index.tsx'] = () => import('./soul/index'), './soul/index.tsx'),
   '/-/passport':'./passport/index.tsx', '/-/grand':'./grand/index.tsx',
   '/-/grand-bench':'./grand/index.tsx',
@@ -57,8 +61,8 @@ if (window.location.pathname === '/dock' || window.location.pathname === '/dock/
   ]);
   const query = new URLSearchParams(location.search);
   let checkedLiveSource: KingdomEntrySource | undefined;
-  const live: KingdomEntrySource = async signal => {
-    if (checkedLiveSource) return checkedLiveSource(signal);
+  const live: KingdomEntrySource = async (signal, arrival) => {
+    if (checkedLiveSource) return checkedLiveSource(signal, arrival);
     const kingdom = KingdomIdSchema.safeParse(query.get('kingdom'));
     if (!kingdom.success) throw new RealmEntryError('refused', 'Choose a kingdom to visit from the Atlas.');
     const response = await fetch(REALM_ENTRY_ROUTE.replace(':kingdomId', encodeURIComponent(kingdom.data)), {
@@ -76,7 +80,7 @@ if (window.location.pathname === '/dock' || window.location.pathname === '/dock/
     }
     checkedLiveSource = createLiveKingdomEntrySource({ kingdomId: kingdom.data, kingdomName: info.data.name,
       endpoint: `${location.origin}/live-realm-data` });
-    return checkedLiveSource(signal);
+    return checkedLiveSource(signal, arrival);
   };
   render(() => <KingdomEntry open={query.get('source') === 'simulated' ? openSimulatedKingdomEntry : live} />, root);
 } else {

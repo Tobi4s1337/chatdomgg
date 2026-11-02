@@ -1,4 +1,5 @@
-import { PresenceInputSchema, type PresenceInput } from '@chatdom/shared';
+import { CHAT_COMMAND_MAX_AGE_MS, CHAT_COMMAND_ROUTE, ChatCommandEnvelopeSchema, PresenceInputSchema,
+  type ChatCommandEnvelope, type PresenceInput } from '@chatdom/shared';
 import { REALM_HERALD_ROUTE, RealmHeraldEnvelopeSchema, RealmMomentObservationSchema, RealmStrikeSchema, RealmSupportObservationSchema,
   type RealmMomentObservation, type RealmStrike, type RealmSupportObservation, type RealmHeraldEnvelope } from '@chatdom/shared/realm';
 import { randomUUID } from 'node:crypto';
@@ -6,6 +7,8 @@ import { mkdir, open, readdir, readFile, rename, rm, stat } from 'node:fs/promis
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import type { RealmDeliverySink } from './sink';
+import { RAID_OBSERVATION_ROUTE, RaidObservationEnvelopeSchema, RaidObservationSchema,
+  type RaidObservation } from '../../../api/src/raid-gate/observations';
 
 const INGRESS_ROUTE = '/internal/realm/ingress';
 const MAX_PENDING = 4096, CLEANUP_RESERVE = 128, MAX_BYTES = 32 * 1024 * 1024;
@@ -14,6 +17,8 @@ const SupportEnvelope = z.strictObject({ version: z.literal(1), support: RealmSu
 const MomentEnvelope = z.strictObject({ version: z.literal(1), moment: RealmMomentObservationSchema });
 /** Spectacle evidence waiting at once. It never takes the room presence and its cleanup need. */
 export const MAX_SPECTACLES = 512;
+/** Commands have a separate allowance so game traffic cannot consume the raid evidence budget. */
+export const MAX_COMMANDS = 1024;
 /** A spectacle the realm has not taken within this long is dropped: its beat has passed and nothing waits on it. */
 export const SPECTACLE_LIFETIME_MS = 15 * 60_000;
 /** `!strike` posts awaiting the realm at once; more are dropped, never queued. */
@@ -24,6 +29,8 @@ export const MAX_STRIKES_IN_FLIGHT = 32;
  */
 interface Entry {
   readonly file: string; readonly body: string; readonly bytes: number; readonly urgent: boolean;
+  readonly route: typeof INGRESS_ROUTE | typeof RAID_OBSERVATION_ROUTE | typeof CHAT_COMMAND_ROUTE;
+  readonly chatCommand: 'command' | 'cleanup' | null; readonly expiresAt: number | null;
   readonly spectacle: boolean; readonly queuedAt: number; failures: number; retryAt: number;
 }
 export interface RealmDeliveryOptions {
@@ -86,20 +93,31 @@ export class RealmDelivery implements RealmDeliverySink {
       if ((metadata.mode & 0o077) !== 0 || metadata.size > MAX_BYTES || sender.#bytes + metadata.size > MAX_BYTES) throw new Error('Herald realm outbox is insecure or too large');
       const raw: unknown = JSON.parse(await readFile(path, 'utf8'));
       const support = SupportEnvelope.safeParse(raw), moment = support.success ? null : MomentEnvelope.safeParse(raw);
-      const envelope = support.success ? support.data : moment?.success ? moment.data : null;
+      const raid = support.success || moment?.success ? null : RaidObservationEnvelopeSchema.safeParse(raw);
+      const command = support.success || moment?.success || raid?.success ? null : ChatCommandEnvelopeSchema.safeParse(raw);
+      const envelope = support.success ? support.data : moment?.success ? moment.data : raid?.success ? raid.data : command?.success ? command.data : null;
       const input = envelope ? null : PresenceInputSchema.parse(raw);
-      const origin = support.success ? support.data.support.origin : moment?.success ? moment.data.moment.origin : input!.origin;
+      const origin = support.success ? support.data.support.origin : moment?.success ? moment.data.moment.origin : raid?.success ? raid.data.raid.origin : command?.success ? command.data.origin : input!.origin;
       if (origin !== options.origin && origin !== 'recovered') throw new Error('Herald realm outbox origin differs');
-      sender.#entries.push({ file, body: JSON.stringify(envelope ?? { version: 1, observation: input }), bytes: metadata.size, urgent: input !== null && urgent(input),
-        spectacle: moment?.success === true, queuedAt: Number(file.slice(0, 16)), failures: 0, retryAt: 0 });
+      sender.#entries.push({ file, body: JSON.stringify(envelope ?? { version: 1, observation: input }), bytes: metadata.size,
+        urgent: command?.success ? command.data.kind === 'cleanup' : input !== null && urgent(input),
+        route: raid?.success ? RAID_OBSERVATION_ROUTE : command?.success ? CHAT_COMMAND_ROUTE : INGRESS_ROUTE,
+        chatCommand: command?.success ? command.data.kind : null,
+        expiresAt: command?.success && command.data.kind === 'command' ? command.data.at + CHAT_COMMAND_MAX_AGE_MS : null,
+        spectacle: moment?.success === true || raid?.success === true, queuedAt: Number(file.slice(0, 16)), failures: 0, retryAt: 0 });
       sender.#bytes += metadata.size;
     }
+    if (sender.#entries.filter(entry => entry.spectacle).length > MAX_SPECTACLES) throw new Error('Herald spectacle outbox exceeds capacity');
+    if (sender.#entries.filter(entry => entry.chatCommand !== null).length > MAX_COMMANDS + CLEANUP_RESERVE) throw new Error('Herald command outbox exceeds capacity');
     void sender.flush();
     return sender;
   }
 
   health() {
     return { configured: true, pending: this.#entries.length, spectacles: this.#entries.filter(entry => entry.spectacle).length, bytes: this.#bytes,
+      raids: this.#entries.filter(entry => entry.route === RAID_OBSERVATION_ROUTE).length,
+      commands: this.#entries.filter(entry => entry.chatCommand === 'command').length,
+      commandCleanups: this.#entries.filter(entry => entry.chatCommand === 'cleanup').length,
       transient: this.#transient, fault: this.#fault, counters: { ...this.#counters } };
   }
 
@@ -128,6 +146,25 @@ export class RealmDelivery implements RealmDeliverySink {
     return this.#enqueue(envelope, envelope, false, false, true);
   }
 
+  /** A raid leaves durable history: no age cutoff, and refusal never resolves as acceptance. */
+  async raid(raw: RaidObservation): Promise<void> {
+    if (this.#closed) { this.#counters.refused++; throw new Error('Herald realm outbox is closed'); }
+    const input = RaidObservationSchema.parse(raw);
+    if (input.origin !== this.options.origin) throw new Error('Herald realm outbox origin differs');
+    const envelope = RaidObservationEnvelopeSchema.parse({ version: 1, raid: input });
+    await this.#enqueue(envelope, envelope, false, false, true, RAID_OBSERVATION_ROUTE);
+  }
+
+  /** Game commands are fresh for thirty seconds; moderation cleanup remains until acknowledged. */
+  async command(raw: ChatCommandEnvelope): Promise<void> {
+    if (this.#closed) { this.#counters.refused++; throw new Error('Herald realm outbox is closed'); }
+    const input = ChatCommandEnvelopeSchema.parse(raw);
+    if (input.origin !== this.options.origin) throw new Error('Herald realm outbox origin differs');
+    const cleanup = input.kind === 'cleanup';
+    await this.#enqueue(input, input, cleanup, cleanup, false, CHAT_COMMAND_ROUTE, input.kind,
+      cleanup ? null : input.at + CHAT_COMMAND_MAX_AGE_MS);
+  }
+
   /** A witnessed `!strike`. Transient: sent once while its chat still stands, never stored or resent. */
   strike(raw: RealmStrike, current: () => boolean): void {
     const parsed = RealmStrikeSchema.safeParse(raw);
@@ -141,12 +178,22 @@ export class RealmDelivery implements RealmDeliverySink {
     }, () => { this.#counters.strikesDropped++; }).finally(() => { this.#strikes--; });
   }
 
-  #enqueue(stored: unknown, envelope: unknown, cleanup: boolean, isUrgent: boolean, spectacle = false): Promise<void> {
+  #enqueue(stored: unknown, envelope: unknown, cleanup: boolean, isUrgent: boolean, spectacle = false,
+    route: Entry['route'] = INGRESS_ROUTE, chatCommand: Entry['chatCommand'] = null, expiresAt: number | null = null): Promise<void> {
     const data = JSON.stringify(stored), bytes = Buffer.byteLength(data);
     return this.#serialize(async () => {
-      if (spectacle && this.#entries.filter(entry => entry.spectacle).length >= MAX_SPECTACLES) { this.#fault = 'capacity'; this.#counters.refused++; return; }
+      if (chatCommand !== null && this.#entries.filter(entry => entry.chatCommand !== null).length >= MAX_COMMANDS + (cleanup ? CLEANUP_RESERVE : 0)) {
+        this.#fault = 'capacity'; this.#counters.refused++; throw new Error('Herald command outbox exceeds capacity');
+      }
+      if (spectacle && this.#entries.filter(entry => entry.spectacle).length >= MAX_SPECTACLES) {
+        this.#fault = 'capacity'; this.#counters.refused++;
+        if (route !== INGRESS_ROUTE) throw new Error('Herald evidence outbox exceeds capacity');
+        return;
+      }
       if (this.#entries.length >= MAX_PENDING + (cleanup ? CLEANUP_RESERVE : 0) || this.#bytes + bytes > MAX_BYTES - (cleanup ? 0 : 1024 * 1024)) {
-        this.#fault = 'capacity'; this.#counters.refused++; return;
+        this.#fault = 'capacity'; this.#counters.refused++;
+        if (route !== INGRESS_ROUTE) throw new Error('Herald evidence outbox exceeds capacity');
+        return;
       }
       this.#fileStamp = Math.max(this.#now(), this.#fileStamp + 1);
       const file = `${String(this.#fileStamp).padStart(16, '0')}-${randomUUID()}.json`;
@@ -156,12 +203,14 @@ export class RealmDelivery implements RealmDeliverySink {
         try { await handle.writeFile(data); await handle.sync(); } finally { await handle.close(); }
         await rename(temporary, path);
         await this.#syncDirectory();
-        this.#entries.push({ file, body: JSON.stringify(envelope), bytes, urgent: isUrgent, spectacle, queuedAt: this.#now(), failures: 0, retryAt: 0 });
+        this.#entries.push({ file, body: JSON.stringify(envelope), bytes, urgent: isUrgent, route, spectacle, chatCommand, expiresAt,
+          queuedAt: this.#now(), failures: 0, retryAt: 0 });
         this.#bytes += bytes; this.#counters.accepted++;
         if (isUrgent && this.#retry) { clearTimeout(this.#retry); this.#retry = null; }
       } catch {
         this.#fault = 'storage'; this.#counters.refused++;
         await rm(temporary, { force: true }).catch(() => undefined);
+        if (route !== INGRESS_ROUTE) throw new Error('Herald could not persist evidence');
       }
     }).then(() => { void this.flush(); });
   }
@@ -192,7 +241,7 @@ export class RealmDelivery implements RealmDeliverySink {
 
   flush(): Promise<void> {
     if (this.#flushing) return this.#flushing;
-    if (this.#closed || this.#retry) return Promise.resolve();
+    if (this.#closed) return Promise.resolve();
     const run = (async () => {
       await this.#serial;
       while (!this.#closed && this.#entries.length) {
@@ -200,21 +249,29 @@ export class RealmDelivery implements RealmDeliverySink {
         // goes next: a cheer or a train's beat is felt the moment it happens, and in a hype train's chat burst it would
         // otherwise wait out every queued presence post. Presence carries its own timestamps, so it loses nothing.
         const now = this.#now();
-        const due = this.#entries.filter(entry => !entry.spectacle || entry.retryAt <= now);
-        const entry = due.find(entry => entry.urgent) ?? due.find(entry => entry.spectacle) ?? due[0];
+        const expired = this.#entries.find(entry => entry.expiresAt !== null && entry.expiresAt <= now);
+        if (expired) { await this.#remove(expired, 'expired'); continue; }
+        const independent = (entry: Entry) => entry.spectacle || entry.chatCommand !== null;
+        const due = this.#entries.filter(entry => independent(entry) ? entry.retryAt <= now : this.#retry === null);
+        const entry = due.find(entry => entry.urgent) ?? due.find(independent) ?? due[0];
         if (!entry) { this.#wakeForSpectacles(); return; }
         try {
-          const response = await this.#post(INGRESS_ROUTE, entry.body);
+          const response = await this.#post(entry.route, entry.body);
           const result: unknown = await response.json();
           if (response.status !== 202 || !result || typeof result !== 'object' || !('status' in result)
-            || result.status !== 'accepted' && result.status !== 'duplicate') throw new Error('Realm has not acknowledged evidence');
+            || result.status !== 'accepted' && result.status !== 'duplicate'
+              && !(entry.route === CHAT_COMMAND_ROUTE && result.status === 'ignored')) throw new Error('Realm has not acknowledged evidence');
           await this.#remove(entry, 'delivered');
-          if (!entry.spectacle) { this.#failures = 0; this.#fault = null; }
+          if (!independent(entry)) this.#failures = 0;
+          if ((!entry.spectacle || entry.route === RAID_OBSERVATION_ROUTE)
+            && !this.#entries.some(pending => pending.route !== INGRESS_ROUTE && pending.failures > 0)
+            && this.#failures === 0) this.#fault = null;
         } catch {
-          if (entry.spectacle) {
+          if (independent(entry)) {
             // Its own clock: the presence behind it is never held. A beat long past is let go.
             this.#counters.retries++; entry.failures++;
-            if (this.#now() - entry.queuedAt > SPECTACLE_LIFETIME_MS) await this.#remove(entry, 'expired').catch(() => undefined);
+            if (entry.route !== INGRESS_ROUTE) this.#fault = 'delivery';
+            if (entry.spectacle && entry.route !== RAID_OBSERVATION_ROUTE && this.#now() - entry.queuedAt > SPECTACLE_LIFETIME_MS) await this.#remove(entry, 'expired').catch(() => undefined);
             else entry.retryAt = this.#now() + Math.min(30_000, (this.options.retryMs ?? 500) * 2 ** Math.min(6, entry.failures - 1));
             continue;
           }
@@ -222,7 +279,7 @@ export class RealmDelivery implements RealmDeliverySink {
           const delay = !entry.urgent && this.#entries.some(pending => pending.urgent) ? 0
             : Math.min(30_000, (this.options.retryMs ?? 500) * 2 ** Math.min(6, this.#failures - 1));
           this.#retry = setTimeout(() => { this.#retry = null; void this.flush(); }, delay);
-          this.#retry.unref?.(); return;
+          this.#retry.unref?.(); continue;
         }
       }
     })().finally(() => { if (this.#flushing === run) this.#flushing = null; });
@@ -235,14 +292,17 @@ export class RealmDelivery implements RealmDeliverySink {
       await rm(join(this.#directory, entry.file)); await this.#syncDirectory();
       const at = this.#entries.indexOf(entry);
       if (at >= 0) { this.#entries.splice(at, 1); this.#bytes -= entry.bytes; this.#counters[counter]++; }
+      if (counter === 'expired' && this.#fault === 'delivery' && this.#failures === 0
+        && !this.#entries.some(pending => pending.route !== INGRESS_ROUTE && pending.failures > 0)) this.#fault = null;
     });
   }
 
   /** Only spectacles are waiting, each on its own clock: come back for the earliest. */
   #wakeForSpectacles(): void {
-    if (this.#closed || !this.#entries.length) return;
+    const spectacles = this.#entries.filter(entry => entry.spectacle || entry.chatCommand !== null);
+    if (this.#closed || !spectacles.length) return;
     if (this.#spectacleWake) clearTimeout(this.#spectacleWake);
-    const next = Math.min(...this.#entries.map(entry => entry.retryAt));
+    const next = Math.min(...spectacles.map(entry => Math.min(entry.retryAt, entry.expiresAt ?? Infinity)));
     this.#spectacleWake = setTimeout(() => { this.#spectacleWake = null; void this.flush(); }, Math.max(0, next - this.#now()));
     this.#spectacleWake.unref?.();
   }

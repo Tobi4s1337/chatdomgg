@@ -1,0 +1,35 @@
+.raid-chat-layer {
+  position: fixed;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 20;
+}
+.raid-chat-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(190px, 44vw);
+  padding: 7px 10px 8px 8px;
+  border: 1px solid #795032;
+  border-radius: 5px 9px 7px 5px;
+  background: #f2dfb6;
+  color: #3d281c;
+  box-shadow: inset 0 0 0 2px #fff2cf80, 0 2px 0 #503322, 0 5px 12px #24150970;
+  font: 600 13px/1.25 Georgia, serif;
+  overflow-wrap: anywhere;
+}
+.raid-chat-bubble .raid-guest-crest { flex: none; filter: drop-shadow(0 1px 0 #50332280); }
+.raid-chat-words {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+.raid-chat-emote { display: inline-block; width: 24px; height: 24px; object-fit: contain; vertical-align: middle; }

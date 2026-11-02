@@ -3,7 +3,7 @@
 // chose to wear, and the keepsakes their passport holds. Everything is supplied by the card authority (or the visibly
 // SIMULATED night); the panel only lays it out. A turned-up corner at the foot of the page leads into the passport.
 import { createSignal, For, Match, Show, Switch, type JSX } from 'solid-js';
-import { CrestArms, type KeepsakeView, type PassportReadState } from '@chatdom/ui/passport';
+import { CrestArms, type KeepsakeView, type PassportReadState } from '@chatdom/ui/passport/live';
 import type { CitizenCard, WornPiece } from '../model';
 import { homeLine, nameInk } from './words';
 import { remembersTravel } from './worn';
@@ -22,7 +22,6 @@ export interface CardSheetProps {
   readonly window: string;
   /** The passport as it is being read, for the keepsakes it carries. Null until the viewer has a passport to read. */
   readonly passport: PassportReadState | null;
-  readonly simulated: boolean;
   /** What the home line says when the card names no home here. A guest by default. */
   readonly noHome?: string;
   readonly children?: JSX.Element;
@@ -35,7 +34,7 @@ export function CardSheet(props: CardSheetProps): JSX.Element {
   const worn = () => props.passport?.kind === 'visible' ? props.card.worn : props.card.worn.filter(piece => !remembersTravel(piece));
   return <div class="cp-sheet cpc">
     <section class="cpc-face" aria-label="Your citizen card">
-      <Portrait card={props.card} simulated={props.simulated} />
+      <Portrait card={props.card} />
       <div class="cpc-who">
         <h3 class="cpc-name" classList={{ long: long() }} style={ink().ink ? { color: ink().ink! } : undefined}>
           <Show when={ink().swatch}>{swatch => <span class="cpc-swatch" style={{ background: swatch() }} aria-hidden="true" />}</Show>
@@ -87,7 +86,7 @@ export function CardSheet(props: CardSheetProps): JSX.Element {
 }
 
 /** Their painted portrait in an arched brass window. Without one, the window stays an honest empty arch. */
-function Portrait(props: { card: CitizenCard; simulated: boolean }): JSX.Element {
+function Portrait(props: { card: CitizenCard }): JSX.Element {
   const [failed, setFailed] = createSignal(false);
   return <figure class="cpc-portrait">
     <span class="cpc-arch">
@@ -96,9 +95,6 @@ function Portrait(props: { card: CitizenCard; simulated: boolean }): JSX.Element
         <img src={portrait().url} alt={portrait().alt} width={portrait().width} height={portrait().height} decoding="async" onError={() => setFailed(true)} />}
       </Show>
     </span>
-    <Show when={props.simulated && props.card.portrait?.origin === 'simulated'}>
-      <figcaption class="cpc-portrait-note">Simulated citizen</figcaption>
-    </Show>
   </figure>;
 }
 

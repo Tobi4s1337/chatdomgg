@@ -2,7 +2,7 @@ import { KingdomIdSchema, type KingdomId } from '@chatdom/shared';
 import { REALM_FOUNDED_ROUTES, RealmFoundedManifestSchema } from '@chatdom/shared/realm';
 import { compileFoundedScene } from '@chatdom/world/founded-collision';
 import { decodeFoundedScene, FOUNDED_SCENE_LIMITS } from '@chatdom/world/founded-scene';
-import { connectRealm } from '../realm/client';
+import { connectRealm, type RealmEntry } from '../realm/client';
 import { openRealmApiSession, RealmEntryError, realmEntryFailureMessage, readRealmJson, type RealmFetch } from '../realm/adapters/entry';
 import { createRoomChatFeed } from '../realm/adapters/chat';
 import { createRealmForgeFeed } from '../realm/adapters/forge-feed';
@@ -10,13 +10,16 @@ import { observeRealm, observedRoom, type RealmObserver } from '../realm/adapter
 import { createRoomMomentFeed } from '../realm/adapters/moments';
 import { createRoomPresenceFeed } from '../realm/adapters/presence';
 import { createRoomGrowthFeed } from '../realm/adapters/growth';
-import type { KingdomEntrySource } from './types';
+import type { KingdomEntryArrival, KingdomEntrySource } from './types';
 
 export interface LiveKingdomEntryOptions {
   readonly kingdomId: KingdomId;
   /** Approved public name supplied by the host. Receipts do not carry names; never infer one from the URL. */
   readonly kingdomName: string;
-  /** Explicit authenticated rehearsal only; it still uses API sessions, CSRF and checked founded geometry. */
+  /**
+   * Explicit authenticated rehearsal only, on a development machine; it still uses API sessions, CSRF and checked
+   * founded geometry. A rehearsal carries no label of its own (decision 25): it never reaches the public origin.
+   */
   readonly origin?: 'live' | 'simulated';
   readonly notice?: string;
   /** Trusted host configuration. Defaults to this origin's /realm-data transport. */
@@ -30,9 +33,8 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions): 
   const kingdomId = KingdomIdSchema.parse(options.kingdomId), origin = options.origin ?? 'live';
   const kingdomName = options.kingdomName.trim();
   if (!kingdomName || kingdomName.length > 80) throw new RealmEntryError('unavailable', 'The kingdom’s approved name is not available yet.');
-  if (origin === 'simulated' && !options.notice?.includes('SIMULATED')) throw new RealmEntryError('refused', 'This rehearsal must be labelled SIMULATED.');
   const forgeFeed = createRealmForgeFeed();
-  const open: KingdomEntrySource = async signal => {
+  const open = async (signal: AbortSignal, arrival?: KingdomEntryArrival) => {
     let step = 'reading your sign-in';
     try {
     signal.throwIfAborted();
@@ -57,7 +59,8 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions): 
     const collision = compileFoundedScene(scene);
     signal.throwIfAborted();
     step = 'joining the live kingdom';
-    const client = await connectRealm(options.endpoint ?? `${location.origin}/realm-data`, session.entry, collision, options.storage ?? sessionStorage);
+    const endpoint = options.endpoint ?? `${location.origin}/realm-data`;
+    const client = await connectRealm(endpoint, arrivingAt(session.entry, arrival), collision, options.storage ?? sessionStorage);
     if (signal.aborted) { client.dispose(); signal.throwIfAborted(); }
     const state = client.room.state;
     if (state.kingdomId !== kingdomId || state.origin !== origin || state.layoutRevision !== manifest.layoutRevision
@@ -84,16 +87,38 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions): 
     try { await readyCheckpoint(observer, signal); signal.throwIfAborted(); }
     catch (error) { dispose(); throw error; }
     return { scene, manifest, collision, client, presenceFeed: createRoomPresenceFeed(observer, origin), growthFeed: createRoomGrowthFeed(observer, origin), chatFeed, forgeFeed, momentFeed: createRoomMomentFeed(observer, origin),
-      kingdomName, ...(options.notice ? { notice: options.notice } : {}), dispose };
+      kingdomName, ...(options.notice ? { notice: options.notice } : {}), entry: doorEntry(kingdomId, session.entry.resumeScope, fetcher), endpoint, dispose };
     } catch (error) {
       if (signal.aborted || error instanceof RealmEntryError) throw error;
       throw new RealmEntryError('unavailable', `Could not finish ${step}: ${realmEntryFailureMessage(error)}`);
     }
   };
-  return async signal => {
-    try { return await open(signal); }
+  return async (signal, arrival) => {
+    try { return await open(signal, arrival); }
     catch (error) { forgeFeed.unavailable(); throw error; }
   };
+}
+
+/** The first fresh join names the door you came back through; any later fresh join (after a drop) is plain. */
+function arrivingAt(entry: RealmEntry, arrival: KingdomEntryArrival | undefined): RealmEntry {
+  if (!arrival) return entry;
+  let pending: KingdomEntryArrival | undefined = arrival;
+  return { kingdomId: entry.kingdomId, resumeScope: entry.resumeScope, async ticket() {
+    const join = await entry.ticket(), arrive = pending; pending = undefined;
+    return arrive ? { ...join, arrive: { portal: arrive.portal } } : join;
+  } };
+}
+
+/**
+ * The entry a door's room uses. The session's own entry asks for tickets under this connection's abort signal, which
+ * ends as the kingdom is left on the way through the door, so each ticket here reads the session afresh.
+ */
+function doorEntry(kingdomId: KingdomId, resumeScope: string, fetcher: RealmFetch): RealmEntry {
+  return { kingdomId, resumeScope, async ticket() {
+    const session = await openRealmApiSession(kingdomId, fetcher);
+    if (session.status !== 'authenticated') throw new RealmEntryError('unauthenticated', 'Your visit has ended. Sign in with Twitch again.');
+    return session.entry.ticket();
+  } };
 }
 
 async function boundedBytes(response: Response, limit: number): Promise<Uint8Array> {

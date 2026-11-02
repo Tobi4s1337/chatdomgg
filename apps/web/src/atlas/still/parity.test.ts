@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { makeWorld } from '../data/fixtures.test-support';
 import { geographyOf } from '../data/model';
@@ -20,6 +21,8 @@ describe('the still draws by the moving map’s rules', () => {
     expect(still.SHIELD_LIMIT).toBe(overlay.SHIELD_LIMIT);
     expect(still.STAMP_SCALE).toEqual(overlay.STAMP_SCALE);
     expect(still.MARKED_TIERS).toEqual(overlay.MARKED_TIERS);
+    expect(still.STAMP_GROUPS).toEqual(overlay.STAMP_GROUPS);
+    expect(still.STAMP_ALPHA).toEqual(overlay.STAMP_ALPHA);
     expect(still.REALM_LABEL_FROM).toBe(overlay.REALM_LABEL_FROM);
   });
 
@@ -28,7 +31,7 @@ describe('the still draws by the moving map’s rules', () => {
       expect(still.markedTiers(scale)).toBe(overlay.markedTiers(scale));
       expect(still.regionLabelFade(scale)).toBe(overlay.regionLabelFade(scale));
       expect(still.realmLabelFade(scale)).toBe(overlay.realmLabelFade(scale));
-      for (let tier = 0; tier < 4; tier++) {
+      for (let tier = 0; tier < 5; tier++) {
         expect(still.stampVisible(tier, scale)).toBe(overlay.stampVisible(tier, scale));
         expect(still.stampPx(tier, 6, scale)).toBe(overlay.stampPx(tier, 6, scale));
       }

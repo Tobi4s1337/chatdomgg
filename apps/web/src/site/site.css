@@ -1,0 +1,299 @@
+/* chatdom.io's pages, made of the carved kit: walnut plates with brass pins, parchment sheets, wax, and the
+   storybook faces. The dusk sky behind the quiet pages is painted here in CSS; every picture is a real capture. */
+:root {
+  --site-night: #141726; --site-dusk: #1d2036; --site-lilac: #8d7bb4; --site-ember: #e3a66b;
+  --site-pad: clamp(18px, 6vw, 96px);
+  /* The kit's one type scale (kit.css). */
+  --site-h1: var(--cd-size-display); --site-h2: var(--cd-size-heading); --site-body: var(--cd-size-body);
+  --cd-foot-pad: var(--site-pad);
+  color-scheme: dark;
+}
+html { background: var(--site-night); scrollbar-color: var(--cd-brass-lo) var(--site-night); scrollbar-width: thin; scroll-padding-top: 72px; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--site-night); }
+::-webkit-scrollbar-thumb { background: linear-gradient(90deg, var(--cd-brass-lo), var(--cd-brass), var(--cd-brass-lo)); border: 2px solid var(--site-night); border-radius: 6px; }
+/* Carrying a returning visitor on to the place they signed in from: the dusk only, never a flash of the story. */
+html.is-leaving body { visibility: hidden; }
+*, *::before, *::after { box-sizing: border-box; }
+body.site { margin: 0; min-height: 100svh; color: var(--cd-cream); font: var(--site-body)/1.5 var(--cd-face-body); font-synthesis: none;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; background: var(--site-night); }
+.site img { display: block; max-width: 100%; height: auto; }
+.site h1, .site h2, .site h3 { margin: 0; font-family: var(--cd-face-story); font-weight: 400; letter-spacing: 0; text-wrap: balance; }
+.site p { margin: 0; text-wrap: pretty; }
+:where(.site a) { color: inherit; }
+.site a, .site button { -webkit-tap-highlight-color: transparent; }
+.site :focus { outline: none; }
+.site :focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); border-radius: 4px; }
+.cd-slip :focus-visible, .cd-hiw :focus-visible, .legal-sheet :focus-visible { outline-color: var(--cd-brass-lo); }
+@media (forced-colors: active) { .site :focus-visible { outline-color: Highlight; } }
+
+.site-skip { position: fixed; z-index: 30; top: 10px; left: 10px; padding: 10px 16px; border-radius: 8px; translate: 0 -160%;
+  color: var(--cd-ink); background: var(--cd-parch); font: 16px/1 var(--cd-face-label); letter-spacing: var(--cd-label-tracking); text-decoration: none; }
+.site-skip:focus-visible { translate: 0 0; }
+
+/* The header: a crest and the wordmark, two ways onward, and the sign-in seal. Over the hero it floats on a soft
+   shade; once the page moves it becomes a carved beam. */
+.site-top { position: fixed; z-index: 20; inset: 0 0 auto; height: 68px; display: flex; align-items: center; gap: clamp(12px, 2.5vw, 36px);
+  padding: 0 clamp(12px, 3vw, 40px); padding-top: env(safe-area-inset-top);
+  background: linear-gradient(180deg, #0d0b18b3, #0d0b1833 70%, transparent); transition: background-color .3s ease, box-shadow .3s ease; }
+.site-top::before { content: ''; position: absolute; inset: 0; z-index: -1; opacity: 0; transition: opacity .35s ease;
+  background: repeating-linear-gradient(90deg, #ffdcae06 0 2px, transparent 2px 11px, #1a0c0412 11px 12px, transparent 12px 23px),
+    linear-gradient(180deg, var(--cd-wood), var(--cd-wood-lo));
+  box-shadow: inset 0 -1px 0 #00000080, 0 1px 0 var(--cd-brass-lo), 0 2px 0 #00000059, 0 10px 24px #0a081466; }
+.site-top.is-scrolled::before, .site-legal .site-top::before, .site-how .site-top::before, .site-lost .site-top::before { opacity: 1; }
+.site-nav { display: flex; align-items: center; gap: clamp(8px, 1.8vw, 24px); margin-right: auto; }
+.site-nav-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; color: var(--cd-cream-soft); text-decoration: none;
+  font: 16px/1 var(--cd-face-label); letter-spacing: var(--cd-label-tracking); text-shadow: 0 1px 0 #00000099; transition: color .15s ease; }
+.site-nav-link:hover { color: var(--cd-brass-hi); }
+.site-nav-link[aria-current='page'] { color: var(--cd-brass-hi); box-shadow: inset 0 -2px 0 var(--cd-brass); }
+.site-top-seal { flex: none; margin-left: auto; }
+.legal-sheet a { color: var(--cd-ink); text-decoration: underline; text-decoration-color: #9c7a4c; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.legal-sheet a:hover { color: var(--cd-ink-alarm); }
+
+.story-way svg, .story-explore svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ——— The story ——— */
+.story-caption { color: var(--cd-cream-soft); font: italic 13.5px/1.3 var(--cd-face-body); text-shadow: 0 1px 0 #000000b3, 0 0 12px #0d0a1acc; }
+
+.story-hero { position: relative; display: grid; align-items: end; min-height: max(100svh, 620px); overflow: hidden; background: #2a2340; isolation: isolate; }
+.story-hero-frames { position: absolute; inset: 0; z-index: -2; }
+.story-hero-frame { position: absolute; inset: 0; opacity: 0; transition: opacity 2.6s ease-in-out; }
+.story-hero-frame.is-shown { opacity: 1; }
+.story-hero-frame img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 58%; transform-origin: 54% 52%; }
+/* The live land (./hero/): over the pictures and under the shade, sized so its crop lands where the picture's does. It
+   fades in wearing the picture's held drift, then settles out of it; it never takes a pointer. */
+.story-hero-live { position: absolute; inset: 0; overflow: hidden; opacity: 0; pointer-events: none; transform-origin: 54% 52%;
+  transition: opacity 1.8s ease-in-out; }
+.story-hero-live.is-shown { opacity: 1; }
+.story-hero-live.is-settling { transition: opacity 1.8s ease-in-out, transform 9s cubic-bezier(.45, 0, .25, 1); }
+.story-hero-live canvas { position: absolute; display: block; outline: none; }
+.story-hero-shade { position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  /* Night settles over the top of the sky (softening the far horizon and carrying the header), and under the plate. */
+  background: linear-gradient(180deg, #171a2ad9 0, #2a234080 9%, #2a234026 17%, transparent 26%),
+    linear-gradient(0deg, #120f22e6 0%, #120f2299 18%, transparent 48%), radial-gradient(ellipse 80% 70% at 0% 100%, #120f22b3, transparent 70%); }
+.story-hero-plate { position: relative; max-width: 520px; margin: 0 var(--site-pad) clamp(30px, 10vh, 104px); padding: 30px 34px 30px; }
+.story-hero-plate h1 { font-size: var(--site-h1); line-height: .98; color: var(--cd-cream); text-shadow: 0 2px 0 #00000059; }
+.story-lede { margin-top: 16px; font-size: clamp(18px, 1.2vw + 8px, 21px); line-height: 1.4; color: var(--cd-cream); max-width: 26em; }
+.story-hero-ways { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; margin-top: 24px; }
+.story-way { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--cd-brass-hi); text-decoration: none;
+  font: 17px/1 var(--cd-face-label); letter-spacing: var(--cd-label-tracking); }
+.story-way:hover { text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1px; }
+.story-caption-hero { position: absolute; right: var(--site-pad); bottom: 18px; }
+/* The hero's date follows its picture: the phone frame (the same media as its <source>) was drawn on its own day. */
+.story-drawn-phone { display: none; }
+@media (max-width: 700px) and (orientation: portrait) {
+  .story-drawn-wide { display: none; }
+  .story-drawn-phone { display: inline; }
+}
+/* Signed in, the seal itself offers the Atlas first, so the hero's own "Explore the map" steps aside. */
+.site-story[data-session='in'] .story-hero-ways > .story-way { display: none; }
+
+/* The sign swings; its corners must never widen the page on a phone, where the browser would then pan the view. */
+.site main { overflow-x: clip; }
+.story-light { position: relative; isolation: isolate; background: var(--site-night); }
+.story-bleed { display: block; height: clamp(540px, 60vw, 1000px); max-height: 100svh; overflow: hidden; }
+.story-bleed img { width: 100%; height: 100%; object-fit: cover; }
+.story-light .story-bleed img { object-position: 50% 40%; }
+.story-light .story-caption { position: absolute; right: var(--site-pad); bottom: 16px; }
+.story-sign { position: absolute; top: clamp(90px, 13vh, 150px); left: var(--site-pad); max-width: 430px; padding: 26px 30px 24px; rotate: -1.2deg; transform-origin: 50% -40px; }
+.story-sign::before, .story-sign::after { content: ''; position: absolute; bottom: 100%; width: 2px; height: 46px; background: linear-gradient(#8a6a3c, #c99f5b); }
+.story-sign::before { left: 18%; rotate: 9deg; transform-origin: bottom; }
+.story-sign::after { right: 18%; rotate: -9deg; transform-origin: bottom; }
+.story-sign h2, .story-note h2 { font-size: var(--site-h2); line-height: 1.04; color: var(--cd-ink); }
+.story-sign p, .story-note p { margin-top: 12px; font-size: clamp(17px, .7vw + 12px, 20px); color: var(--cd-ink-soft); }
+.story-sign.cd-slip, .story-note.cd-slip { box-shadow: inset 0 0 0 1px #ffffff4d, inset 0 0 0 5px #f9eed5, inset 0 0 0 5.6px #9c7a4c38, inset 0 -6px 14px #a0784026, 0 2px 0 #0000004d, 0 16px 36px #08061280; }
+
+.story-forge { position: relative; padding: clamp(72px, 10vw, 140px) var(--site-pad);
+  background: radial-gradient(ellipse 60% 50% at 70% 40%, #e3a66b26, transparent 70%),
+    repeating-linear-gradient(90deg, transparent 0 calc(16.66% - 2px), #120a05 calc(16.66% - 2px) 16.66%),
+    repeating-linear-gradient(91deg, #ffdcae05 0 3px, transparent 3px 13px, #1a0c0418 13px 14px, transparent 14px 29px),
+    linear-gradient(180deg, #3b2617, #2a1a0e 60%, #221509); box-shadow: inset 0 18px 30px #0a0614b3, inset 0 -18px 30px #0a0614b3; }
+.story-board { display: grid; grid-template-columns: minmax(280px, 5fr) 7fr; grid-template-areas: 'note a' 'note b'; gap: clamp(24px, 3vw, 44px) clamp(28px, 4vw, 64px); max-width: 1240px; margin: 0 auto; align-items: center; }
+.story-note { grid-area: note; padding: 30px 32px 28px; rotate: -.8deg; align-self: center; }
+.story-chat { display: inline-block; padding: 0 7px 1px; border-radius: 4px; color: var(--cd-cream); background: #3d2718; font: italic 600 .95em/1.35 var(--cd-face-body); box-shadow: inset 0 -1px 0 #00000066; }
+.story-pinned { position: relative; margin: 0; padding: 10px 10px 12px; background: linear-gradient(172deg, var(--cd-parch-hi), var(--cd-parch-lo)); border-radius: 2px;
+  box-shadow: 0 2px 0 #0000004d, 0 18px 34px #0806128c; }
+.story-pinned::before { content: ''; position: absolute; top: -7px; left: 50%; width: 15px; height: 15px; translate: -50% 0; border-radius: 50%; z-index: 1;
+  background: radial-gradient(circle at 35% 30%, var(--cd-brass-hi), var(--cd-brass) 45%, var(--cd-brass-lo)); box-shadow: 0 2px 2px #00000080; }
+.story-pinned img { width: 100%; border-radius: 1px; }
+.story-pinned-a { grid-area: a; rotate: 1.4deg; }
+.story-pinned-b { grid-area: b; rotate: -1.1deg; margin-left: clamp(0px, 4vw, 60px); }
+.story-pinned .story-caption { margin-top: 8px; color: var(--cd-ink-soft); text-shadow: none; }
+
+.story-growth, .story-twitch { position: relative; padding: clamp(80px, 10vw, 140px) var(--site-pad) clamp(56px, 7vw, 96px); text-align: center;
+  background: radial-gradient(ellipse 70% 60% at 50% 0%, #8d7bb433, transparent 70%), linear-gradient(180deg, var(--site-dusk), var(--site-night)); }
+/* A low ember glow behind the three pictures, faded out well before the section's edge so it never shows a seam. */
+.story-twitch { background: radial-gradient(ellipse 58% 42% at 50% 58%, #e3a66b17, transparent 72%), linear-gradient(180deg, var(--site-night), #191a2e); }
+.story-growth h2, .story-twitch h2 { font-size: var(--site-h2); line-height: 1.05; color: var(--cd-cream); max-width: 18em; margin: 0 auto; text-shadow: 0 2px 12px #0008; }
+.story-line { margin: 12px auto 0; color: var(--cd-cream-soft); font-size: clamp(17px, .7vw + 12px, 20px); }
+.story-pair, .story-trio { display: grid; gap: clamp(18px, 2.4vw, 36px); max-width: 1320px; margin: clamp(34px, 4vw, 56px) auto 0; }
+.story-pair { grid-template-columns: 1fr 1fr; }
+.story-trio { grid-template-columns: repeat(3, 1fr); }
+.story-framed { position: relative; margin: 0 0 18px; padding: 9px; border-radius: 7px;
+  background: repeating-linear-gradient(93deg, #ffdcae07 0 2px, transparent 2px 9px, #1a0c0412 9px 10px, transparent 10px 17px), linear-gradient(176deg, var(--cd-wood-hi), var(--cd-wood) 40%, var(--cd-wood-lo));
+  border: 1px solid var(--cd-wood-edge); box-shadow: inset 0 1px 0 #ffe1b440, inset 0 0 0 4px #00000014, 0 0 0 1px #c99f5b33, 0 20px 40px #06040e99; }
+.story-framed img { width: 100%; aspect-ratio: 1600 / 820; object-fit: cover; border-radius: 3px; box-shadow: 0 0 0 1px #000000a6, inset 0 0 0 1px #000; }
+.story-trio .story-framed img { aspect-ratio: 4 / 3; }
+.story-plaque { position: absolute; left: 50%; bottom: -15px; translate: -50% 0; padding: 6px 16px 6px; border-radius: 4px; white-space: nowrap; color: var(--cd-wood-edge);
+  font: 15px/1 var(--cd-face-label); letter-spacing: var(--cd-label-tracking);
+  background: linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 60%, #a9813f); box-shadow: inset 0 1px 0 #fff6d8, inset 0 -1px 0 #7c5a2a, 0 2px 0 #000000a6, 0 4px 8px #00000066; }
+.story-growth > .story-caption, .story-twitch > .story-caption { margin-top: 26px; }
+
+
+/* How it works: the kit's parchment sheet on the night. */
+.story-how { padding: clamp(72px, 9vw, 128px) clamp(10px, 4vw, 64px); background: linear-gradient(180deg, #191a2e, var(--site-night)); }
+
+/* The Atlas, last: its real picture (or the live map, once atlas-map's embed is in the build) and the way in. */
+.story-atlas { position: relative; isolation: isolate; display: grid; align-items: center; min-height: clamp(600px, 64vw, 1000px); max-height: none; background: #ded4b4; }
+.story-atlas-stage { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
+.story-atlas-stage .story-bleed { height: 100%; max-height: none; }
+.story-atlas-stage::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 60% 80% at 0% 50%, #120f2273, transparent 70%); }
+.story-atlas-live { position: absolute; inset: 0; z-index: 1; opacity: 0; transition: opacity .8s ease; }
+.story-atlas.is-live .story-atlas-live { opacity: 1; }
+.story-atlas-plate { position: relative; z-index: 2; max-width: 460px; margin: 0 var(--site-pad); padding: 30px 34px 28px; }
+.story-atlas-plate h2 { font-size: var(--site-h2); line-height: 1.04; color: var(--cd-cream); }
+.story-explore { display: inline-flex; align-items: center; gap: 10px; min-height: 52px; margin-top: 22px; padding: 0 22px 0 24px; border-radius: 10px; color: var(--cd-wood-edge); text-decoration: none;
+  font: 21px/1 var(--cd-face-story); background: linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 55%, #a9813f);
+  box-shadow: inset 0 1px 0 #fff6d8, inset 0 -3px 0 #7c5a2a, 0 3px 0 #000000a6, 0 10px 20px #0a081466; transition: transform .12s ease, box-shadow .12s ease; }
+.story-explore:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 #fff6d8, inset 0 -3px 0 #7c5a2a, 0 4px 0 #000000a6, 0 12px 24px #0a081466; }
+.story-explore:active { transform: translateY(2px); box-shadow: inset 0 1px 0 #f4dc9d, inset 0 -1px 0 #7c5a2a, 0 1px 0 #000000a6; }
+/* Find any channel: a parchment slip with a brass search button; on the live map it flies there in place. */
+.story-find { margin-top: 20px; max-width: 360px; }
+.story-find-row { display: flex; align-items: center; gap: 8px; }
+.story-find .cd-field-input { min-height: 40px; font: 19px/1.2 var(--cd-face-body); }
+.story-find-go { flex: none; display: grid; place-items: center; width: 44px; height: 40px; margin: 0; padding: 0; border: 0; border-radius: 7px; cursor: pointer;
+  color: var(--cd-wood-edge); background: linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 55%, #a9813f);
+  box-shadow: inset 0 1px 0 #fff6d8, inset 0 -2px 0 #7c5a2a, 0 2px 0 #00000080; }
+.story-find-go svg { width: 22px; height: 22px; }
+.story-find-go:active { transform: translateY(1px); box-shadow: inset 0 1px 0 #f4dc9d, inset 0 -1px 0 #7c5a2a, 0 1px 0 #00000080; }
+.story-find-go:focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); }
+.story-find:has(.story-find-go:focus-visible) { outline: none; }
+.story-find-said { min-height: 1.3em; margin-top: 8px; color: var(--cd-cream-soft); font: italic 15.5px/1.3 var(--cd-face-body); }
+.story-find-said:empty { min-height: 0; margin-top: 0; }
+.story-atlas > .story-caption { position: absolute; right: var(--site-pad); bottom: 14px; color: var(--cd-ink-soft); text-shadow: 0 0 8px #f3e6c6; }
+
+.story-close { display: grid; justify-items: center; gap: 26px; padding: clamp(84px, 10vw, 140px) 20px; text-align: center;
+  background: radial-gradient(ellipse 50% 70% at 50% 110%, #e3a66b38, transparent 70%), radial-gradient(ellipse 80% 60% at 50% 0%, #8d7bb426, transparent 70%), var(--site-night); }
+.story-close h2 { font-size: var(--site-h2); color: var(--cd-cream); }
+
+/* Settling in, the first time a section is reached (and only with motion allowed and the script running). */
+@media (prefers-reduced-motion: no-preference) {
+  .js .story-hero-frame.is-shown img { animation: story-drift 22s ease-in-out infinite alternate; }
+  .js .story-hero-plate { animation: story-rise .9s cubic-bezier(.2, .8, .25, 1) both .15s; }
+  .js [data-story-section]:not(.is-seen) .story-sign { opacity: 0; transform: rotate(-9deg) translateY(-24px); }
+  .js [data-story-section].is-seen .story-sign { animation: story-swing 1.1s cubic-bezier(.3, 1.4, .5, 1) both; }
+  .js [data-story-section]:not(.is-seen) :is(.story-note, .story-pinned, .story-framed, .cd-hiw, .story-atlas-plate) { opacity: 0; transform: translateY(26px); }
+  .js [data-story-section].is-seen :is(.story-note, .story-pinned, .story-framed, .cd-hiw, .story-atlas-plate) { transition: opacity .7s ease, transform .9s cubic-bezier(.2, .8, .25, 1); }
+  .js [data-story-section].is-seen :is(.story-pinned-a, .story-framed:nth-child(2)) { transition-delay: .12s; }
+  .js [data-story-section].is-seen :is(.story-pinned-b, .story-framed:nth-child(3)) { transition-delay: .24s; }
+}
+@keyframes story-drift { from { transform: scale(1.075) translate3d(-1.1%, .5%, 0); } to { transform: scale(1.005) translate3d(.6%, -.3%, 0); } }
+@keyframes story-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes story-swing { 0% { opacity: 0; transform: rotate(-9deg) translateY(-24px); } 35% { opacity: 1; } 60% { transform: rotate(2.4deg); } 80% { transform: rotate(-.9deg); } 100% { opacity: 1; transform: none; } }
+
+/* ——— The quiet pages ——— */
+body.site-legal, body.site-how, body.site-lost { background:
+  radial-gradient(ellipse 120% 60% at 50% -8%, #e3a66b59 0, #8d7bb440 34%, transparent 62%),
+  radial-gradient(ellipse 80% 50% at 85% 0%, #c98a9a2e, transparent 60%),
+  linear-gradient(180deg, #2b2645 0, var(--site-dusk) 40vh, var(--site-night) 100vh) no-repeat, var(--site-night); }
+.site-legal main, .site-how main { padding: 112px clamp(10px, 4vw, 48px) clamp(56px, 8vw, 110px); }
+.legal-sheet { position: relative; max-width: 820px; margin: 0 auto; padding: clamp(28px, 6vw, 72px) clamp(20px, 6vw, 76px) clamp(34px, 5vw, 64px); color: var(--cd-ink); border-radius: 4px;
+  font-size: 17px; line-height: 1.62;
+  background: radial-gradient(ellipse at 22% 6%, var(--cd-parch-hi), transparent 55%), radial-gradient(ellipse at 90% 100%, #d6bd8a59, transparent 55%),
+    repeating-radial-gradient(circle at 30% 40%, #8a6a3c07 0 1px, transparent 1px 4px), linear-gradient(176deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #ffffff52, inset 0 0 0 7px #f9eed5, inset 0 0 0 7.8px #9c7a4c47, inset 0 -10px 30px #a0784022, 0 2px 0 #0000004d, 0 26px 60px #0605109e; }
+.legal-kicker { color: var(--cd-brass-lo); font-size: 15px; }
+.legal-sheet h1 { margin-top: 8px; font-size: clamp(36px, 4.4vw, 54px); line-height: 1.04; color: var(--cd-ink); }
+.legal-updated { margin-top: 10px; color: var(--cd-ink-soft); font-style: italic; font-size: 15px; }
+.legal-lede { margin-top: 16px; font-size: 18.5px; line-height: 1.5; }
+.legal-head { padding-bottom: 22px; border-bottom: 1px solid #9c7a4c4d; }
+.legal-toc { margin: 24px 0 8px; padding: 18px 22px; border-radius: 4px; background: #e9d8b166; box-shadow: inset 0 0 0 1px #9c7a4c40; }
+.legal-toc ol { columns: 2 220px; column-gap: 28px; margin: 0; padding-left: 1.3em; font-size: 15.5px; line-height: 1.45; }
+.legal-toc li { break-inside: avoid; padding: 3px 0; }
+.legal-sheet section { margin-top: 34px; }
+.legal-sheet h2 { position: relative; font-size: clamp(24px, 1.2vw + 16px, 30px); line-height: 1.15; color: var(--cd-ink); padding-top: 18px; }
+.legal-sheet h2::before { content: ''; position: absolute; top: 0; left: 0; width: 56px; height: 2px; background: linear-gradient(90deg, var(--cd-brass-lo), var(--cd-brass), transparent); }
+.legal-sheet h3 { margin-top: 22px; font-size: 21px; line-height: 1.2; color: var(--cd-ink); }
+.legal-sheet p, .legal-sheet ul, .legal-sheet ol:not(.legal-toc ol), .legal-sheet address, .legal-sheet dl, .legal-sheet table { margin: 12px 0 0; }
+.legal-sheet ul { padding-left: 0; list-style: none; }
+.legal-sheet ul > li { position: relative; padding-left: 22px; margin-top: 6px; }
+.legal-sheet ul > li::before { content: ''; position: absolute; left: 3px; top: .62em; width: 7px; height: 7px; rotate: 45deg; background: var(--cd-brass-lo); }
+.legal-sheet address { font-style: normal; padding: 12px 16px; border-left: 3px solid var(--cd-brass); background: #ead9b24d; }
+.legal-sheet dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; }
+.legal-sheet dt { font: 15px/1.6 var(--cd-face-label); letter-spacing: var(--cd-label-tracking); color: var(--cd-ink-soft); }
+.legal-sheet dd { margin: 0; }
+.legal-sheet table { width: 100%; border-collapse: collapse; font-size: 15.5px; }
+.legal-sheet th, .legal-sheet td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid #9c7a4c40; }
+.legal-sheet th { font: 14px/1.3 var(--cd-face-label); letter-spacing: var(--cd-label-tracking); color: var(--cd-ink-soft); }
+.legal-sheet strong { font-weight: 700; }
+
+.hiw-onward { margin-top: clamp(26px, 3vw, 40px); text-align: center; }
+
+body.site-lost { background: linear-gradient(180deg, #131628e0, #131628c7 50%, #131628f2), url('./img/streets-1440.webp') 50% 60% / cover no-repeat fixed, var(--site-night); }
+.site-lost main { display: grid; place-items: center; min-height: 100svh; padding: 96px 14px 60px; }
+.lost-sign { max-width: 520px; padding: 32px 34px 30px; text-align: left; }
+.lost-kicker { color: var(--cd-brass-hi); }
+.lost-sign h1 { margin-top: 8px; font-size: clamp(36px, 4.4vw, 52px); line-height: 1.04; color: var(--cd-cream); }
+.lost-sign p:not(.lost-kicker) { margin-top: 14px; color: var(--cd-cream); }
+.lost-ways { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; }
+.lost-ways .story-explore { margin-top: 6px; }
+
+/* ——— Phones and narrow windows: designed, not shrunk. ——— */
+@media (max-width: 860px) {
+  .story-board { grid-template-columns: 1fr; grid-template-areas: 'note' 'a' 'b'; }
+  .story-pinned-b { margin-left: 0; }
+  .story-trio { grid-template-columns: 1fr; max-width: 560px; }
+  .site-nav-link[data-page='how-it-works'] { display: none; }
+}
+@media (max-width: 700px) {
+  :root { --cd-notice-top: 68px; }
+  .site-top { height: 60px; gap: 10px; }
+  .site-top .cd-brand-word { font-size: 24px; }
+  .site-top .cd-brand-crest { width: 26px; height: 29px; }
+  .site-nav { display: none; }
+
+  .story-hero { min-height: 100svh; }
+  .story-hero-frame img { object-position: 50% 40%; }
+  .story-hero-shade { background: linear-gradient(180deg, #171a2af2 0, #2a2340c4 14%, #2a234059 26%, transparent 36%),
+    linear-gradient(0deg, #120f22f2 0%, #120f22a6 30%, transparent 58%); }
+  .story-hero-plate { margin: 0 10px calc(14px + env(safe-area-inset-bottom)); padding: 22px 22px 22px; max-width: none; }
+  .story-hero-plate h1 { font-size: clamp(42px, 12vw, 54px); }
+  .story-lede { font-size: 18px; margin-top: 12px; }
+  .story-hero-ways { gap: 6px 18px; margin-top: 18px; }
+  .story-caption-hero { top: 70px; bottom: auto; right: 14px; }
+
+  .story-bleed { height: 66svh; min-height: 420px; }
+  .story-sign { position: relative; top: auto; left: auto; margin: -64px 14px 0; max-width: none; padding: 22px 22px 20px; }
+  .story-sign::before, .story-sign::after { display: none; }
+  .story-light { padding-bottom: 44px; }
+  .story-light .story-caption { position: static; padding: 14px 18px 0; text-align: right; }
+
+  .story-forge { padding: 64px 14px 72px; }
+  .story-note { padding: 22px 22px 20px; rotate: -.5deg; }
+  .story-pinned { padding: 7px 7px 9px; }
+
+  .story-growth, .story-twitch { padding: 72px 14px 56px; }
+  .story-pair { grid-template-columns: 1fr; gap: 26px; }
+  .story-framed { padding: 7px; }
+
+  .story-how { padding: 60px 8px 64px; }
+
+  .story-atlas { display: block; min-height: 0; padding-bottom: 0; background: var(--site-night); }
+  .story-atlas-stage { position: relative; inset: auto; height: 62svh; min-height: 400px; }
+  .story-atlas-stage::after { display: none; }
+  .story-atlas-stage .story-bleed img { object-position: 46% 45%; }
+  .story-atlas-plate { margin: -70px 10px 0; padding: 24px 22px 22px; max-width: none; }
+  .story-atlas > .story-caption { position: static; padding: 12px 18px 0; text-align: right; color: var(--cd-cream-soft); text-shadow: none; }
+  .story-explore { width: 100%; justify-content: center; }
+
+  .story-close { padding: 72px 14px 84px; }
+
+  .site-legal main, .site-how main { padding: 84px 8px 48px; }
+  .legal-sheet { font-size: 16.5px; }
+  .legal-sheet dl { grid-template-columns: 1fr; gap: 2px; }
+  .legal-sheet dd { margin-bottom: 8px; }
+
+}
+@media (max-width: 380px) {
+  .site-top .cd-brand-word { font-size: 22px; }
+}

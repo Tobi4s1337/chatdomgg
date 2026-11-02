@@ -1,5 +1,5 @@
 /**
- * The durable `RaidGateRepository` over the shared realm schema (migration `realm-migration.sql`). It keeps the exact
+ * The durable `RaidGateRepository` over the shared realm schema (migration `0011_realm_raid_gate.sql`). It keeps the exact
  * rules of `memory-repository.ts`, which the application suite runs against:
  *
  * - One serializable transaction per `transaction` call. If `work` throws, or the signal aborts before commit,
@@ -180,7 +180,8 @@ export async function serializable<Tx, T>(pool: SqlPool, open: (client: SqlClien
   }
 }
 
-function transactionOn(client: SqlClient): RaidGateTransaction {
+/** Binds gate reads and writes to the caller's existing SQL transaction without opening or committing one. */
+export function createRaidGateTransaction(client: SqlClient): RaidGateTransaction {
   return {
     getGate: (kingdomId: KingdomId) => select(client, POINTERS, [kingdomId]),
     putGate: (record, expected) => put(client, POINTERS, record, expected),
@@ -196,5 +197,5 @@ function transactionOn(client: SqlClient): RaidGateTransaction {
 }
 
 export function createPostgresRaidGateRepository(options: PostgresRaidGateRepositoryOptions): RaidGateRepository {
-  return { transaction: (work, signal) => serializable(options.pool, transactionOn, work, signal) };
+  return { transaction: (work, signal) => serializable(options.pool, createRaidGateTransaction, work, signal) };
 }

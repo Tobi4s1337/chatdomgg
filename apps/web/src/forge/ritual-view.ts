@@ -82,7 +82,7 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     const sprite = new THREE.Sprite(ownMaterial(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false })));
     sprite.scale.set(2.8, .65, 1); return sprite;
   };
-  const stamp = makeText('FIT FOR THIS HOME · SIMULATED', '#f4d399'); stamp.position.set(0, 2.1, 0); stamp.scale.set(2.6, .48, 1); root.add(stamp);
+  const stamp = makeText('FIT FOR THIS HOME', '#f4d399'); stamp.position.set(0, 2.1, 0); stamp.scale.set(2.6, .48, 1); root.add(stamp);
   function beginWords(){
     wordsGroup.children.forEach(child=>{const m=(child as THREE.Sprite).material;if(m.map){m.map.dispose();textures.delete(m.map);}m.dispose();materials.delete(m);});wordsGroup.clear();
     // Authored runes never encode an unjudged request's words, length or identity.

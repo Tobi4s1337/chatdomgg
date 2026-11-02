@@ -2,15 +2,19 @@ import { createHash } from 'node:crypto';
 import { createReadStream, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sha256 } from '../export/project';
-import type { ChannelObservation, SnapshotManifest } from '../export/schema';
+import { AvatarUrlSchema, RAW_CONTENT_MAX_AGE_MS, type ChannelObservation, type SnapshotManifest } from '../export/schema';
 import { dabHash } from '../live/frame';
+import { PencilPlaces, type PencilRegionPlaces } from '../cartography/pencil-place';
+import type { TwitchChannelFacts } from './twitch-lookup';
 import { loadLiveTarget } from '../live/target';
-import { nameFreshUntil, publicVisibility } from '../policy/visibility';
+import type { AtlasAlignment } from '@chatdom/shared';
+import { isGamblingCategory, nameFreshUntil, publicVisibility } from '../policy/visibility';
 import { readManifest, revisionDir } from '../store/revisions';
+import { readPreviewNames } from '../preview/store';
 import { matchRank, queryKey, searchKey } from './normalize';
 import {
   CARD_ROADS, CardReplySchema, DIRECTORY_KIND, MAX_RESULTS, RoadReplySchema, SearchReplySchema,
-  type CardReply, type CardRoad, type ChannelFace, type RoadReply, type SearchReply,
+  type CardReply, type CardRoad, type ChannelFace, type ChannelPortrait, type RoadReply, type SearchReply,
 } from './schema';
 
 /**
@@ -25,9 +29,17 @@ interface Entry {
   nameKey: string;
   /** When the source last confirmed login and display name. Names remain served between imports. */
   factsAt: number;
-  firstSeenAt: number;
-  lastLiveAt: number;
+  avatarUrl: string | null;
+  avatarFactsAt: number | null;
+  firstSeenAt: number | null;
+  lastLiveAt: number | null;
+  /** Observed average audience; 0 (and `surveyed` false) for a holding the revision never observed. */
   average: number;
+  /**
+   * False for an edition holding whose channel this night's survey never saw (a raided or claimed stream under the
+   * sweep's floor): it is named from the publication and has land, but no observed facts.
+   */
+  surveyed: boolean;
   language: string;
   live: boolean;
   stream: ChannelObservation['stream'];
@@ -42,6 +54,28 @@ interface Tally { raids: number; travellers: number; lastAt: number }
 
 export type Lookup = { id: string } | { login: string } | { dab: string };
 
+/** A point in world units: the holding geometry's own units, the same as a pencil place. */
+export interface WorldPoint { x: number; y: number }
+
+/** What the register observed of one channel, for ordering and grouping; nulls when the survey never saw it. */
+export interface ChannelFacts {
+  average: number | null;
+  region: number | null;
+  realm: number | null;
+  ordinal: number | null;
+  language: string | null;
+}
+
+/** A realm's index, region and drawn centre (coordinate-scale units of the world file). */
+export interface RealmCentre { index: number; region: number; x: number; y: number }
+
+/** What a land needs beyond its register: holding points per ordinal, realm centres and the live alignment. */
+export interface DirectoryLand {
+  holdings: readonly WorldPoint[];
+  realms: readonly RealmCentre[];
+  alignment: AtlasAlignment | null;
+}
+
 /** Why a reply could not be given; the service maps each to one bounded public error. */
 export type DirectoryRefusal = 'not-found' | 'empty' | 'too-long';
 
@@ -54,6 +88,8 @@ export class Directory {
   private readonly byId = new Map<string, Entry>();
   private readonly byLogin = new Map<string, Entry>();
   private byHash: Map<string, Entry> | null = null;
+  /** Public entries that hold land, by settler ordinal. */
+  private readonly byOrdinal = new Map<number, Entry>();
   private readonly roads = new Map<string, Map<string, { sent: Tally | null; received: Tally | null }>>();
   private readonly regionOfRealm: number[];
 
@@ -66,10 +102,14 @@ export class Directory {
     private readonly blocked: ReadonlySet<string>,
     pairs: readonly { from: string; to: string; tally: Tally }[],
     realmRegions: readonly number[],
+    private readonly placement?: { realmFor: (facts: Pick<TwitchChannelFacts, 'id' | 'language' | 'gameId'>) => number; regions: Map<number, PencilRegionPlaces> },
+    private readonly blockedLogins: ReadonlySet<string> = new Set(),
+    private readonly land: DirectoryLand = { holdings: [], realms: [], alignment: null },
   ) {
     this.regionOfRealm = [...realmRegions];
     for (const entry of entries) {
       this.byId.set(entry.id, entry);
+      if (entry.ordinal >= 0) this.byOrdinal.set(entry.ordinal, entry);
       const held = this.byLogin.get(entry.login);
       // A login can pass to another channel; the more recently confirmed one owns it.
       if (!held || entry.factsAt > held.factsAt) this.byLogin.set(entry.login, entry);
@@ -78,6 +118,119 @@ export class Directory {
       this.side(from, to).sent = tally;
       this.side(to, from).received = tally;
     }
+  }
+
+  /** Known channels stay under the survey gate, even when their public card is absent. */
+  has(lookup: Lookup): boolean {
+    if ('id' in lookup) return this.byId.has(lookup.id) || this.blocked.has(lookup.id);
+    if ('login' in lookup) return this.byLogin.has(lookup.login) || this.blockedLogins.has(lookup.login);
+    return this.find(lookup) !== null;
+  }
+
+  allowed(id: string, withheld: ReadonlySet<string>): boolean {
+    return !withheld.has(id) && !this.blocked.has(id);
+  }
+
+  /** Project public lookup facts through the same gate. This never writes an entry or a holding. */
+  external(facts: TwitchChannelFacts, withheld: ReadonlySet<string>, now: number, portraits = true): CardReply | null {
+    if (!this.allowed(facts.id, withheld) || isGamblingCategory(facts.gameId)) return null;
+    const known = this.card({ id: facts.id }, withheld, now, portraits, true);
+    if (typeof known !== 'string') return known;
+    const placed = this.externalPlace(facts);
+    if (!placed) return null;
+    const { realm, region, position } = placed;
+    const fresh = facts.fetchedAt + RAW_CONTENT_MAX_AGE_MS > now;
+    return CardReplySchema.parse({
+      ...this.reply(now), asOf: facts.fetchedAt, kind: `${DIRECTORY_KIND}-card`,
+      channel: { id: facts.id, login: facts.login, name: facts.name, freshUntil: facts.fetchedAt + RAW_CONTENT_MAX_AGE_MS, place: 'waiting', ordinal: null, tier: null, region, realm },
+      ...(portraits ? { portrait: fresh && facts.avatarUrl && AvatarUrlSchema.safeParse(facts.avatarUrl).success ? { url: facts.avatarUrl, freshUntil: facts.fetchedAt + RAW_CONTENT_MAX_AGE_MS } : null } : {}),
+      position, average: null, language: facts.language, firstSeenAt: null, lastLiveAt: null,
+      stream: fresh ? { live: facts.live, game: facts.game, title: facts.title, viewers: facts.viewers, startedAt: facts.startedAt } : null,
+      roads: null, coverage: this.coverage(),
+    });
+  }
+
+  /** The deterministic place of a channel outside the survey: its realm, region and pencil point, or null. */
+  externalPlace(facts: Pick<TwitchChannelFacts, 'id' | 'language' | 'gameId'>): { realm: number; region: number; position: WorldPoint } | null {
+    if (!this.placement) return null;
+    const realm = this.placement.realmFor(facts);
+    const region = this.regionOfRealm[realm];
+    if (region === undefined) return null;
+    const position = this.placement.regions.get(region)?.place(dabHash(facts.id), realm);
+    return position ? { realm, region, position } : null;
+  }
+
+  private pencilPosition(entry: Entry): { x: number; y: number } | undefined {
+    if (entry.ordinal >= 0) return undefined;
+    return this.placement?.regions.get(entry.region)?.place(dabHash(entry.id), entry.realm) ?? undefined;
+  }
+
+  /**
+   * Where a surveyed channel stands in world units: its holding, else its pencil place in its realm's waiting land,
+   * else null (unknown to the survey, or no place could be found). Never consults the withheld list: callers gate.
+   */
+  position(id: string): WorldPoint | null {
+    const entry = this.byId.get(id);
+    if (!entry) return null;
+    if (entry.ordinal >= 0) {
+      const point = this.land.holdings[entry.ordinal];
+      return point ? { x: point.x, y: point.y } : null;
+    }
+    return this.pencilPosition(entry) ?? null;
+  }
+
+  /** The register's observed facts of one channel; every field null when the survey never saw it. */
+  facts(id: string): ChannelFacts {
+    const entry = this.byId.get(id);
+    if (!entry) return { average: null, region: null, realm: null, ordinal: null, language: null };
+    return { average: entry.surveyed ? entry.average : null, region: entry.region, realm: entry.realm, ordinal: entry.ordinal >= 0 ? entry.ordinal : null, language: entry.language };
+  }
+
+  /** The last stream the survey saw, while it is still fresh (a day after the channel was last live), else null. */
+  stream(id: string, now: number): { live: boolean; game: string | null; viewers: number | null } | null {
+    const entry = this.byId.get(id);
+    if (!entry?.stream || entry.lastLiveAt === null || nameFreshUntil(entry.lastLiveAt) <= now) return null;
+    return { live: entry.live, game: entry.stream.game, viewers: entry.stream.viewers };
+  }
+
+  /** The channel's picture while its own refresh clock is fresh, else null (the shield). */
+  portraitOf(id: string, now: number): ChannelPortrait | null {
+    const entry = this.byId.get(id);
+    return entry ? this.portrait(entry, now) : null;
+  }
+
+  /** Whether the survey itself knows this channel ID (public or gated). */
+  knows(id: string): boolean {
+    return this.byId.has(id);
+  }
+
+  /** The channel ID a lookup resolves to in this register, or null. */
+  resolve(lookup: Lookup): string | null {
+    return this.find(lookup)?.id ?? null;
+  }
+
+  /** Every realm with its region and drawn centre. */
+  realms(): readonly RealmCentre[] {
+    return this.land.realms;
+  }
+
+  /** The alignment live frames of this land are written against, or null when unknown. */
+  get alignment(): AtlasAlignment | null {
+    return this.land.alignment;
+  }
+
+  /**
+   * Public channels a live frame shows on air: holdings whose slot class is above 0, and waiting channels whose
+   * dab is present. Channels the register does not name are left out.
+   */
+  liveIds(frame: { slots: Uint8Array; dabs: readonly { channelHash: string }[] }): Set<string> {
+    const live = new Set<string>();
+    for (const [ordinal, entry] of this.byOrdinal) if ((frame.slots[ordinal * 2] ?? 0) > 0) live.add(entry.id);
+    for (const dab of frame.dabs) {
+      const entry = this.find({ dab: dab.channelHash });
+      if (entry) live.add(entry.id);
+    }
+    return live;
   }
 
   private side(a: string, b: string): { sent: Tally | null; received: Tally | null } {
@@ -103,7 +256,7 @@ export class Directory {
   }
 
   /** A channel as it may be shown now, or null when the gate keeps it off the map. */
-  private face(id: string, withheld: ReadonlySet<string>, now: number): ChannelFace | null {
+  face(id: string, withheld: ReadonlySet<string>, now: number): ChannelFace | null {
     if (withheld.has(id) || this.blocked.has(id)) return null;
     const entry = this.byId.get(id);
     if (!entry) return { id: id as ChannelFace['id'], login: null, name: null, freshUntil: null, place: 'unseen', ordinal: null, tier: null, region: null, realm: null };
@@ -125,6 +278,13 @@ export class Directory {
     return { version: 1 as const, preview: this.preview, revision: this.manifest.revision, servedAt: now, asOf: this.manifest.asOf };
   }
 
+  private portrait(entry: Entry, now: number): ChannelPortrait | null {
+    // Older exports merged the login and live clocks. They cannot establish an avatar's age.
+    const at = entry.avatarFactsAt;
+    if (at === null || at > now + 60_000 || at + RAW_CONTENT_MAX_AGE_MS <= now || !AvatarUrlSchema.safeParse(entry.avatarUrl).success) return null;
+    return { url: entry.avatarUrl!, freshUntil: at + RAW_CONTENT_MAX_AGE_MS };
+  }
+
   private window() {
     return { from: this.manifest.window.firstObservationAt, to: Math.max(this.manifest.window.firstObservationAt, this.manifest.source.database.openedAt) };
   }
@@ -139,7 +299,7 @@ export class Directory {
    * a word beginning with it, then names containing it; within each, the larger observed audience, then channel ID.
    * Names stay searchable between survey imports; withholding is applied to every response.
    */
-  search(raw: string, withheld: ReadonlySet<string>, now: number): SearchReply | DirectoryRefusal {
+  search(raw: string, withheld: ReadonlySet<string>, now: number, portraits = true, positions = false): SearchReply | DirectoryRefusal {
     const query = queryKey(raw);
     if (!query.ok) return query.reason;
     const ranks: Entry[][] = [[], [], [], []];
@@ -159,7 +319,7 @@ export class Directory {
       ...this.reply(now),
       kind: `${DIRECTORY_KIND}-search`,
       key: query.key,
-      results: chosen.map((entry) => ({ channel: this.face(entry.id, withheld, now)!, average: entry.average, language: entry.language })),
+      results: chosen.map((entry) => ({ channel: this.face(entry.id, withheld, now)!, ...(portraits ? { portrait: this.portrait(entry, now) } : {}), average: entry.surveyed ? entry.average : null, language: entry.language, ...(positions ? { position: this.pencilPosition(entry) } : {}) })),
       more: matched > chosen.length,
     });
   }
@@ -177,7 +337,7 @@ export class Directory {
   }
 
   /** A channel's public card, or not-found when it is unknown, withheld, gone or gambling (all alike to a reader). */
-  card(lookup: Lookup, withheld: ReadonlySet<string>, now: number): CardReply | DirectoryRefusal {
+  card(lookup: Lookup, withheld: ReadonlySet<string>, now: number, portraits = true, positions = false): CardReply | DirectoryRefusal {
     const entry = this.find(lookup);
     const channel = entry && this.face(entry.id, withheld, now);
     if (!entry || !channel) return 'not-found';
@@ -196,12 +356,14 @@ export class Directory {
     }
     // Strongest: most raids either way, then most travellers, then the latest, then channel ID.
     roads.sort((a, b) => (b.sent + b.received) - (a.sent + a.received) || b.travellers - a.travellers || b.lastAt - a.lastAt || compareId(a.other.id, b.other.id));
-    const streamFresh = entry.stream && nameFreshUntil(entry.lastLiveAt) > now;
+    const streamFresh = entry.stream && entry.lastLiveAt !== null && nameFreshUntil(entry.lastLiveAt) > now;
     return CardReplySchema.parse({
       ...this.reply(now),
       kind: `${DIRECTORY_KIND}-card`,
       channel,
-      average: entry.average,
+      ...(portraits ? { portrait: this.portrait(entry, now) } : {}),
+      ...(positions ? { position: this.pencilPosition(entry) } : {}),
+      average: entry.surveyed ? entry.average : null,
       language: entry.language,
       firstSeenAt: entry.firstSeenAt,
       lastLiveAt: entry.lastLiveAt,
@@ -244,7 +406,8 @@ export class Directory {
   }
 }
 
-function compareId(a: string, b: string): number {
+/** Decimal channel IDs in numeric order: shorter first, then lexicographic. */
+export function compareId(a: string, b: string): number {
   return a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
 }
 
@@ -277,10 +440,12 @@ export async function loadDirectory(dataDir: string, previewId: string): Promise
   const realmRegions = target.world.realms.map((realm) => realm.region);
   const entries: Entry[] = [];
   const blocked = new Set<string>();
+  const blockedLogins = new Set<string>();
   await readNdjson(join(dir, manifest.files.channels.path), manifest.files.channels.sha256, (record) => {
     const channel = record as ChannelObservation;
     if (publicVisibility(channel) !== 'public') {
       blocked.add(channel.kingdomId);
+      blockedLogins.add(channel.login);
       return;
     }
     const ordinal = target.ordinalOf.get(channel.kingdomId) ?? -1;
@@ -293,9 +458,12 @@ export async function loadDirectory(dataDir: string, previewId: string): Promise
       loginKey: searchKey(channel.login),
       nameKey: searchKey(channel.displayName),
       factsAt: channel.factsAt,
+      avatarUrl: channel.avatarUrl,
+      avatarFactsAt: channel.avatarFactsAt ?? null,
       firstSeenAt: channel.firstSeenAt,
       lastLiveAt: channel.lastLiveAt,
       average: Math.round(channel.averageViewers),
+      surveyed: true,
       language: channel.language,
       live: channel.live,
       stream: channel.stream,
@@ -311,6 +479,33 @@ export async function loadDirectory(dataDir: string, previewId: string): Promise
     const pair = JSON.parse(line) as { fromKingdomId: string; toKingdomId: string; raids: number; viewersTotal: number; lastAt: number };
     return { from: pair.fromKingdomId, to: pair.toKingdomId, tally: { raids: pair.raids, travellers: pair.viewersTotal, lastAt: pair.lastAt } };
   });
+  // Edition holdings this revision never observed (raided or claimed streams under the sweep's floor) are named by
+  // the publication from Twitch's answer for them: a search finds them on their land, never as waiting pencil.
+  if (target.world.status === 'edition') {
+    const names = readPreviewNames(dataDir, previewId);
+    const known = new Set(entries.map((entry) => entry.id));
+    names.ids.forEach((id, i) => {
+      const ordinal = target.ordinalOf.get(id) ?? -1;
+      if (ordinal < 0 || known.has(id) || blocked.has(id)) return;
+      const realm = target.realmOf[ordinal]!;
+      const region = realmRegions[realm] ?? 0;
+      entries.push({
+        id, login: names.logins[i]!, name: names.names[i]!, loginKey: searchKey(names.logins[i]!), nameKey: searchKey(names.names[i]!),
+        factsAt: names.factsAt[i]!, avatarUrl: null, avatarFactsAt: null, firstSeenAt: null, lastLiveAt: null, average: 0, surveyed: false,
+        language: target.world.regions[region]?.language ?? 'other', live: false, stream: null, ordinal, tier: target.tierRank[ordinal]!, realm, region,
+      });
+    });
+  }
   entries.sort((a, b) => b.average - a.average || compareId(a.id, b.id));
-  return new Directory(target.previewId, manifest, entries, blocked, pairs, realmRegions);
+  const pencil = new PencilPlaces(target.world);
+  const regions = new Map<number, PencilRegionPlaces>();
+  const holdings = target.holdingGeometry ?? [];
+  for (const region of target.world.regions) regions.set(region.index, pencil.forRegion(region.index, holdings.filter(holding => holding.region === region.index)));
+  return new Directory(target.previewId, manifest, entries, blocked, pairs, realmRegions, {
+    regions, realmFor: facts => target.realmFor({ id: facts.id, language: facts.language, categories: facts.gameId ? [{ gameId: facts.gameId, minutes: 1 }] : [] }),
+  }, blockedLogins, {
+    holdings: target.holdingPoints ?? holdings.map(holding => ({ x: holding.x, y: holding.y })),
+    realms: target.world.realms.map(realm => ({ index: realm.index, region: realm.region, x: realm.x, y: realm.y })),
+    alignment: target.alignment,
+  });
 }

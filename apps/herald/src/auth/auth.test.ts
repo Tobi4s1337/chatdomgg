@@ -15,7 +15,7 @@ const READER = { id: '900000001', login: 'herald_reader', displayName: 'HeraldRe
 const STRANGER = { id: '900000002', login: 'someone_else', displayName: 'SomeoneElse' };
 const REDIRECT = 'http://localhost:5195/herald/callback';
 const FULL_GRANTS = { [READER.id]: ['user:read:chat', 'user:bot', 'user:write:chat'], [BROADCASTER.id]: ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train',
-  'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls'] };
+  'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls', 'channel:manage:raids', 'moderator:read:shield_mode'] };
 
 function config(overrides: Partial<HeraldConfig> = {}): HeraldConfig {
   return {
@@ -109,7 +109,7 @@ describe('capabilities', () => {
   it('app credentials alone authorize only stream state and revocation', () => {
     const result = assessCapabilities(valid, { reader: account('reader', []), broadcaster: account('broadcaster', []) });
     expect(Object.fromEntries(result.map(status => [status.capability, status.available]))).toEqual({ chat: false, chatters: false, stream: true, revocation: true, bits: false, hype: false,
-      follows: false, rewards: false, polls: false });
+      follows: false, rewards: false, polls: false, raids: false, shield: false });
   });
 
   it('chat needs the reader pair and channel:bot; chatters needs only the broadcaster', () => {
@@ -129,11 +129,11 @@ describe('capabilities', () => {
 
   it('re-consent preserves every existing scope and adds the crier permission', () => {
     expect(scopesToRequest('reader', ['channel:bot', 'moderator:read:chatters', 'user:write:chat', 'channel:manage:polls'])).toEqual(['channel:bot', 'channel:manage:polls', 'moderator:read:chatters', 'user:bot', 'user:read:chat', 'user:write:chat']);
-    expect(scopesToRequest('broadcaster', ['user:write:chat', 'channel:manage:polls'])).toEqual(['bits:read', 'channel:bot', 'channel:manage:polls', 'channel:manage:redemptions',
-      'channel:read:hype_train', 'moderator:read:chatters', 'moderator:read:followers', 'user:write:chat']);
+    expect(scopesToRequest('broadcaster', ['user:write:chat', 'channel:manage:polls'])).toEqual(['bits:read', 'channel:bot', 'channel:manage:polls', 'channel:manage:raids', 'channel:manage:redemptions',
+      'channel:read:hype_train', 'moderator:read:chatters', 'moderator:read:followers', 'moderator:read:shield_mode', 'user:write:chat']);
     expect(assessCapabilities({ state: 'valid', expiresAt: 999999 }, { reader: account('reader', ['user:bot', 'user:read:chat']), broadcaster: account('broadcaster', ['channel:bot']) }).find(status => status.capability === 'chat')?.available).toBe(true);
-    expect(scopesToRequest('broadcaster', [])).toEqual(['bits:read', 'channel:bot', 'channel:manage:polls', 'channel:manage:redemptions', 'channel:read:hype_train',
-      'moderator:read:chatters', 'moderator:read:followers']);
+    expect(scopesToRequest('broadcaster', [])).toEqual(['bits:read', 'channel:bot', 'channel:manage:polls', 'channel:manage:raids', 'channel:manage:redemptions', 'channel:read:hype_train',
+      'moderator:read:chatters', 'moderator:read:followers', 'moderator:read:shield_mode']);
   });
 });
 
@@ -144,7 +144,7 @@ describe('check:auth', () => {
     expect(report.ok).toBe(true);
     expect(report.accounts.broadcaster).toMatchObject({ id: BROADCASTER.id, authorized: true });
     const text = formatAuthReport(report).join('\n');
-    expect(text).toContain('Every Herald read capability is authorized.');
+    expect(text).toContain('Every Herald capability is authorized.');
     expectNoSecrets(fake, text, report);
   });
 
@@ -158,6 +158,21 @@ describe('check:auth', () => {
     expect(text).toContain('authorize -- --role reader');
     expect(text).toContain('authorize -- --role broadcaster');
     expectNoSecrets(fake, text, report);
+  });
+
+  it('reports both missing action grants while retaining existing chat and observation', async () => {
+    const old = FULL_GRANTS[BROADCASTER.id]!.filter(scope => scope !== 'channel:manage:raids' && scope !== 'moderator:read:shield_mode');
+    const { tokens, helix } = twitch({ [READER.id]: FULL_GRANTS[READER.id]!, [BROADCASTER.id]: old });
+    const report = await inspectAuthorization({ config: config(), tokens, helix });
+    expect(report.ok).toBe(false);
+    expect(report.capabilities.find(status => status.capability === 'chat')?.available).toBe(true);
+    expect(report.capabilities.find(status => status.capability === 'stream')?.available).toBe(true);
+    for (const [capability, scope] of [['raids', 'channel:manage:raids'], ['shield', 'moderator:read:shield_mode']] as const) {
+      expect(report.capabilities.find(status => status.capability === capability)).toMatchObject({ available: false,
+        blockers: [{ kind: 'missing_scopes', role: 'broadcaster', scopes: [scope] }] });
+      expect(formatAuthReport(report).join('\n')).toContain(scope);
+    }
+    expect(scopesToRequest('broadcaster', [...old, 'user:write:chat'])).toEqual(expect.arrayContaining([...old, 'user:write:chat', 'channel:manage:raids', 'moderator:read:shield_mode']));
   });
 
   it('an undesignated reader is named as the dependency, not guessed', async () => {
@@ -432,7 +447,7 @@ describe('authorize', () => {
       await callback(port, { code: fake.consent(BROADCASTER.id, ['channel:bot'], REDIRECT), state });
     }, {}, 'broadcaster');
     expect(outcome).toEqual({ status: 'missing_scopes', scopes: ['moderator:read:chatters', 'bits:read', 'channel:read:hype_train',
-      'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls'] });
+      'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls', 'channel:manage:raids', 'moderator:read:shield_mode'] });
   });
 
   it('expires when nobody comes back', async () => {

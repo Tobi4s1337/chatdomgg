@@ -19,8 +19,8 @@ import { GeometryFields, PREVIEW_ALGORITHM, RegionFields } from '../preview/sche
  * Founding and publishing an edition are team decisions: nothing in this service founds one on its own.
  */
 export const EDITIONS = {
-  '0': { id: 'ed-0', label: 'Edition 0', minObservedMs: 48 * 3_600_000, requiresReviewedTaxonomy: false, landByRaid: false },
-  I: { id: 'ed-1', label: 'Edition I', minObservedMs: 7 * 86_400_000, requiresReviewedTaxonomy: true, landByRaid: true },
+  '0': { id: 'ed-0', label: 'Edition 0', minObservedMs: 48 * 3_600_000, requiresReviewedTaxonomy: false, requiresReviewedNames: false, landByRaid: false },
+  I: { id: 'ed-1', label: 'Edition I', minObservedMs: 7 * 86_400_000, requiresReviewedTaxonomy: true, requiresReviewedNames: true, landByRaid: true },
 } as const;
 export type EditionNumber = keyof typeof EDITIONS;
 export const EditionNumberSchema = z.enum(['0', 'I']);
@@ -77,11 +77,24 @@ export const FoundingSchema = z.strictObject({
    * founding holdings it tombstoned as hidden. The founding night carries exactly that many hidden tombstones.
    */
   withheld: z.strictObject({ key: z.string().min(1).max(96), hidden: UIntSchema }),
+  /**
+   * The continent name table the founding was gated on. Names are applied when drawing, keyed by language code, so
+   * a later rename never touches this edition's land; the record only proves the table was reviewed at founding.
+   */
+  names: z.strictObject({ id: z.string().regex(/^language-names-[0-9]{1,4}$/), status: z.enum(['proposed', 'reviewed']), sha256: Sha256Schema }).optional(),
+  /**
+   * Present only on a rehearsal staged on a bench (`atlas:rehearse --stage`): the gates it skipped. A rehearsal is
+   * signed with a key made for it and thrown away, so it never verifies against the founder key.
+   */
+  rehearsal: z.strictObject({ waived: z.array(z.string().max(240)).max(8) }).optional(),
 });
 export type Founding = z.infer<typeof FoundingSchema>;
 
-/** Why a holding was granted. Founded kingdoms settle through their own producer (needs main's founded-record seam). */
-export const SettleReasonSchema = z.enum(['founding', 'candidate', 'raid', 'founded']);
+/**
+ * Why a holding was granted: the founding itself, a newly mapped kingdom, a witnessed raid into a small channel, or a
+ * claim: the channel's kingdom was founded in Chatdom (`founded`) or its streamer signed in (`signed-in`).
+ */
+export const SettleReasonSchema = z.enum(['founding', 'candidate', 'raid', 'founded', 'signed-in']);
 
 const Chain = { seq: UIntSchema, prev: Sha256Schema };
 export const LedgerLineSchema = z.discriminatedUnion('kind', [

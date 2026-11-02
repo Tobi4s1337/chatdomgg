@@ -1,6 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import { ServerError } from '@colyseus/core';
-import { starterCitizenLook, type KingdomId, type PersonId, type EventCause, type Vec3 } from '@chatdom/shared';
+import { starterCitizenLook, type KingdomId, type PersonId, type EventCause, type Vec3, type RaidGuestVisualMark } from '@chatdom/shared';
 import type { CollisionWorld, RealmAuthenticator, RealmBootstrap, RealmCapability, RealmDomainCommand, RealmIngressCheckpoint, RealmIngressTransition,
   RealmIntent, RealmPrincipal, RealmPrivateMessage, RealmPrivateState, RealmPublicDelivery, RealmReceipt, RealmRepository,
   RealmStoredOutcome, RealmTransientMessage, RealmWriterLease } from '@chatdom/shared/realm';
@@ -441,6 +441,12 @@ export class DurableKingdom implements RealmRoomHandle {
   }
 
   private refreshPresentations() { for (const [id, principal] of this.principals) this.presentWalker(id, principal); }
+
+  /** The raid authority decorates only actual current seats; it never supplies a person or a new walker. */
+  presentRaidGuest(walkerId: string, mark: RaidGuestVisualMark | null): void {
+    if (!this.current || !this.walkers.has(walkerId) || !this.principals.has(walkerId)) return;
+    for (const effects of this.effects) if (effects.readWalker(walkerId)) effects.presentRaidGuest?.(walkerId, mark);
+  }
 
   onLifecycle(listener: RealmLifecycleListener): () => void {
     this.lifecycles.add(listener);

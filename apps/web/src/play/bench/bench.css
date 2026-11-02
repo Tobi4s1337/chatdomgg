@@ -1,0 +1,6 @@
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #120c22; }
+#stage { position: fixed; inset: 0; cursor: pointer;
+  background: var(--bench-backdrop) center 38% / auto 112% no-repeat, linear-gradient(180deg, #3d3564, #7a5a6a 46%, #2b2436 47%, #1d1a26); }
+@media (max-aspect-ratio: 1/1) { #stage { background-size: auto 104%, auto; background-position: 50% 30%, 0 0; } }
+.bench-piece { padding: 6px 12px; font: 15px/1 'IM Fell English', Georgia, serif; color: #f4e3bf; border-radius: 6px;
+  background: linear-gradient(176deg, #7d5538, #5b3b27 45%, #3d2718); border: 1px solid #24160d; box-shadow: 0 0 0 1px #c99f5b55, 0 4px 10px #0c0a1c80; }

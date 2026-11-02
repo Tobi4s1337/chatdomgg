@@ -5,7 +5,6 @@
 .ritual-eyebrow{font-size:10px;letter-spacing:.18em;color:#e2c18b}
 .ritual-bench-head strong{font-size:30px;line-height:1.1;font-weight:400;color:#fbecd0}
 .ritual-caption{margin:0;min-height:20px;font-size:16px;font-style:italic;color:#f0d8ae}
-.ritual-simulated{margin-top:4px;padding:4px 9px;border:1px solid #c9a96a;border-radius:2px;background:#2b2530d9;color:#f1e3c2;font-size:11px;letter-spacing:.08em;text-shadow:none}
 .ritual-controls{position:absolute;left:28px;bottom:26px;width:380px;box-sizing:border-box;padding:16px 18px 13px;border:1px solid #aa8252;border-radius:4px 4px 12px 4px;background:repeating-linear-gradient(3deg,transparent 0 7px,#d3a56806 8px 9px),linear-gradient(120deg,#493a2cf2,#292822f2);box-shadow:0 5px 0 #181a19,0 12px 40px #13182466,inset 0 0 0 4px #241f1b80;display:flex;flex-direction:column;gap:11px}
 .ritual-row{display:flex;align-items:center;gap:10px}
 .ritual-controls button,.ritual-controls select{font:12px Georgia,serif;color:#f2dcb4;border:1px solid #a8875666;background:#d4b1790c;border-radius:3px;padding:8px 10px;cursor:pointer}

@@ -42,9 +42,14 @@ export function createKingdomForge(options:Options){
   function status():ForgeStatus{const frame=current?forgeRitualFrame(current.id,elapsed()):null;return {open,busy:preparing||!!current&&!current.committed,phase:preparing?'preparing':now<refusalUntil?'refusal':frame?.phase??'idle',title:now<refusalUntil?'The bellows need a breather':preparing?'Words in the fire':current?(current.approval?.title??forgeTitle(current.result.plan)):'What shall we make?',message:preparing?({'judging-words':'The runes circle the fire…',drafting:'The smith is listening to your wish…',assembling:'A shape is finding its place…','judging-piece':'The seal is weighing this new shape…'}[waitingStage]??'The runes circle the fire…'):current?.committed?'Made here. At home here.':frame?({words:'Words find their shape',blueprint:'A wish, drawn in light',pour:'The metal remembers',seal:'Fit for this home',strike:'',cool:'The colours of your kingdom',flight:'A gift for your home',landed:'Made here. At home here.'}[frame.phase]):'One small wish. Something that belongs to you.',privateError,maker:current?.committed&&!preparing?`First forged by ${current.provenance.makerName} · ${current.provenance.kingdomName}`:null,placed:placed.size,kept:kept.size,family,plaque:current?.approval?.plaque??null,runtime:fixture?'fixture':'codex'};}
   function publishStatus(){const value=status(),key=JSON.stringify(value);if(key!==lastStatus){lastStatus=key;options.onStatus?.(value);}}
   function save(){try{localStorage.setItem(storageKey,JSON.stringify({version:1,attached:[...placed.values()].map(p=>p.receipt),kept:[...kept.values()],pending:pendingReceipt}));}catch{privateError='This browser could not keep the piece after you leave.';}}
-  async function make(plan:HousePartPlan,selected:StyleKey){
-    const home=options.home(),socket=findForgeSockets(home.blueprint).find(s=>s.kind===plan.kind);if(!socket)throw new Error('Your home needs a clear place for this part.');
-    const result=assembleForge(plan,forgeStyleKit(selected),socket);checkForge(result,home.blueprint);
+  function receiptStyle(receipt:ForgePlacement):StyleKey{
+    const style=(['hearth','tide','grove'] as const).find(style=>forgeStyleKit(style,receipt.kitRevision).id===receipt.kitId);
+    if(!style)throw new Error('This piece needs its original registered style kit.');
+    return style;
+  }
+  async function make(plan:HousePartPlan,selected:StyleKey,kitRevision?:number){
+    const kit=forgeStyleKit(selected,kitRevision),home=options.home(),socket=findForgeSockets(home.blueprint,'street-home',kit.revision).find(s=>s.kind===plan.kind);if(!socket)throw new Error('Your home needs a clear place for this part.');
+    const result=assembleForge(plan,kit,socket);checkForge(result,home.blueprint);
     const mesh=await options.pool.submit({kind:'blueprint',blueprint:result.blueprint,materials:MATERIALS.materials,materialRevision:MATERIALS.revision,revision:++revision});
     if(disposed||mesh?.kind!=='asset')throw new Error('The anvil has gone cold.');
     if(socket.hostFingerprint!==homeFingerprint(options.home().blueprint))throw new Error('Your house changed while the smith was working. Your previous pieces are safe.');
@@ -89,8 +94,7 @@ export function createKingdomForge(options:Options){
     if(attached.length>3)return;
     if(envelope?.pending){const parsed=ForgePlacementSchema.safeParse(envelope.pending);if(parsed.success){const at=attached.findIndex(raw=>(raw as ForgePlacement)?.socketId===parsed.data.socketId);if(at>=0)attached.splice(at,1);attached.push(parsed.data);}}
     for(const raw of attached){try{const receipt=ForgePlacementSchema.parse(raw),home=options.home();if(receipt.hostFingerprint!==homeFingerprint(home.blueprint)){kept.set(receipt.id,receipt);continue;}
-      const style=receipt.kitId.replace('-native','') as StyleKey;if(!['hearth','tide','grove'].includes(style))continue;
-      const work=await make(receipt.plan,style);work.id=receipt.id;work.approval=receipt.approval;if(receipt.provenance)work.provenance=receipt.provenance;if(disposed){work.geometry.dispose();return;}install(work);
+      const work=await make(receipt.plan,receiptStyle(receipt),receipt.kitRevision);work.id=receipt.id;work.approval=receipt.approval;if(receipt.provenance)work.provenance=receipt.provenance;if(disposed){work.geometry.dispose();return;}install(work);
     }catch{const parsed=ForgePlacementSchema.safeParse(raw);if(parsed.success)kept.set(parsed.data.id,parsed.data);}}
     save();
   }
@@ -153,7 +157,7 @@ export function createKingdomForge(options:Options){
   async function refit(){
     if(preparing||current&&!current.committed)return;const receipt=[...kept.values()].at(-1);if(!receipt)return;
     preparing=true;privateError=null;publishStatus();
-    try{const work=await make(receipt.plan,receipt.kitId.replace('-native','') as StyleKey);work.id=receipt.id;work.approval=receipt.approval;if(receipt.provenance)work.provenance=receipt.provenance;install(work);current=work;view.setPiece(work.geometry,work.bounds,work.destination,work.home.yaw);fixed=21;options.sound.cue('wood');}
+    try{const work=await make(receipt.plan,receiptStyle(receipt),receipt.kitRevision);work.id=receipt.id;work.approval=receipt.approval;if(receipt.provenance)work.provenance=receipt.provenance;install(work);current=work;view.setPiece(work.geometry,work.bounds,work.destination,work.home.yaw);fixed=21;options.sound.cue('wood');}
     catch{privateError='This piece is kept safely. The house still needs a clear socket for it.';}finally{preparing=false;publishStatus();}
   }
   function castingHeat(){

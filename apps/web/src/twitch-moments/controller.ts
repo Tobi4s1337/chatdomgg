@@ -473,6 +473,27 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     push(beat, beat.holdUntil - startAt, now);
   }
 
+  /**
+   * The current raid in a restored snapshot, while its column is still coming through: a raider who followed the
+   * welcome link, or a page reloaded mid-show, finds the caravan where it really is. Its beat keeps the moment the
+   * realm committed the raid as its start (a beat this page was already playing keeps its own), takes no stage slot
+   * ahead of it and plays nothing it has missed. A recovered or finished raid restores nothing.
+   */
+  function joinRaidsOnRoad(facts: readonly TwitchMomentFact[], onRoad: ReadonlyMap<string, RaidBeat>): void {
+    const now = clock.now();
+    const raids = facts.filter(fact => fact.body.kind === 'raid' && fact.origin === expectedOrigin).sort((a, b) => b.seq - a.seq);
+    for (const fact of raids.slice(0, RAID_LIMITS.caravans).reverse()) {
+      const body = fact.body as MomentBodyOf<'raid'>;
+      // A fact committed after its window (a late delivery) never put a caravan on the road; it stays history.
+      if (fact.committedAt > body.displayUntil) continue;
+      const beat = onRoad.get(body.raidKey) ?? planRaid(`${body.key}@${fact.seq}`, body, Math.min(fact.committedAt, now), truncate, now);
+      if (now >= beat.sleepAt) continue;
+      raidSeen.add(body.raidKey);
+      if (raidSeen.size > CELEBRATED_LIMIT) raidSeen.delete(raidSeen.values().next().value!);
+      push(beat, beat.holdUntil - beat.startAt, now);
+    }
+  }
+
   /** A town fact's live beat (a sapling, a relight, the gate, a reward, the board, a decree) takes its turn on the stage. */
   function scheduleTown(fact: TwitchMomentFact, colourBefore: TownColour): void {
     const now = clock.now();
@@ -519,7 +540,9 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
       if (fact.data.seq > info.data.throughSeq) return fail('sequence');
       facts.push(fact.data);
     }
-    // Replace bounded state; a restored snapshot has no "just happened" beat.
+    // Replace bounded state; a restored snapshot has no "just happened" beat. A raid's column is the exception: it is
+    // on the road now, so it is joined where it is (below), never replayed from the gate.
+    const onRoad = new Map(pending(clock.now()).filter((b): b is RaidBeat => b.kind === 'raid').map(b => [b.raidKey, b]));
     cancelTransient(); current.clear(); homes.clear(); train = null; battle = null; town = createTownState();
     for (const fact of facts.sort((a, b) => a.seq - b.seq)) {
       applyState(fact, false);
@@ -528,6 +551,7 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     }
     metrics.restored += facts.length;
     epoch = info.data.epoch; watermark = info.data.throughSeq; status = 'ready';
+    joinRaidsOnRoad(facts, onRoad);
     return { accepted: true };
   }
 

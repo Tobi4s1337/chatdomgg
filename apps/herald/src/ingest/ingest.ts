@@ -1,4 +1,5 @@
-import { KingdomIdSchema, PersonIdSchema, PRESENCE_LEASE_MS, type KingdomId } from '@chatdom/shared';
+import { CHAT_COMMAND_MAX_AGE_MS, ChatCommandEnvelopeSchema, KingdomIdSchema, PersonIdSchema, PRESENCE_LEASE_MS,
+  type KingdomId } from '@chatdom/shared';
 import {
   AuthorizationRevokeEventSchema, ChatClearEventSchema, ChatClearUserMessagesEventSchema, ChatMessageDeleteEventSchema,
   ChatMessageEventSchema, type DeliveryFrame, matchesRequest, StreamOfflineEventSchema, StreamOnlineEventSchema,
@@ -13,6 +14,8 @@ import type { HeraldEventType, SubscriptionPlan } from './subscriptions';
 import { TtlMap } from './ttl';
 import { extractForgeWords, ForgeCommandHandoff, type ForgeCommandApplication } from '../forge/commands';
 import { speechParts, type RealmDeliverySink } from '../realm-delivery/sink';
+import { raidObservation } from './raids';
+import { chatCommand } from './commands';
 
 /** Twitch redelivers within minutes; ten minutes of keys covers a reconnect handover and its resends. */
 export const DEDUPE_TTL_MS = 600_000;
@@ -24,8 +27,9 @@ const PENDING_LIMIT = 2_048;
 /** Recent chat timings kept for the latency summary on health. */
 const TIMING_SAMPLES = 64;
 /**
- * A message stamped up to this far after our own receipt is accepted at its receipt time (it certainly
- * existed by then); further ahead is a clock we cannot trust and is rejected as future.
+ * Presence accepts a message stamped up to this far ahead at its receipt time (it certainly existed by then).
+ * Chat evidence separately retains the original provider time for exact authority windows; further ahead is
+ * a clock we cannot trust and is rejected as future.
  */
 export const CLOCK_SKEW_MS = 5_000;
 
@@ -61,6 +65,14 @@ export interface IngestCounters {
   spectacles: number;
   /** `!strike` messages relayed to the realm's battle. */
   strikes: number;
+  raids: number;
+  raidRefused: number;
+  commands: number;
+  commandCleanups: number;
+  commandRefused: number;
+  commandExpired: number;
+  /** The designated bot's own chat is not viewer activity, speech or game input. */
+  ignoredBotChat: number;
 }
 
 /** One chat act's timing, numbers only: when Twitch stamped it, when it reached us and when its frame went out. */
@@ -108,7 +120,7 @@ export interface IngestOptions {
   /** A `user.authorization.revoke` for a configured account. */
   readonly onAuthorizationRevoked: (userId: string) => void;
   /** Twitch disabled one of our subscriptions; `status` is its short code. */
-  readonly onSubscriptionRevoked: (type: HeraldEventType, status: string) => void;
+  readonly onSubscriptionRevoked: (plan: SubscriptionPlan, status: string) => void;
   /**
    * Where pushed stream changes go. The live source passes its stream tracker, which also holds the polled
    * Get Streams state; without one they go straight to the source.
@@ -132,16 +144,19 @@ export class ChatIngest {
   readonly #options: IngestOptions;
   readonly #now: () => number;
   readonly #forge: ForgeCommandHandoff | null;
+  readonly #botUserId: string | null;
   readonly #deliveries = new TtlMap<string, true>(DEDUPE_TTL_MS, DEDUPE_CAPACITY);
   readonly #messages = new TtlMap<string, true>(DEDUPE_TTL_MS, DEDUPE_CAPACITY);
   readonly #deleted = new TtlMap<string, true>(DEDUPE_TTL_MS, TOMBSTONE_CAPACITY);
   readonly #authorClears = new TtlMap<string, number>(DEDUPE_TTL_MS, AUTHOR_CLEAR_CAPACITY);
   readonly #pending = new Map<string, PendingActivity>();
+  readonly #pendingWrites = new Map<string, Promise<void>>();
+  readonly #pendingCommands = new Map<string, Promise<void>>();
   readonly #counters: IngestCounters = {
     deliveries: 0, duplicateDeliveries: 0, duplicateMessages: 0, malformed: 0, unverified: 0, notCovered: 0, future: 0,
     expired: 0, preStart: 0, tombstoned: 0, sharedChatGuests: 0, canceled: 0, pendingOverflow: 0, chatSubmitted: 0,
     deletes: 0, userClears: 0, roomClears: 0, streamChanges: 0, notLive: 0, revocations: 0, authorizationRevokes: 0,
-    spectacles: 0, strikes: 0,
+    spectacles: 0, strikes: 0, raids: 0, raidRefused: 0, commands: 0, commandCleanups: 0, commandRefused: 0, commandExpired: 0, ignoredBotChat: 0,
   };
   #roomClearedAt = -1;
   #lastChatAt: number | null = null;
@@ -152,6 +167,8 @@ export class ChatIngest {
     this.#options = options;
     this.#now = options.now ?? Date.now;
     this.kingdomId = KingdomIdSchema.parse(options.source.kingdomId);
+    const readers = [...new Set(options.plans.filter(plan => plan.type === 'channel.chat.message').map(plan => plan.condition.user_id))];
+    this.#botUserId = readers.length === 1 && readers[0] && readers[0] !== this.kingdomId ? readers[0] : null;
     this.startedAt = this.#now();
     this.#forge = options.forge ? new ForgeCommandHandoff(options.source, options.forge, this.#now) : null;
   }
@@ -170,13 +187,14 @@ export class ChatIngest {
     };
   }
 
-  /** One delivery from the shard. Returns once the observation, if any, has been queued. */
-  handle(frame: DeliveryFrame): void {
+  /** Evidence promises resolve only after durable enqueue; webhook transports await before acknowledging. */
+  handle(frame: DeliveryFrame): void | Promise<void> {
     const receivedAt = this.#now();
     this.#counters.deliveries++;
-    if (this.#deliveries.has(frame.meta.messageId, receivedAt)) {
+    const pendingWrite = this.#pendingWrites.get(frame.meta.messageId);
+    if (pendingWrite || this.#deliveries.has(frame.meta.messageId, receivedAt)) {
       this.#counters.duplicateDeliveries++;
-      return;
+      return pendingWrite;
     }
     const plan = this.#verify(frame);
     if (!plan) {
@@ -186,21 +204,22 @@ export class ChatIngest {
     this.#deliveries.set(frame.meta.messageId, true, receivedAt);
     if (frame.kind === 'revocation') {
       this.#counters.revocations++;
-      this.#options.onSubscriptionRevoked(plan.type, /^[a-z_]{1,64}$/.test(frame.subscription.status) ? frame.subscription.status : 'disabled');
+      this.#options.onSubscriptionRevoked(plan, /^[a-z_]{1,64}$/.test(frame.subscription.status) ? frame.subscription.status : 'disabled');
       return;
     }
     const at = this.#observedAt(frame.meta.at, receivedAt);
     switch (plan.type) {
       case 'channel.chat.notification': return this.#support(frame.event, frame.meta.messageId, at, receivedAt);
-      case 'channel.chat.message': return this.#chat(frame.event, at, receivedAt);
-      case 'channel.chat.message_delete': return this.#delete(frame.event, receivedAt);
-      case 'channel.chat.clear': return this.#roomClear(frame.event, at ?? receivedAt);
-      case 'channel.chat.clear_user_messages': return this.#userClear(frame.event, frame.meta.messageId, at, receivedAt);
+      case 'channel.chat.message': return this.#chat(frame.event, frame.meta.messageId, at, receivedAt, frame.meta.at);
+      case 'channel.chat.message_delete': return this.#delete(frame.event, frame.meta.messageId, at === null ? receivedAt : frame.meta.at, receivedAt);
+      case 'channel.chat.clear': return this.#roomClear(frame.event, frame.meta.messageId, at ?? receivedAt, at === null ? receivedAt : frame.meta.at);
+      case 'channel.chat.clear_user_messages': return this.#userClear(frame.event, frame.meta.messageId, at, receivedAt, at === null ? receivedAt : frame.meta.at);
       case 'stream.online': return this.#online(frame.event, at, frame.meta.messageId, receivedAt);
       case 'stream.offline': return this.#offline(frame.event, at, frame.meta.messageId, receivedAt);
       case 'user.authorization.revoke': return this.#authorizationRevoke(frame.event);
+      case 'channel.raid': return this.#raid(plan, frame.event, frame.meta.messageId, at === null ? null : frame.meta.at, receivedAt);
       case 'channel.bits.use': case 'channel.hype_train.begin': case 'channel.hype_train.progress': case 'channel.hype_train.end':
-      case 'channel.raid': case 'channel.follow': case 'channel.channel_points_custom_reward_redemption.add':
+      case 'channel.follow': case 'channel.channel_points_custom_reward_redemption.add':
       case 'channel.poll.begin': case 'channel.poll.progress': case 'channel.poll.end':
         return this.#spectacle(plan.type, frame.event, frame.meta.messageId, at, receivedAt);
     }
@@ -251,6 +270,41 @@ export class ChatIngest {
     void this.#options.realm?.support?.(result.data).catch(() => undefined);
   }
 
+  #raid(plan: SubscriptionPlan, raw: unknown, id: string, at: number | null, receivedAt: number): void | Promise<void> {
+    const sink = this.#options.realm;
+    if (!sink?.raid) return this.#spectacle('channel.raid', raw, id, at, receivedAt);
+    if (at === null) { this.#counters.future++; return; }
+    const observation = raidObservation(raw, { plan, kingdomId: this.kingdomId, id,
+      origin: this.#options.source.origin, occurredAt: at, receivedAt });
+    if (observation === IGNORED) return;
+    if (observation === null) { this.#counters.malformed++; return; }
+    return this.#durable(id, () => sink.raid!(observation), 'raids', 'raidRefused');
+  }
+
+  #durable(id: string, write: () => Promise<void>, accepted: 'raids' | 'commands' | 'commandCleanups', refused: 'raidRefused' | 'commandRefused'): Promise<void> {
+    if (this.#pendingWrites.size >= PENDING_LIMIT) {
+      this.#deliveries.delete(id); this.#counters[refused]++;
+      return Promise.reject(new Error('Herald evidence writes exceed pending capacity'));
+    }
+    const pending = Promise.resolve().then(write).then(() => {
+      this.#counters[accepted]++;
+    }, error => {
+      this.#deliveries.delete(id); this.#counters[refused]++;
+      throw error;
+    }).finally(() => { this.#pendingWrites.delete(id); });
+    this.#pendingWrites.set(id, pending);
+    return pending;
+  }
+
+  #commandCleanup(messageId: string, at: number, twitchId: string | null, targetMessageId: string | null): void | Promise<void> {
+    const sink = this.#options.realm;
+    if (!sink?.command) return;
+    const result = ChatCommandEnvelopeSchema.safeParse({ version: 1, kind: 'cleanup', origin: this.#options.source.origin,
+      kingdomId: this.kingdomId, messageId, at, twitchId, targetMessageId, reason: targetMessageId === null ? 'clear' : 'delete' });
+    if (!result.success) { this.#counters.malformed++; return; }
+    return this.#durable(messageId, () => sink.command!(result.data), 'commandCleanups', 'commandRefused');
+  }
+
   /**
    * Bits, the Hype Train and incoming raids. Verified frames from our own conduit; they do not wait for chat
    * coverage, because they light no window and name nobody beyond what Twitch made public.
@@ -267,16 +321,26 @@ export class ChatIngest {
     void this.#options.realm?.moment?.(result.data).catch(() => undefined);
   }
 
-  #chat(raw: unknown, at: number | null, receivedAt: number): void {
+  #chat(raw: unknown, deliveryId: string, at: number | null, receivedAt: number, providerAt: number): void | Promise<void> {
     const parsed = ChatMessageEventSchema.safeParse(raw);
     if (!parsed.success || parsed.data.broadcaster_user_id !== this.kingdomId) {
       this.#counters.malformed++;
       return;
     }
     const event = parsed.data;
-    if (this.#messages.has(event.message_id, receivedAt)) {
+    if (event.chatter_user_id === this.#botUserId) { this.#counters.ignoredBotChat++; return; }
+    const pendingCommand = this.#pendingCommands.get(event.message_id);
+    if (pendingCommand || this.#messages.has(event.message_id, receivedAt)) {
       this.#counters.duplicateMessages++;
-      return;
+      const pending = pendingCommand;
+      if (!pending) return;
+      if (this.#pendingWrites.size >= PENDING_LIMIT) {
+        this.#deliveries.delete(deliveryId); this.#counters.commandRefused++;
+        return Promise.reject(new Error('Herald evidence writes exceed pending capacity'));
+      }
+      const retryable = pending.catch(error => { this.#deliveries.delete(deliveryId); throw error; });
+      this.#pendingWrites.set(deliveryId, retryable);
+      return retryable.finally(() => { this.#pendingWrites.delete(deliveryId); });
     }
     this.#messages.set(event.message_id, true, receivedAt);
     if (event.source_broadcaster_user_id && event.source_broadcaster_user_id !== this.kingdomId) {
@@ -303,13 +367,26 @@ export class ChatIngest {
       this.#counters.notCovered++;
       return;
     }
+    let commandWrite: Promise<void> | undefined;
+    const sink = this.#options.realm;
+    const command = sink?.command ? chatCommand(raw, this.kingdomId, this.#options.source.origin, providerAt) : null;
+    if (command) {
+      if (receivedAt - at >= CHAT_COMMAND_MAX_AGE_MS) this.#counters.commandExpired++;
+      else {
+        commandWrite = this.#durable(deliveryId, () => sink!.command!(command), 'commands', 'commandRefused').catch(error => {
+          this.#messages.delete(event.message_id); throw error;
+        }).finally(() => { this.#pendingCommands.delete(event.message_id); });
+        this.#pendingCommands.set(event.message_id, commandWrite);
+      }
+    }
     if (this.#pending.size >= PENDING_LIMIT) {
       this.#counters.pendingOverflow++;
-      return;
+      return commandWrite;
     }
-    const observation: Observation = { kind: 'chat', messageId: event.message_id, at, author: { id: event.chatter_user_id, displayName: event.chatter_user_name } };
+    const observation: Observation = { kind: 'chat', messageId: event.message_id, at,
+      ...(providerAt !== at ? { providerAt } : {}), author: { id: event.chatter_user_id, displayName: event.chatter_user_name } };
     const input = this.#input(observation);
-    if (!input) return;
+    if (!input) return commandWrite;
     const pending: PendingActivity = { authorId: event.chatter_user_id, occurredAt: at, receivedAt, canceled: false };
     this.#pending.set(event.message_id, pending);
     this.#counters.chatSubmitted++;
@@ -334,6 +411,7 @@ export class ChatIngest {
         personId: event.chatter_user_id, messageId: event.message_id, words, observedAt: at,
       }, forgeValid);
     }, () => this.#settled(event.message_id, pending, 'rejected'));
+    return commandWrite;
   }
 
   #settled(messageId: string, pending: PendingActivity, result: SubmitResult): void {
@@ -345,7 +423,7 @@ export class ChatIngest {
     this.#timed++;
   }
 
-  #delete(raw: unknown, receivedAt: number): void {
+  #delete(raw: unknown, deliveryId: string, at: number, receivedAt: number): void | Promise<void> {
     const parsed = ChatMessageDeleteEventSchema.safeParse(raw);
     if (!parsed.success || parsed.data.broadcaster_user_id !== this.kingdomId) {
       this.#counters.malformed++;
@@ -358,9 +436,10 @@ export class ChatIngest {
     this.#forge?.cancel(parsed.data.message_id);
     const pending = this.#pending.get(parsed.data.message_id);
     if (pending) pending.canceled = true;
+    return this.#commandCleanup(deliveryId, at, parsed.data.target_user_id, parsed.data.message_id);
   }
 
-  #roomClear(raw: unknown, at: number): void {
+  #roomClear(raw: unknown, deliveryId: string, at: number, providerAt: number): void | Promise<void> {
     const parsed = ChatClearEventSchema.safeParse(raw);
     if (!parsed.success || parsed.data.broadcaster_user_id !== this.kingdomId) {
       this.#counters.malformed++;
@@ -372,9 +451,10 @@ export class ChatIngest {
     this.#options.realm?.clear(this.kingdomId);
     this.#forge?.clear();
     for (const pending of this.#pending.values()) pending.canceled = true;
+    return this.#commandCleanup(deliveryId, providerAt, null, null);
   }
 
-  #userClear(raw: unknown, deliveryId: string, at: number | null, receivedAt: number): void {
+  #userClear(raw: unknown, deliveryId: string, at: number | null, receivedAt: number, providerAt: number): void | Promise<void> {
     const parsed = ChatClearUserMessagesEventSchema.safeParse(raw);
     if (!parsed.success || parsed.data.broadcaster_user_id !== this.kingdomId) {
       this.#counters.malformed++;
@@ -389,6 +469,7 @@ export class ChatIngest {
     for (const pending of this.#pending.values()) if (pending.authorId === target) pending.canceled = true;
     // Chatdom's finite protective hold: the window goes dark now and stays dark for ten minutes.
     this.#submit({ kind: 'user_clear', eventId: deliveryId, at: clearedAt, userId: target });
+    return this.#commandCleanup(deliveryId, providerAt, target, null);
   }
 
   /** The night's evidence for the realm: the gate opens when a broadcast starts and rests when it ends. */

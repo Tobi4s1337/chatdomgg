@@ -1,3 +1,4 @@
+import type { PanelGiftShelf, PanelSettings } from '../../../packages/shared/src/panel';
 import type { PassportDisclosureView, PassportTransport } from '@chatdom/ui/passport';
 
 // The panel's local view model. It describes only what the panel may show and why;
@@ -35,19 +36,22 @@ export interface Kingdom {
 }
 
 export interface PictureProvenance {
-  readonly origin: 'simulated';
+  readonly origin: 'simulated' | 'realm' | 'sketch';
   /** Human words for the caption. */
   readonly caption: string;
-  readonly render: { readonly route: string; readonly seed: string; readonly hour: number; readonly camera: string };
+  readonly render?: { readonly route: string; readonly seed: string; readonly hour: number; readonly camera: string };
   readonly capturedOn: string;
 }
 
 export type Picture =
   | {
+    /** `url` stays readable until a second newer still replaces it, so the view can dissolve from one to the next. */
     readonly kind: 'still'; readonly url: string; readonly alt: string; readonly width: number; readonly height: number;
     /** The same moment framed for a phone held upright, when the source made one. */
     readonly portrait: { readonly url: string; readonly width: number; readonly height: number } | null;
     readonly provenance: PictureProvenance;
+    /** Where the viewer's own window glows in this painting, 0..1 across and down; only while it is lit in it. */
+    readonly mark?: { readonly x: number; readonly y: number };
   }
   | { readonly kind: 'unavailable'; readonly reason: string };
 
@@ -58,10 +62,11 @@ export type LightStep = 'sharing' | 'confirming';
 
 /**
  * The viewer's window. Only an authority may produce `lit`: the SIMULATED fixture
- * (which says so) or, one day, the kingdom's own server. Twitch identity, opaque
+ * (which says so) or the kingdom's own server. Twitch identity, opaque
  * IDs, decoded tokens, URLs and storage never do.
  */
 export type Light =
+  | { readonly kind: 'ready' }
   | { readonly kind: 'outside-twitch' }
   | { readonly kind: 'logged-out' }
   | { readonly kind: 'unshared' }
@@ -69,7 +74,13 @@ export type Light =
   | { readonly kind: 'refused' }
   | { readonly kind: 'pending'; readonly choice: LightChoice; readonly step: LightStep }
   /** Confirmed present. `as: 'guest'` when the person already keeps three homes elsewhere. */
-  | { readonly kind: 'lit'; readonly choice: LightChoice; readonly as: 'citizen' | 'guest'; readonly by: 'simulation' }
+  | { readonly kind: 'lit'; readonly choice: LightChoice; readonly as: 'citizen' | 'guest' | 'castle'; readonly by: 'simulation' | 'realm' }
+  /** A private moderation hold; no public accusation is shown. */
+  | { readonly kind: 'held' }
+  /** The viewer asked to be forgotten, and the realm cannot lift that hold with a new tap yet. */
+  | { readonly kind: 'forgotten' }
+  /** Waiting land, with a private pledge outside the three-home cap. */
+  | { readonly kind: 'unfounded'; readonly pledged: boolean; readonly band: string | null }
   /** The stream is resting: no window is lit from the panel until it returns. */
   | { readonly kind: 'resting'; readonly choice: LightChoice | null }
   /** The kingdom stopped answering; the light's state is unknown, not assumed. */
@@ -182,7 +193,6 @@ export type PassportSource =
     /** Kingdom names the card already shows publicly (its disclosed homes), so a road can say where it began. */
     readonly places: ReadonlyMap<string, string>;
     readonly disclosure: PassportDisclosureView | null;
-    readonly simulated: boolean;
   }
   | { readonly kind: 'unavailable'; readonly reason: string };
 
@@ -331,12 +341,33 @@ export const ALL_SECTIONS: Sections = { night: true, home: true, acts: true, she
 /** Where "Walk in" leads: the kingdom's own entry gate, on chatdom.gg, in a new tab. */
 export type Entry = { readonly kind: 'gate'; readonly path: string } | { readonly kind: 'none' };
 
+export type Privacy =
+  | { readonly kind: 'loading' | 'unavailable' }
+  | { readonly kind: 'ready' | 'pending'; readonly quiet: boolean; readonly projection?: 'pending' | 'applied'; readonly forgetAvailable?: boolean; readonly renewal?: Renewal }
+  /** What the realm erased and what it kept, as the realm's own kinds; the panel words them. */
+  | { readonly kind: 'forgotten'; readonly erased: readonly ForgottenKind[]; readonly retained: readonly RetainedKind[]; readonly renewal?: Renewal };
+/**
+ * Whether taking your place after "Forget me" can light the window again, as the realm says. `pending` means the
+ * forget hold stays for now: the panel says the window stays dark instead of offering a light it cannot give.
+ */
+export type Renewal = 'applied' | 'pending';
+export const FORGOTTEN_KINDS = ['light', 'name', 'quiet', 'pledges', 'observations'] as const;
+export const RETAINED_KINDS = ['homes', 'nights', 'gifts'] as const;
+export type ForgottenKind = typeof FORGOTTEN_KINDS[number];
+export type RetainedKind = typeof RETAINED_KINDS[number];
+
 export interface PanelSnapshot {
+  readonly gifts?: PanelGiftShelf;
+  readonly privacy?: Privacy;
   readonly source: SourceMark;
   readonly connection: Connection;
   /** Null when no service has told us which kingdom this channel holds. */
   readonly kingdom: Kingdom | null;
+  /** The streamer's Twitch display name, told only while their channel has no kingdom yet. */
+  readonly streamer?: string | null;
   readonly stream: 'live' | 'resting' | 'unknown';
+  readonly kingdomLights?: number | null;
+  readonly moment?: string | null;
   readonly picture: Picture;
   readonly light: Light;
   readonly tonight: Tonight;
@@ -349,6 +380,7 @@ export interface PanelSnapshot {
   readonly entry: Entry;
   /** The streamer's choice of sections, as the kingdom carries it to every panel. */
   readonly sections: Sections;
+  readonly settings?: PanelSettings;
 }
 
 /** One adapter per mounted panel. Actions report back only through the snapshot. */
@@ -360,8 +392,16 @@ export interface PanelAdapter {
   /** Ask Twitch to share who the viewer is with Chatdom, so their own card can open. Gesture only. */
   requestIdentity?(): void;
   /** One tap on the crowd act: one command, under chat's limits. Gesture only. */
+  requestPrivacy?(): void;
+  requestQuiet?(quiet: boolean): void;
+  requestForget?(): void;
   requestAct(option: string): void;
   /** Ask Twitch to confirm Bits for a shelf product. Gesture only; nothing is granted here. */
   requestProduct(sku: string): void;
+  chooseGiftTarget?(plotId: string): void;
+  resolveGiftIntent?(intentId: string): void;
+  moreGiftChoices?(): void;
+  cancelGiftChoice?(): void;
+  resetGift?(): void;
   dispose(): void;
 }

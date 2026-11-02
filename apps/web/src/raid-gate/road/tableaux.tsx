@@ -31,7 +31,6 @@ function Stage(props: { label: string; words: Words; simulated: boolean; childre
         <svg viewBox="0 0 1400 360" preserveAspectRatio="xMinYMax meet">{props.children}</svg>
       </div>
     </Show>
-    <Show when={props.simulated}><p class="rr-chip"><span class="rg-pip" />SIMULATED</p></Show>
   </section>;
 }
 

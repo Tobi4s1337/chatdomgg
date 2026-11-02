@@ -3,7 +3,7 @@ import { AVATAR_RIG, AVATAR_SOCKETS, VOXEL_METRES, type AvatarAttachmentId, type
 import { geometryFromChunks, type VoxelRenderState } from '@chatdom/render';
 import { VoxelWorkerPool } from '@chatdom/voxel';
 import { createCitizenCapeRenderer } from './capes';
-import { createFootstepState, stepFootsteps, type FootstepState } from './footsteps';
+import { createFootstepState, stepFootsteps, type FootstepFloor, type FootstepGround, type FootstepState } from './footsteps';
 import { meshStyledCitizen, STYLED_CITIZEN_RIG, type StyledCitizenLook } from './style-adapter';
 import { createStyledCitizenMaterial, styledCitizenGeometry } from './style-material';
 
@@ -41,6 +41,10 @@ export interface CitizenSample {
   readonly waveWeight?: number;
   /** Standing rise onto the toes, from 0 to 1. Ease this value at the call site. */
   readonly tiptoe?: number;
+  /** The drawn ground under this walker while its body follows it (walk/ground `groundFor`): no sole goes under it. */
+  readonly ground?: FootstepGround | undefined;
+  /** Solid floors and stairs near the feet (walk/ground `floorAt`). */
+  readonly floor?: FootstepFloor | undefined;
 }
 export interface CitizenFootfall {
   readonly id: string;
@@ -172,7 +176,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   function pose(sample: CitizenSample, seated: number, heading: number, weights: Record<AnimatedGesture, number>, rig: typeof AVATAR_RIG, footstepState: FootstepState, now: number) {
     const locomotion = stepFootsteps(footstepState, { position: sample.position, heading, distance: sample.distance,
       moving: sample.moving * (1 - seated) * (1 - Math.max(0, Math.min(1, sample.tiptoe ?? 0))),
-      speed: sample.speed ?? sample.moving * 1.2, timeMs: now });
+      speed: sample.speed ?? sample.moving * 1.2, timeMs: now, ground: sample.ground, floor: sample.floor });
     // Arms and torso follow the same distance-driven cycle as the planted legs.
     const phase = footstepState.phase * Math.PI * 2;
     const gait = Math.max(0, Math.min(1, sample.moving)) * (1 - seated);
@@ -212,7 +216,8 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     };
     root.makeRotationY(heading); root.setPosition(...sample.position);
     root.elements[12]! += Math.sin(heading) * toeShift;
-    root.elements[13]! += toeLift;
+    // Standing on a slope the level pose rises just enough that neither sole cuts the ground; planted feet own it as they walk.
+    root.elements[13]! += toeLift + locomotion.lift * (1 - locomotion.blend) * (1 - seated);
     root.elements[14]! += Math.cos(heading) * toeShift;
     for (const fall of locomotion.footfalls) footfalls.push({ id: sample.id, side: fall.side, position: [fall.sole.x, fall.sole.y, fall.sole.z] });
     const legBlend = locomotion.blend;
