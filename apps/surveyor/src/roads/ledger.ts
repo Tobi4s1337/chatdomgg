@@ -4,8 +4,9 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { AtlasRaidSchema, type AtlasRaid } from '@chatdom/shared';
+import { AtlasRaidSchema, EpochMsSchema, type AtlasRaid } from '@chatdom/shared';
 import { z } from 'zod';
+import { RaidPairSchema, type RaidPair } from '../export/schema';
 
 /** Receipt-time SSE and timestamped observations can describe the same public raid. */
 export const ROAD_DEDUPE_WINDOW_MS = 30_000;
@@ -25,8 +26,15 @@ export interface RoadSummary {
   to: string;
   raids: number;
   viewers: number;
-  firstAt: number;
+  /** Historical start is unknown when aggregate evidence includes unlocated raids. */
+  firstAt: number | null;
+  firstObservedEventAt: number | null;
+  /** True describes the retained observation set only; any aggregate makes lifetime history unknown. */
+  historyStartKnown: boolean;
   lastAt: number;
+  observedRaids: number;
+  observedViewers: number;
+  countBasis: 'observations' | 'at-least';
   /** Canonical observations only, in durable observation order. */
   events: readonly AtlasRaid[];
 }
@@ -39,6 +47,30 @@ const CheckpointSchema = z.strictObject({
   cursor: CursorSchema,
 });
 type Checkpoint = z.infer<typeof CheckpointSchema>;
+const ProvenanceSchema = z.string().min(1).max(128).regex(/^[\x20-\x7e]+$/);
+const ReferenceSchema = z.string().min(1).max(256);
+export interface RoadObservationOptions {
+  checkpoint?: Checkpoint;
+  recovered?: boolean;
+  /** Opaque identity of the collector, shared with its aggregate snapshots. */
+  provenance?: string;
+}
+export interface RoadReconcileOptions {
+  provenance: string;
+  cutAt: number;
+  reference: string;
+  checkpoint?: Checkpoint;
+}
+
+const AggregateSchema = z.strictObject({
+  kind: z.literal('aggregate'),
+  pair: RaidPairSchema,
+  provenance: ProvenanceSchema,
+  cutAt: EpochMsSchema,
+  reference: ReferenceSchema,
+  checkpoint: CheckpointSchema.optional(),
+}).refine((body) => body.cutAt >= body.pair.lastAt, 'An aggregate cut cannot precede its last raid.');
+type Aggregate = z.infer<typeof AggregateSchema>;
 
 const BodySchema = z.discriminatedUnion('kind', [
   z.strictObject({
@@ -46,8 +78,10 @@ const BodySchema = z.discriminatedUnion('kind', [
     raid: AtlasRaidSchema,
     canonicalId: z.string().min(1).max(128),
     recovered: z.boolean(),
+    provenance: ProvenanceSchema.optional(),
     checkpoint: CheckpointSchema.optional(),
   }),
+  AggregateSchema,
   z.strictObject({ kind: z.literal('checkpoint'), checkpoint: CheckpointSchema }),
 ]);
 type Body = z.infer<typeof BodySchema>;
@@ -96,6 +130,27 @@ interface Canonical {
   raid: AtlasRaid;
   /** All delivery sources already represented, including retained aliases. */
   sources: Set<AtlasRaid['source']>;
+  /** Original SSE witnesses survive aliases whose canonical representative has another clock. */
+  sseWitnesses: { raid: AtlasRaid; provenance: string }[];
+}
+
+function aggregateId(body: Aggregate): string {
+  return digest(JSON.stringify([body.provenance, body.reference, body.pair.fromKingdomId, body.pair.toKingdomId]));
+}
+
+function sameAggregate(first: Aggregate, next: Aggregate): boolean {
+  return first.cutAt === next.cutAt && first.pair.raids === next.pair.raids
+    && first.pair.viewersTotal === next.pair.viewersTotal && first.pair.lastAt === next.pair.lastAt;
+}
+
+function witnessKey(raid: AtlasRaid, provenance?: string): string {
+  return JSON.stringify([raid.source, provenance ?? null]);
+}
+
+function safeAdd(first: number, second: number): number {
+  const total = first + second;
+  if (!Number.isSafeInteger(total)) throw new Error('A road total exceeds the safe integer limit.');
+  return total;
 }
 
 /**
@@ -112,9 +167,11 @@ export class RoadLedger {
   private poisoned = false;
   private head = GENESIS;
   private seq = 0;
-  private readonly ids = new Map<string, { raid: AtlasRaid; canonical: Canonical }>();
+  private readonly ids = new Map<string, { raid: AtlasRaid; canonical: Canonical; witnesses: Set<string> }>();
   private readonly canonical = new Map<string, Canonical>();
   private readonly directed = new Map<string, Canonical[]>();
+  private readonly aggregates = new Map<string, Aggregate>();
+  private readonly directedAggregates = new Map<string, Aggregate[]>();
   private readonly summaries = new Map<string, RoadSummary>();
   private readonly checkpoints = new Map<string, string>();
 
@@ -182,13 +239,15 @@ export class RoadLedger {
     }
   }
 
-  observe(input: unknown, options: { checkpoint?: Checkpoint; recovered?: boolean } = {}): RoadReceipt {
+  observe(input: unknown, options: RoadObservationOptions = {}): RoadReceipt {
     this.assertOpen();
     const raid = AtlasRaidSchema.parse(input);
     assertWitnessed(raid);
     const checkpoint = options.checkpoint === undefined ? undefined : CheckpointSchema.parse(options.checkpoint);
+    const provenance = options.provenance === undefined ? undefined : ProvenanceSchema.parse(options.provenance);
     return this.observeInternal(raid, {
       recovered: z.boolean().parse(options.recovered ?? false), ...(checkpoint ? { checkpoint } : {}),
+      ...(provenance === undefined ? {} : { provenance }),
     }, true);
   }
 
@@ -197,7 +256,7 @@ export class RoadLedger {
    * has no yield, callback or public observe() call, so no other JS stack can inspect its temporary indexes.
    * One final fsync precedes every returned receipt. An uncertain prefix poisons all reads and writes.
    */
-  observeBatch(inputs: readonly unknown[], options: { checkpoint?: Checkpoint; recovered?: boolean } = {}): RoadReceipt[] {
+  observeBatch(inputs: readonly unknown[], options: RoadObservationOptions = {}): RoadReceipt[] {
     this.assertOpen();
     if (!Array.isArray(inputs) || inputs.length < 1 || inputs.length > 200) {
       throw new Error('A road observation batch must contain between 1 and 200 raids.');
@@ -210,6 +269,7 @@ export class RoadLedger {
     }
     const checkpoint = options.checkpoint === undefined ? undefined : CheckpointSchema.parse(options.checkpoint);
     const recovered = z.boolean().parse(options.recovered ?? false);
+    const provenance = options.provenance === undefined ? undefined : ProvenanceSchema.parse(options.provenance);
     if (checkpoint) this.assertCheckpoint(checkpoint);
     const initialSeq = this.seq;
     let flushing = false;
@@ -218,6 +278,7 @@ export class RoadLedger {
       for (let index = 0; index < raids.length; index++) {
         receipts.push(this.observeInternal(raids[index]!, {
           recovered, ...(checkpoint && index === raids.length - 1 ? { checkpoint } : {}),
+          ...(provenance === undefined ? {} : { provenance }),
         }, false));
       }
       flushing = true;
@@ -229,22 +290,77 @@ export class RoadLedger {
     }
   }
 
-  private observeInternal(raid: AtlasRaid, options: { checkpoint?: Checkpoint; recovered: boolean }, sync: boolean): RoadReceipt {
+  private observeInternal(raid: AtlasRaid, options: RoadObservationOptions & { recovered: boolean }, sync: boolean): RoadReceipt {
     const checkpoint = options.checkpoint;
     if (checkpoint) this.assertCheckpoint(checkpoint);
     const existing = this.ids.get(raid.id);
     const canonical = this.match(raid);
     const canonicalId = canonical?.raid.id ?? raid.id;
     // An already durable delivery needs no new record unless its source or cursor adds information.
-    if (!existing || !existing.canonical.sources.has(raid.source) || (checkpoint && checkpoint.cursor !== checkpoint.after)) {
+    if (!existing?.witnesses.has(witnessKey(raid, options.provenance)) || (checkpoint && checkpoint.cursor !== checkpoint.after)) {
       const body: Body = {
         kind: 'observation', raid, canonicalId, recovered: options.recovered ?? false,
         ...(checkpoint ? { checkpoint } : {}),
+        ...(options.provenance === undefined ? {} : { provenance: options.provenance }),
       };
       this.append(body, sync);
     }
     const summary = this.summaries.get(roadKey(raid.fromKingdomId, raid.toKingdomId))!;
     return { kind: canonical ? 'duplicate' : 'stored', raidId: raid.id, road: summary.key, raids: summary.raids };
+  }
+
+  /**
+   * Retain immutable snapshot baselines with their own cuts; never fabricate individual raids.
+   * A dominated envelope adds no evidence and is not accepted as a stored identity. Only stored
+   * identities carry the immutable-facts conflict guarantee; duplicate receipts may also mean dominated.
+   */
+  reconcile(pairs: readonly RaidPair[], options: RoadReconcileOptions): { stored: number; duplicates: number } {
+    this.assertOpen();
+    if (!Array.isArray(pairs) || pairs.length < 1 || pairs.length > 200) {
+      throw new Error('A road aggregate batch must contain between 1 and 200 pairs.');
+    }
+    const provenance = ProvenanceSchema.parse(options.provenance);
+    const cutAt = EpochMsSchema.parse(options.cutAt);
+    const reference = ReferenceSchema.parse(options.reference);
+    const checkpoint = options.checkpoint === undefined ? undefined : CheckpointSchema.parse(options.checkpoint);
+    if (checkpoint) this.assertCheckpoint(checkpoint);
+    const pending = new Map<string, Aggregate>();
+    const bodies = pairs.map((pair) => {
+      const body = AggregateSchema.parse({ kind: 'aggregate', pair, provenance, cutAt, reference });
+      const id = aggregateId(body);
+      const existing = pending.get(id) ?? this.aggregates.get(id);
+      if (existing && !sameAggregate(existing, body)) throw new Error('Conflicting road aggregate identity.');
+      pending.set(id, body);
+      return body;
+    });
+    const initialSeq = this.seq;
+    let flushing = false;
+    try {
+      let stored = 0;
+      let duplicates = 0;
+      for (let index = 0; index < bodies.length; index++) {
+        const body = bodies[index]!;
+        const existing = this.aggregates.has(aggregateId(body));
+        const baselines = this.directedAggregates.get(`${body.pair.fromKingdomId}>${body.pair.toKingdomId}`) ?? [];
+        const dominated = baselines.some((baseline) => baseline.provenance === body.provenance
+          && baseline.cutAt <= body.cutAt && baseline.pair.raids >= body.pair.raids
+          && baseline.pair.viewersTotal >= body.pair.viewersTotal && baseline.pair.lastAt >= body.pair.lastAt);
+        const duplicate = existing || dominated;
+        if (duplicate) duplicates++; else stored++;
+        const tail = checkpoint && index === bodies.length - 1 ? checkpoint : undefined;
+        if (!duplicate) {
+          this.append({ ...body, ...(tail ? { checkpoint: tail } : {}) }, false);
+        } else if (tail && tail.cursor !== tail.after) {
+          this.append({ kind: 'checkpoint', checkpoint: tail }, false);
+        }
+      }
+      flushing = true;
+      if (this.seq !== initialSeq) fsyncSync(this.fd!);
+      return { stored, duplicates };
+    } catch (error) {
+      if (flushing || this.seq !== initialSeq) this.poisoned = true;
+      throw error;
+    }
   }
 
   /** A feed may advance without observing an event; CAS prevents racing or stale pollers. */
@@ -316,6 +432,7 @@ export class RoadLedger {
 
   private append(body: Body, sync = true): void {
     body = BodySchema.parse(body);
+    this.assertSafeTotals(body);
     const payload = { version: 1 as const, seq: this.seq, previous: this.head, body };
     const hash = digest(JSON.stringify(payload));
     const bytes = Buffer.from(`${JSON.stringify({ ...payload, hash })}\n`);
@@ -350,6 +467,9 @@ export class RoadLedger {
         if ((matched?.raid.id ?? line.body.raid.id) !== line.body.canonicalId) {
           throw new Error('Invalid road ledger alias.');
         }
+      } else if (line.body.kind === 'aggregate') {
+        const existing = this.aggregates.get(aggregateId(line.body));
+        if (existing && !sameAggregate(existing, line.body)) throw new Error('Conflicting road aggregate identity.');
       }
       if (line.body.checkpoint) this.assertCheckpoint(line.body.checkpoint);
       this.apply(line.body);
@@ -365,7 +485,7 @@ export class RoadLedger {
       const { raid, canonicalId } = body;
       let canonical = this.canonical.get(canonicalId);
       if (!canonical) {
-        canonical = { raid, sources: new Set() };
+        canonical = { raid, sources: new Set(), sseWitnesses: [] };
         this.canonical.set(raid.id, canonical);
         const directedKey = `${raid.fromKingdomId}>${raid.toKingdomId}`;
         const directed = this.directed.get(directedKey) ?? [];
@@ -375,15 +495,133 @@ export class RoadLedger {
         const previous = this.summaries.get(key);
         const time = raidTime(raid);
         const [from, to] = key.split('~') as [string, string];
+        const firstObservedEventAt = Math.min(previous?.firstObservedEventAt ?? time, time);
+        const observedRaids = (previous?.observedRaids ?? 0) + 1;
+        const observedViewers = (previous?.observedViewers ?? 0) + raid.viewers;
         this.summaries.set(key, {
-          key, from, to, raids: (previous?.raids ?? 0) + 1, viewers: (previous?.viewers ?? 0) + raid.viewers,
-          firstAt: Math.min(previous?.firstAt ?? time, time), lastAt: Math.max(previous?.lastAt ?? time, time),
+          key, from, to, raids: observedRaids, viewers: observedViewers,
+          firstAt: firstObservedEventAt, firstObservedEventAt, historyStartKnown: true,
+          observedRaids, observedViewers, countBasis: 'observations',
+          lastAt: Math.max(previous?.lastAt ?? time, time),
           events: [...(previous?.events ?? []), raid],
         });
       }
       canonical.sources.add(raid.source);
-      if (!this.ids.has(raid.id)) this.ids.set(raid.id, { raid, canonical });
+      let delivery = this.ids.get(raid.id);
+      if (!delivery) {
+        delivery = { raid, canonical, witnesses: new Set() };
+        this.ids.set(raid.id, delivery);
+      }
+      const witness = witnessKey(raid, body.provenance);
+      if (!delivery.witnesses.has(witness)) {
+        delivery.witnesses.add(witness);
+        if (raid.source === 'surveyor-sse' && body.provenance !== undefined) {
+          canonical.sseWitnesses.push({ raid, provenance: body.provenance });
+        }
+      }
+      this.refreshAggregateSummary(raid.fromKingdomId, raid.toKingdomId);
+    } else if (body.kind === 'aggregate') {
+      const id = aggregateId(body);
+      if (!this.aggregates.has(id)) {
+        this.aggregates.set(id, body);
+        const key = `${body.pair.fromKingdomId}>${body.pair.toKingdomId}`;
+        const directed = this.directedAggregates.get(key) ?? [];
+        directed.push(body);
+        this.directedAggregates.set(key, directed);
+        this.refreshAggregateSummary(body.pair.fromKingdomId, body.pair.toKingdomId);
+      }
     }
     if (body.checkpoint) this.checkpoints.set(body.checkpoint.source, body.checkpoint.cursor);
+  }
+
+  /** Only the changed undirected road is revisited; event-only roads keep their incremental fast path. */
+  private refreshAggregateSummary(first: string, second: string): void {
+    const forward = this.directedAggregates.get(`${first}>${second}`) ?? [];
+    const reverse = this.directedAggregates.get(`${second}>${first}`) ?? [];
+    if (forward.length === 0 && reverse.length === 0) return;
+    const key = roadKey(first, second);
+    const previous = this.summaries.get(key);
+    const totals = this.aggregateTotals(first, second);
+    const [from, to] = key.split('~') as [string, string];
+    const firstObservedEventAt = previous?.firstObservedEventAt ?? null;
+    this.summaries.set(key, {
+      key, from, to, ...totals, firstObservedEventAt,
+      firstAt: totals.historyStartKnown ? firstObservedEventAt : null,
+      observedRaids: previous?.observedRaids ?? 0,
+      observedViewers: previous?.observedViewers ?? 0,
+      countBasis: 'at-least', events: previous?.events ?? [],
+    });
+  }
+
+  private assertSafeTotals(body: Body): void {
+    if (body.kind === 'checkpoint') return;
+    const fact = body.kind === 'observation' ? body.raid : body.pair;
+    const previous = this.summaries.get(roadKey(fact.fromKingdomId, fact.toKingdomId));
+    if (body.kind === 'observation' && !this.canonical.has(body.canonicalId)) {
+      safeAdd(previous?.observedRaids ?? 0, 1);
+      safeAdd(previous?.observedViewers ?? 0, body.raid.viewers);
+    }
+    if (body.kind === 'aggregate'
+      || this.directedAggregates.has(`${fact.fromKingdomId}>${fact.toKingdomId}`)
+      || this.directedAggregates.has(`${fact.toKingdomId}>${fact.fromKingdomId}`)) {
+      this.aggregateTotals(fact.fromKingdomId, fact.toKingdomId, body);
+    }
+  }
+
+  /** A candidate projection lets overflow fail before any bytes are appended. */
+  private aggregateTotals(first: string, second: string, candidate?: Exclude<Body, { kind: 'checkpoint' }>): {
+    raids: number; viewers: number; lastAt: number; historyStartKnown: boolean;
+  } {
+    let raids = 0;
+    let viewers = 0;
+    let lastAt = this.summaries.get(roadKey(first, second))?.lastAt ?? 0;
+    let historyStartKnown = true;
+    for (const [from, to] of [[first, second], [second, first]] as const) {
+      const directedKey = `${from}>${to}`;
+      let observations = this.directed.get(directedKey) ?? [];
+      let baselines = this.directedAggregates.get(directedKey) ?? [];
+      const fact = candidate?.kind === 'observation' ? candidate.raid : candidate?.pair;
+      if (fact?.fromKingdomId === from && fact.toKingdomId === to) {
+        if (candidate?.kind === 'aggregate' && !this.aggregates.has(aggregateId(candidate))) {
+          baselines = [...baselines, candidate];
+        } else if (candidate?.kind === 'observation') {
+          const current = this.canonical.get(candidate.canonicalId);
+          const witnesses = [...(current?.sseWitnesses ?? [])];
+          if (candidate.raid.source === 'surveyor-sse' && candidate.provenance !== undefined) {
+            witnesses.push({ raid: candidate.raid, provenance: candidate.provenance });
+          }
+          const next: Canonical = { raid: current?.raid ?? candidate.raid, sources: current?.sources ?? new Set(), sseWitnesses: witnesses };
+          observations = current ? observations.map((item) => item === current ? next : item) : [...observations, next];
+          lastAt = Math.max(lastAt, raidTime(next.raid));
+        }
+      }
+      const observedViewers = observations.reduce((sum, item) => safeAdd(sum, item.raid.viewers), 0);
+      if (baselines.length > 0) historyStartKnown = false;
+      let directedRaids = observations.length;
+      let directedViewers = observedViewers;
+      for (const baseline of baselines) {
+        let postCutRaids = 0;
+        let postCutViewers = 0;
+        for (const canonical of observations) {
+          // A recorder or herald clock cannot establish that the collector saw this after its own cut.
+          let witnessedViewers: number | null = null;
+          for (const witness of canonical.sseWitnesses) {
+            if (witness.provenance === baseline.provenance && witness.raid.observedAt > baseline.cutAt) {
+              witnessedViewers = Math.max(witnessedViewers ?? 0, witness.raid.viewers);
+            }
+          }
+          if (witnessedViewers !== null) {
+            postCutRaids++;
+            postCutViewers = safeAdd(postCutViewers, witnessedViewers);
+          }
+        }
+        directedRaids = Math.max(directedRaids, safeAdd(baseline.pair.raids, postCutRaids));
+        directedViewers = Math.max(directedViewers, safeAdd(baseline.pair.viewersTotal, postCutViewers));
+        lastAt = Math.max(lastAt, baseline.pair.lastAt);
+      }
+      raids = safeAdd(raids, directedRaids);
+      viewers = safeAdd(viewers, directedViewers);
+    }
+    return { raids, viewers, lastAt, historyStartKnown };
   }
 }
