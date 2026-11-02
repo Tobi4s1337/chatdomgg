@@ -148,10 +148,26 @@ try {
   for (const [label, width, height] of shotSizes.map(([w, h]) => ['room', w, h])) {
     await page.setViewportSize({ width, height });
     await page.waitForFunction(() => window.__chatdomTavern && window.__chatdomTavernLive?.tables?.find(t => t.table === 'middle')?.pong?.phase === 'rally', null, { timeout: 30000 });
+    await page.waitForFunction(({ width, height }) => {
+      const viewport = window.__chatdomTavernLive?.nameViewport;
+      return viewport?.width === width && viewport?.height === height;
+    }, { width, height }, { timeout: 15000 });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const before = structuredClone(spectator.state.tables.tables);
-    const browserState = await page.evaluate(() => ({ telemetry: window.__chatdomTavern, live: window.__chatdomTavernLive, overflow: document.documentElement.scrollWidth > window.innerWidth || document.documentElement.scrollHeight > window.innerHeight }));
+    const browserState = await page.evaluate(() => ({ telemetry: window.__chatdomTavern, live: window.__chatdomTavernLive,
+      names: [...document.querySelectorAll('.gather-citizen-name[data-citizen-id]')].map(element => {
+        const rect = element.getBoundingClientRect();
+        return { id: element.dataset.citizenId, name: element.textContent, left: rect.left, top: rect.top,
+          right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height };
+      }), overflow: document.documentElement.scrollWidth > window.innerWidth || document.documentElement.scrollHeight > window.innerHeight }));
     assert.equal(browserState.overflow, false, 'viewport has no document overflow');
+    assert.ok(browserState.names.length > 0, 'visible walkers retain readable names');
+    for (const [index, name] of browserState.names.entries()) {
+      assert.ok(name.width > 0 && name.height > 0, 'a name occupies actual rendered text');
+      assert.ok(name.left >= 0 && name.top >= 0 && name.right <= width && name.bottom <= height, 'complete name stays inside the viewport');
+      assert.equal(browserState.live.walkers.find(walker => walker.id === name.id)?.name, name.name, 'name identifies its actual public walker');
+      for (const other of browserState.names.slice(index + 1)) assert.ok(name.right <= other.left || other.right <= name.left || name.bottom <= other.top || other.bottom <= name.top, 'rendered citizen names do not overlap');
+    }
     for (const key of ['draws', 'roomDraws', 'citizenDraws', 'triangles', 'dynamicLights', 'bakedWarmSources']) assert.equal(typeof browserState.telemetry[key], 'number', `missing telemetry ${key}`);
     const telemetry = browserState.telemetry;
     assert.ok(telemetry.draws > 0 && telemetry.roomDraws > 0 && telemetry.citizenDraws > 0 && telemetry.triangles > 0, 'draw and triangle counts are positive');
@@ -177,6 +193,7 @@ try {
     await until(() => { const a = table(spectator, id)?.[kind], b = table(players[0], id)?.[kind]; return a && b && a.match === b.match && (id === 'middle' ? a.phase === b.phase : JSON.stringify(a) === JSON.stringify(b)); }, `spectator agrees on ${id}`, 10000);
   }
   report.checks.push('A seventh SDK spectator observed eight walkers and agreed with another SDK client on each public table.');
+  report.checks.push('Actual rendered name rectangles stay in the viewport, do not overlap and retain their corresponding public walker names.');
 } catch (error) {
   process.exitCode = 1;
   report.failure = error instanceof Error ? error.stack : String(error);

@@ -144,7 +144,7 @@ export function TavernRoomSurface(props: {
       <button class="cd-crest cd-focus" onClick={() => void install()}>Try the door again</button>
     </section></Show>
     <Show when={state().ready && !link().connected && !link().ended && !failed()}><p class="gather-tavern-status cd-slip" role="status">The road is quiet. Reconnecting to your chair…</p></Show>
-    <For each={state().names}>{name => <span class="gather-citizen-name" style={{ left: `${name.x}px`, top: `${name.y}px` }}>{name.name}</span>}</For>
+    <For each={state().names}>{name => <span class="gather-citizen-name" data-citizen-id={name.id} title={name.name} style={{ left: `${name.x}px`, top: `${name.y}px` }}>{name.name}</span>}</For>
     <Show when={table()}>{current => <Show when={!current().game || current().game === 'pong'} fallback={<TurnGameHud table={current} seat={() => client?.self.playerIndex ?? null}
       connected={() => link().connected} column={() => state().column} now={() => client?.serverNow() ?? Date.now()} onStart={start} onMove={(action, column) => { sound?.affordance(state().seated); client?.move(action, column); }} onLeave={leave} />}><section class="gather-game-hud cd-plate" aria-label="Pong table" data-pong-hud>
       <p class="cd-label">Pong · First to seven</p>

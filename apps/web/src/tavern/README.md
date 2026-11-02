@@ -62,8 +62,11 @@ GA10 remains open. Still required: play's generic portal transfer and safe retur
 full database-authenticated matches and portal evidence, durable result/tally integration, remaining browser failure-path and database restart evidence,
 headphone mix review and real-GPU acceptance with eight walkers. The later populated phone check shares Pong
 marks and ball in one batch: eight reference clients and three simultaneous games produce 11 room draws plus
-62 common citizen draws, 73 total. This establishes the room contribution only. Name overlap/clipping needs
-polish. The browser's west-chair-2 approach is blocked after three failures; the SDK obtains that same chair.
+62 common citizen draws, 73 total. This establishes the room contribution only. The destination's name layout
+now measures complete names, keeps them above their actual heads, and suppresses edge/collision conflicts with
+nearest-person priority. It retains full public text rather than wrapping or abbreviating it. See
+`work/evidence/gather/ga10-names.md` for the layout and rendered-rectangle checks.
+The browser's west-chair-2 approach is blocked after three failures; the SDK obtains that same chair.
 See `work/evidence/gather/ga10-room-budget.md`, the lane PRD and `SEAMS.md` for evidence and limits.
 
 `work/evidence/gather/ga10-input-recovery.md` records the locked controls, actual cut/reconnect and page-refresh

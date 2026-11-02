@@ -23,6 +23,7 @@ import { TAVERN_ROOM_BOUNDS } from '../../../../packages/content/src/tavern';
 import { tableGame } from '../games/boards';
 import { createRetainedSeatRestore } from './retained-seat';
 import { tavernTableFraming } from './framing';
+import { createNameMeasurer, layoutNames, type NameCandidate } from './name-labels';
 
 export interface TavernWalkState {
   readonly ready: boolean;
@@ -125,6 +126,8 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
   const direction = new THREE.Vector3(), projected = new THREE.Vector3(), raycaster = new THREE.Raycaster();
   const offResize = stage.onResize((width, height) => controller.resize(width, height));
   const offFeet = stage.localFeet(() => [client.predicted.x, client.predicted.y, client.predicted.z]);
+  const nameMeasurer = createNameMeasurer(options.host);
+  let nameViewport = { width: 0, height: 0 };
   let lastNames = -Infinity, ready = false, wasConnected = client.connected, lastColumn: number | null = null;
   let observedDisconnects = client.disconnects;
   // A fast reconnect can fit between rendered frames. Retire the old lease at the transport event itself.
@@ -169,20 +172,22 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
     people.update(poses.map(pose => ({ id: pose.id, look: pose.look, position: [pose.x, pose.y, pose.z], heading: pose.yaw * Math.PI / 128,
       distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, time: now / 1000,
       ...(pose.posture ? { posture: pose.posture } : {}), opacity: pose.self ? selected ? 0 : controller.selfOpacity : 1 })), stage.camera);
-    const names: TavernWalkState['names'][number][] = [];
+    const candidates: NameCandidate[] = [];
     const column = tableView?.column() ?? null;
     if (now - lastNames > 200 || !ready || column !== lastColumn) {
       for (const pose of poses) {
         if (pose.self && selected) continue;
         const head = people.heads.get(pose.id); if (!head || head.distanceTo(stage.camera.position) > 20) continue;
         projected.copy(head).project(stage.camera); if (projected.z < -1 || projected.z > 1 || Math.abs(projected.x) > 1 || Math.abs(projected.y) > 1) continue;
-        names.push({ id: pose.id, name: pose.name, x: (projected.x + 1) * stage.canvas.clientWidth / 2, y: (1 - projected.y) * stage.canvas.clientHeight / 2 });
+        candidates.push({ id: pose.id, name: pose.name, x: (projected.x + 1) * stage.canvas.clientWidth / 2, y: (1 - projected.y) * stage.canvas.clientHeight / 2, distance: head.distanceTo(stage.camera.position), width: nameMeasurer.width(pose.name) });
       }
+      nameViewport = { width: stage.canvas.clientWidth, height: stage.canvas.clientHeight };
+      const names = layoutNames(candidates, nameViewport.width, nameViewport.height);
       ready ||= controller.debug.ready && poses.length > 0; lastNames = now; lastColumn = column;
       options.onState({ ready, connected: client.connected, seated: selected, column, names });
     }
     (window as Window & { __chatdomTavernLive?: unknown }).__chatdomTavernLive = {
-      ready, connected: client.connected, disconnects: client.disconnects, reconnects: client.reconnects,
+      ready, nameViewport, connected: client.connected, disconnects: client.disconnects, reconnects: client.reconnects,
       ended: client.ended, resumeStored: client.resumeStored,
       self: controller.debug.self, input: controller.debug.input,
       ...(drive ? { approach: { done: drive.done, requested: asked, ...drive.progress, input: drivenInput,
@@ -192,6 +197,6 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
     };
   });
   return { registry, controller, interactions,
-    dispose() { if (disposed) return; disposed = true; offFrame(); offResize(); offFeet(); offRestore(); offConnection(); retainedSeat.clear(); restored.clear(); tableView?.close(); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); avatar.dispose(); },
+    dispose() { if (disposed) return; disposed = true; nameMeasurer.dispose(); offFrame(); offResize(); offFeet(); offRestore(); offConnection(); retainedSeat.clear(); restored.clear(); tableView?.close(); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); avatar.dispose(); },
   };
 }

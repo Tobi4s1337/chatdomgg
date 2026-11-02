@@ -77,8 +77,10 @@ transfer success. No tavern chairs are installed in the kingdom registry.
 
 **needs: play/render owner** review common citizen cost with approved looks on real GPU. The populated phone
 reference view measures 11 room draws plus 62 common citizen draws, 73 total, with eight connected walkers and
-three live games. Gather keeps the common renderer and actual bodies. This is no whole-scene draw or GPU claim;
-overlapping/clipped destination name labels remain gather visual debt. See `work/evidence/gather/ga10-room-budget.md`.
+three live games. Gather keeps the common renderer and actual bodies. This is no whole-scene draw or GPU claim.
+Gather's own name overlay now measures full text and suppresses overlapping/edge-clipped labels while retaining
+their head anchors; no common renderer change is needed. See `work/evidence/gather/ga10-room-budget.md` and
+`work/evidence/gather/ga10-names.md` for the checks and limits.
 
 **needs: integrator/session owner** provide a supported test entry/session issuer for the lane's isolated
 database-backed founded kingdom. The existing `/reference/session` route is memory-only and admits synthetic
