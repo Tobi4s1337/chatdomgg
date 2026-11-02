@@ -33,6 +33,9 @@ import { RaidGuestAuthority } from './raid-gate/guests';
 import { createRaidGuestRuntime } from './raid-gate/guest-runtime';
 import { createRaidGuestSpawn } from './raid-gate/guest-spawn';
 import { createRealmForgeChat } from './wiring/forge-chat-runtime';
+import { itemCatalogue } from './items';
+import { createDurableFishingChannel } from './fishing/durable';
+import { fishingSpecies } from './fishing/content';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -51,6 +54,8 @@ async function serve() {
   const port = realmListenPort(process.env);
   // uWS permits SO_REUSEPORT. Two local builds on one port would split entry and sockets between worlds.
   const reservation = createPortReservation();
+  // A connection accepted during boot (a health probe, a browser retry) would hold close() open forever.
+  reservation.on('connection', socket => socket.destroy());
   await new Promise<void>((resolve, reject) => {
     reservation.once('error', () => reject(new Error(`Realm port ${port} is already in use; choose a free REALM_PORT.`)));
     reservation.listen({ port, host, exclusive: true }, resolve);
@@ -111,6 +116,12 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     return held?.current && founded ? { world: held.world, layoutRevision: held.layoutRevision,
       writerEpoch: held.writerEpoch, plan: founded.scene.plan } : undefined;
   } }) });
+  // Fishing opens only where its pier layer is drawn: REALM_PIER_FISHING=1 once the kingdom view mounts it.
+  const pierVisible = process.env.REALM_PIER_FISHING === '1';
+  Object.assign(boot.services, { channels: [...boot.services.channels!, createDurableFishingChannel({ pool, origin, store: itemFoundation.store,
+    items: itemFoundation.items, catalogue: itemCatalogue, species: fishingSpecies, readiness: boot.readiness,
+    authority: id => boot.services.kingdoms.get(id) ?? null, scene: id => boot.loader.current(id)?.scene ?? null,
+    visible: () => pierVisible, where: id => names.has(id) ? `${names.get(id)} pier` : 'the pier' })] });
   citizens.use(boot.allocation, boot.services);
   boot.ingress.moments.useSettler(raidGuests.guardSettler(citizens));
   castle.use(boot.allocation, boot.store);

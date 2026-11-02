@@ -86,6 +86,27 @@ it('caps active casts, handles expiry and clock rewind, and a restart starts emp
   s.setTime(Number.MAX_SAFE_INTEGER); expect(s.domain.tick().filter(beat => beat.kind === 'ended')).toHaveLength(1);
 });
 
+it('treats a repeated strike on a hooked fish as the reel, and a strike while landing as nothing', () => {
+  const s = setup(), { id, bite } = s.start();
+  s.setTime(bite); expect(s.domain.act(person, { type: 'pier.strike', id: 's1', castId: id, seq: 2 }).cast?.phase).toBe('fighting');
+  expect(s.domain.act(person, { type: 'pier.reel', id: 'off', castId: id, seq: 3, on: false }).ok).toBe(true);
+  const again = s.domain.act(person, { type: 'pier.strike', id: 's2', castId: id, seq: 4 });
+  expect(again).toMatchObject({ ok: true, cast: { phase: 'fighting' } });
+  expect(again.beats.some(beat => beat.kind === 'ended')).toBe(false);
+  // The second strike is a reel edge on the same next tick, so the last word (reel on) holds.
+  s.setTime(bite + 50); s.domain.tick();
+  const expected = stepFight(createFight(fishingHash('fight:1:1'), 'steady'), true);
+  expect(s.domain.views()[0]?.fight).toMatchObject({ tick: 1, tension: expected.tension, progress: expected.progress });
+});
+
+it('keeps a landing fish when the strike is pressed again', () => {
+  const { s, id } = winFight();
+  expect(s.domain.views()[0]?.phase).toBe('landing');
+  const result = s.domain.act(person, { type: 'pier.strike', id: 'late', castId: id, seq: 9_000 });
+  expect(result).toMatchObject({ ok: true, cast: { phase: 'landing' } });
+  expect(s.domain.candidate(person)).not.toBeNull();
+});
+
 function winFight() {
   const s = setup(), { id, bite } = s.start();
   s.setTime(bite); expect(s.domain.act(person, { type: 'pier.strike', id: 's', castId: id, seq: 2 }).ok).toBe(true);

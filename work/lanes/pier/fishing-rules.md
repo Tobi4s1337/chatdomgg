@@ -23,6 +23,9 @@
 - Wait is 4–11 s. Two nibbles at 45% and 76% of the wait precede the bite. Strike windows are 1200 ms common,
   1050 ms uncommon, 900 ms rare. The window includes its opening instant and excludes its closing instant.
   An early strike or a missed window ends the cast; repeated strikes cannot farm a new fish from one cast.
+  A strike that arrives after the fish is already hooked (a double click, or a second press crossing the first
+  strike's answer) is a reel edge while fighting and nothing while landing: it never loses a hooked fish. The
+  client also sends one strike per cast and turns every later press on that cast into the reel.
 - A fight advances in 50 ms integer steps, for at most 600 steps. Inputs take effect at the next step after
   their actual server receipt; the server tape records only changed reel edges. No retrospective inputs.
   Receipt times never rewind, even if the process wall clock does. Per-cast sequence numbers strictly increase.

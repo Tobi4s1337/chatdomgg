@@ -51,8 +51,9 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
     }
     async onCreate(options: { kingdomId: string }) {
       const kingdomId = KingdomIdSchema.parse(options.kingdomId);
-      this.handle = await services.open(kingdomId);
+      // Known before the open: after a slow open, Colyseus has refused a late room id ("can only be overridden upon room creation").
       this.roomId = kingdomRoomId(kingdomId);
+      this.handle = await services.open(kingdomId);
       this.state.kingdomId = kingdomId; this.state.writerEpoch = this.handle.writerEpoch;
       this.state.origin = this.handle.origin; this.state.layoutRevision = this.handle.layoutRevision;
       this.state.collisionRevision = this.handle.world.revision; this.state.factSequence = this.handle.sequence;

@@ -1,4 +1,3 @@
-import { Buffer } from 'node:buffer';
 import { FISHING_CHANNEL, FISHING_PRIVATE_BYTES, FISHING_PUBLIC_BYTES, FishingChannelRequestSchema,
   kingdomFishingHour, kingdomWaterMood, type FishingOwnerCast, type FishingPrivateReply, type FishingPublicBeat,
   type FishingPublicCast, type FishingPublicReply, type FishingPublicRod, type ItemRecord, type PersonId } from '@chatdom/shared';
@@ -70,8 +69,10 @@ function publicView(view: CastView, walkerId: string): FishingPublicCast {
     ...(view.fight ? { fight: { tick: view.fight.tick, tension: view.fight.tension, progress: view.fight.progress,
       phase: view.fight.phase, tired: view.fight.tired } } : {}) };
 }
+const encoder = new TextEncoder();
+/** UTF-8 length through the platform encoder, so the same transport also runs on the staged review bench. */
 function bytes(value: unknown, limit: number): boolean {
-  try { return Buffer.byteLength(JSON.stringify(value), 'utf8') <= limit; } catch { return false; }
+  try { return encoder.encode(JSON.stringify(value)).byteLength <= limit; } catch { return false; }
 }
 
 /** Transport orchestration only. The bound server domain and durable writers decide every grant. */
@@ -171,7 +172,7 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
       for (const person of people.values()) if (person.rod && person.selectedId
         && room.person(person.owner)?.walkerId === person.walkerId) rods.push({ walkerId: person.walkerId, model: 'tool:rod.willow' });
       privateSend(from, { type: 'pier.state', id, at, revision: installation?.revision ?? room.world().revision,
-        site: installation?.site ?? null, rack: installation?.rack ?? null,
+        site: installation?.site ?? null, rack: installation?.rack ?? null, ...(installation?.lights ? { lights: installation.lights } : {}),
         water: installation ? { hour: kingdomFishingHour(at), mood: kingdomWaterMood(room.kingdomId, at) } : null,
         casts: publicCasts(), rods, self: { rod: fisher.rod, cast: ownCast(fisher.owner), pendingCastId: fisher.pendingCastId } });
     };

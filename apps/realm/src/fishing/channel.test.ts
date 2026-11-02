@@ -36,7 +36,8 @@ function fixture() {
   const timers = new Map<number, () => void>(), delays: number[] = []; let timerId = 0;
   const records = new Map<string, ItemRecord>(), senders = new Map<string, RealmChannelSender>();
   let refreshRod = async (_sender: RealmChannelSender, id: string): Promise<ItemRecord | null> => records.get(id) ?? null;
-  let keep: (sender: RealmChannelSender, id: string) => Promise<FishingCatchResult> = async () => ({ status: 'refused', message: 'Not kept.' });
+  type Keep = (sender: RealmChannelSender, id: string) => Promise<FishingCatchResult>;
+  let keep: Keep = async () => ({ status: 'refused', message: 'Not kept.' });
   const state = new Map<string, { present: boolean; current: boolean }>();
   const makeSender = (personId: typeof owner, walkerId: string): RealmChannelSender => {
     const flags = { present: true, current: true }; state.set(walkerId, flags);
@@ -257,5 +258,87 @@ it('does not resurrect an unequipped rod when a background refresh returns late'
   await f.act(f.from, { type: 'pier.sync', id: 'check' });
   expect(f.privateMessages.at(-1)?.message).toMatchObject({ type: 'pier.state', self: { rod: null } });
   expect(f.casts().views()).toEqual([]);
+  f.dispose();
+});
+
+function keptResult(f: ReturnType<typeof fixture>, castId: string, replayed = false): FishingCatchResult {
+  const candidate = f.casts().candidate(owner)!;
+  const item = { ...rod(), defId: fish.id, branch: 'gathered' as const, place: 'bag' as const, slot: null };
+  return { status: 'kept', replayed, item, catch: { version: 1, id: castId, kingdomId, origin: 'simulated', ownerId: owner, speciesId: fish.id,
+    itemId: item.id, grantKey: 'private grant', caughtAt: candidate.at, personalFirst: false, kingdomFirst: false, rarity: 'common', fish: candidate.fish,
+    environment: candidate.environment, float: candidate.float, anchor: candidate.anchor, collisionRevision: 7,
+    proof: { version: 1, castSeed: candidate.castSeed, fightSeed: candidate.fightSeed, inputs: candidate.inputs, result: candidate.result } } };
+}
+
+it('runs one writer call when an explicit keep overlaps the automatic landing keep, and shows one catch', async () => {
+  const f = fixture();
+  let finish!: (result: FishingCatchResult) => void, calls = 0;
+  f.setKeep(async () => { calls++; return new Promise<FishingCatchResult>(resolve => { finish = resolve; }); });
+  const castId = await land(f);
+  expect(calls).toBe(1);
+  // The person presses keep while the landing's own keep is still in the ledger: no second write, no second spectacle.
+  await f.act(f.from, { type: 'pier.keep', id: 'early', castId });
+  expect(calls).toBe(1);
+  expect(f.privateMessages.at(-1)?.message.type === 'pier.refused' || f.privateMessages.at(-1)?.message.type === 'pier.pending').toBe(true);
+  finish(keptResult(f, castId)); await new Promise(resolve => setImmediate(resolve));
+  expect(f.publicMessages.filter(message => message.type === 'pier.caught')).toHaveLength(1);
+  expect(f.privateMessages.filter(entry => entry.message.type === 'pier.kept')).toHaveLength(1);
+  f.dispose();
+});
+
+it('refuses a keep asked before the landing privately, with no public outcome and the cast untouched', async () => {
+  const f = fixture();
+  const kept: string[] = [];
+  f.setKeep(async (_sender, id) => {
+    const landed = f.casts().views().some(view => view.id === id && view.phase === 'landing');
+    if (!landed) return { status: 'refused', message: 'That catch is not on the line yet.' };
+    kept.push(id); return keptResult(f, id);
+  });
+  const item = rod(); f.records.set(item.id, item);
+  await f.act(f.from, { type: 'pier.equip', id: 'equip', itemId: item.id });
+  await f.act(f.from, { type: 'pier.draw', id: 'draw' });
+  const castId = f.casts().views()[0]!.id;
+  await f.act(f.from, { type: 'pier.keep', id: 'too-early', castId });
+  expect(f.privateMessages.at(-1)?.message).toMatchObject({ type: 'pier.refused', id: 'too-early' });
+  expect(f.publicMessages.some(message => message.type === 'pier.caught')).toBe(false);
+  expect(f.casts().views()[0]?.phase).toBe('drawing');
+  f.dispose();
+});
+
+it('delivers an in-flight catch to a reconnected socket that keeps the same seat identity', async () => {
+  const f = fixture();
+  let finish!: (result: FishingCatchResult) => void;
+  f.setKeep(async () => new Promise<FishingCatchResult>(resolve => { finish = resolve; }));
+  const castId = await land(f);
+  // A Colyseus reconnection keeps the walker id: it is the same seat, so the catch is still theirs to see.
+  const reconnected = f.makeSender(owner, f.from.walkerId);
+  f.privateMessages.length = 0; f.publicMessages.length = 0;
+  finish(keptResult(f, castId)); await new Promise(resolve => setImmediate(resolve));
+  expect(f.privateMessages.filter(entry => entry.personId === owner && entry.message.type === 'pier.kept')).toHaveLength(1);
+  expect(f.publicMessages.filter(message => message.type === 'pier.caught')).toHaveLength(1);
+  await f.act(reconnected, { type: 'pier.sync', id: 'after' });
+  expect(f.privateMessages.at(-1)?.message).toMatchObject({ type: 'pier.state', id: 'after', self: { pendingCastId: null } });
+  f.dispose();
+});
+
+it('maps every public ending to an allowlisted outcome and never carries entry, session or person identifiers', async () => {
+  const f = fixture(), item = rod(); f.records.set(item.id, item);
+  await f.act(f.from, { type: 'pier.equip', id: 'equip', itemId: item.id });
+  await f.act(f.from, { type: 'pier.draw', id: 'draw' });
+  const castId = f.casts().views()[0]!.id;
+  f.setTime(1_000_200); await f.act(f.from, { type: 'pier.release', id: 'release', castId, seq: 1 });
+  f.setTime(1_000_850); await f.fire();
+  // Lowering the rod reels the line in: the public sees a plain cancelled ending, never the server's words.
+  await f.act(f.from, { type: 'pier.equip', id: 'lower', itemId: null });
+  await f.fire();
+  const ended = f.publicMessages.flatMap(message => message.type === 'pier.beats' ? message.beats : []).filter(beat => beat.kind === 'ended');
+  expect(ended.length).toBeGreaterThan(0);
+  for (const beat of ended) {
+    expect(['snapped', 'escaped', 'missed', 'cancelled', 'unkept']).toContain(beat.outcome);
+    expect(Object.keys(beat).sort()).toEqual(['at', 'castId', 'kind', 'outcome', 'walkerId']);
+  }
+  const publicJSON = JSON.stringify(f.publicMessages);
+  for (const secret of [f.from.principal.sessionId, f.other.principal.sessionId, '"personId"', '"ownerId"', '"sessionId"', 'Private name', '"reason"', 'expiresAt'])
+    expect(publicJSON).not.toContain(secret);
   f.dispose();
 });

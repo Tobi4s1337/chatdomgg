@@ -8,6 +8,8 @@ import { installPier, pierLocalToWorld, pierWaterAt } from './site';
 
 export interface FishingRoomInstallation extends FishingInstallation {
   readonly rack: Vec3;
+  /** The lantern glass the adopted pier carries, in world metres. */
+  readonly lights?: readonly Vec3[];
 }
 
 /** Exact adopted content only: a plausible lake or a planned pier cannot authorize fishing. */
@@ -36,6 +38,7 @@ export function fishingInstallationFromScene(scene: RealmFoundedScene, revision:
   }
   return { site: biome === null ? installed.site : Object.freeze({ ...installed.site, biome }), revision, biome,
     rack: Object.freeze(pierLocalToWorld(installed.site, installed.content.anchors.rack)),
+    lights: Object.freeze(installed.content.lights.map(light => Object.freeze(pierLocalToWorld(installed.site, light.at)))),
     sample: (x, z) => ({ waterY: pierWaterAt(scene.plan, x, z), groundY: foundedGroundAt(scene.plan, x, z)[1] }),
   };
 }

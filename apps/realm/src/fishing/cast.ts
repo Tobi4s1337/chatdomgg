@@ -49,6 +49,14 @@ const sameSite = (a: FishingPierSite, b: FishingPierSite) => a.id === b.id && a.
   && a.deckY === b.deckY && a.waterY === b.waterY && a.root.every((n, i) => n === b.root[i]) && a.water === b.water;
 
 /** Ephemeral server domain. No catch/grant capability and no client tape input. Restart loses only active casts. */
+/** One reel edge at the fight's next tick: the last edge of a tick wins, and an unchanged state appends nothing. */
+function reelTape(cast: Cast, on: boolean) {
+  const nextTick = cast.fight!.tick + 1;
+  if (cast.tape.at(-1)?.tick === nextTick) cast.tape.pop();
+  const previous = cast.tape.at(-1)?.reel ?? false;
+  if (on !== previous) cast.tape.push({ tick: nextTick, reel: on });
+}
+
 export function createFishingCasts(options: FishingCastsOptions) {
   const casts = new Map<PersonId, Cast>();
   let lastTime = 0, closed = false;
@@ -178,6 +186,10 @@ export function createFishingCasts(options: FishingCastsOptions) {
           if (!aim.ok) { end(cast, time, beats, aim.message); return refuse(aim.message); }
           cast.float = copiedVec(aim.float); cast.depthM = aim.depthM; cast.phase = 'flying'; cast.at = time; cast.landedAt = time + FLIGHT_MS;
           emit(beats, cast, 'cast', time);
+        } else if (request.type === 'pier.strike' && (cast.phase === 'fighting' || cast.phase === 'landing')) {
+          // A second press on a fish already hooked (a double click, or a strike crossing its own answer) is a reel,
+          // never a miss: the fish on the line is never lost to the button being pressed again.
+          if (cast.phase === 'fighting' && cast.fight) reelTape(cast, true);
         } else if (request.type === 'pier.strike') {
           if (cast.phase !== 'bite' || !cast.fish) { end(cast, time, beats, 'The hook came back empty.'); return refuse('Wait for the float to dip.'); }
           cast.phase = 'fighting'; cast.at = time; cast.fightAt = time;
@@ -186,11 +198,7 @@ export function createFishingCasts(options: FishingCastsOptions) {
           cast.tape.push({ tick: 1, reel: true }); emit(beats, cast, 'hook', time);
         } else {
           if (cast.phase !== 'fighting' || !cast.fight) return refuse('There is no fish on the line.');
-          const nextTick = cast.fight.tick + 1;
-          const last = cast.tape.at(-1);
-          if (last?.tick === nextTick) cast.tape.pop();
-          const previous = cast.tape.at(-1)?.reel ?? false;
-          if (request.on !== previous) cast.tape.push({ tick: nextTick, reel: request.on });
+          reelTape(cast, request.on);
         }
       }
       return { ok: true, cast: view(cast), beats };
