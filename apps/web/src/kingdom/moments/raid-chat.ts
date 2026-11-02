@@ -18,7 +18,8 @@ export function createRaidChatFeed(kingdomId: KingdomId, origin: RaidChatFeed['o
     async function poll() {
       if (stopped || document.hidden || request) return;
       const controller = new AbortController(); request = controller;
-      const timeout = setTimeout(() => controller.abort(), 3000);
+      // A small JSON read, bounded so a hung request cannot hold the next one; a busy renderer can take seconds per frame.
+      const timeout = setTimeout(() => controller.abort(), 6000);
       try {
         const response = await fetch(`/live-realm-data/realm/raid-chat/${encodeURIComponent(kingdomId)}`, {
           signal: controller.signal, credentials: 'same-origin', cache: 'no-store',

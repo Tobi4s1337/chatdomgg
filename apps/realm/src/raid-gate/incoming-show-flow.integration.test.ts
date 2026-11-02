@@ -2,50 +2,26 @@ import { execFile } from 'node:child_process';
 import { createHmac, randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { createServer as createPortProbe } from 'node:net';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { KingdomIdSchema, PersonIdSchema, parseRaidChatFrame, parseRaidGuestVisualMark, starterCitizenLook } from '@chatdom/shared';
-import { REALM_AUTH_ROUTES, REALM_FOUNDED_ROUTES, REALM_NO_HOME_SLOT, WALK_BODY, RealmFoundedManifestSchema,
-  RealmSessionReplySchema, RealmTicketReplySchema, type RealmJoin } from '@chatdom/shared/realm';
+import { REALM_FOUNDED_ROUTES, REALM_NO_HOME_SLOT, WALK_BODY, RealmFoundedManifestSchema, type RealmJoin } from '@chatdom/shared/realm';
 import type { TwitchMomentFact } from '@chatdom/shared/twitch-moments';
 import { generateSettlementPlan } from '@chatdom/world';
 import { compileFoundedScene } from '@chatdom/world/founded-collision';
 import { decodeFoundedScene } from '@chatdom/world/founded-scene';
 import { embeddedSolids, supported } from '@chatdom/world/movement';
-import { createRealmAuthHttp } from '../../../api/src/realm-auth/http';
-import { createRealmAuthService } from '../../../api/src/realm-auth/service';
-import { createSimulatedOidcProvider } from '../../../api/src/realm-auth/simulated-provider';
-import { readRealmAuthConfig } from '../../../api/src/realm-auth/config';
-import { handleRaidGuest } from '../../../api/src/raid-gate/guests-http';
-import { parseRaidWelcomePath, raidWelcomePath, RAID_GUEST_PREFIX, RaidGuestBeginReplySchema, RaidGuestReadReplySchema,
-  type RaidGuestRoomReceipt } from '../../../api/src/raid-gate/guest-contracts';
-import { RAID_OBSERVATION_ROUTE } from '../../../api/src/raid-gate/observations';
-import { startMockDoor } from '../../../herald/src/mock/door';
-import { createMockRaidCrier } from '../../../herald/src/mock/crier';
-import { RealmDelivery } from '../../../herald/src/realm-delivery/delivery';
+import { parseRaidWelcomePath, raidWelcomePath } from '../../../api/src/raid-gate/guest-contracts';
 import { connectRealm, type RealmClient } from '../../../web/src/realm/client';
 import { observeRealm, observedRoom, type RealmObserver } from '../../../web/src/realm/adapters/observer';
 import { giftRouteOf } from '../../../web/src/kingdom/moments/anchors';
 import { raiderArms } from '../../../web/src/twitch-moments/raid-art';
-import { TenureEvidenceVerifier } from '../allocation';
-import { createDurableRealmBoot } from '../bootstrap/durable';
-import { createRealmCitizens } from '../evening/citizens';
-import { mountEveningRoutes } from '../evening/http';
 import { createRealmPool, migrateRealmSchema } from '../persistence';
-import { FileForgeApprovals, ForgeWriteGate } from '../wiring';
-import { RaidCrierAuthority } from './crier';
-import { mountRaidCrierRoutes } from './crier-http';
-import { createRaidGuestRuntime } from './guest-runtime';
-import { createRaidGuestSpawn } from './guest-spawn';
-import { RaidGuestAuthority } from './guests';
-import { mountRaidShowRoutes } from './http';
-import { RaidChatBridge } from './raid-chat-bridge';
-import { mountRaidChatRead } from './raid-chat-http';
-import { RaidChatPresentation } from './raid-chat-presentation';
+import { incomingRaidRouteOf, raidColumnDistance, RAID_COLUMN_CLEARANCE } from './guest-spawn';
+import { closeServer, listen, openShowAuth, openShowHerald, openShowRealm, readBody, ShowBrowser as Browser, SHOW_DOOR_SECRET as doorSecret,
+  waitFor } from './incoming-show-harness';
 
 /**
  * RS10 mock run, one flow: a signed Twitch CLI raid into tobi4s_ (SIMULATED) travels Herald's door and durable outbox
@@ -57,84 +33,6 @@ const exec = promisify(execFile);
 const kingdomId = KingdomIdSchema.parse('129634568');
 const raiderId = KingdomIdSchema.parse('412000777');
 const wrenId = PersonIdSchema.parse('990100001'), tamsinId = PersonIdSchema.parse('990100002'), okoId = PersonIdSchema.parse('990100003');
-const serviceSecret = 'simulated-service-secret-0000000000000000', doorSecret = 'simulated-eventsub-secret';
-
-class Browser {
-  readonly cookies = new Map<string, string>();
-  constructor(readonly origin: string) {}
-  cookie() { return [...this.cookies].map(([name, value]) => `${name}=${value}`).join('; '); }
-  async request(path: string, init: { method?: string; body?: unknown; csrf?: string; form?: URLSearchParams } = {}) {
-    const headers: Record<string, string> = { cookie: this.cookie() };
-    if (init.csrf) headers['x-csrf-token'] = init.csrf;
-    if (init.method === 'POST') headers.origin = this.origin;
-    if (init.body !== undefined) headers['content-type'] = 'application/json';
-    if (init.form) headers['content-type'] = 'application/x-www-form-urlencoded';
-    const response = await fetch(new URL(path, this.origin), { method: init.method ?? 'GET', headers, redirect: 'manual',
-      ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : init.form ? { body: init.form.toString() } : {}) });
-    for (const line of response.headers.getSetCookie()) {
-      const pair = line.split(';')[0] ?? '', at = pair.indexOf('='), name = pair.slice(0, at), value = pair.slice(at + 1);
-      if (/Max-Age=0/iu.test(line)) this.cookies.delete(name); else this.cookies.set(name, value);
-    }
-    return response;
-  }
-  async signIn(person: string, returnTo: string) {
-    const start = await this.request(`${REALM_AUTH_ROUTES.start}?returnTo=${encodeURIComponent(returnTo)}`);
-    expect(start.status).toBe(302);
-    const authorize = new URL(start.headers.get('location')!);
-    expect(await (await this.request(authorize.pathname + authorize.search)).text()).toContain('SIMULATED');
-    const form = new URLSearchParams(authorize.searchParams); form.set('person', person); form.set('decision', 'allow');
-    const approve = await this.request(authorize.pathname.replace(/authorize$/u, 'approve'), { method: 'POST', form });
-    expect(approve.status).toBe(302);
-    const callback = new URL(approve.headers.get('location')!);
-    const back = await this.request(callback.pathname + callback.search);
-    expect(back.status).toBe(303); expect(back.headers.get('location')).toBe(returnTo);
-    expect((await this.session()).status).toBe('authenticated');
-  }
-  async session() { return RealmSessionReplySchema.parse(await (await this.request(REALM_AUTH_ROUTES.session)).json()); }
-  async csrf() { const session = await this.session(); if (session.status !== 'authenticated') throw new Error('Expected checked OIDC session'); return session.csrfToken; }
-  async ticket(kingdom: string): Promise<RealmJoin> {
-    const response = await this.request(REALM_AUTH_ROUTES.ticket, { method: 'POST', csrf: await this.csrf(), body: { version: 1, kingdomId: kingdom, protocol: 1 } });
-    expect(response.status).toBe(200); return RealmTicketReplySchema.parse(await response.json()).join;
-  }
-  async begin(kingdom: string, raidId: string) {
-    const response = await this.request(`${RAID_GUEST_PREFIX}/${kingdom}`, { method: 'POST', csrf: await this.csrf(), body: { version: 1, raidId } });
-    expect(response.status).toBe(200); return RaidGuestBeginReplySchema.parse(await response.json());
-  }
-  async guest(kingdom: string) {
-    const response = await this.request(`${RAID_GUEST_PREFIX}/${kingdom}`);
-    expect(response.status).toBe(200); return RaidGuestReadReplySchema.parse(await response.json()).guest;
-  }
-}
-
-async function freePort(): Promise<number> {
-  const probe = createPortProbe();
-  await new Promise<void>(resolve => probe.listen(0, '127.0.0.1', resolve));
-  const address = probe.address();
-  if (!address || typeof address === 'string') throw new Error('No ephemeral test port');
-  await new Promise<void>((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
-  return address.port;
-}
-async function waitFor(predicate: () => boolean | Promise<boolean>, label: string, ms = 30_000) {
-  const deadline = Date.now() + ms;
-  while (!await predicate()) {
-    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
-    await new Promise(resolve => setTimeout(resolve, 25));
-  }
-}
-async function listen(server: ReturnType<typeof createServer>): Promise<string> {
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  const address = server.address(); if (!address || typeof address === 'string') throw new Error('No HTTP listener');
-  return `http://127.0.0.1:${address.port}`;
-}
-async function closeServer(server: ReturnType<typeof createServer>) {
-  if (server.listening) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
-}
-async function readBody(request: IncomingMessage): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of request) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks).toString('utf8');
-}
-
 describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('RS10 incoming raid show, CLI to caravan lantern (SIMULATED)', () => {
   it('carries one CLI raid from Herald to the scene, crier, walked-in guests and lantern, and keeps it across restart and redelivery', async () => {
     const connectionString = process.env.DATABASE_URL;
@@ -142,82 +40,13 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('RS10 incoming raid sho
     const schema = `realm_test_${randomBytes(6).toString('hex')}`;
     const pool = createRealmPool({ connectionString, schema });
     const directory = await mkdtemp(join(tmpdir(), 'chatdom-incoming-show-'));
-    const outbox = join(directory, 'outbox'), founded = join(directory, 'founded'), cli = join(directory, 'cli');
+    const outbox = join(directory, 'outbox'), cli = join(directory, 'cli');
     const evidenceKey = randomBytes(32);
     let apiOrigin = '';
 
-    /** The realm exactly as `main.ts` composes the raid gate around the durable boot, on one listener. */
-    async function openRealm() {
-      const port = await freePort(), endpoint = `http://127.0.0.1:${port}`;
-      const authority = new RaidGuestAuthority({ pool, origin: 'simulated', clock: Date.now });
-      const citizens = createRealmCitizens({ db: pool, origin: 'simulated', kingdomNames: new Map([[kingdomId, 'SIMULATED tobi4s_']]) });
-      const raidChat = new RaidChatPresentation({ origin: 'simulated' }), gate = new ForgeWriteGate();
-      const joins: RaidGuestRoomReceipt[] = [];
-      const runtime = createRaidGuestRuntime({ origin: 'simulated', authority, citizens: input => citizens.observe(input),
-        chatPresented: (input, result) => raidChat.observe(input, result) });
-      const boot = createDurableRealmBoot({ pool, origin: 'simulated', foundedDirectory: founded,
-        verifier: new TenureEvidenceVerifier('simulated', evidenceKey), furnish: citizens.furnish,
-        foundedAccess: target => target.origin === 'simulated', ingressCredentials: { herald: serviceSecret },
-        repositoryOptions: gate.install({ origin: 'simulated' }),
-        attach: kingdom => {
-          const detach = runtime.attach(kingdom);
-          const record = kingdom.onLifecycle((event, principal, _walker, at) => {
-            if (event === 'join') joins.push({ version: 1, origin: principal.origin, kingdomId: principal.kingdomId,
-              personId: principal.personId, entryId: principal.sessionId, at });
-          });
-          return () => { record(); detach(); };
-        } });
-      const current = (id: string) => boot.services.kingdoms.get(KingdomIdSchema.parse(id))?.current === true;
-      Object.assign(boot.services, { prepareSpawn: createRaidGuestSpawn({ authority, current: id => {
-        const held = boot.services.kingdoms.get(id), scene = boot.loader.current(id);
-        return held?.current && scene ? { world: held.world, layoutRevision: held.layoutRevision,
-          writerEpoch: held.writerEpoch, plan: scene.scene.plan } : undefined;
-      } }) });
-      citizens.use(boot.allocation, boot.services);
-      boot.ingress.moments.useSettler(runtime.guardSettler(citizens));
-      const bridge = new RaidChatBridge({ origin: 'simulated', ingress: boot.ingress, gate, raidChat, current,
-        approvals: new FileForgeApprovals(join(directory, 'forge-approvals')), beforeObservation: input => runtime.observe(input) });
-      bridge.use(boot.services);
-      let reader: ReturnType<typeof mountRaidChatRead> | undefined;
-      const realm = boot.createServer({ mountIngress: app => {
-        mountEveningRoutes(app, bridge); reader = mountRaidChatRead(app, { origin: 'simulated', presentation: raidChat, current });
-      } });
-      const show = mountRaidShowRoutes(realm.transport.app, { pool, origin: 'simulated', clock: Date.now, recoverEveryMs: 0,
-        credentials: { herald: serviceSecret }, moment: observation => boot.ingress.moments.acceptMoment(observation) });
-      const crier = mountRaidCrierRoutes(realm.transport.app, { origin: 'simulated', credentials: { herald: serviceSecret }, recoverEveryMs: 0,
-        authority: new RaidCrierAuthority({ pool, origin: 'simulated', clock: Date.now, publicOrigin: apiOrigin }) });
-      let closed = false;
-      const close = async () => {
-        if (closed) return; closed = true;
-        reader?.close();
-        try { await realm.server.gracefullyShutdown(false); }
-        finally { await show.close(); await crier.close(); await bridge.stop(); await runtime.close(); await boot.stop(); }
-      };
-      try {
-        expect((await boot.readiness.start()).ready).toBe(true);
-        await realm.server.listen(port, '127.0.0.1');
-      } catch (error) { await close(); throw error; }
-      return { endpoint, boot, show, runtime, authority, joins, close };
-    }
-
-    /** Herald's mock run: door, durable realm outbox and recording-only crier, with raid replies kept for the record. */
+    const openRealm = () => openShowRealm({ pool, kingdomId, kingdomName: 'SIMULATED tobi4s_', directory, evidenceKey, publicOrigin: () => apiOrigin });
     const raidReplies: unknown[] = [];
-    const recordingFetch: typeof fetch = async (input, init) => {
-      const response = await fetch(input, init);
-      const url = input instanceof Request ? input.url : String(input);
-      if (new URL(url).pathname === RAID_OBSERVATION_ROUTE) raidReplies.push(await response.clone().json());
-      return response;
-    };
-    async function openHerald(realmUrl: string) {
-      const realm = await RealmDelivery.open({ url: realmUrl, secret: serviceSecret, directory: outbox, origin: 'simulated', fetch: recordingFetch });
-      const mock = createMockRaidCrier({ kingdomId, realm });
-      const door = await startMockDoor({ kingdomId, secret: doorSecret, realm, port: 0, crier: () => mock.health() });
-      let closed = false;
-      return { realm, mock, door, async close() {
-        if (closed) return; closed = true;
-        await mock.worker.close(); await door.stop(); await realm.flush(); await realm.close();
-      } };
-    }
+    const openHerald = (realmUrl: string) => openShowHerald({ kingdomId, realmUrl, outbox, raidReplies });
 
     // The CLI's exact signed delivery is kept on its way to the door, so it can be redelivered byte for byte.
     const captured: { headers: Record<string, string>; body: string }[] = [];
@@ -240,18 +69,7 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('RS10 incoming raid sho
     try {
       expect(await migrateRealmSchema(pool, schema)).toEqual(expect.arrayContaining(['0011b_realm_raid_observations', '0011c_realm_raid_crier', '0011d_realm_raid_guests']));
       apiOrigin = await listen(api);
-      const config = readRealmAuthConfig({ DATABASE_URL: connectionString, REALM_AUTH_MODE: 'simulated', REALM_DATABASE_SCHEMA: schema, REALM_PUBLIC_ORIGIN: apiOrigin });
-      const oidc = await createSimulatedOidcProvider({ publicOrigin: apiOrigin, internalOrigin: apiOrigin, redirectUri: config.redirectUri });
-      // OIDC belongs to the API workspace; resolve its installed verifier without adding a realm dependency.
-      const { createRemoteJWKSet } = await import(createRequire(new URL('../../../api/package.json', import.meta.url)).resolve('jose'));
-      const service = createRealmAuthService({ pool, provider: oidc.provider, keys: createRemoteJWKSet(new URL(oidc.provider.jwksUri)), redirectUri: config.redirectUri });
-      await service.ready();
-      const authRoutes = createRealmAuthHttp({ service, publicOrigin: apiOrigin, secureCookies: false, extra: oidc.handle });
-      const guestAuthority = new RaidGuestAuthority({ pool, origin: 'simulated', clock: Date.now });
-      dispatch = async (request, response) => {
-        if (await handleRaidGuest(request, response, { pool, config, authority: guestAuthority })) return;
-        if (!await authRoutes(request, response)) response.writeHead(404).end();
-      };
+      dispatch = await openShowAuth({ pool, connectionString, schema, apiOrigin });
 
       // tobi4s_'s founded kingdom, its realm, and Herald's mock door in front of it.
       realm = await openRealm();
@@ -338,6 +156,8 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('RS10 incoming raid sho
         expect(supported(pose, collision)).toBe(true);
         expect(Math.hypot(pose.x - caravanGate![0], pose.z - caravanGate![2])).toBeLessThan(18);
         expect(Math.hypot(pose.x, pose.z)).toBeGreaterThan(18);
+        // Beside the road, never in the caravan's swept column.
+        expect(raidColumnDistance(incomingRaidRouteOf(scene.plan)!, pose.x, pose.z)).toBeGreaterThanOrEqual(RAID_COLUMN_CLEARANCE);
       }
       expect(Math.abs(wrenPose.x - tamsinPose.x) >= WALK_BODY.radius * 2 || Math.abs(wrenPose.z - tamsinPose.z) >= WALK_BODY.radius * 2
         || Math.abs(wrenPose.y - tamsinPose.y) >= WALK_BODY.height).toBe(true);

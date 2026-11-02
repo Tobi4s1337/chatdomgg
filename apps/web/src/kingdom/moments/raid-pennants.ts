@@ -11,6 +11,14 @@ import { raidPropGroundOf, type RaidChatSupport } from './raid-chat-ground';
 const POLL_MS = 3000;
 const REQUEST_MS = 3000;
 
+/**
+ * The stream view (an OBS source) marks its document as a broadcast. Nobody there can press anything, so the
+ * wall's reading control stays off it; the dated wall itself is still drawn.
+ */
+export function isBroadcastSurface(canvas: Pick<HTMLCanvasElement, 'ownerDocument'> | undefined): boolean {
+  return canvas?.ownerDocument?.documentElement?.classList.contains('stream-document') === true;
+}
+
 /** A public history reader. Failed reads leave the last verified history untouched. */
 export function createRaidPennantFeed(kingdomId: KingdomId, origin: RaidPennantFeed['origin'], clock: () => number): RaidPennantFeed {
   return { origin, subscribe(receive) {
@@ -132,7 +140,7 @@ export function mountKingdomRaidPennants({ view, feed, kingdomId, signal, clock,
   const browser = createRaidPennantBrowser({ reader: feed.raidPennantArchive ?? createRaidPennantArchiveReader(kingdomId, feed.origin, clock),
     kingdomId, origin: feed.origin, clock, signal, present: frame => view.receiveRaidPennants(frame) });
   children.browser = browser;
-  if (canvas && camera) ui = mountRaidPennantBrowser({ canvas, camera, sites: () => view.raidPennantSites(), browser, signal, ...(visible ? { visible } : {}) });
+  if (canvas && camera && !isBroadcastSurface(canvas)) ui = mountRaidPennantBrowser({ canvas, camera, sites: () => view.raidPennantSites(), browser, signal, ...(visible ? { visible } : {}) });
   try {
     if (reading) {
       detachReading = reading({ open: browser.open, close: browser.close, subscribe: browser.subscribe, sites: () => view.raidPennantSites() });

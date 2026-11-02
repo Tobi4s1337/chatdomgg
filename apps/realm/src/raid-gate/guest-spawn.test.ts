@@ -13,7 +13,10 @@ import { giftRouteOf } from '../../../web/src/kingdom/moments/anchors';
 import type { RealmRoomEffects, RealmRoomServices, RealmSpawnPreparation } from '../ports';
 import { referenceServices, REFERENCE_KINGDOM } from '../reference';
 import { createRealmServer } from '../server';
-import { createRaidGuestSpawn, incomingRaidGateOf, raidGuestSpawnAnchors } from './guest-spawn';
+import { BRAZIER_CELLS, TORCH_CELLS } from '../../../web/src/twitch-moments/raid-art';
+import { CELL } from '../../../web/src/twitch-moments/banner';
+import { RAID_CHAT_GATE_LAYOUT, RAID_GATE_LAYOUT, RAID_TORCH_LAYOUT } from '../../../web/src/twitch-moments/raid-view';
+import { createRaidGuestSpawn, incomingRaidGateOf, incomingRaidRouteOf, raidColumnDistance, raidGateFurnitureOf, raidGuestSpawnAnchors, RAID_COLUMN_CLEARANCE, RAID_GATE_FURNITURE } from './guest-spawn';
 import type { RaidGuestAuthority } from './guests';
 
 const plan = generateSettlementPlan({ seed: 'raid-spawn-geometry', tier: 'hamlet', firstYear: 2025, year: 2026 });
@@ -50,6 +53,54 @@ describe('incoming guest geometry and read-only preparation', () => {
       expect(embeddedSolids(body, world)).toEqual([]); expect(supported(body, world)).toBe(true);
       expect(anchors.slice(0, i).every(other => Math.abs(other[0] - point[0]) >= WALK_BODY.radius * 2 + .05
         || Math.abs(other[2] - point[2]) >= WALK_BODY.radius * 2 + .05 || Math.abs(other[1] - point[1]) >= WALK_BODY.height)).toBe(true);
+    }
+  });
+
+  it('follows the web caravan road and seats guests beside it inside the gate, never in the column first', () => {
+    for (const seed of ['raid-gate-a', 'raid-gate-b', 'raid-spawn-geometry']) {
+      const layout = generateSettlementPlan({ seed, tier: 'hamlet', firstYear: 2025, year: 2026 });
+      expect(incomingRaidRouteOf(layout)).toEqual(giftRouteOf(layout)?.inbound ?? null);
+    }
+    const world = terrain(), route = incomingRaidRouteOf(plan)!, gate = route[0]!;
+    const anchors = raidGuestSpawnAnchors(plan, world), furniture = raidGateFurnitureOf(route);
+    const blocked = anchors.map(point => raidColumnDistance(route, point[0], point[2]) < RAID_COLUMN_CLEARANCE
+      || furniture.some(piece => Math.hypot(point[0] - piece.x, point[2] - piece.z) < piece.radius + WALK_BODY.radius + .1));
+    const firstInPath = blocked.indexOf(true);
+    // Several guests fit beside the road before anyone would be placed in the caravan's way or the gate's furniture.
+    expect(firstInPath === -1 ? anchors.length : firstInPath).toBeGreaterThanOrEqual(4);
+    if (firstInPath >= 0) expect(blocked.slice(firstInPath).every(Boolean)).toBe(true);
+    // The first guest stands on the town side of the gate, where the column comes towards them.
+    const inward = route.find(point => Math.hypot(point[0] - gate[0], point[2] - gate[2]) > .05)!;
+    const first = anchors[0]!;
+    expect((first[0] - gate[0]) * (inward[0] - gate[0]) + (first[2] - gate[2]) * (inward[2] - gate[2])).toBeGreaterThan(0);
+    // The swept column covers the straight approach outside the gate as well as the road in.
+    const outward = [gate[0] - (inward[0] - gate[0]), gate[2] - (inward[2] - gate[2])] as const;
+    expect(raidColumnDistance(route, outward[0], outward[1])).toBeLessThan(.01);
+  });
+
+  it('keeps guests out of the raid layer\'s braziers, standard, torches and lantern stands, with the layer\'s own numbers', () => {
+    const F = RAID_GATE_FURNITURE;
+    expect(F.gate).toEqual(RAID_GATE_LAYOUT);
+    expect(F.torches).toMatchObject({ start: RAID_TORCH_LAYOUT.start, spacing: RAID_TORCH_LAYOUT.spacing, aside: RAID_TORCH_LAYOUT.aside, notBefore: RAID_GATE_LAYOUT.brazierIn + 1 });
+    expect(F.chat).toMatchObject({ aside: RAID_CHAT_GATE_LAYOUT.aside, spacing: RAID_CHAT_GATE_LAYOUT.spacing, start: RAID_CHAT_GATE_LAYOUT.start, slots: RAID_CHAT_GATE_LAYOUT.slots });
+    expect(F.brazier).toBeGreaterThanOrEqual(Math.max(BRAZIER_CELLS.size[0], BRAZIER_CELLS.size[2]) * CELL / 2);
+    expect(F.torches.post).toBeGreaterThanOrEqual(Math.max(TORCH_CELLS.size[0], TORCH_CELLS.size[2]) * CELL / 2);
+    for (const seed of ['raid-gate-a', 'raid-gate-b', 'raid-spawn-geometry', 'SIMULATED-tobi4s-incoming-show']) {
+      const layout = generateSettlementPlan({ seed, tier: 'hamlet', firstYear: 2025, year: 2026 });
+      const route = incomingRaidRouteOf(layout)!, gate = route[0]!, inward = route.find(point => Math.hypot(point[0] - gate[0], point[2] - gate[2]) > .05)!;
+      const length = Math.hypot(inward[0] - gate[0], inward[2] - gate[2]), fx = (inward[0] - gate[0]) / length, fz = (inward[2] - gate[2]) / length;
+      const braziers = [-1, 1].map(sign => [gate[0] + fx * F.gate.brazierIn + fz * F.gate.brazierAside * sign, gate[2] + fz * F.gate.brazierIn - fx * F.gate.brazierAside * sign] as const);
+      const furniture = raidGateFurnitureOf(route);
+      for (const [x, z] of braziers) expect(furniture.some(piece => Math.hypot(piece.x - x, piece.z - z) < 1e-9 && piece.radius === F.brazier)).toBe(true);
+      // The first guests (the room seats them in order) stand clear of both fires, on real ground beside the road.
+      const gx = Math.floor(gate[0] * 2) / 2 - 8, gz = Math.floor(gate[2] * 2) / 2 - 8;
+      const heights = Float32Array.from({ length: 32 * 32 }, (_, i) => foundedGroundAt(layout, gx + (i % 32 + .5) * .5, gz + (Math.floor(i / 32) + .5) * .5)[1]);
+      const world = compileCollisionWorld({ revision: 1, materials: { materials: [{ id: 0, solid: false }] }, assets: [], placements: [],
+        terrain: { origin: [gx, -16, gz], columns: 32, rows: 32, heights, ceilingY: 496 } });
+      for (const point of raidGuestSpawnAnchors(layout, world).slice(0, 4)) {
+        for (const [x, z] of braziers) expect(Math.hypot(point[0] - x, point[2] - z)).toBeGreaterThanOrEqual(F.brazier + WALK_BODY.radius);
+        expect(furniture.every(piece => Math.hypot(point[0] - piece.x, point[2] - piece.z) >= piece.radius + WALK_BODY.radius)).toBe(true);
+      }
     }
   });
 

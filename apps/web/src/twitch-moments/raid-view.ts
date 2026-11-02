@@ -50,8 +50,12 @@ const TAU = Math.PI * 2;
 const v3 = (p: Vec3) => new THREE.Vector3(p[0], p[1], p[2]);
 const cells = (x: number, y: number, z: number, out = new THREE.Vector3()) => out.set(x * CELL, y * CELL, z * CELL);
 
-/** The pole stands this far to one side of the road at the gate line; the braziers flank the road a little inside it. */
-const POLE_ASIDE = 2.4, BRAZIER_ASIDE = 2.0, BRAZIER_IN = 1.2;
+/**
+ * The pole stands this far to one side of the road at the gate line; the braziers flank the road a little inside it.
+ * The realm keeps arriving raid guests out of this furniture (apps/realm/src/raid-gate/guest-spawn.ts mirrors it).
+ */
+export const RAID_GATE_LAYOUT = { poleAside: 2.4, brazierAside: 2.0, brazierIn: 1.2 } as const;
+const { poleAside: POLE_ASIDE, brazierAside: BRAZIER_ASIDE, brazierIn: BRAZIER_IN } = RAID_GATE_LAYOUT;
 
 /** Soft light: a round glow facing the camera, or a pool of light lying on the ground. Additive, HDR, unfogged. */
 const glowVertex = /* glsl */ `
