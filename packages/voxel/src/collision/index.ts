@@ -122,7 +122,15 @@ export function compilePlacedSolids(input: PlacedSolidsInput, limits?: PlacedSol
  */
 export function compileCollisionWorld(input: CollisionCompilerInput): CollisionWorld {
   if (!Number.isInteger(input.revision) || input.revision < 0 || input.revision > 0xffffffff) throw new Error('Invalid collision revision.');
-  const placed = compilePlacedSolids(input);
+  return compileCollisionWorldWithSolids(input, compilePlacedSolids(input));
+}
+
+/**
+ * The same world from solids that `compilePlacedSolids` already compiled for this input elsewhere (a worker), in
+ * their original order. `compileCollisionWorld(input)` equals this with `compilePlacedSolids(input)`.
+ */
+export function compileCollisionWorldWithSolids(input: Pick<CollisionCompilerInput, 'revision' | 'terrain'>, placed: readonly CollisionBox[]): CollisionWorld {
+  if (!Number.isInteger(input.revision) || input.revision < 0 || input.revision > 0xffffffff) throw new Error('Invalid collision revision.');
   const t = input.terrain, [ox, bottom, oz] = t.origin;
   if (!finite(t.origin) || !Number.isFinite(t.ceilingY) || t.ceilingY <= bottom || !Number.isInteger(t.columns) || !Number.isInteger(t.rows) || t.columns < 1 || t.rows < 1 || t.columns * t.rows > MAX_CELLS || t.heights.length !== t.columns * t.rows) throw new Error('Invalid sampled terrain.');
   const heights = Array.from(t.heights);
@@ -161,4 +169,21 @@ export function compileCollisionWorld(input: CollisionCompilerInput): CollisionW
     clip([lx, Math.max(lo[1], ceiling), lz], [hx, hi[1], hz]);
     return Object.freeze([...out.values()].sort((a, b) => { for (let i = 0; i < 3; i++) { const d = a.min[i]! - b.min[i]!; if (d) return d; } for (let i = 0; i < 3; i++) { const d = a.max[i]! - b.max[i]!; if (d) return d; } return 0; }));
   } });
+}
+
+/** Six float64 per box (min then max), for moving compiled solids between threads without loss. */
+export function packCollisionBoxes(boxes: readonly CollisionBox[]): Float64Array {
+  const out = new Float64Array(boxes.length * 6);
+  boxes.forEach((b, i) => { out.set(b.min, i * 6); out.set(b.max, i * 6 + 3); });
+  return out;
+}
+export function unpackCollisionBoxes(data: Float64Array): readonly CollisionBox[] {
+  if (data.length % 6) throw new Error('Packed collision boxes need six numbers each.');
+  const out: CollisionBox[] = [];
+  for (let i = 0; i < data.length; i += 6) {
+    const min: Vec3 = [data[i]!, data[i + 1]!, data[i + 2]!], max: Vec3 = [data[i + 3]!, data[i + 4]!, data[i + 5]!];
+    if (!finite(min) || !finite(max) || min.some((v, k) => v >= max[k]!)) throw new Error('Packed collision box is not a finite nonempty box.');
+    out.push(freezeBox(min, max));
+  }
+  return Object.freeze(out);
 }

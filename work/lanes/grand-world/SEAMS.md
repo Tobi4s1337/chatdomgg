@@ -932,8 +932,9 @@ Run in the deployed checkout (lane/integrator with this checkpoint merged). Noth
 2. **Land directory:** one persistent directory outside the repo, owned by the realm's user, on the same disk as
    `REALM_FOUNDED_DIRECTORY` (for example `/var/lib/chatdom/land`). Either:
    - **copy the verified bake** (instant, 17.63 MB): `cp -a <grand-world worktree>/shots/grand-world/land-bake-g3/. /var/lib/chatdom/land/`
-     It holds recipe `71f6888b…` (grader 3, format 2), the plan catalogue and the binding for the live receipt
-     `af5df495…` (collision revision 11); or
+     It holds recipe `71f6888b…` (grader 3, format 2), the plan catalogue and the bindings for the live receipts
+     `af5df495…` (collision revision 11) and `1ee0e81d…` (collision revision 12, the anvil's physics identity; same
+     plan, rebound with the publication command in 1.9 s, all 354 blobs reused); or
    - **leave it empty**: on the kingdom's first open the realm bakes it itself (about 93 CPU s at priority 19,
      about 400 MiB in the child; on this host under load 25 it took the wall time recorded in GW11.md), and the
      kingdom shows today's land until the binding lands.
@@ -954,8 +955,22 @@ Run in the deployed checkout (lane/integrator with this checkpoint merged). Noth
    ```
    Then `/stream?source=realm&kingdom=129634568` and `/-/grand?channel=tobi4s_` open on the grand land with his homes
    (the canvas's `data-hosted-land` is not `absent`).
+   After the Content-Length fix (`apps/realm/src/land/mount.ts`, GW11 third session) merges and the realm is
+   rebuilt, the deployed copy's local patch that skipped the header can be dropped; `curl -sI` then shows exactly
+   one `content-length`, equal to the blob's size.
 7. **Rollback:** unset `REALM_LAND_DIRECTORY` and restart. Clients fall back to today's land (the probe's 6 s limit
    ends the wait on an unmounted route). The land directory can stay; it is immutable.
 
 Still open for the integrator (unchanged): the Chronicle's historical scenes do not pass through the founded store, so
 replaying an old receipt shows today's land unless that exact receipt was published (`publish-cli`).
+
+### GW11 opening speed: small additive changes beside this lane's files
+
+No round lane owns these, so they were made here as the smallest backward-compatible change (note of 2 Nov 12:18):
+- `packages/voxel/src/collision`: `compileCollisionWorldWithSolids`, `packCollisionBoxes`, `unpackCollisionBoxes`;
+  `compileCollisionWorld` now calls the first with `compilePlacedSolids(input)`, the same world as before.
+- `packages/world/src/founded-world/collision.ts`: `foundedPlacedSolidsInput` and `compileFoundedSceneWithSolids`.
+  `compileFoundedScene` is unchanged in result.
+- `terrain-art` is untouched: the scene answers ground queries from the workers' corners in its own
+  `apps/web/src/kingdom/terrain-founded-sampler.ts` (the producer's interpolation, spot-checked against
+  `terrainHeight`).

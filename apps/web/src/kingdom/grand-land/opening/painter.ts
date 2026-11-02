@@ -18,8 +18,9 @@ interface LandLayers {
   readonly relief: HTMLCanvasElement;
   /** Watercolour of the land (meadow, heath, rock, snow, water) at the grid's resolution. */
   readonly colour: HTMLCanvasElement;
-  readonly coast: Float32Array;
-  readonly contours: Float32Array;
+  /** The inked coast and the 24 m contours as paths in world metres, built once: a frame strokes each in one call. */
+  readonly coast: Path2D;
+  readonly contours: Path2D;
   /** The dry land's extent: the map frames the island, not the open sea around it. */
   readonly dry: OpeningBounds;
 }
@@ -47,6 +48,36 @@ export function isolines(columns: number, rows: number, value: (column: number, 
     for (let i = 0; i + 3 < points.length; i += 4) out.push(points[i]!, points[i + 1]!, points[i + 2]!, points[i + 3]!);
   }
   return Float32Array.from(out);
+}
+
+/** `isolines` for every level of an ascending list in one pass over the grid; segments are path pairs in world metres. */
+export function contourPath(columns: number, rows: number, value: (column: number, row: number) => number, levels: readonly number[],
+  bounds: OpeningBounds, path: { moveTo(x: number, y: number): void; lineTo(x: number, y: number): void }): number {
+  if (!levels.length) return 0;
+  const cw = (bounds.maxX - bounds.minX) / columns, ch = (bounds.maxZ - bounds.minZ) / rows, first = levels[0]!, last = levels.at(-1)!;
+  const x = (c: number) => bounds.minX + (c + .5) * cw, z = (r: number) => bounds.minZ + (r + .5) * ch;
+  const points: number[] = [];
+  let segments = 0;
+  const edge = (p: number, q: number, x0: number, z0: number, x1: number, z1: number) => {
+    if ((p < 0) === (q < 0)) return;
+    const t = p / (p - q); points.push(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t);
+  };
+  for (let r = 0; r < rows - 1; r++) for (let c = 0; c < columns - 1; c++) {
+    const a = value(c, r), b = value(c + 1, r), d = value(c, r + 1), e = value(c + 1, r + 1);
+    const low = Math.min(a, b, d, e), high = Math.max(a, b, d, e);
+    // A cell crosses a level only between its lowest and highest corner.
+    if (high < first || low > last) continue;
+    for (const level of levels) {
+      if (level < low || level > high) continue;
+      points.length = 0;
+      edge(a - level, b - level, x(c), z(r), x(c + 1), z(r));
+      edge(b - level, e - level, x(c + 1), z(r), x(c + 1), z(r + 1));
+      edge(e - level, d - level, x(c + 1), z(r + 1), x(c), z(r + 1));
+      edge(d - level, a - level, x(c), z(r + 1), x(c), z(r));
+      for (let i = 0; i + 3 < points.length; i += 4) { path.moveTo(points[i]!, points[i + 1]!); path.lineTo(points[i + 2]!, points[i + 3]!); segments++; }
+    }
+  }
+  return segments;
 }
 
 function buildLand(land: OpeningLand): LandLayers {
@@ -84,11 +115,11 @@ function buildLand(land: OpeningLand): LandLayers {
   }
   relief.getContext('2d')!.putImageData(reliefData, 0, 0);
   colour.getContext('2d')!.putImageData(colourData, 0, 0);
-  const wet = (c: number, r: number) => water[c + r * columns] ? 1 : -1;
-  const coast = isolines(columns, rows, (c, r) => wet(c, r), 0, land.bounds);
-  const contour: number[] = [];
-  for (let level = seaLevel + 24; level < high; level += 24) contour.push(...isolines(columns, rows, (c, r) => water[c + r * columns] ? seaLevel - 1 : at(c, r), level, land.bounds));
-  return { land, relief, colour, coast, contours: Float32Array.from(contour), dry };
+  const coast = new Path2D(), contours = new Path2D(), levels: number[] = [];
+  contourPath(columns, rows, (c, r) => water[c + r * columns] ? 1 : -1, [0], land.bounds, coast);
+  for (let level = seaLevel + 24; level < high; level += 24) levels.push(level);
+  contourPath(columns, rows, (c, r) => water[c + r * columns] ? seaLevel - 1 : heights[c + r * columns]!, levels, land.bounds, contours);
+  return { land, relief, colour, coast, contours, dry };
 }
 
 function lerpBounds(a: OpeningBounds, b: OpeningBounds, t: number): OpeningBounds {
@@ -124,7 +155,9 @@ export function createOpeningPainter(target: HTMLCanvasElement) {
     drawnKey = key;
     if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, w, h);
-    if (state.land && layers?.land !== state.land) { layers = buildLand(state.land); maskRegions = -1; }
+    // A journal that starts over (a reopened kingdom) drops the land it drew before.
+    if (!state.land) layers = undefined;
+    else if (layers?.land !== state.land) { layers = buildLand(state.land); maskRegions = -1; }
     const streets = state.streets;
     const town = streets ? pad(streets.bounds, .1) : state.land ? pad(state.land.town, .1) : null;
     if (!town) return true;
@@ -244,11 +277,8 @@ export function createOpeningPainter(target: HTMLCanvasElement) {
   return { draw, dispose() { layers = undefined; mask = undefined; } };
 }
 
-function strokeSegments(ctx: CanvasRenderingContext2D, segments: Float32Array, width: number, style: string) {
-  if (!segments.length) return;
-  ctx.beginPath();
-  for (let i = 0; i + 3 < segments.length; i += 4) { ctx.moveTo(segments[i]!, segments[i + 1]!); ctx.lineTo(segments[i + 2]!, segments[i + 3]!); }
-  ctx.lineWidth = width; ctx.strokeStyle = style; ctx.stroke();
+function strokeSegments(ctx: CanvasRenderingContext2D, segments: Path2D, width: number, style: string) {
+  ctx.lineWidth = width; ctx.strokeStyle = style; ctx.stroke(segments);
 }
 function polygon(ctx: CanvasRenderingContext2D, points: readonly (readonly [number, number])[]) {
   ctx.beginPath(); points.forEach(([x, z], i) => i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)); ctx.closePath();

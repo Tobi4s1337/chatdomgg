@@ -329,7 +329,9 @@ try {
         if (Date.now() - started > timeout) throw new Error(`Timed out: ${JSON.stringify(run.trail.at(-1))}`);
       }
     };
-    run.gateMs = await timed(() => !!document.querySelector('.kingdom-gate'), 30_000);
+    // The opening map replaced the plain gate; either one, or the opening's own gate mark, is the designed loader.
+    run.gateMs = await timed(() => !!document.querySelector('.kingdom-gate, .opening') || performance.getEntriesByName('chatdom:open:gate').length > 0, 30_000);
+    run.gateMs = await page.evaluate(fallback => Math.round(performance.getEntriesByName('chatdom:open:gate')[0]?.startTime ?? fallback), run.gateMs);
     run.loadedMs = await timed(() => window.__chatdomReady === true && !!window.__chatdomKingdom?.inspect?.().loaded, 240_000);
     run.walkableMs = await timed(() => window.__chatdomWalk?.ready === true && window.__chatdomWalk.owner === 'walking', 240_000);
     run.land = await page.evaluate(() => { const s = window.__chatdomKingdom.inspect().land; return s && { generatedColumns: s.generatedColumns, initialNetworkBytes: s.initialNetworkBytes, phase: s.phase, regions: s.regions ?? null }; });

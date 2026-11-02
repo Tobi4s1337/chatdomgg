@@ -16,6 +16,8 @@ export { createHostedGrandMaterial, hostedPalette } from './material';
 
 const MiB = 1024 * 1024;
 const INSTALL_BYTES = 256 * 1024;
+/** Before the land is first presented nothing is drawn, so a frame may install far more without a visible hitch. */
+const OPENING_INSTALL_BYTES = 4 * MiB, OPENING_INSTALL_MS = 6;
 const RESIDENT_BYTES = 128 * MiB;
 const FADE_MS = 400;
 
@@ -339,7 +341,8 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
         }
         item.from = to;
         if (to >= end) { item.face++; item.from = reply.offsets[item.face]!; }
-        if (bytes >= INSTALL_BYTES || performance.now() - started >= .75) break;
+        if (presented ? bytes >= INSTALL_BYTES || performance.now() - started >= .75
+          : bytes >= OPENING_INSTALL_BYTES || performance.now() - started >= OPENING_INSTALL_MS) break;
       }
     }
     function visibility() {

@@ -1,6 +1,6 @@
 import type { Vec3 } from '@chatdom/shared';
 import type { CollisionWorld } from '@chatdom/shared/realm';
-import { COLLISION_COMPILER_VERSION, compileCollisionWorld, type SampledTerrain } from '@chatdom/voxel/collision';
+import { COLLISION_COMPILER_VERSION, compileCollisionWorld, compileCollisionWorldWithSolids, type CollisionBox, type PlacedSolidsInput, type SampledTerrain } from '@chatdom/voxel/collision';
 import { terrainHeight } from '../layout';
 import type { RealmFoundedScene } from './types';
 import type { SettlementPlan } from '../settlement/types';
@@ -93,10 +93,20 @@ export function primeFoundedTerrain(plan: SettlementPlan, heights: Float32Array)
 
 /** Compile already validated, receipt-matched public geometry on either end of walking. */
 export function compileFoundedScene(scene: RealmFoundedScene): CollisionWorld {
+  return compileCollisionWorld({ revision: scene.collisionRevision, ...foundedPlacedSolidsInput(scene), terrain: sampleFoundedTerrain(scene.plan) });
+}
+
+/** The placed-solid half of `compileFoundedScene`'s input (the scene's assets and placements plus the anvil). */
+export function foundedPlacedSolidsInput(scene: RealmFoundedScene): PlacedSolidsInput {
   const anvil = foundedAnvil(scene);
-  return compileCollisionWorld({ revision: scene.collisionRevision, materials: scene.materials,
+  return { materials: scene.materials,
     assets: anvil ? [...scene.assets, anvil.asset] : scene.assets,
-    placements: anvil ? [...scene.placements, anvil.placement] : scene.placements, terrain: sampleFoundedTerrain(scene.plan) });
+    placements: anvil ? [...scene.placements, anvil.placement] : scene.placements };
+}
+
+/** `compileFoundedScene` with its placed solids compiled elsewhere from `foundedPlacedSolidsInput(scene)`. */
+export function compileFoundedSceneWithSolids(scene: RealmFoundedScene, placed: readonly CollisionBox[]): CollisionWorld {
+  return compileCollisionWorldWithSolids({ revision: scene.collisionRevision, terrain: sampleFoundedTerrain(scene.plan) }, placed);
 }
 
 /** The anvil as one collision-only asset and placement; null only if the scene has no solid material at all. */

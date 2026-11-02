@@ -3,6 +3,7 @@
   "include": [
     "../../../apps/web/src/kingdom/scene.ts",
     "../../../apps/web/src/kingdom/terrain-founded*.ts",
+    "../../../apps/web/src/kingdom/ground-dressing/adopted-cover*.ts",
     "../../../apps/web/src/grand/**/*.ts",
     "../../../apps/web/src/grand/**/*.tsx",
     "../../../apps/web/src/kingdom/grand-land/**/*.ts",
@@ -12,6 +13,8 @@
     "../../../packages/world/src/grand-adoption/surface*.ts",
     "../../../packages/world/src/land-interface*.ts",
     "../../../apps/web/src/kingdom/terrain-surface*.ts",
+    "../../../apps/web/src/places/water/surface/**/*.ts",
+    "../../../apps/web/src/kingdom/trees/picture-motion*.ts",
     "../../../packages/world/src/grand-adoption/pier-sites*.ts",
     "../../../packages/world/src/grand-adoption/pier-authored*.ts",
     "../../../packages/world/src/grand-adoption/pier-fishing-proposal*.ts",
