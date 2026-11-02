@@ -26,3 +26,20 @@ export function savedView(value: unknown, mapId: string): { camera: SavedCamera;
   const selected = typeof view.selected === 'string' && CHANNEL_ID.test(view.selected) ? view.selected : null;
   return { camera: { x, y, scale }, selected };
 }
+
+/**
+ * The page's own requests to move the map (`restore`, `flyTo`): only the newest may still act. Beginning one cancels
+ * the one before, so a late card reply from an earlier request can never reopen its card over a newer view.
+ */
+export class LatestRequest {
+  private current: AbortController | null = null;
+
+  /** Start a request; its signal aborts when a newer one begins or any of `signals` aborts. */
+  begin(...signals: (AbortSignal | undefined)[]): AbortSignal {
+    this.current?.abort();
+    const controller = new AbortController();
+    this.current = controller;
+    const all = signals.filter((signal): signal is AbortSignal => !!signal);
+    return all.length ? AbortSignal.any([controller.signal, ...all]) : controller.signal;
+  }
+}

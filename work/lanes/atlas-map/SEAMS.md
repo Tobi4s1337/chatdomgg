@@ -229,3 +229,7 @@ still has one fixed view, so a restore there opens the card only. With `routing:
 
 The sign-in seal and `takeReturnView()` recipe on `/map` waits for front-door's `@chatdom/ui/site` exports to reach
 this branch through main; the embed half is ready for the front page now.
+
+Newest request wins (2 Nov, AM10 follow-up): each `restore` or `flyTo` cancels the one before it. A superseded call
+resolves `false` and never opens its card or finishes its flight later, and a card the person opens or closes while a
+call is still fetching stays as they left it. The front page needs no guard of its own.

@@ -29,7 +29,7 @@ export interface AtlasHandle {
   /**
    * Put the map exactly at a view it gave earlier, without a flight, and open its card (explore only). Resolves true
    * once it stands there; false for a view from another survey revision, a malformed view, a card that cannot be
-   * shown or a disposed map.
+   * shown, a disposed map, or one superseded by a newer `restore` or `flyTo` (only the newest may still open a card).
    */
   restore(view: AtlasView, options?: { signal?: AbortSignal }): Promise<boolean>;
   setMode(mode: 'hero' | 'explore'): void;

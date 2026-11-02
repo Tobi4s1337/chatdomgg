@@ -258,3 +258,23 @@ command every web test failed to start with "Cannot find package 'jsdom'".
   computation.
 - Changing the web package's environment for every lane (set `node`, or add
   `jsdom`) is outside this lane's scope. It is written as a `needs:` line.
+
+## Overlapping restores (2 Nov, review follow-up)
+
+- The review found that `restore(viewWithCard)` followed at once by a second
+  `restore` could still open the first view's card when that card's register
+  reply arrived late. Now the page's own requests (`restore`, `flyTo`) go
+  through one `LatestRequest` in `saved-view.ts`. Each new request aborts the
+  one before it, and that signal is checked after the card fetch and again
+  after `openFace` has located the holding, so a late reply can no longer open
+  its card.
+- A card the person opened or closed while a request was still fetching
+  (`cardGeneration` moved) also wins: the request resolves `false` and leaves
+  their card alone. A camera-only `flyTo` (`openCard: false`) still flies;
+  only a newer request cancels it.
+- A superseded `flyTo` now resolves `false` instead of waiting for a flight
+  that a newer request replaced. This is written as a clarification in both
+  atlas-map's and front-door's `SEAMS.md`.
+- Tests: three `LatestRequest` unit tests in `saved-view.test.ts`, and one
+  real-Chrome check in `embed-checks.mjs` (two restores in a row: the first,
+  with a card, resolves `false`; the second stands at its view with no card).

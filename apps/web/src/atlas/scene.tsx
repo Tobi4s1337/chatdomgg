@@ -2,7 +2,7 @@ import { batch, createEffect, createMemo, createSignal, createUniqueId, Match, o
 import './atlas.css';
 import { render } from 'solid-js/web';
 import type { AtlasMountOptions, AtlasReadyState, AtlasScene as SceneHandle, AtlasTarget, AtlasView } from './embed';
-import { savedView } from './saved-view';
+import { LatestRequest, savedView } from './saved-view';
 import type { HistoryLike } from './ui/history';
 import { adoptPreview, loadPreview, type LoadedPreview } from './data/load';
 import { dabHashOf, DirectoryError, fetchCard, fetchRoad, type CardReply, type CardRoad, type ChannelFace, type Lookup, type PencilPosition, type RoadReply, type SearchResult } from './data/directory';
@@ -413,10 +413,10 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
    * Open any channel the register named (a search result, a road's end, a route): its holding, its flag, or its
    * waiting card. `fly` false (a restored view) opens it where the map already stands. Resolves whether a card opened.
    */
-  const openFace = async (face: ChannelFace, position?: PencilPosition, fly = true): Promise<boolean> => {
+  const openFace = async (face: ChannelFace, position?: PencilPosition, fly = true, signal?: AbortSignal): Promise<boolean> => {
     const generation = ++cardGeneration;
     const place = await locate(face);
-    if (generation !== cardGeneration) return false;
+    if (generation !== cardGeneration || signal?.aborted) return false;
     if (place && 'settler' in place) { choose(place.settler, fly); return true; }
     if (place && 'dab' in place) { chooseDab(place.dab, fly, face); return true; }
     if (face.place === 'waiting') { openWaiting(face, position, fly); return true; }
@@ -820,19 +820,25 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     return selected()?.id ?? waiting()?.id ?? (flag?.status === 'ready' ? flag.reply.channel.id : null);
   };
   const currentView = () => ({ ...(view?.cameraState() ?? { x: 0, y: 0, scale: 1 }), selected: openChannel(), mapId: loaded()?.world.id ?? '' });
-  /** Open a saved view's card where the map stands. */
+  /** Only the page's newest restore or flight may still open a card or move the map. */
+  const hostRequests = new LatestRequest();
+  /**
+   * Open a saved view's card where the map stands, unless a newer request began or a card opened or closed meanwhile
+   * (the person acted since): a late reply never reopens an earlier selection.
+   */
   const openSaved = async (id: string, signal: AbortSignal): Promise<boolean> => {
+    const cards = cardGeneration;
     try {
       const reply = await fetchCard(SOURCE, loaded()!.world.id, { id }, signal);
-      if (signal.aborted || disposed) return false;
-      return await openFace(reply.channel, reply.position, false);
+      if (signal.aborted || disposed || cards !== cardGeneration) return false;
+      return await openFace(reply.channel, reply.position, false, signal);
     } catch { return false; }
   };
   const restore = async (target: AtlasView, options?: { signal?: AbortSignal }): Promise<boolean> => {
     if (disposed || !loaded() || !controller || options?.signal?.aborted) return false;
     const saved = savedView(target, loaded()!.world.id);
     if (!saved) return false;
-    const signal = options?.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
+    const signal = hostRequests.begin(controller.signal, options?.signal);
     view?.setCamera(saved.camera);
     if (mode() === 'hero') return true;
     if (!saved.selected) {
@@ -844,11 +850,16 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   };
   const flyTo = async (target: AtlasTarget, options?: { openCard?: boolean; signal?: AbortSignal }): Promise<boolean> => {
     if (disposed || !loaded() || !controller || options?.signal?.aborted) return false;
-    const signal = options?.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
+    const signal = hostRequests.begin(controller.signal, options?.signal);
+    const cards = cardGeneration;
     try {
       const reply = await fetchCard(SOURCE, loaded()!.world.id, 'login' in target ? { login: target.login } : { id: target.channelId }, signal);
       if (signal.aborted || disposed) return false;
-      if (options?.openCard !== false && mode() !== 'hero') await openFace(reply.channel, reply.position);
+      if (options?.openCard !== false && mode() !== 'hero') {
+        // A card the person opened or closed while the register answered stays as they left it.
+        if (cards !== cardGeneration) return false;
+        if (!await openFace(reply.channel, reply.position, true, signal)) return false;
+      }
       else {
         const place = await locate(reply.channel);
         if (signal.aborted || disposed) return false;

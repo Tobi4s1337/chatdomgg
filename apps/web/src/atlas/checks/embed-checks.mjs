@@ -230,6 +230,18 @@ try {
     const returned = await page.evaluate(() => ({ view: window.__atlasBench.handle.view(), history: window.__embedCounts.history }));
     check('restore returns to the exact position, zoom and card', back && near(returned.view, saved) && returned.view.selected === saved.selected && (await card()) === savedCard, { back, saved, returned, card: await card() });
     check('restore in memory routing never writes history', returned.history === 0, returned.history);
+    // Two restores in a row: the earlier one's card reply arrives late and must not reopen its card.
+    const overlap = await page.evaluate(async ([withCard, without]) => {
+      const handle = window.__atlasBench.handle;
+      await handle.restore(without);
+      return Promise.all([handle.restore(withCard), handle.restore(without)]);
+    }, [saved, elsewhere]);
+    await sleep(1500);
+    const overlapped = await page.evaluate(() => window.__atlasBench.handle.view());
+    check('a newer restore wins over an earlier one still fetching its card', overlap[0] === false && overlap[1] === true && near(overlapped, elsewhere) && overlapped.selected === null && (await card()) === null, { overlap, overlapped, card: await card() });
+    await page.evaluate(next => window.__atlasBench.handle.restore(next), saved);
+    await page.waitForFunction(() => !!document.querySelector('.atlas-card h2'), null, { timeout: 10000 }).catch(() => {});
+    await sleep(600);
     const foreign = await page.evaluate(next => window.__atlasBench.handle.restore(next), { ...elsewhere, mapId: 'another-survey' });
     const unmoved = await page.evaluate(() => window.__atlasBench.handle.view());
     check('a view from another survey is refused and leaves the map as it is', foreign === false && near(unmoved, saved), { foreign, unmoved });

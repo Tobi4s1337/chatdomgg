@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { savedView } from './saved-view';
+import { LatestRequest, savedView } from './saved-view';
 
 const view = { x: 1200.5, y: -340.25, scale: 0.42, selected: '141981764', mapId: 'world-abc' };
 
@@ -31,5 +31,43 @@ describe('savedView', () => {
       expect(read?.camera).toEqual({ x: 1200.5, y: -340.25, scale: 0.42 });
       expect(read?.selected).toBeNull();
     }
+  });
+});
+
+describe('LatestRequest', () => {
+  it('cancels the earlier request when a newer one begins', () => {
+    const requests = new LatestRequest();
+    const first = requests.begin();
+    expect(first.aborted).toBe(false);
+    const second = requests.begin();
+    expect(first.aborted).toBe(true);
+    expect(second.aborted).toBe(false);
+  });
+
+  it('follows the map and the caller signals', () => {
+    const requests = new LatestRequest();
+    const map = new AbortController();
+    const caller = new AbortController();
+    const signal = requests.begin(map.signal, caller.signal, undefined);
+    caller.abort();
+    expect(signal.aborted).toBe(true);
+    const next = requests.begin(map.signal);
+    map.abort();
+    expect(next.aborted).toBe(true);
+  });
+
+  it('drops a late reply of an earlier restore after a newer one', async () => {
+    const requests = new LatestRequest();
+    const opened: string[] = [];
+    const restore = async (id: string, delay: number) => {
+      const signal = requests.begin();
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      if (signal.aborted) return false;
+      opened.push(id);
+      return true;
+    };
+    const results = await Promise.all([restore('earlier', 20), restore('newer', 0)]);
+    expect(results).toEqual([false, true]);
+    expect(opened).toEqual(['newer']);
   });
 });
