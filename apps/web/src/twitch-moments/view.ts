@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { RaidChatCue, RaidChatFrame, Vec3, VoxelBlueprint } from '@chatdom/shared';
+import type { RaidChatCue, RaidChatFrame, RaidPennantFrame, Vec3, VoxelBlueprint } from '@chatdom/shared';
 import {
   BANNER_CELLS, BANNER_TIERS, CELL, RIBBON_SLOTS, SHIMMER_PHASES, SWAG_CELLS, bannerBracket, bannerParts, bannerRibbon, type BannerKit, type BannerTier,
 } from './banner';
@@ -9,6 +9,7 @@ import type { FocusFrame, HomeDressFrame, MomentCue, MomentFrame, MomentPlace, M
 import { createDragonLayer } from './dragon-view';
 import { createGiftLayer, type DoorAnchor, type GiftRoute, type PlaceAnchor } from './gift-view';
 import { createRaidLayer, type RaidChatGround } from './raid-view';
+import { createRaidPennantWall } from './raid-pennant-wall';
 import { createSkyFlightLayer } from './sky-flight-view';
 import { createSkyLightLayer } from './sky-light-view';
 import type { CrowdCall } from './stage-beat';
@@ -194,6 +195,8 @@ export function createTwitchMomentView(host: MomentViewHost) {
   // The Raid Gate and its caravan, on the same supplied gate and road as the gift cart.
   const raid = createRaidLayer(root, { kit: host.kit, material: host.material, mesh: (blueprint, offset) => meshOf(blueprint, offset),
     place: place => host.placeAnchor?.(place) ?? null, route: () => host.giftRoute?.() ?? null });
+  const pennantWall = createRaidPennantWall(root, { kit: host.kit, material: host.material, mesh: (blueprint, offset) => meshOf(blueprint, offset),
+    place: place => host.placeAnchor?.(place) ?? null, route: () => host.giftRoute?.() ?? null });
 
   // The spectacle layers: the sky's light, what flies through it, the festival train and the dragon.
   const places = host.places ?? NO_PLACES;
@@ -210,7 +213,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
 
   /** Mesh every banner and gift part before the first meaningful frame, so no beat waits on a worker. */
   async function prepare(): Promise<void> {
-    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints(), ...raid.blueprints(), ...spectacles.flatMap(layer => layer.blueprints()),
+    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints(), ...raid.blueprints(), ...pennantWall.blueprints(), ...spectacles.flatMap(layer => layer.blueprints()),
       ...townLayer.blueprints(), ...decree.blueprints()];
     for (const tier of BANNER_TIERS) {
       const p = bannerParts(tier, host.kit);
@@ -783,6 +786,9 @@ export function createTwitchMomentView(host: MomentViewHost) {
     receiveRaidChat(frame: RaidChatFrame): void { if (!disposed) raid.chat(frame.cues, frame.lights); },
     /** The feature host supplies its adopted surface; no sampler means no stationary fixtures. */
     setRaidChatGround(sample: RaidChatGround | undefined): void { if (!disposed) raid.ground(sample); },
+    raidPennantSites: () => pennantWall.sites(),
+    receiveRaidPennants(frame: RaidPennantFrame | null): void { if (!disposed) pennantWall.receive(frame); },
+    setRaidPennantGround(sample: RaidChatGround | undefined): void { if (!disposed) pennantWall.ground(sample); },
     onDispose(listener: () => void): () => void {
       if (disposed) { listener(); return () => {}; }
       disposeListeners.add(listener);
@@ -823,6 +829,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       syncEdges(frame);
       gifts.apply(frame);
       raid.apply(frame.visible ? frame.raids : [], frame.atMs);
+      pennantWall.apply(frame.atMs, frame.visible);
       skyLight.apply(frame.visible ? frame.sky : [], frame.atMs);
       flight.apply(frame.visible ? frame.sky : [], frame.atMs);
       trainLayer.apply(frame.visible ? frame.train : null, frame.atMs);
@@ -877,7 +884,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
     glow: glowNow,
     stats: (): Record<string, number | boolean> => ({ banners: banners.size, meshes: [...banners.values()].reduce((n, b) => n + b.root.children.length, 0), edges: edges.size,
       ...gifts.stats(), ...prefixed('sky', skyLight.stats()), ...prefixed('flight', flight.stats()), ...prefixed('train', trainLayer.stats()),
-      ...prefixed('dragon', dragon.stats()), ...prefixed('raid', raid.stats()),
+      ...prefixed('dragon', dragon.stats()), ...prefixed('raid', raid.stats()), ...prefixed('pennantWall', pennantWall.stats()),
       ...prefixed('town', townLayer.stats()), ...prefixed('decree', decree.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent,
       'stage.watchers': lastFrame?.visible && lastFrame.stage ? lastFrame.stage.watchers : 0, crowd: crowdCalled }),
     dispose(): void {
@@ -895,7 +902,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       playing.clear();
       for (const slot of [...banners.keys()]) remove(slot);
       for (const edge of edges.values()) root.remove(edge.group);
-      edges.clear(); gifts.dispose(); raid.dispose();
+      edges.clear(); gifts.dispose(); raid.dispose(); pennantWall.dispose();
       for (const layer of spectacles) layer.dispose();
       townLayer.dispose(); decree.dispose();
       host.parent.remove(root);

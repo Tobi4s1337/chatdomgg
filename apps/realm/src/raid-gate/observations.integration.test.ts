@@ -47,6 +47,24 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('raid observation ledge
     expect(await ledger.pennants(KingdomIdSchema.parse('202'))).toContainEqual({ raidId: result.raidId, from, occurredAt: now - 60_000 });
   });
 
+  it('selects incoming history by destination and origin in commit order, including late visits after restart', async () => {
+    const moment = async () => ({ http: 202, body: { status: 'accepted' } });
+    const boot = (origin: 'live' | 'simulated') => new RaidObservationLedger({ pool, origin, clock: () => now, moment });
+    const sim = boot('simulated');
+    const first = await sim.record(observation('wall-first', { occurredAt: now - 1000 }));
+    const late = await sim.record(observation('wall-late', { occurredAt: now - 365 * 86400_000 }));
+    await sim.record(observation('wall-late', { occurredAt: now - 365 * 86400_000 }));
+    await sim.record(observation('wall-outgoing', { direction: 'outgoing', kingdomId: '101' }));
+    await boot('live').record(observation('wall-live', { origin: 'live' }));
+    const restarted = boot('simulated');
+    const history = await restarted.pennants(KingdomIdSchema.parse('202'), 2);
+    expect(history.map(item => item.raidId)).toEqual([late.raidId, first.raidId]);
+    expect(history[0]!.occurredAt).toBe(now - 365 * 86400_000);
+    expect((await restarted.pennants(KingdomIdSchema.parse('101'))).map(item => item.raidId)).not.toContain(late.raidId);
+    expect((await boot('live').pennants(KingdomIdSchema.parse('202'))).map(item => item.raidId)).not.toContain(late.raidId);
+    expect(await restarted.pennants(KingdomIdSchema.parse('202'), 1)).toEqual([history[0]]);
+  });
+
   it('keeps a tolerated future provider timestamp stable across redelivery and restart', async () => {
     const moment = async () => ({ http: 202, body: { status: 'accepted' } });
     const first = new RaidObservationLedger({ pool, origin: 'live', clock: () => now, moment });

@@ -176,6 +176,7 @@ export interface MomentResetInfo { epoch: string; asOf: number; throughSeq: numb
 export interface TwitchMomentFeed {
   readonly origin: 'live' | 'simulated';
   readonly raidChat?: import('./raid-show').RaidChatFeed;
+  readonly raidPennants?: import('./raid-show').RaidPennantFeed;
   subscribe(
     reset: (info: MomentResetInfo) => void,
     receive: (epoch: string, fact: TwitchMomentFact) => void,

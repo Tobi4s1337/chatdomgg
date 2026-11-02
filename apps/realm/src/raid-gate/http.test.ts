@@ -38,6 +38,9 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('raid show HTTP boundar
     expect((await post(JSON.stringify({ version: 1, raid: { ...raid, origin: 'live' } }))).status).toBe(403);
     const feed = await service.handle(new Request('http://realm.test/realm/raid-roads'));
     expect((await feed.json()).items).toHaveLength(1);
+    const pennants = await service.handle(new Request('http://realm.test/realm/raid-pennants/202'));
+    expect(await pennants.json()).toMatchObject({ version: 1, origin: 'simulated', kingdomId: '202', asOf: now,
+      items: [{ from: raid.from, occurredAt: raid.occurredAt }] });
   });
 
   it('coalesces recovery wakes and waits for the active recovery during close', async () => {

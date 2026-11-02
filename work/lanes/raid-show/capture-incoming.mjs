@@ -36,7 +36,7 @@ if (!process.argv.includes('--worker')) {
     if (!Number.isFinite(chatAge) || chatAge < 500 || chatAge > 89500) throw new Error('Chat age must retain some of its original light lease.');
     const scene = argument('--scene', 'incoming');
     if (!['incoming', 'insignia'].includes(scene)) throw new Error('Choose incoming or insignia.');
-    const route = scene === 'insignia' ? '/-/raid-gate?guestInsignia=1' : `/-/raid-gate?incoming=1&viewers=${viewers}&at=${at}${process.argv.includes('--chat') ? `&chat=1&chatAge=${chatAge}` : ''}`;
+    const route = scene === 'insignia' ? '/-/raid-gate?guestInsignia=1' : `/-/raid-gate?incoming=1&viewers=${viewers}&at=${at}${process.argv.includes('--pennants') ? '&pennants=1' : ''}${process.argv.includes('--chat') ? `&chat=1&chatAge=${chatAge}` : ''}`;
     const page = await browser.newPage({ viewport: { width, height } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));

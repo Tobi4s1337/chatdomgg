@@ -5,6 +5,7 @@ import type { createTwitchMomentView } from '../../twitch-moments/view';
 import { createGuestCrest } from '../../raid-gate/guest-insignia';
 import type { SettlementPlan } from '@chatdom/world';
 import { raidChatGroundOf, type RaidChatSupport } from './raid-chat-ground';
+import { mountKingdomRaidPennants } from './raid-pennants';
 import '../../raid-gate/raid-chat.css';
 
 /** A short-lived public current-state reader. It never retains a chat history. */
@@ -76,6 +77,8 @@ export interface KingdomRaidChatOptions {
 /** Projects only the moment view's currently visible verified lanterns, moving or beside the gate. */
 export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock, plan, ground, support }: KingdomRaidChatOptions): () => void {
   if (signal.aborted) return () => {};
+  const detachPennants = mountKingdomRaidPennants({ view, feed, kingdomId, signal, clock,
+    ...(plan ? { plan } : {}), ...(ground ? { ground } : {}), ...(support ? { support } : {}) });
   view.setRaidChatGround(plan && ground ? raidChatGroundOf(plan, ground, support) : undefined);
   const layer = document.createElement('div');
   layer.className = 'raid-chat-layer';
@@ -147,7 +150,7 @@ export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, si
   let unsubscribeView = () => {};
   const dispose = () => {
     if (stopped) return; stopped = true; signal.removeEventListener('abort', dispose);
-    unsubscribeView(); cancelAnimationFrame(animation); disconnect(); clear(); view.setRaidChatGround(undefined); layer.remove();
+    unsubscribeView(); cancelAnimationFrame(animation); disconnect(); detachPennants(); clear(); view.setRaidChatGround(undefined); layer.remove();
   };
   unsubscribeView = view.onDispose(dispose);
   if (stopped) unsubscribeView();

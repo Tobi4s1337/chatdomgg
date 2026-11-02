@@ -13,9 +13,17 @@ const segmentDistance = (x: number, z: number, a: readonly number[], b: readonly
   return Math.hypot(x - a[0]! - t * dx, z - a[2]! - t * dz);
 };
 
+export interface RaidPropGroundOptions { readonly radius: number; readonly height: number; readonly maxRise?: number; readonly sampleSpacing?: number; readonly support?: RaidChatSupport }
+
 /** Read-only adopted plan plus the exact surface drawn by this scene. Recreate on world adoption. */
-export function raidChatGroundOf(plan: SettlementPlan, ground: (x: number, z: number) => number, support?: RaidChatSupport): RaidChatGround {
-  const cache = new Map<string, number | null>(), r = RAID_CHAT_FOOT;
+export function raidPropGroundOf(plan: SettlementPlan, ground: (x: number, z: number) => number, options: RaidPropGroundOptions): RaidChatGround {
+  const cache = new Map<string, number | null>(), r = options.radius;
+  const offsets: number[][] = [[0, 0], [-r, -r], [-r, r], [r, -r], [r, r]];
+  if (options.sampleSpacing !== undefined && Number.isFinite(options.sampleSpacing) && options.sampleSpacing > 0) {
+    const divisions = Math.min(24, Math.max(1, Math.ceil(2 * r / options.sampleSpacing)));
+    offsets.length = 0;
+    for (let ix = 0; ix <= divisions; ix++) for (let iz = 0; iz <= divisions; iz++) offsets.push([-r + 2 * r * ix / divisions, -r + 2 * r * iz / divisions]);
+  }
   const lots = [...plan.reservations.map(reservation => reservation.lot), plan.castle.bounds];
   const active = new Set(plan.activeStreetIds), streets = plan.streets.filter(street => active.has(street.id));
   const squares = [plan.market, ...plan.courts, plan.castle.court].map(square => ({
@@ -24,9 +32,9 @@ export function raidChatGroundOf(plan: SettlementPlan, ground: (x: number, z: nu
   }));
   const excluded = [...lots, ...squares];
   const current = (x: number, z: number, height: number | null): number | null => {
-    if (height === null || !support) return height;
+    if (height === null || !options.support) return height;
     // Terrain samples are scene-local; current physical support must never be cached with them.
-    try { return support({ foot: [x, height, z], radius: r, height: 2.4 }) === true ? height : null; }
+    try { return options.support({ foot: [x, height, z], radius: r, height: options.height }) === true ? height : null; }
     catch { return null; }
   };
   const blocked = (x: number, z: number): boolean => {
@@ -45,12 +53,16 @@ export function raidChatGroundOf(plan: SettlementPlan, ground: (x: number, z: nu
     let result: number | null = null;
     if (!blocked(x, z)) {
       try {
-        const samples = [[0, 0], [-r, -r], [-r, r], [r, -r], [r, r]].map(([dx, dz]) => ground(x + dx!, z + dz!));
+        const samples = offsets.map(([dx, dz]) => ground(x + dx!, z + dz!));
         // Bury the stone foot's lower edge on gentle slopes, rather than leaving a floating corner.
-        if (samples.every(y => Number.isFinite(y) && y > Math.max(0, plan.lake.level) + .1) && Math.max(...samples) - Math.min(...samples) <= .08) result = Math.min(...samples);
+        if (samples.every(y => Number.isFinite(y) && y > Math.max(0, plan.lake.level) + .1) && Math.max(...samples) - Math.min(...samples) <= (options.maxRise ?? .08)) result = Math.min(...samples);
       } catch { /* Missing adopted terrain is not permission to guess a height. */ }
     }
     if (cache.size >= MAX_SAMPLES) cache.delete(cache.keys().next().value!);
     cache.set(key, result); return current(x, z, result);
   };
+}
+
+export function raidChatGroundOf(plan: SettlementPlan, ground: (x: number, z: number) => number, support?: RaidChatSupport): RaidChatGround {
+  return raidPropGroundOf(plan, ground, { radius: RAID_CHAT_FOOT, height: 2.4, ...(support ? { support } : {}) });
 }

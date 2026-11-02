@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { generateSettlementPlan, type SettlementPlan } from '@chatdom/world';
-import { raidChatGroundOf } from './raid-chat-ground';
+import { raidChatGroundOf, raidPropGroundOf } from './raid-chat-ground';
 
 const generated = generateSettlementPlan({ seed: 'raid-chat-ground', tier: 'hamlet', firstYear: 2026, year: 2026 });
 function site(): SettlementPlan {
@@ -46,4 +46,19 @@ describe('raid chat on the adopted surface', () => {
     expect(ground).toHaveBeenCalledTimes(5); expect(support).toHaveBeenCalledTimes(3);
     expect(raidChatGroundOf(site(), ground, () => { throw new Error('retired revision'); })(20, 20)).toBeNull();
   });
+  it('refuses localized relief beneath a wide wall bay, between its centre and corners', () => {
+    const ground = vi.fn((x: number, z: number) => x === 21 && z === 20 ? 7.5 : 7);
+    const sample = raidPropGroundOf(site(), ground, { radius: 1.5, height: 4.5, maxRise: .18, sampleSpacing: .5 });
+    expect(sample(20, 20)).toBeNull(); expect(ground).toHaveBeenCalledTimes(49);
+  });
+
+  it('checks the whole pennant footprint and its current physical support', () => {
+    const support = vi.fn(() => true);
+    const sample = raidPropGroundOf(site(), x => 7 + (x - 20) * .05, { radius: 1.5, height: 4.5, maxRise: .18, support });
+    expect(sample(20, 20)).toBeCloseTo(6.925);
+    expect(support).toHaveBeenCalledWith({ foot: [20, 6.925, 20], radius: 1.5, height: 4.5 });
+    expect(raidPropGroundOf(site(), x => 7 + (x - 20) * .07, { radius: 1.5, height: 4.5, maxRise: .18 })(20, 20)).toBeNull();
+    expect(sample(99, 10)).toBeNull();
+  });
+
 });

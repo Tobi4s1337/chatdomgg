@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { KingdomIdSchema, type RaidChatFeed, type RaidChatFrame } from '@chatdom/shared';
+import { KingdomIdSchema, type RaidChatFeed, type RaidChatFrame, type RaidPennantFeed } from '@chatdom/shared';
 import { WORLD_FIXTURE_KINGDOM, WORLD_FIXTURE_TIME } from '@chatdom/shared/world-fixtures';
 import { createKingdomScene } from '../kingdom/scene';
 import * as THREE from 'three';
@@ -10,6 +10,7 @@ import './incoming.css';
 /** Private art bench. Its synthetic evidence never leaves this page or enters a live feed. */
 export default function IncomingRaid() {
   const query = new URLSearchParams(location.search);
+  const withPennants = query.get('pennants') === '1';
   const withChat = query.get('chat') === '1', raidId = `raid.${'a'.repeat(64)}`;
   const viewers = Math.max(1, Math.min(1_000_000, Math.floor(Number(query.get('viewers')) || 140)));
   const requestedAt = Number(query.get('at'));
@@ -25,11 +26,13 @@ export default function IncomingRaid() {
   let canvas!: HTMLCanvasElement, scene: Awaited<ReturnType<typeof createKingdomScene>> | undefined;
   let deliver: Parameters<TwitchMomentFeed['subscribe']>[1] | undefined;
   let deliverChat: Parameters<RaidChatFeed['subscribe']>[0] | undefined;
+  let deliverPennants: Parameters<RaidPennantFeed['subscribe']>[0] | undefined;
   let animation = 0;
   let presented = false, sceneReady = false;
   const priorReady = Object.getOwnPropertyDescriptor(window, '__chatdomReady');
   const feed: TwitchMomentFeed = {
     origin: 'simulated',
+    raidPennants: { origin: 'simulated', subscribe(receive) { deliverPennants = receive; return () => { deliverPennants = undefined; }; } },
     raidChat: { origin: 'simulated', subscribe(receive) { deliverChat = receive; return () => { deliverChat = undefined; }; } },
     subscribe(reset, receive) {
       deliver = receive;
@@ -51,6 +54,7 @@ export default function IncomingRaid() {
         onMomentCaptions: setCaptions, onProgress: () => {}, onNames: () => {}, onSource: () => {}, onError: fail,
       });
       window.__chatdomRaidShow = { viewers, offset, inspect: () => ({ ...scene?.inspect(),
+        raidPennants: { framing: 'private evidence pose, no raid camera lease', fixtures: withPennants },
         raidChat: { chatAge, bubbles: [...document.querySelectorAll<HTMLElement>('.raid-chat-bubble')].filter(node => !node.hidden).length,
           framing: offset >= 120_000 ? 'private evidence pose, no raid camera lease' : 'production raid director' } }) };
       while (!life.signal.aborted) {
@@ -97,7 +101,31 @@ export default function IncomingRaid() {
           lights: cues.map(cue => ({ lightId: cue.lightId, kingdomId: cue.kingdomId, origin: cue.origin, raid: cue.raid,
             asOf: cue.asOf, expiresAt: cue.asOf + 90_000 })), cues: cues.filter(cue => cue.expiresAt > at + offset) });
       }
+      if (withPennants) {
+        await Promise.all([document.fonts.load('bold 49px "Alegreya"'), document.fonts.load('32px "IM Fell English"')]);
+        // Art fixtures exercise reload-shaped history without replaying any older raid facts.
+        deliverPennants?.({ version: 1, origin: 'simulated', kingdomId: WORLD_FIXTURE_KINGDOM, asOf: at + offset,
+          items: [
+            { raidId, from: { kingdomId: raider, login: 'mossbrook', name: 'Mossbrook' }, occurredAt: at },
+            { raidId: `raid.${'b'.repeat(64)}`, from: { kingdomId: KingdomIdSchema.parse('7331'), login: 'copperleaf', name: 'Copperleaf' }, occurredAt: at - 86_400_000 },
+            { raidId: `raid.${'c'.repeat(64)}`, from: { kingdomId: KingdomIdSchema.parse('91234'), login: 'emberford', name: 'Emberford' }, occurredAt: at - 172_800_000 },
+            { raidId: `raid.${'d'.repeat(64)}`, from: { kingdomId: raider, login: 'mossbrook', name: 'Mossbrook' }, occurredAt: at - 604_800_000 },
+          ] });
+        // Fixed-time benches must explicitly request a draw after asynchronous history arrives.
+        scene.seek(40 + offset / 1000 + .001);
+      }
       await frame(); await frame();
+      if (withPennants) {
+        const metrics = scene.inspect().moments?.view;
+        if (!metrics || Number(metrics['pennantWall.pennants']) < 1 || Number(metrics['pennantWall.plaques']) < 1) throw new Error('No supported dated pennants to frame');
+        const foot = new THREE.Vector3(Number(metrics['pennantWall.firstX']), Number(metrics['pennantWall.firstY']), Number(metrics['pennantWall.firstZ']));
+        const face = new THREE.Vector3(Number(metrics['pennantWall.firstFaceX']), 0, Number(metrics['pennantWall.firstFaceZ']));
+        const side = new THREE.Vector3(face.z, 0, -face.x);
+        const target = foot.clone().add(new THREE.Vector3(0, 2, 0));
+        const eye = target.clone().addScaledVector(face, 8).addScaledVector(side, 2.5).add(new THREE.Vector3(0, 2, 0));
+        scene.pose(eye.toArray(), target.toArray(), canvas.clientHeight > canvas.clientWidth ? 60 : 52);
+        await frame(); await frame();
+      }
       if (withChat && offset >= 120_000) {
         const metrics = scene.inspect().moments?.view, route = giftRouteOf(scene.layout);
         if (!metrics || !route || Number(metrics['raid.chatGateLanterns']) < 1) throw new Error('No current gate lights to frame');

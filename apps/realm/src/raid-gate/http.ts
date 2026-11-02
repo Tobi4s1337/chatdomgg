@@ -1,5 +1,5 @@
 import type { uWebSocketsTransport } from '@colyseus/uwebsockets-transport';
-import { KingdomIdSchema } from '@chatdom/shared';
+import { KingdomIdSchema, RaidPennantFrameSchema } from '@chatdom/shared';
 import { RaidObservationEnvelopeSchema, RAID_OBSERVATION_ROUTE, RAID_ROADS_ROUTE, RAID_PENNANTS_ROUTE } from '../../../api/src/raid-gate/observations';
 import { IngressGate, type IngressCredentials } from '../ingress/gate';
 import { RaidObservationError, RaidObservationLedger, type RaidObservationLedgerOptions } from './observations';
@@ -71,7 +71,8 @@ export function createRaidShowService(options: RaidShowServiceOptions) {
           if (request.method !== 'GET') return refused(405);
           const limit = count(url.searchParams.get('limit'), 24, 64);
           if (!parameters(url, ['limit']) || limit === null) return refused(400);
-          return json(200, { version: 1, items: await ledger.pennants(KingdomIdSchema.parse(pennant[1]), limit) });
+          const kingdomId = KingdomIdSchema.parse(pennant[1]), items = await ledger.pennants(kingdomId, limit);
+          return json(200, RaidPennantFrameSchema.parse({ version: 1, origin: options.origin, kingdomId, asOf: options.clock(), items }));
         }
         if (url.pathname !== RAID_OBSERVATION_ROUTE) return refused(404);
         if (request.method !== 'POST') return refused(405);

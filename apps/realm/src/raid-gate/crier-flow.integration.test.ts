@@ -86,7 +86,9 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('simulated Twitch CLI t
       expect(mock.transport.records).toHaveLength(0);
       expect(transport.records).toHaveLength(1);
       expect(await (await fetch(`${url}/realm/raid-roads`)).json()).toEqual(beforeRoads);
-      expect(await (await fetch(`${url}/realm/raid-pennants/${kingdomId}`)).json()).toEqual(beforePennants);
+      const afterPennants = await (await fetch(`${url}/realm/raid-pennants/${kingdomId}`)).json();
+      expect(afterPennants).toMatchObject({ version: 1, origin: 'simulated', kingdomId, items: beforePennants.items });
+      expect(afterPennants.asOf).toBeGreaterThanOrEqual(beforePennants.asOf);
     } finally {
       await mock?.worker.close(); await door?.stop(); await realm?.close();
       await show?.close(); await crier?.close();

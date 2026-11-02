@@ -119,3 +119,44 @@ export function parseRaidChatFrame(raw: unknown, now: number): RaidChatFrame | n
     return { ...parsed.data, lights, cues: parsed.data.cues.filter(cue => cue.expiresAt > now && keys.has(cue.lightId)) };
   } catch { return null; }
 }
+
+/** Channel-level witnessed history. A pennant never asserts who rode, arrived, or earned a stamp. */
+export const RAID_PENNANT_FRAME_MAX_BYTES = 96 * 1024;
+export const RAID_PENNANT_LIMIT = 64;
+export const RaidPennantSchema = z.strictObject({
+  raidId: RaidGuestVisualMarkSchema.shape.raidId,
+  from: z.strictObject({ kingdomId: KingdomIdSchema, login: z.string().regex(/^[a-z0-9_]{1,64}$/u),
+    name: RaidGuestVisualMarkSchema.shape.fromName }),
+  occurredAt: EpochMsSchema,
+});
+export type RaidPennant = z.infer<typeof RaidPennantSchema>;
+export const RaidPennantFrameSchema = z.strictObject({
+  version: z.literal(1), origin: z.enum(['live', 'simulated']), kingdomId: KingdomIdSchema, asOf: EpochMsSchema,
+  /** Newest incoming commit first; late history keeps its original provider date. */
+  items: z.array(RaidPennantSchema).max(RAID_PENNANT_LIMIT),
+}).superRefine((frame, context) => {
+  if (new Set(frame.items.map(item => item.raidId)).size !== frame.items.length ||
+      frame.items.some(item => item.from.kingdomId === frame.kingdomId || item.occurredAt > frame.asOf + 5_000)) {
+    context.addIssue({ code: 'custom', message: 'A pennant frame needs distinct witnessed visits to this kingdom' });
+  }
+});
+export type RaidPennantFrame = z.infer<typeof RaidPennantFrameSchema>;
+export interface RaidPennantFeed {
+  readonly origin: RaidPennantFrame['origin'];
+  subscribe(receive: (frame: RaidPennantFrame) => void): () => void;
+}
+
+/** History does not expire; only scope, malformed data and implausible future read time invalidate it. */
+export function parseRaidPennantFrame(raw: unknown, now: number): RaidPennantFrame | null {
+  if (!EpochMsSchema.safeParse(now).success) return null;
+  try {
+    if (typeof raw === 'string') {
+      if (raw.length > RAID_PENNANT_FRAME_MAX_BYTES || utf8.encode(raw).byteLength > RAID_PENNANT_FRAME_MAX_BYTES) return null;
+      raw = JSON.parse(raw) as unknown;
+    }
+    const parsed = RaidPennantFrameSchema.safeParse(raw);
+    if (!parsed.success || parsed.data.asOf > now + 5_000 ||
+        utf8.encode(JSON.stringify(parsed.data)).byteLength > RAID_PENNANT_FRAME_MAX_BYTES) return null;
+    return parsed.data;
+  } catch { return null; }
+}
