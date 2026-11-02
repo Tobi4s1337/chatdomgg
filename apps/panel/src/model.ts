@@ -1,3 +1,4 @@
+import type { PanelGiftShelf, PanelSettings } from '../../../packages/shared/src/panel';
 import type { PassportDisclosureView, PassportTransport } from '@chatdom/ui/passport';
 
 // The panel's local view model. It describes only what the panel may show and why;
@@ -35,10 +36,10 @@ export interface Kingdom {
 }
 
 export interface PictureProvenance {
-  readonly origin: 'simulated';
+  readonly origin: 'simulated' | 'realm' | 'sketch';
   /** Human words for the caption. */
   readonly caption: string;
-  readonly render: { readonly route: string; readonly seed: string; readonly hour: number; readonly camera: string };
+  readonly render?: { readonly route: string; readonly seed: string; readonly hour: number; readonly camera: string };
   readonly capturedOn: string;
 }
 
@@ -58,10 +59,11 @@ export type LightStep = 'sharing' | 'confirming';
 
 /**
  * The viewer's window. Only an authority may produce `lit`: the SIMULATED fixture
- * (which says so) or, one day, the kingdom's own server. Twitch identity, opaque
+ * (which says so) or the kingdom's own server. Twitch identity, opaque
  * IDs, decoded tokens, URLs and storage never do.
  */
 export type Light =
+  | { readonly kind: 'ready' }
   | { readonly kind: 'outside-twitch' }
   | { readonly kind: 'logged-out' }
   | { readonly kind: 'unshared' }
@@ -69,7 +71,11 @@ export type Light =
   | { readonly kind: 'refused' }
   | { readonly kind: 'pending'; readonly choice: LightChoice; readonly step: LightStep }
   /** Confirmed present. `as: 'guest'` when the person already keeps three homes elsewhere. */
-  | { readonly kind: 'lit'; readonly choice: LightChoice; readonly as: 'citizen' | 'guest'; readonly by: 'simulation' }
+  | { readonly kind: 'lit'; readonly choice: LightChoice; readonly as: 'citizen' | 'guest' | 'castle'; readonly by: 'simulation' | 'realm' }
+  /** A private moderation hold; no public accusation is shown. */
+  | { readonly kind: 'held' }
+  /** Waiting land, with a private pledge outside the three-home cap. */
+  | { readonly kind: 'unfounded'; readonly pledged: boolean; readonly band: string | null }
   /** The stream is resting: no window is lit from the panel until it returns. */
   | { readonly kind: 'resting'; readonly choice: LightChoice | null }
   /** The kingdom stopped answering; the light's state is unknown, not assumed. */
@@ -182,7 +188,6 @@ export type PassportSource =
     /** Kingdom names the card already shows publicly (its disclosed homes), so a road can say where it began. */
     readonly places: ReadonlyMap<string, string>;
     readonly disclosure: PassportDisclosureView | null;
-    readonly simulated: boolean;
   }
   | { readonly kind: 'unavailable'; readonly reason: string };
 
@@ -331,12 +336,21 @@ export const ALL_SECTIONS: Sections = { night: true, home: true, acts: true, she
 /** Where "Walk in" leads: the kingdom's own entry gate, on chatdom.gg, in a new tab. */
 export type Entry = { readonly kind: 'gate'; readonly path: string } | { readonly kind: 'none' };
 
+export type Privacy =
+  | { readonly kind: 'loading' | 'unavailable' }
+  | { readonly kind: 'ready' | 'pending'; readonly quiet: boolean; readonly projection?: 'pending' | 'applied'; readonly forgetAvailable?: boolean }
+  | { readonly kind: 'forgotten'; readonly erased: readonly string[] };
+
 export interface PanelSnapshot {
+  readonly gifts?: PanelGiftShelf;
+  readonly privacy?: Privacy;
   readonly source: SourceMark;
   readonly connection: Connection;
   /** Null when no service has told us which kingdom this channel holds. */
   readonly kingdom: Kingdom | null;
   readonly stream: 'live' | 'resting' | 'unknown';
+  readonly kingdomLights?: number | null;
+  readonly moment?: string | null;
   readonly picture: Picture;
   readonly light: Light;
   readonly tonight: Tonight;
@@ -349,6 +363,7 @@ export interface PanelSnapshot {
   readonly entry: Entry;
   /** The streamer's choice of sections, as the kingdom carries it to every panel. */
   readonly sections: Sections;
+  readonly settings?: PanelSettings;
 }
 
 /** One adapter per mounted panel. Actions report back only through the snapshot. */
@@ -360,8 +375,16 @@ export interface PanelAdapter {
   /** Ask Twitch to share who the viewer is with Chatdom, so their own card can open. Gesture only. */
   requestIdentity?(): void;
   /** One tap on the crowd act: one command, under chat's limits. Gesture only. */
+  requestPrivacy?(): void;
+  requestQuiet?(quiet: boolean): void;
+  requestForget?(): void;
   requestAct(option: string): void;
   /** Ask Twitch to confirm Bits for a shelf product. Gesture only; nothing is granted here. */
   requestProduct(sku: string): void;
+  chooseGiftTarget?(plotId: string): void;
+  resolveGiftIntent?(intentId: string): void;
+  moreGiftChoices?(): void;
+  cancelGiftChoice?(): void;
+  resetGift?(): void;
   dispose(): void;
 }

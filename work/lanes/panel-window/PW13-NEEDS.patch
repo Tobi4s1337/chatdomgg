@@ -1,0 +1,12 @@
+--- a/apps/herald/src/auth/grants.ts
++++ b/apps/herald/src/auth/grants.ts
+@@ -7,6 +7,3 @@
+-/**
+- * The monarch's grant. Follows, rewards and polls ask for the manage scopes: the same grant then lets the monarch's
+- * own scripts create Chatdom's rewards and open a decree poll on their channel, and Herald settle the redemptions.
+- */
+-export const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train',
+-  'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls'] as const;
++/** First connection grants only tier 1. Optional moment reads and royal writes require a separate later gesture. */
++export const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters', 'moderator:read:followers',
++  'moderator:read:blocked_terms', 'moderator:read:shield_mode', 'moderation:read'] as const;

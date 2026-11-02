@@ -1,0 +1,322 @@
+--- /dev/null
++++ b/apps/herald/src/privacy/commands.ts
+@@ -0,0 +1,35 @@
++import type { KingdomId, PersonId } from '@chatdom/shared';
++
++export type PrivacyCommand = { action: 'quiet'; quiet: boolean } | { action: 'prepare' } | { action: 'confirm'; token: string };
++export interface PrivacyRequest { kingdomId: KingdomId; personId: PersonId; messageId: string; observedAt: number; command: PrivacyCommand }
++export type PrivacyCommandSink = (input: PrivacyRequest) => Promise<void>;
++/** Called only after ChatIngest authenticates EventSub, checks channel/author IDs, age and deletion. */
++export function privacyCommand(raw: unknown): PrivacyCommand | null {
++  const text = (raw as { message?: { text?: unknown } } | null)?.message?.text;
++  if (typeof text !== 'string' || text.length > 160) return null;
++  if (/^!chatdom quiet$/i.test(text.trim())) return { action: 'quiet', quiet: true };
++  if (/^!chatdom quiet off$/i.test(text.trim())) return { action: 'quiet', quiet: false };
++  if (/^!chatdom forget$/i.test(text.trim())) return { action: 'prepare' };
++  const confirm = /^!chatdom forget confirm ([a-f0-9]{32})$/i.exec(text.trim());
++  return confirm ? { action: 'confirm', token: confirm[1]!.toLowerCase() } : null;
++}
++/** No automatic retry of a destructive confirmation. Reply is the owner's real, authorized chat sender. */
++export function createPrivacyClient(options: { url: string; secret: string; reply: (input: PrivacyRequest, line: string) => Promise<void> }): PrivacyCommandSink {
++  const endpoint = new URL('/internal/realm/chat-privacy', options.url);
++  if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname))) throw new Error('Privacy transport needs HTTPS or loopback.');
++  let inFlight = 0;
++  return async input => {
++    if (inFlight >= 32) return;
++    inFlight++;
++    try {
++    let line = 'Privacy could not be confirmed. Open You in the Chatdom panel.';
++    try {
++      const response = await fetch(endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8_000),
++        headers: { Authorization: `Bearer ${options.secret}`, 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
++      const body = await response.json() as { line?: unknown };
++      if (typeof body.line === 'string' && body.line.length > 0 && body.line.length <= 500) line = body.line;
++    } catch { /* A lost reply is not proof that nothing changed. */ }
++    await options.reply(input, line);
++    } finally { inFlight--; }
++  };
++}
+--- a/apps/herald/src/ingest/ingest.ts
++++ b/apps/herald/src/ingest/ingest.ts
+@@ -13,6 +13,7 @@
+ import { TtlMap } from './ttl';
+ import { extractForgeWords, ForgeCommandHandoff, type ForgeCommandApplication } from '../forge/commands';
+ import { speechParts, type RealmDeliverySink } from '../realm-delivery/sink';
++import { privacyCommand, type PrivacyCommandSink } from '../privacy/commands';
+ 
+ /** Twitch redelivers within minutes; ten minutes of keys covers a reconnect handover and its resends. */
+ export const DEDUPE_TTL_MS = 600_000;
+@@ -99,6 +100,7 @@
+ 
+ export interface IngestOptions {
+   readonly realm?: RealmDeliverySink;
++  readonly privacy?: PrivacyCommandSink;
+   readonly source: PresenceSource;
+   readonly conduitId: string;
+   readonly clientId: string;
+@@ -303,6 +305,14 @@
+       this.#counters.notCovered++;
+       return;
+     }
++    const privacy = privacyCommand(raw);
++    if (privacy) {
++      // Do not relight, settle, credit or echo an erasure command as an ordinary chat act.
++      if (this.#options.privacy) void this.#options.privacy({ kingdomId: this.kingdomId,
++        personId: PersonIdSchema.parse(event.chatter_user_id), messageId: event.message_id,
++        observedAt: at, command: privacy }).catch(() => undefined);
++      return;
++    }
+     if (this.#pending.size >= PENDING_LIMIT) {
+       this.#counters.pendingOverflow++;
+       return;
+--- a/apps/herald/src/ingest/runtime.ts
++++ b/apps/herald/src/ingest/runtime.ts
+@@ -54,6 +54,7 @@
+   readonly stream?: IngestOptions['stream'];
+   readonly forge?: IngestOptions['forge'];
+   readonly realm?: IngestOptions['realm'];
++  readonly privacy?: IngestOptions['privacy'];
+   /**
+    * Reads current state again (Get Streams, Chatters) whenever coverage is restored. Twitch does not replay
+    * a gap, so the source publishes again only after this has settled.
+@@ -147,6 +148,7 @@
+       ...(options.stream ? { stream: options.stream } : {}),
+       ...(options.forge ? { forge: options.forge } : {}),
+       ...(options.realm ? { realm: options.realm } : {}),
++      ...(options.privacy ? { privacy: options.privacy } : {}),
+       ...(options.now ? { now: options.now } : {}),
+     });
+   }
+--- a/apps/herald/src/source/live.ts
++++ b/apps/herald/src/source/live.ts
+@@ -13,6 +13,7 @@
+ import { startPresenceServer, type PresenceServer, type SourceHost, type UnstartedHealth } from './server';
+ import { PresenceSource } from './source';
+ import type { RealmDelivery } from '../realm-delivery/delivery';
++import type { PrivacyCommandSink } from '../privacy/commands';
+ import { RealmMomentObservationSchema } from '@chatdom/shared/realm';
+ import { streamNotice } from '../ingest/spectacles';
+ import { providerToken } from '../twitch-moments/credit';
+@@ -46,6 +47,7 @@
+   /** Main's trusted Forge application. Omitted until its own authority and judging path is connected. */
+   readonly forge?: ForgeCommandSink;
+   readonly realm?: RealmDelivery;
++  readonly privacy?: PrivacyCommandSink;
+   /**
+    * Where Twitch is. Production uses the real endpoints; the acceptance suite runs this same composition
+    * against SIMULATED local fakes, so nothing in between is a test-only path.
+@@ -151,6 +153,7 @@
+       admin: new EventSubAdmin(helix.session), authority, source: live, log: line => print(`  ${line}`),
+       ...(options.forge ? { forge: {run:options.forge, broadcast:observed.tracker} } : {}),
+       ...(options.realm ? { realm: options.realm } : {}),
++      ...(options.privacy ? { privacy: options.privacy } : {}),
+       ...(options.twitch?.socketFactory ? { socketFactory: options.twitch.socketFactory } : {}),
+       ...(options.twitch?.eventsubUrl ? { url: options.twitch.eventsubUrl } : {}),
+       ...(options.twitch?.random ? { random: options.twitch.random } : {}),
+--- /dev/null
++++ b/apps/realm/src/ingress/chat-privacy.ts
+@@ -0,0 +1,59 @@
++import { randomBytes } from 'node:crypto';
++import { z } from 'zod';
++import { EpochMsSchema, KingdomIdSchema, PersonIdSchema, TokenSchema } from '@chatdom/shared';
++import type { uWebSocketsTransport } from '@colyseus/uwebsockets-transport';
++import type { RealmDatabase } from '../persistence';
++import { IngressGate, type IngressCredentials } from './gate';
++import { forgetPerson, setPersonQuiet, type RealmForgetAuthority } from './panel';
++const Request = z.strictObject({ kingdomId: KingdomIdSchema, personId: PersonIdSchema, messageId: TokenSchema, observedAt: EpochMsSchema,
++  command: z.discriminatedUnion('action', [z.strictObject({ action: z.literal('quiet'), quiet: z.boolean() }),
++    z.strictObject({ action: z.literal('prepare') }), z.strictObject({ action: z.literal('confirm'), token: z.string().regex(/^[a-f0-9]{32}$/) })]) });
++/** A restart forgets challenges and therefore requires a fresh confirmation; no raw chat or names are stored. */
++export function mountChatPrivacy(app: uWebSocketsTransport['app'], options: {
++  db: Pick<RealmDatabase, 'query'>; origin: 'live' | 'simulated'; credentials: IngressCredentials; authority?: RealmForgetAuthority;
++}) {
++  const gate = new IngressGate(options.credentials, options.origin);
++  const pending = new Map<string, { token: string; messageId: string; at: number; until: number }>();
++  app.post('/internal/realm/chat-privacy', (res, req) => {
++    let aborted = false, done = false, size = 0;
++    const chunks: Buffer[] = [];
++    res.onAborted(() => { aborted = true; });
++    const reply = (status: 200 | 400 | 401 | 503, line: string) => {
++      if (aborted || done) return; done = true;
++      res.cork(() => res.writeStatus({ 200: '200 OK', 400: '400 Bad Request', 401: '401 Unauthorized', 503: '503 Service Unavailable' }[status])
++        .writeHeader('Content-Type', 'application/json').writeHeader('Cache-Control', 'no-store').end(JSON.stringify({ line })));
++    };
++    if (gate.authenticate(req.getHeader('authorization')) !== 'herald') return reply(401, 'Unknown Herald service.');
++    if (!/^application\/json\b/i.test(req.getHeader('content-type'))) return reply(400, 'Send JSON.');
++    res.onData((chunk, last) => {
++      if (done) return;
++      size += chunk.byteLength; if (size > 4096) return reply(400, 'The request is too large.');
++      chunks.push(Buffer.from(chunk.slice(0))); if (!last) return;
++      void (async () => {
++        const input = Request.parse(JSON.parse(Buffer.concat(chunks).toString('utf8'))), now = Date.now();
++        if (input.observedAt > now + 5000 || now - input.observedAt >= 90000) return reply(400, 'That command has expired.');
++        const key = `${input.kingdomId}:${input.personId}`;
++        for (const [id, value] of pending) if (value.until <= now) pending.delete(id);
++        if (input.command.action === 'quiet') {
++          await setPersonQuiet(options.db, options.origin, input.personId, input.command.quiet);
++          return reply(200, 'Preference saved. Stream hiding is still being connected.');
++        }
++        if (!options.authority) return reply(503, 'Forget is unavailable. Nothing was erased.');
++        if (input.command.action === 'prepare') {
++          if (pending.size >= 1024 && !pending.has(key)) return reply(503, 'Please try again shortly. Nothing was erased.');
++          const token = randomBytes(16).toString('hex');
++          pending.set(key, { token, messageId: input.messageId, at: input.observedAt, until: now + 120000 });
++          return reply(200, `Erase Twitch-derived history across all kingdoms? Homes and earned things stay. Within two minutes type !chatdom forget confirm ${token}`);
++        }
++        const challenge = pending.get(key);
++        if (!challenge || challenge.token !== input.command.token || challenge.messageId === input.messageId || input.observedAt <= challenge.at)
++          return reply(400, 'Start with !chatdom forget, then confirm the new code. Nothing was erased.');
++        pending.delete(key); // One caller consumes the challenge before any asynchronous erasure work.
++        const answer = await forgetPerson(options.authority, { personId: input.personId, requestedFromKingdomId: input.kingdomId,
++          origin: options.origin, requestId: `chat-forget:${challenge.token}` });
++        if (answer.status === 'unavailable') return reply(503, 'Forget is unavailable. Nothing was erased.');
++        return reply(200, answer.status === 'pending' ? 'Erasure is pending. It is not finished.' : 'Twitch-derived history was erased. Your homes and earned things remain.');
++      })().catch(() => reply(503, 'Privacy could not be confirmed. Open You in the Chatdom panel.'));
++    });
++  });
++}
+--- /dev/null
++++ b/apps/realm/src/bootstrap/watch-names.ts
+@@ -0,0 +1,28 @@
++import type { RealmPublicMessage } from '@chatdom/shared/realm';
++import type { Credit, TwitchMomentFact } from '@chatdom/shared/twitch-moments';
++import type { DurableKingdom, RealmDatabase } from '../persistence';
++export interface WatchNames { key: string; project(message: RealmPublicMessage): RealmPublicMessage }
++/** Current private ownership resolves slots. Neither person IDs nor the quiet registry cross the watch wire. */
++export async function readWatchNames(db: Pick<RealmDatabase, 'query'>, kingdom: DurableKingdom): Promise<WatchNames> {
++  const homes = [...Object.values(kingdom.privateState.homes), ...(kingdom.privateState.castle ? [kingdom.privateState.castle] : [])];
++  const rows = await db.query<{ person_id: string }>('SELECT person_id FROM realm_panel_privacy WHERE origin = $1 AND quiet = true AND person_id = ANY($2::text[])',
++    [kingdom.origin, homes.map(home => home.ownerId)]);
++  const people = new Set(rows.rows.map(row => row.person_id));
++  const slots = new Set(homes.filter(home => people.has(home.ownerId)).map(home => home.slot));
++  const credit = (value: Credit): Credit => value && value.slot !== null && !slots.has(value.slot) ? value : null;
++  const fact = (value: TwitchMomentFact): TwitchMomentFact => {
++    const body = value.body;
++    if ('credit' in body) return { ...value, body: { ...body, credit: credit(body.credit) } };
++    if (body.kind === 'gifts') return { ...value, body: { ...body, giver: credit(body.giver), forwardedFrom: credit(body.forwardedFrom), recipients: body.recipients.map(item => ({ ...item, credit: credit(item.credit) })) } };
++    if (body.kind === 'hype') return { ...value, body: { ...body, contributors: body.contributors.map(credit) } };
++    if (body.kind === 'charity') return { ...value, body: { ...body, donation: body.donation && { ...body.donation, credit: credit(body.donation.credit) } } };
++    return value;
++  };
++  return { key: [...slots].sort((a, b) => a - b).join(','), project: message => {
++    if (message.type === 'presence') return { ...message, frame: { ...message.frame,
++      windows: message.frame.windows.map(window => slots.has(window.slot) ? { ...window, publicName: null } : window) } };
++    if (message.type === 'moment') return { ...message, fact: fact(message.fact) };
++    if (message.type === 'moments.current') return { ...message, facts: message.facts.map(fact) };
++    return message;
++  } };
++}
+--- a/apps/realm/src/bootstrap/watch.ts
++++ b/apps/realm/src/bootstrap/watch.ts
+@@ -4,6 +4,8 @@
+ import { FoundedUnavailableError, type createFoundedWorldLoader } from '../founded';
+ import type { DurableKingdomHold, DurableRealmServices } from '../persistence';
+ import { FoundedReadError, type createFoundedReader } from './founded';
++import type { DurableKingdom } from '../persistence';
++import type { WatchNames } from './watch-names';
+ 
+ const WATCH_LIMIT = 32;
+ const PREFIX_LIMIT = 256;
+@@ -15,6 +17,7 @@
+ /** A public spectator shares the retained authority; it never joins a room or obtains a principal. */
+ export function mountRealmWatchRoutes(app: uWebSocketsTransport['app'], input: {
+   readonly services: Pick<DurableRealmServices, 'retain'>;
++  readonly names?: (kingdom: DurableKingdom) => Promise<WatchNames>;
+   readonly founded: Pick<ReturnType<typeof createFoundedReader>, 'manifest'>;
+   readonly loader: Pick<ReturnType<typeof createFoundedWorldLoader>, 'current'>;
+ }) {
+@@ -28,12 +31,14 @@
+     let stalled: ReturnType<typeof setTimeout> | undefined;
+     let keepalive: ReturnType<typeof setInterval> | undefined;
+     let prefixBytes = 0, throughCursor = 0;
++    let names: WatchNames | undefined, privacyTimer: ReturnType<typeof setInterval> | undefined, checkingPrivacy = false;
+     const prefix: RealmPublicDelivery[] = [], detach: (() => void)[] = [];
+     const cleanup = () => {
+       if (ended) return;
+       ended = true;
+       if (stalled) clearTimeout(stalled);
+       if (keepalive) clearInterval(keepalive);
++      if (privacyTimer) clearInterval(privacyTimer);
+       for (const unsubscribe of detach.splice(0)) unsubscribe();
+       prefix.length = 0;
+       if (counted) { counted = false; watchers--; }
+@@ -61,7 +66,11 @@
+       }
+       return !ended;
+     };
+-    const send = (event: string, value: unknown) => write(frame(event, value));
++    const send = (event: string, value: unknown) => {
++      if (names && event === 'world') { const row = value as RealmPublicDelivery; value = { ...row, message: names.project(row.message) }; }
++      if (names && event === 'checkpoint') { const row = value as RealmWatchCheckpoint; value = { ...row, checkpoint: { ...row.checkpoint, current: row.checkpoint.current.map(names.project) } }; }
++      return write(frame(event, value));
++    };
+     res.onAborted(cleanup);
+     res.onWritable(() => {
+       if (ended) return true;
+@@ -90,6 +99,8 @@
+       if (ended) { await retained.release(); return; }
+       hold = retained;
+       const kingdom = hold.kingdom;
++      names = await input.names?.(kingdom);
++      if (ended) return;
+       detach.push(kingdom.onClosed(() => close('authority-lost')));
+       detach.push(kingdom.subscribe(message => {
+         if (ended) return;
+@@ -126,6 +137,13 @@
+       throughCursor = checkpoint.throughCursor;
+       if (!send('checkpoint', initial)) return;
+       ready = true;
++      if (input.names) {
++        privacyTimer = setInterval(() => {
++          if (ended || checkingPrivacy) return; checkingPrivacy = true;
++          void input.names!(kingdom).then(next => { if (next.key !== names?.key) close('privacy-changed'); }, () => close('privacy-unavailable'))
++            .finally(() => { checkingPrivacy = false; });
++        }, 1000); privacyTimer.unref?.();
++      }
+       if (!send('walkers', kingdom.currentWalkers())) return;
+       keepalive = setInterval(() => { write(': keepalive\n\n'); }, 10_000);
+       keepalive.unref?.();
+--- a/apps/realm/src/main.ts
++++ b/apps/realm/src/main.ts
+@@ -5,6 +5,8 @@
+   realmDatabaseConfig } from './persistence';
+ import { INGRESS_ROUTE, ingressCredentials } from './ingress';
+ import { RealmPanelService, mountRealmPanelRoutes } from './ingress/panel';
++import { mountChatPrivacy } from './ingress/chat-privacy';
++import { readWatchNames } from './bootstrap/watch-names';
+ import { HEALTH_ROUTE, READY_ROUTE } from './diagnostics';
+ import { TenureEvidenceVerifier, tenureEvidenceKey } from './allocation';
+ import { createDurableRealmBoot, mountEntryRoutes, mountRealmWatchRoutes } from './bootstrap';
+@@ -92,9 +94,9 @@
+   const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
+   dock.use(boot.services);
+   const panel = new RealmPanelService({ db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded });
+-  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); mountRealmPanelRoutes(app, panel); } });
++  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); mountRealmPanelRoutes(app, panel); mountChatPrivacy(app, { db: pool, origin, credentials }); } });
+   mountEntryRoutes(transport.app, boot.founded, origin, names);
+-  mountRealmWatchRoutes(transport.app, boot);
++  mountRealmWatchRoutes(transport.app, { ...boot, names: kingdom => readWatchNames(pool, kingdom) });
+   ownRealmShutdown(server, transport, async () => {
+     dock.stop();
+     try { await evening.stop(); }
+--- a/apps/web/src/stream/index.tsx
++++ b/apps/web/src/stream/index.tsx
+@@ -121,7 +121,7 @@
+     onPhase: next => {
+       setPhase(next);
+       if (next !== 'ready') setArrival(null);
+-      if (next !== 'ready') setWalkers([]);
++      if (next !== 'ready') { setWalkers([]); setNames([]); setSpeech([]); setMomentCaptions([]); }
+       if (next === 'ready') { attempts = 0; director.start(); } else director.stop();
+       if (next === 'failed') scheduleRetry();
+     },
+@@ -183,7 +183,7 @@
+     return slot === null || !fresh() ? null : names().find(name => name.slot === slot) ?? null;
+   });
+-  // Keep the last name in place while it fades, so it leaves rather than vanishes.
++  // A withdrawn name disappears immediately; cached names cannot survive privacy or source loss.
+-  createEffect(() => { const name = climaxName(); if (name) setShownName(name); });
++  createEffect(() => { setShownName(climaxName()); });
+ 
+   const visible = () => document.visibilityState !== 'hidden' && obsVisible;
+   function open(): void {

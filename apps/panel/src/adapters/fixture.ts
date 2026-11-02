@@ -141,7 +141,7 @@ const SIMULATED_PLACES: ReadonlyMap<string, string> = new Map([['910000102', 'Ta
 export function simulatedPassportSource(): PassportSource {
   let opening: Promise<import('../passport/simulated-reading').SimulatedPanelPassport> | undefined;
   const open = () => opening ??= import('../passport/simulated-reading').then(module => module.simulatedPanelPassport());
-  return { kind: 'readable', transport: async (request, signal) => (await open()).transport(request, signal), places: SIMULATED_PLACES, disclosure: null, simulated: true };
+  return { kind: 'readable', transport: async (request, signal) => (await open()).transport(request, signal), places: SIMULATED_PLACES, disclosure: null };
 }
 
 const CITIZEN_HISTORY: readonly Earned[] = [

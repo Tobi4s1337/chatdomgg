@@ -9,7 +9,7 @@ import { twitchOidc } from '../realm-auth/oidc';
 import { createRealmAuthService } from '../realm-auth/service';
 import { createSimulatedOidcProvider } from '../realm-auth/simulated-provider';
 import { readPublicConfig } from './config';
-import { createPanelHttp } from './panel/http';
+import { createPanelHttp } from '../panel/http';
 import { createPanelAuthority } from './panel/reading';
 import { createTwitchUsers } from './panel/twitch-users';
 import { fetchTargetJson, proxyHttp, proxyUpgrade, type ProxyTarget } from './proxy';

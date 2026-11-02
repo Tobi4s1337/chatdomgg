@@ -2,12 +2,12 @@
 // in the 318 x 496 slot under the video. The book, its states and its reading are the shared passport craft; this
 // view gives it the panel's room (a slim head, thumb tabs down the fore-edge, one stamp to a leaf so every name
 // reads whole) and never decides anything about whose book it is. Main binds the transport and the mount.
-import { createEffect, createMemo, For, Show, type JSX } from 'solid-js';
+import { createEffect, For, Show, type JSX } from 'solid-js';
 import {
   PassportReading, createPassportReading,
   type PassportBookProps, type PassportDisclosureView, type PassportReadState, type PassportSession, type PassportTransport,
 } from '@chatdom/ui/passport';
-import { PANEL_DENSITY, simulatedOrigin } from './model';
+import { PANEL_DENSITY } from './model';
 import './panel-passport.css';
 
 export interface PanelPassportProps {
@@ -26,8 +26,6 @@ export interface PanelPassportProps {
   /** Back to the kingdom. Without it the view has no way out of its own and shows no back button. */
   readonly onClose?: () => void;
   readonly backLabel?: string;
-  /** The whole surface is SIMULATED (a bench or the panel's own simulated night), whatever the book says. */
-  readonly simulated?: boolean;
   /** 0 is the closed cover, where the panel opens by default; 1 is the flyleaf. */
   readonly initialView?: number;
   /** Every state the reading passes through, for a host that waits on the first settled one. */
@@ -50,7 +48,6 @@ export function PanelPassport(props: PanelPassportProps): JSX.Element {
 function PanelReading(props: PanelPassportProps): JSX.Element {
   const { state, session } = props.reading ?? createPassportReading(props.transport, { disclosure: () => props.disclosure });
   createEffect(() => props.onState?.(state()));
-  const simulated = createMemo(() => simulatedOrigin(state(), props.simulated === true));
   const onKey = (event: KeyboardEvent) => {
     if (event.key !== 'Escape' || !props.onClose) return;
     event.preventDefault();
@@ -67,9 +64,6 @@ function PanelReading(props: PanelPassportProps): JSX.Element {
         </button>}
       </Show>
       <h2 id="cpp-title" class="cpp-title">{props.title ?? 'Your passport'}</h2>
-      <Show when={simulated()}>
-        <span class="cpp-chip" role="note" aria-label="Simulated: an illustrative passport, not a live one">Simulated</span>
-      </Show>
     </header>
     <div class="cpp-desk">
       <PassportReading state={state()} layout="page" density={PANEL_DENSITY} initialView={props.initialView ?? 0} class="cpp-book"

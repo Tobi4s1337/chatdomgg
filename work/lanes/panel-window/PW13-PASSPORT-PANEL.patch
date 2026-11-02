@@ -1,0 +1,81 @@
+--- a/apps/panel/src/Panel.tsx
++++ b/apps/panel/src/Panel.tsx
+@@ -1,5 +1,5 @@
+ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, Switch, Match } from 'solid-js';
+-import { createPassportReading } from '@chatdom/ui/passport';
++import { createPassportReading } from '@chatdom/ui/passport/live';
+ import { selectAdapter } from './adapters/select';
+ import { CardSheet, PassportCorner } from './card/CardSheet';
+ import { PanelPassport } from './passport/PanelPassport';
+--- a/apps/panel/src/card/CardSheet.tsx
++++ b/apps/panel/src/card/CardSheet.tsx
+@@ -3,7 +3,7 @@
+ // chose to wear, and the keepsakes their passport holds. Everything is supplied by the card authority (or the visibly
+ // SIMULATED night); the panel only lays it out. A turned-up corner at the foot of the page leads into the passport.
+ import { createSignal, For, Match, Show, Switch, type JSX } from 'solid-js';
+-import { CrestArms, type KeepsakeView, type PassportReadState } from '@chatdom/ui/passport';
++import { CrestArms, type KeepsakeView, type PassportReadState } from '@chatdom/ui/passport/live';
+ import type { CitizenCard, WornPiece } from '../model';
+ import { homeLine, nameInk } from './words';
+ import { remembersTravel } from './worn';
+--- a/apps/panel/src/passport/PanelPassport.tsx
++++ b/apps/panel/src/passport/PanelPassport.tsx
+@@ -6,7 +6,7 @@
+ import {
+   PassportReading, createPassportReading,
+   type PassportBookProps, type PassportDisclosureView, type PassportReadState, type PassportSession, type PassportTransport,
+-} from '@chatdom/ui/passport';
++} from '@chatdom/ui/passport/live';
+ import { PANEL_DENSITY } from './model';
+ import './panel-passport.css';
+ 
+--- a/apps/panel/src/passport/transport.ts
++++ b/apps/panel/src/passport/transport.ts
+@@ -4,7 +4,8 @@
+  * panel never names a person in the body and never treats a Twitch ID as one. Every answer crosses the passport
+  * boundary reader, so a refused reply reaches the session as `undefined` (unavailable, never an empty book).
+  */
+-import { readPassportReply, type PassportReply } from '../../../api/src/passport/contracts';
++import type { PassportReply } from '../../../api/src/passport/contracts';
++import { readLivePassportReply } from '../../../api/src/passport/live-contracts';
+ import type { PassportReplyView, PassportRequestView, PassportTransport } from '@chatdom/ui/passport';
+ 
+ /** Replies are a book's first pages or one page of ≤50 records; anything far larger is not a passport. */
+@@ -42,6 +43,6 @@
+     if (text.length > PANEL_PASSPORT_REPLY_LIMIT) return undefined;
+     let body: unknown;
+     try { body = JSON.parse(text); } catch { return undefined; }
+-    return view(readPassportReply(body));
++    return view(readLivePassportReply(body));
+   };
+ }
+--- a/apps/panel/src/passport/transport.test.ts
++++ b/apps/panel/src/passport/transport.test.ts
+@@ -7,10 +7,10 @@
+ 
+ const URL = 'https://ebs.chatdom.example/passport';
+ 
+-/** A backend double that answers through the real reader for a SIMULATED holder, and records what it was sent. */
++/** Test-only authorities use a live card and origin before the real reader constructs its reply. */
+ function backend(options: { status?: number; body?: (json: unknown) => string } = {}) {
+   const sim = simulatedPassportAuthorities('many', { signedIn: true, travelsHidden: false });
+-  const reader = createPassportReader(sim.ports);
++  const reader = createPassportReader({ ...sim.ports, origin: 'live', card: async (...args) => { const source = await sim.ports.card(...args); return { ...source, document: { ...source.document, origin: 'live' } }; } });
+   const seen: { url: string; init: RequestInit }[] = [];
+   const fetchDouble: typeof fetch = async (input, init = {}) => {
+     seen.push({ url: String(input), init });
+@@ -67,6 +67,14 @@
+     }
+   });
+ 
++  it('refuses non-live and unknown wire books rather than converting them', async () => {
++    for (const origin of ['simulated', 'unknown']) {
++      const server = backend({ body: () => JSON.stringify({ kind: 'book', book: { version: 1, origin, visibility: 'hidden' } }) });
++      const transport = passportExtensionTransport({ url: URL, token: () => 'token', fetch: server.fetch });
++      expect(await transport({ op: 'book' }, new AbortController().signal)).toBeUndefined();
++    }
++  });
++
+   it('fails a read the backend refused with an error status', async () => {
+     const server = backend({ status: 503 });
+     const transport = passportExtensionTransport({ url: URL, token: () => 'token', fetch: server.fetch });

@@ -4,6 +4,8 @@ import { referenceServices } from './reference';
 import { assertRealmSchema, createRealmPool, describeStorageFailure,
   realmDatabaseConfig } from './persistence';
 import { INGRESS_ROUTE, ingressCredentials } from './ingress';
+import { RealmPanelGifts, RealmPanelService, mountRealmPanelRoutes } from './ingress/panel';
+import { RealmPanelSettings } from './ingress/panel/settings';
 import { HEALTH_ROUTE, READY_ROUTE } from './diagnostics';
 import { TenureEvidenceVerifier, tenureEvidenceKey } from './allocation';
 import { createDurableRealmBoot, mountEntryRoutes, mountRealmWatchRoutes } from './bootstrap';
@@ -90,7 +92,8 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   evening.use(boot.services);
   const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
   dock.use(boot.services);
-  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); } });
+  const panel = new RealmPanelService({ settings: new RealmPanelSettings({ db: pool, services: boot.services, origin }), gifts: new RealmPanelGifts({ db: pool, services: boot.services, origin }), db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded });
+  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); mountRealmPanelRoutes(app, panel); } });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
   ownRealmShutdown(server, transport, async () => {
