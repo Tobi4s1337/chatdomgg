@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { DisplayNameSchema, EpochMsSchema, KingdomIdSchema, TokenSchema, UIntSchema } from '../identity';
 import { CitizenLookIdSchema } from '../citizen-look';
 import { RaidGuestVisualMarkSchema } from '../raid-show';
+import { MonarchTitleSchema } from './monarch';
 
 /** Actual walkers only; matches the current KingdomRoom capacity and 5 Hz public patch cadence. */
 export const REALM_WALKER_FRAME_LIMIT = 300;
@@ -17,6 +18,8 @@ export const RealmObservedWalkerSchema = z.strictObject({
   placement: UIntSchema.max(0xffff_ffff),
   /** Current visual lease on this admitted walker only; missing/null means no guest insignia. */
   raidGuest: RaidGuestVisualMarkSchema.nullable().optional(),
+  /** The title while this walker is the kingdom's verified broadcaster; missing for everyone else. */
+  crown: MonarchTitleSchema.optional(),
 });
 export type RealmObservedWalker = z.infer<typeof RealmObservedWalkerSchema>;
 /** The existing public room lease, never a person/session id or a second world-space pose. */

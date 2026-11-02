@@ -28,6 +28,7 @@ import { createServer as createNetServer } from 'node:net';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { parseArgs } from 'node:util';
 import { chromium } from '@playwright/test';
 import { createServer as createViteServer, preview as createPreview } from 'vite';
@@ -49,6 +50,9 @@ const { values } = parseArgs({ options: {
   scene: { type: 'string' },
   receipt: { type: 'string' },
   stream: { type: 'string', default: '' },
+  // GW16: who walks in. `monarch` signs in as the broadcaster (tobi4s_, crowned by the room); `guest` as a visitor,
+  // and in the `arrival` view a crowned tobi4s_ walker joins and stands in front of them.
+  as: { type: 'string', default: 'monarch' },
 } });
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const pc = values.pc, hour = Number(values.hour);
@@ -56,14 +60,16 @@ const hourName = new Map([[6.5, 'dawn'], [12, 'noon'], [17.5, 'golden'], [19.5, 
 assert.ok(hourName, 'Use a named evidence hour');
 const sizes = values.sizes === 'none' ? [] : values.sizes.split(',').map(text => { const [w, h] = text.split('x').map(Number); assert.ok(w > 0 && h > 0); return { w, h }; });
 const viewNames = values.views.split(',');
-for (const name of viewNames) assert.ok(['street', 'door', 'forge', 'tavern', 'pier', 'castle'].includes(name), `unknown view ${name}`);
+for (const name of viewNames) assert.ok(['street', 'door', 'forge', 'tavern', 'pier', 'castle', 'arrival'].includes(name), `unknown view ${name}`);
+const as = values.as;
+assert.ok(as === 'monarch' || as === 'guest', 'Walk in --as monarch or --as guest');
 const streamCameras = values.stream ? values.stream.split(',') : [];
 for (const name of streamCameras) assert.ok(['hero', 'window', 'pier', 'citizen'].includes(name), `unknown stream camera ${name}`);
 assert.ok(!values.scene === !values.receipt, 'A staged scene needs its receipt');
 const staged = !!values.scene;
 const today = values.today, unpublished = values.unpublished;
 assert.ok(!(today && unpublished), 'Choose either the comparison build or an unpublished land');
-const prefix = `${staged || streamCameras.length ? 'gw14' : 'gw10'}-${pc ? 'gpu-' : ''}${today ? 'today-' : ''}${unpublished ? 'unpublished-' : ''}walk${values.label ? `-${values.label}` : ''}`;
+const prefix = `${viewNames.includes('arrival') ? `gw16-${as}-` : staged || streamCameras.length ? 'gw14-' : 'gw10-'}${pc ? 'gpu-' : ''}${today ? 'today-' : ''}${unpublished ? 'unpublished-' : ''}walk${values.label ? `-${values.label}` : ''}`;
 const sleep = ms => new Promise(done => setTimeout(done, ms));
 const host = '127.0.0.1', kingdomId = '129634568';
 const live = 'http://127.0.0.1:5197';
@@ -111,9 +117,10 @@ try {
 
   loader = await createViteServer({ root: repo, configFile: false, appType: 'custom', logLevel: 'error', server: { middlewareMode: true, hmr: false, ws: false } });
   const load = path => loader.ssrLoadModule(path);
-  const [{ createRealmServer }, { decodeFoundedScene }, { compileFoundedScene }, { foundedSpawnAnchors }, interactions, { grandKingdomLand }] = await Promise.all([
+  const [{ createRealmServer }, { decodeFoundedScene }, { compileFoundedScene }, { foundedSpawnAnchors }, interactions, { grandKingdomLand }, monarchRealm, { KingdomRoomState }] = await Promise.all([
     load('/apps/realm/src/server.ts'), load('/packages/world/src/founded-world/validate.ts'), load('/packages/world/src/founded-world/collision.ts'),
     load('/apps/realm/src/founded/anchors.ts'), load('/packages/world/src/interactions/index.ts'), load('/packages/world/src/grand/kingdom/ground.ts'),
+    load('/apps/realm/src/monarch/index.ts'), load('/packages/shared/src/realm/schema.ts'),
   ]);
   const scene = await decodeFoundedScene(sceneBytes, receipt);
   const world = compileFoundedScene(scene);
@@ -215,7 +222,11 @@ try {
   // Bench realm: the real server, the real founded collision world, one bench principal per ticket.
   const tickets = new Map(), sessions = new Map(), effectsSet = new Set();
   let writerOpen = false;
+  // The monarch as main.ts composes it: titles (in memory here), the monarch channel, and the castle-gate arrival.
+  const monarchTitles = monarchRealm.createMemoryMonarchTitles(new Map([[kingdomId, 'tobi4s_']]));
   const services = {
+    monarch: monarchTitles, channels: [monarchRealm.createMonarchRoomChannel(monarchTitles)],
+    prepareSpawn: monarchRealm.withMonarchArrival(undefined, () => ({ world, layoutRevision: receipt.layoutRevision, writerEpoch: checkpoint.checkpoint.writerEpoch, plan: scene.plan })),
     auth: {
       async authenticate(join) {
         const principal = tickets.get(join.ticket); tickets.delete(join.ticket);
@@ -286,7 +297,8 @@ try {
     if (req.method === 'POST' && req.url === '/api/realm/ticket') {
       if (req.headers['x-csrf-token'] !== csrf) return reply(403, { version: 1, status: 'refused', message: 'Bad CSRF token.' });
       const ticket = randomBytes(24).toString('hex'), sessionId = randomUUID();
-      const principal = { personId: kingdomId, kingdomId, sessionId, expiresAt: Date.now() + 3_600_000, origin: 'live', publicName: 'tobi4s_', look: 'tide' };
+      const principal = as === 'monarch' ? { personId: kingdomId, kingdomId, sessionId, expiresAt: Date.now() + 3_600_000, origin: 'live', publicName: 'tobi4s_', look: 'tide' }
+        : { personId: '990716001', kingdomId, sessionId, expiresAt: Date.now() + 3_600_000, origin: 'live', publicName: 'wren_visits', look: 'hearth' };
       tickets.set(ticket, principal); sessions.set(sessionId, principal);
       report.lastWalker = sessionId;
       return reply(200, { version: 1, status: 'issued', join: { kingdomId, ticket, protocol: 1 }, expiresAt: Date.now() + 60_000 });
@@ -330,6 +342,42 @@ try {
   browser = pc ? await chromium.connectOverCDP('http://127.0.0.1:9333', { timeout: 15_000 })
     : await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 
+  // GW16: the moment of walking in. As the monarch: at the castle gate, crowned, the line and the beacon. As a guest:
+  // at the market, then a crowned tobi4s_ (a second real walker in this room) arrives and stands in front of them.
+  const { Client: RealmSdk } = await import(pathToFileURL(createRequire(resolve('apps/realm/package.json')).resolve('@colyseus/sdk')).href);
+  async function arrivalView(page, run, w, h, phone) {
+    const view = { name: 'arrival', as };
+    if (as === 'guest') {
+      const ticket = randomBytes(24).toString('hex'), sessionId = randomUUID();
+      const principal = { personId: kingdomId, kingdomId, sessionId, expiresAt: Date.now() + 3_600_000, origin: 'live', publicName: 'tobi4s_', look: 'tide' };
+      tickets.set(ticket, principal); sessions.set(sessionId, principal);
+      const bot = await new RealmSdk(`http://${host}:${report.ports.realm}`).joinOrCreate('kingdom', { kingdomId, ticket, protocol: 1 }, KingdomRoomState);
+      cleanups.push(() => { void bot.leave().catch(() => {}); });
+      const me = await page.evaluate(() => window.__chatdomWalk.self && { ...window.__chatdomWalk.self, yaw: window.__chatdomWalk.camera.yaw });
+      // Three and a half metres ahead of the guest's view, turned to face them.
+      let spot = null;
+      for (const ahead of [3.6, 4.2, 3, 5, 2.6]) for (const lift of [0, .5, -.5, 1, -1]) if (!spot) spot = settle([me.x + Math.sin(me.yaw) * ahead, me.y + lift, me.z + Math.cos(me.yaw) * ahead]);
+      assert.ok(spot, 'No supported spot in front of the guest');
+      await sleep(400);
+      const effect = [...effectsSet][0];
+      assert.ok(effect.placeWalker(bot.sessionId, spot, world.revision), 'place the monarch');
+      await sleep(250);
+      const placement = bot.state.walkers.get(bot.sessionId).placement;
+      const yaw = ((Math.round(Math.atan2(me.x - spot[0], me.z - spot[2]) / (Math.PI * 2) * 256) % 256) + 256) % 256;
+      const input = bot.input({ mode: 'reliable' });
+      for (let n = 0; n < 4; n++) { Object.assign(input.data, { moveX: 0, moveZ: 0, buttons: 0, yaw, collisionRevision: world.revision, placement }); input.send(); await sleep(60); }
+      view.monarchAt = spot; view.monarchCrown = bot.state.walkers.get(bot.sessionId).crown;
+    }
+    await page.waitForFunction(() => document.querySelector('.monarch-arrival.shown') !== null, null, { timeout: 20_000, polling: 100 }).catch(() => { view.lineMissing = true; });
+    await sleep(phone ? 1800 : 1500);
+    view.state = await page.evaluate(() => ({ line: document.querySelector('.monarch-arrival')?.innerText ?? null,
+      tag: document.body.innerText.match(/(Monarch|King|Queen) tobi4s_/)?.[0] ?? null,
+      self: window.__chatdomWalk?.self ?? null }));
+    view.png = `${values.out}/${prefix}-arrival-${hourName}@${w}x${h}.png`;
+    await page.screenshot({ path: view.png, timeout: pc ? 30_000 : 180_000 });
+    console.log(JSON.stringify(view));
+    return view;
+  }
   for (const { w, h } of sizes) {
     const phone = w < 600;
     const run = { size: `${w}x${h}`, cold: true, views: [], landRequests: 0, landBytes: 0 };
@@ -384,9 +432,8 @@ try {
         if (Date.now() - started > timeout) throw new Error(`Timed out: ${JSON.stringify(run.trail.at(-1))}`);
       }
     };
-    // The opening map replaced the plain gate; either one, or the opening's own gate mark, is the designed loader.
-    run.gateMs = await timed(() => !!document.querySelector('.kingdom-gate, .opening') || performance.getEntriesByName('chatdom:open:gate').length > 0 || window.__chatdomReady === true, 30_000);
-    run.gateMs = await page.evaluate(fallback => Math.round(performance.getEntriesByName('chatdom:open:gate')[0]?.startTime ?? fallback), run.gateMs);
+    // The gate shows only when the opening loader does not; a page already ready has passed both.
+    run.gateMs = await timed(() => !!document.querySelector('.kingdom-gate') || window.__chatdomReady === true, pc ? 30_000 : 150_000);
     run.loadedMs = await timed(() => window.__chatdomReady === true && !!window.__chatdomKingdom?.inspect?.().loaded, 240_000);
     run.walkableMs = await timed(() => window.__chatdomWalk?.ready === true && window.__chatdomWalk.owner === 'walking', 240_000);
     run.land = await page.evaluate(() => { const s = window.__chatdomKingdom.inspect().land; return s && { generatedColumns: s.generatedColumns, initialNetworkBytes: s.initialNetworkBytes, phase: s.phase, regions: s.regions ?? null }; });
@@ -402,6 +449,7 @@ try {
     const self = () => page.evaluate(() => window.__chatdomWalk.self && { ...window.__chatdomWalk.self, yaw: window.__chatdomWalk.camera.yaw });
 
     for (const name of viewNames) {
+      if (name === 'arrival') { run.views.push(await arrivalView(page, run, w, h, phone)); continue; }
       const spot = spots[name];
       if (!spot) { run.views.push({ name, absent: 'this scene has no such place' }); console.log(JSON.stringify({ name, absent: true })); continue; }
       const view = { name, note: spot.note, start: spot.start };

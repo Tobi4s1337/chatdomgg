@@ -720,28 +720,6 @@ For the integrator: publish tobi4s_'s land from the **grader 3, format 2 store**
 not from the earlier `land-bake-a` or `land-bake-f2` stores; their metadata names grader 2 and the client
 rejects them. The commands in `apps/realm/src/land/README.md` carry the new recipe hash.
 
-## GW15 the kingdom as stunning as the island — 2026-11-02
-
-What GW15 changes on shared surfaces, for workers 1 (GW11) and 2 (GW14) and the integrator:
-
-- `kingdom/scene.ts`: new `CameraName`s `island` and `vista` (offered only on the grand floor, `offers(view)`), an
-  `opening` scene option (hold on the island, then descend to the hero), the forest fringe planted just outside the
-  physical region, and the town ground (fields, meadow, heath, bracken, borders) planned in a worker
-  (`grand-land/town-ground/remote.ts`). The town-ground block sits right after the adopted cover; the fringe sits
-  inside the grand-land task beside `materialFactory`. Nothing touches collision, plots, doors or placements.
-- The grand replacement water now has an **open sea** (`createWaterSurface({ openSea })`): four quads at sea level
-  from the raster's edge to 40 km, and the camera's far plane reaches it. Its far reach takes the sky dome's horizon
-  colour (`domeHorizon` in `places/water/surface/shader.ts`), so a change to the dome's horizon terms in
-  `packages/render/src/atmosphere.ts` should be mirrored there.
-- Ground dressing: `GroundDressing.yieldGround(drop)` permanently drops passive cover (never solids; their
-  collision stays) and a new band family `fields` for `town-*` crops and borders. `pieceRole` treats any `town-*`
-  blueprint as passive cover.
-- The hosted floor material takes the town's land-use mask late (`HostedGrandMaterial.setTownUse`).
-- Stream: `window.__chatdomStream.inspect()` returns the scene's diagnostics for capture probes; the director's
-  break and show tours include `island` and `vista` where the scene offers them; `?opening=0` turns the opening off.
-- **needs (Backlog):** trees inside the walkable town. They need colliders through GW14's solids query; until then
-  the fringe stands only outside the physical region (SEAMS guarantee 4).
-
 ## GW11 the opening loader, mountable — 2026-11-02
 
 The kingdom page, the stream stage and `/-/grand` now open behind one loader: the parchment map of the kingdom.
@@ -1022,9 +1000,8 @@ Run in the deployed checkout (lane/integrator with this checkpoint merged). Noth
 2. **Land directory:** one persistent directory outside the repo, owned by the realm's user, on the same disk as
    `REALM_FOUNDED_DIRECTORY` (for example `/var/lib/chatdom/land`). Either:
    - **copy the verified bake** (instant, 17.63 MB): `cp -a <grand-world worktree>/shots/grand-world/land-bake-g3/. /var/lib/chatdom/land/`
-     It holds recipe `71f6888b…` (grader 3, format 2), the plan catalogue and the bindings for the live receipts
-     `af5df495…` (collision revision 11) and `1ee0e81d…` (collision revision 12, the anvil's physics identity; same
-     plan, rebound with the publication command in 1.9 s, all 354 blobs reused); or
+     It holds recipe `71f6888b…` (grader 3, format 2), the plan catalogue and the binding for the live receipt
+     `af5df495…` (collision revision 11); or
    - **leave it empty**: on the kingdom's first open the realm bakes it itself (about 93 CPU s at priority 19,
      about 400 MiB in the child; on this host under load 25 it took the wall time recorded in GW11.md), and the
      kingdom shows today's land until the binding lands.
@@ -1032,7 +1009,9 @@ Run in the deployed checkout (lane/integrator with this checkpoint merged). Noth
    - `REALM_LAND_DIRECTORY=/var/lib/chatdom/land` (required; without it nothing changes and clients keep today's land).
    - `REALM_LAND_BAKE_SCRIPT` (optional; the default is `land-bake.mjs` beside `dist/realm.mjs`). Without the bundle
      the realm still serves and rebinds, and logs that a new plan waits for the offline bake command.
-   - No `GRAND_*` variable is used in production (those are private test inputs). No migration.
+   - No `GRAND_*` variable is used in production (those are private test inputs). GW16 adds one additive
+     migration, `0015_realm_monarch` (the monarch's chosen title, one small table); the realm applies it the way it
+     applies the others (`migrateRealmSchema` before start). Nothing else in the environment changes.
 4. **Gateway:** nothing to add. The public allowlist already admits exactly `/api/realm/land/<kingdom>/<scene>` and
    `/api/realm/land/<kingdom>/<scene>/<blob>` (`apps/api/src/public/routes.ts`), forwarded to the realm.
 5. **Restart the realm.** Expect `land: serving and baking /var/lib/chatdom/land (bake command …/land-bake.mjs)`.
@@ -1045,25 +1024,11 @@ Run in the deployed checkout (lane/integrator with this checkpoint merged). Noth
    ```
    Then `/stream?source=realm&kingdom=129634568` and `/-/grand?channel=tobi4s_` open on the grand land with his homes
    (the canvas's `data-hosted-land` is not `absent`).
-   After the Content-Length fix (`apps/realm/src/land/mount.ts`, GW11 third session) merges and the realm is
-   rebuilt, the deployed copy's local patch that skipped the header can be dropped; `curl -sI` then shows exactly
-   one `content-length`, equal to the blob's size.
 7. **Rollback:** unset `REALM_LAND_DIRECTORY` and restart. Clients fall back to today's land (the probe's 6 s limit
    ends the wait on an unmounted route). The land directory can stay; it is immutable.
 
 Still open for the integrator (unchanged): the Chronicle's historical scenes do not pass through the founded store, so
 replaying an old receipt shows today's land unless that exact receipt was published (`publish-cli`).
-
-### GW11 opening speed: small additive changes beside this lane's files
-
-No round lane owns these, so they were made here as the smallest backward-compatible change (note of 2 Nov 12:18):
-- `packages/voxel/src/collision`: `compileCollisionWorldWithSolids`, `packCollisionBoxes`, `unpackCollisionBoxes`;
-  `compileCollisionWorld` now calls the first with `compilePlacedSolids(input)`, the same world as before.
-- `packages/world/src/founded-world/collision.ts`: `foundedPlacedSolidsInput` and `compileFoundedSceneWithSolids`.
-  `compileFoundedScene` is unchanged in result.
-- `terrain-art` is untouched: the scene answers ground queries from the workers' corners in its own
-  `apps/web/src/kingdom/terrain-founded-sampler.ts` (the producer's interpolation, spot-checked against
-  `terrainHeight`).
 
 ## GW12 frame budget: what the scene host now offers and one ask — 2026-11-02
 
@@ -1084,30 +1049,30 @@ No round lane owns these, so they were made here as the smallest backward-compat
   and shown again as soon as one point has alpha. It never shows a pool its owner hid. If forge adopts the same rule
   in `forge/emitters`, the host sweep simply finds nothing to hide; nothing needs removing.
 
-## GW13 every channel its own world — the asks (2026-11-02, checkpoint)
+## GW16 the monarch walks in — 2026-11-02
 
-- **needs: integrator** — a kingdom founded on its own world needs its `grand-land-2` recipe pinned at founding and
-  bound into the founded receipt, so the realm bakes and serves it and the browser can verify it. Today only adopted
-  `grand-land-1` recipes exist (`adoptedGrandRecipe`); `grandSeedFromGenesis(recipe, name, { character })` in
-  `packages/world/src/grand/world.ts` (or `grandSeedForHolding` in `apps/web/src/grand/holding-world.ts` for an Atlas
-  holding) makes the seed. Grand-world will add the realm's immutable recipe store and the served-recipe check next.
-- **needs: chronicle** — each opening is offered as a Chronicle page. The opening is a pure function of the baked
-  surface, the founded town's columns and the citizen count (`grandRevealField`, `grandRevealStage`,
-  `grandRevealOpening` in `packages/world/src/grand/reveal.ts`); the page text is `opening.line`. The realm sees the
-  count cross a milestone; it should append one page per crossing, never more than once per stage.
+Contracts (additive, `packages/shared/src/realm/monarch.ts`, exported from `@chatdom/shared/realm`):
+`isVerifiedMonarch(principal)` (live origin and person id = kingdom id; nothing else ever crowns), the titles
+`Monarch | King | Queen` (default `Monarch`; anything else reads as the default), `monarchNameTag`, `arrivalLine`,
+and the room channel `monarch` (`{type:'who'}` from anyone, `{type:'title', title}` from the verified monarch only;
+reply `{type:'monarch', name, title, you}` to the asker). Wire fields: `WalkerSchema.crown` (append-only string,
+the title or empty) and `RealmObservedWalker.crown` (optional).
 
-## from launch
+Realm (`apps/realm/src/monarch/**`, the room and main.ts additively): the room sets `crown` on join only for the
+verified broadcaster, re-crowns their seat when the title changes, publishes it in the walker frame, and turns any
+arriving walker toward `RealmSpawnPreparation.faceToward` when a preparation names one (raid-show's §11 arrival
+facing is now honoured too). `withMonarchArrival` wraps `prepareSpawn`: the monarch steps out at the castle gate
+facing the town; everyone else keeps the inner preparation. Titles live in `realm_monarch_titles` (migration 0015);
+the broadcaster's public name is read from their own sign-in, else the name Twitch ingress observed.
 
-- 2 Nov (LA10): `/stream` without a kingdom showed "Choose a kingdom" calmly but logged
-  `console.error('The stream kingdom could not open', …)` on every load. The refusal is now a `StreamRefusal`
-  (`apps/web/src/stream/mount.ts`), which the mount still turns into the failed phase but does not log; every other
-  failure still logs. Test in `mount.test.ts`.
-- 2 Nov (LA10, review): the stream shows only calm words when it fails. `fail()` in `apps/web/src/stream/mount.ts`
-  now takes the cause: a `StreamRefusal` speaks its own message; any other cause (a realm 500, a TypeError, a scene
-  `onError`, the five-minute replacement timeout, a rejected final handoff) shows "The kingdom could not be opened
-  just now." (or "…could not refresh just now." for a replacement), is logged, and keeps its raw message in
-  `stats.lastCause` for diagnostics. A rejected final handoff is now logged too. Tests in `mount.test.ts`.
-- 2 Nov (LA10, session 4, realm): `GET /api/realm/entry/<id>` for a kingdom with no approved entry name answers **404**
-  "No kingdom with this address is open to visitors." instead of 503 "…no approved entry name configured." (the walk-in
-  gate turns the 404 into its `nowhere` state). Every client of the route already treats any non-OK answer alike
-  (`apps/realm/src/bootstrap/entry.ts`, new `entry.test.ts`).
+Scene (`apps/web/src/kingdom/grand-land/monarch/**`, mounted in `scene.ts`): crown on the monarch's head, title on
+their tag, heads turning (`walkerGaze`, play SEAMS), the kingdom's bell once and the beacon catching as they walk
+in, the arrival line once per standing for guests and citizens (every arrival for the monarch, with their title
+choice), and a faint thread of light from the reader's own door.
+
+Asks:
+- **raid-show (dock/throne):** a title choice belongs in the throne too. Send `{version:1,type:'title',title}` on
+  the room channel `monarch` from the broadcaster's session, or call `RealmMonarchTitles.choose` from a dock route
+  that has already verified the broadcaster; the room re-crowns at once.
+- **front-door / Chronicle:** a monarch-arrival page or beat can read the same `crown` mark; nothing is published
+  to the Chronicle by this lane.

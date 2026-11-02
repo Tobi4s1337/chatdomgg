@@ -8,11 +8,11 @@ import { sampleFoundedTerrain } from '@chatdom/world/founded-collision';
 import { createWalkerGround } from '../walk/ground';
 import type { InteractionRegistry } from '@chatdom/world/interactions';
 import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
-import { sharedCitizenLooks } from '../citizens/look-library';
 import type { RealmWalkerPose } from '../realm/client';
 import type { WalkerLabel } from './walk-scene';
 import { presentWalkers, type WalkerPresentation } from './walker-presentation';
 import { createWalkerFigures, createWalkerSplit, createWalkerViewTest } from './walker-figures';
+import { walkerGaze } from './grand-land/monarch/gaze';
 
 export type WalkerSlots = ReadonlyMap<number, WalkerPresentation>;
 
@@ -71,9 +71,8 @@ export function createObservedWalkerTrack(manifest: WalkerScene) {
 export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Camera, canvas: HTMLCanvasElement,
   pool: VoxelWorkerPool, material: VoxelRenderState, manifest: WalkerScene, feed: RealmWalkerFeed, registry: InteractionRegistry,
   land?: { readonly plan: SettlementPlan; readonly world: CollisionWorld }) {
-  const looks = createDefaultCitizenLooks(), library = sharedCitizenLooks();
-  const ready = (look: string) => library.has(look) || (library.request(look), false);
-  const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool, library });
+  const looks = createDefaultCitizenLooks(), known = new Set(looks.map(look => look.id));
+  const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool });
   // The nearest walkers in full, the rest as simple figures, crossfading at the boundary.
   const split = createWalkerSplit(), inView = createWalkerViewTest(), figures = createWalkerFigures(scene, material);
   const track = createObservedWalkerTrack(manifest);
@@ -92,9 +91,8 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
     draw(now: number, visible = true) {
       // A walker whose look is not here yet is still a person in the street: a simple figure until it is.
       const parts = split.split(visible ? poses : [], eye.setFromMatrixPosition(camera.matrixWorld), now, inView(camera));
-      for (const { pose } of parts.simple) ready(pose.look);
-      const full = parts.full.filter(({ pose }) => ready(pose.look));
-      const simple = [...parts.simple, ...parts.full.filter(({ pose }) => !ready(pose.look))];
+      const full = parts.full.filter(({ pose }) => known.has(pose.look));
+      const simple = [...parts.simple, ...parts.full.filter(({ pose }) => !known.has(pose.look))];
       const dt = lastDraw === null ? 0 : Math.max(0, Math.min(.1, (now - lastDraw) / 1000));
       lastDraw = now;
       heights.clear();
@@ -107,7 +105,7 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
       people.update(full.map(({ pose, opacity }) => ({ id: pose.id, look: pose.look,
         position: [pose.x, bodyY(pose), pose.z] as const, ...(ground ? { ground: ground.groundFor(pose.id), floor: ground.floorAt } : {}), heading: pose.yaw * Math.PI * 2 / 256,
         distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, opacity,
-        ...(pose.posture ? { posture: pose.posture } : {}), time: now / 1000 })), camera);
+        ...(pose.posture ? { posture: pose.posture } : {}), time: now / 1000, ...walkerGaze(pose) })), camera);
       figures.update(simple.map(({ pose, opacity }) => ({ id: pose.id, position: [pose.x, bodyY(pose), pose.z] as const,
         heading: pose.yaw * Math.PI * 2 / 256, distance: pose.distance, speed: pose.posture ? 0 : pose.speed, opacity })), now);
       ground?.retain(heights);

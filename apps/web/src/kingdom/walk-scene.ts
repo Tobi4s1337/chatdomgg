@@ -5,10 +5,9 @@ import type { VoxelWorkerPool } from '@chatdom/voxel';
 import type { VoxelRenderState } from '@chatdom/render';
 import { MATERIALS } from '@chatdom/content';
 import { createCitizenRenderer, createDefaultCitizenLooks, type CitizenRenderLook } from '../citizens';
-import { sharedCitizenLooks } from '../citizens/look-library';
 import type { RealmClient, RealmCollision, RealmWalkerPose } from '../realm/client';
 import { createWalkController, headingFromByte, type WalkControllerOptions } from '../walk';
-import { createFoundedInteractionRegistry, foundedInstalledHomes, homeThreshold, homeZone, STREET_ZONE } from '@chatdom/world/interactions';
+import { createFoundedInteractionRegistry, homeZone, STREET_ZONE } from '@chatdom/world/interactions';
 import { interactionSound, mountInteractionController, type InteractionPlaces } from '../interactions';
 import { bindWalkInteractions } from './walk-interactions';
 import { createHomeStepMaterial, createOthersSteps, createPlacementStepSurface, createPublicStepSurface, createStepCueMaterial, othersStepDistance } from './walk-footsteps';
@@ -19,8 +18,7 @@ import { createWalkerFigures, createWalkerSplit, createWalkerViewTest } from './
 import { createPlaySession, type PlaySession } from '../play/session';
 import type { PlayBuildEntry, PlayVolume } from '../play/host';
 import { wayHomeFrom } from '../play/way-home';
-import { placeCameraAt, provideObservedWalkerHands, registeredFriendSource, type CameraHold, type OwnHomeInside } from '../play/slots';
-import { createWayHomeRuntime, type WayHomeRuntime } from '../play/way-home-runtime';
+import { placeCameraAt, provideObservedWalkerHands } from '../play/slots';
 import { withRegisteredPlaces } from '../play/places';
 import { bindPortalSource, type PortalSource } from '../play/portals';
 import { mountPlayHud } from '../play';
@@ -29,6 +27,7 @@ import { createWalkerGround } from '../walk/ground';
 import { sampleFoundedTerrain } from '@chatdom/world/founded-collision';
 import type { PlaySettings } from '../play/slots';
 import '../play/providers';
+import { walkerGaze } from './grand-land/monarch/gaze';
 
 /** Other walkers' steps are heard within this many metres. */
 
@@ -59,11 +58,6 @@ export interface KingdomWalkBinding {
   readonly portal?: Pick<PortalSource, 'entry' | 'endpoint' | 'title' | 'leave' | 'rejoin'>;
   /** Dev stills only (walk/stills, the "before" sole close-ups): false draws every body at its physics height. */
   readonly drawnGround?: boolean;
-  /**
-   * Dev stills only (walk/stills, the lantern trail): the plot to treat as your home, and no lighting on arrival.
-   * A real walk learns its home from the room's `home.owned` message.
-   */
-  readonly stillsHome?: string;
 }
 
 /** Building in a founded kingdom opens with the street; until then the ledger says so in one honest line. */
@@ -92,8 +86,9 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
     /** The unlocked mixer itself for walk features, or null while it may not sound. Without it features hear nothing. */
     audio?: () => KingdomAudio | null;
   }) {
-  const looks = binding.appearances ?? createDefaultCitizenLooks();
-  const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool, library: sharedCitizenLooks() });
+  const looks = binding.appearances ?? createDefaultCitizenLooks(), lookIds = new Set(looks.map(look => look.id));
+  const knownLook = (id: string) => lookIds.has(id);
+  const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool });
   // The nearest 64 walkers are drawn in full; everyone further off as one instanced draw of simple figures.
   const split = createWalkerSplit(), inView = createWalkerViewTest(), figures = createWalkerFigures(scene, material), eye = new THREE.Vector3();
   const client = binding.client;
@@ -118,41 +113,6 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
     hand: id => people.grips.get(id) ?? null,
     pose: (id, pose) => { if (pose) toolPoses.set(id, pose); else toolPoses.delete(id); },
   });
-  // Your own home's shell while the room says you are in it (the wardrobe stands against its wall), per collision revision.
-  let homeShell: { readonly key: string; readonly home: OwnHomeInside | null } | null = null;
-  const ownHomeInside = (): OwnHomeInside | null => {
-    const plotId = connection.ownedPlotId, state = connection.session.snapshot().self, world = currentWorld();
-    if (!plotId || !world || state.mode !== 'interior' || state.plotId !== plotId) return null;
-    const key = `${plotId}@${world.revision}`;
-    if (homeShell?.key !== key) {
-      const installed = foundedInstalledHomes(founded, new Map([[plotId, key]])).homes[0];
-      const threshold = installed ? homeThreshold(installed, world) : null, anchor = threshold?.placement?.anchors[0];
-      const door = anchor?.position, inside = anchor?.rest;
-      homeShell = { key, home: threshold?.interior && door && inside ? { plotId, interior: threshold.interior, door, inside, world } : null };
-    }
-    return homeShell.home;
-  };
-  // A feature may hold the drawn camera for a moment (the wardrobe's mirror): placed after the walk, your body whole.
-  const cameraHolds = new Set<symbol>();
-  const holdCamera = (reason: string): CameraHold => {
-    const token = Symbol(reason);
-    cameraHolds.add(token);
-    return {
-      set(eye, target, fov) {
-        if (!cameraHolds.has(token)) return;
-        camera.position.set(...eye); camera.up.set(0, 1, 0); camera.lookAt(...target); camera.updateMatrixWorld();
-        if (fov !== undefined && Number.isFinite(fov) && Math.abs(camera.fov - fov) > 1e-6) { camera.fov = Math.min(100, Math.max(20, fov)); camera.updateProjectionMatrix(); }
-      },
-      release() { cameraHolds.delete(token); },
-    };
-  };
-  // The map and the lantern path home (PL12): built once the drawn ground below exists; the play host reads it live.
-  let wayHome: WayHomeRuntime | null = null;
-  const ownedPlot = () => binding.stillsHome ?? connection.ownedPlotId;
-  const insideOwnHome = () => {
-    const state = connection.session.snapshot().self, plot = ownedPlot();
-    return state.mode === 'interior' && !!state.plotId && state.plotId === plot;
-  };
   let play: PlaySession;
   const self = { personId: client.selfId, get publicName() { return selfWalker()?.name ?? ''; }, get lookToken() { return selfWalker()?.look ?? ''; } };
   try {
@@ -163,12 +123,9 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         if (!self) return null;
         camera.getWorldDirection(direction);
         const state = connection.session.snapshot().self;
-        return wayHomeFrom(founded, ownedPlot(), [self.x, self.y, self.z], [direction.x, direction.z],
-          state.mode === 'interior' && !!state.plotId && state.plotId === ownedPlot());
+        return wayHomeFrom(founded, connection.ownedPlotId, [self.x, self.y, self.z], [direction.x, direction.z],
+          state.mode === 'interior' && !!state.plotId && state.plotId === connection.ownedPlotId);
       },
-      map: () => wayHome?.map() ?? null,
-      lights: { light: () => wayHome?.lights.light() ?? false, get lit() { return wayHome?.lights.lit ?? false; },
-        onChange: listener => { const stop = wayHome?.lights.onChange(listener); return () => stop?.(); } },
       build: binding.play?.build ?? { open: null, note: FOUNDED_BUILD_NOTE },
       volumes: sound.setVolumes ? sound.volumes ?? [] : [],
       cue: surface => { sound.cue('wood', { ui: surface }); },
@@ -197,8 +154,6 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         founded, world: currentWorld,
         audio: () => sound.audio?.() ?? null,
         overlayHost: host,
-        ownHome: ownHomeInside,
-        holdCamera,
       },
     });
   } catch (error) { stopHands(); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); figures.dispose(); throw error; }
@@ -250,17 +205,6 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
     terrainFloorY: terrain.origin[1], terrainCeilingY: terrain.ceilingY });
   const drawnHeights = new Map<string, number>();
   let lastDraw: number | null = null;
-  try {
-    wayHome = createWayHomeRuntime({ plan: founded.plan, scene, groundAt: (x, z) => ground.drawnAt(x, z),
-      reducedMotion: () => sharedPlaySettings().current.reducedMotion,
-      ownedPlotId: ownedPlot, inside: insideOwnHome,
-      feet: () => { const self = controller.debug.self; return self ? [self.x, self.y, self.z] : null; },
-      walkers: () => poses.map(pose => ({ id: pose.id, name: pose.name, position: [pose.x, pose.y, pose.z] as const, yaw: headingFromByte(pose.yaw), self: pose.self })),
-      friends: () => { const source = registeredFriendSource(); return source ? { mutual: walkers => source.mutual(walkers, play.ctx) } : null; },
-      heading: () => { camera.getWorldDirection(direction); return Math.hypot(direction.x, direction.z) > 1e-6 ? Math.atan2(direction.x, direction.z) : null; },
-      hour: () => binding.play?.hour?.() ?? 19.5,
-      ...(binding.stillsHome ? { lightOnArrival: false } : {}) });
-  } catch (error) { console.error('The way home could not be drawn', error); wayHome = null; }
   return {
     controller,
     get poses() { return poses; },
@@ -284,7 +228,6 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
       const place = self && controller.owner === 'walking' ? placeCameraAt([self.x, self.y, self.z]) : null;
       controller.limitCamera(place ? { maxDistance: place.maxDistance, tilt: place.tilt, seeThrough: seeThroughBoxes(place.seeThrough) } : null);
       play.frame(lastPlayFrame === null ? 0 : Math.max(0, Math.min(.1, (now - lastPlayFrame) / 1000)));
-      wayHome?.frame(now);
       lastPlayFrame = now;
       poses = presentWalkers(walkingPoses, connection.session.snapshot().seats, registry);
       return active;
@@ -319,11 +262,9 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
     draw(now: number) {
       // A walker whose look is not here yet is still a person in the street: a simple figure until it is.
       const parts = split.split(connected ? poses : [], eye.setFromMatrixPosition(camera.matrixWorld), now, inView(camera));
-      // Asking for every look in view (ready() requests it) means walkers further off are dressed before they come close.
-      for (const { pose } of parts.simple) people.ready(pose.look);
-      const full = parts.full.filter(({ pose }) => people.ready(pose.look));
+      const full = parts.full.filter(({ pose }) => knownLook(pose.look));
       // Your own body is never a stand-in figure: it hides in first person, which a figure cannot.
-      const simple = [...parts.simple, ...parts.full.filter(({ pose }) => !people.ready(pose.look) && !pose.self)];
+      const simple = [...parts.simple, ...parts.full.filter(({ pose }) => !knownLook(pose.look) && !pose.self)];
       const dt = lastDraw === null ? 0 : Math.max(0, Math.min(.1, (now - lastDraw) / 1000));
       lastDraw = now;
       // Once per walker per frame, whichever level (or both, while crossfading) draws them.
@@ -345,7 +286,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         ...(pose.posture ? { posture: pose.posture } : {}),
         // The gait reads the drawn ground and floors, so no sole cuts a slope or a stair while standing or walking.
         ...gaitGround(pose.id),
-        opacity: detail * (pose.self ? play.selfHidden ? 0 : cameraHolds.size || controller.owner !== 'walking' ? 1 : controller.selfOpacity : 1), time: now / 1000 })), camera);
+        opacity: detail * (pose.self ? play.selfHidden ? 0 : controller.owner === 'walking' ? controller.selfOpacity : 1 : 1), time: now / 1000, ...walkerGaze(pose) })), camera);
       ground.retain(drawnHeights);
       const self = walkingPoses.find(pose => pose.self), state = client.room.state;
       const interaction = connection.session.snapshot().self;
@@ -399,9 +340,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
       return labels;
     },
     play,
-    /** The lantern path home and the map (PL12), for stills and tests. */
-    get wayHome() { return wayHome; },
-    dispose() { wayHome?.dispose(); stopPortal(); stopHands(); stopVolumes(); canvas.removeEventListener('contextmenu', lockedMenu); host.removeEventListener('pointerdown', lockedPress, { capture: true }); host.removeEventListener('pointerup', lockedPress, { capture: true }); play.dispose(); document.removeEventListener('visibilitychange', resetFootsteps); window.removeEventListener('blur', resetFootsteps); client.room.onLeave.remove(left); client.room.onDrop.remove(left); client.room.onReconnect.remove(reconnected); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); figures.dispose(); },
+    dispose() { stopPortal(); stopHands(); stopVolumes(); canvas.removeEventListener('contextmenu', lockedMenu); host.removeEventListener('pointerdown', lockedPress, { capture: true }); host.removeEventListener('pointerup', lockedPress, { capture: true }); play.dispose(); document.removeEventListener('visibilitychange', resetFootsteps); window.removeEventListener('blur', resetFootsteps); client.room.onLeave.remove(left); client.room.onDrop.remove(left); client.room.onReconnect.remove(reconnected); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); figures.dispose(); },
   };
 }
 
