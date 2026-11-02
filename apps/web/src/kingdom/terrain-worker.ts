@@ -63,6 +63,26 @@ export type TerrainWorkerResponse =
   | { readonly kind: 'complete'; readonly completed: number; readonly total: number }
   | { readonly kind: 'error'; readonly message: string };
 
+const surfacePhase = (layout: TerrainLayout) => (seedHash(layout.config.seed) % 6283) / 1000;
+
+function cellSurface(layout: TerrainLayout, worldX: number, worldZ: number, height: number, phase: number): number {
+  // Long, continuous worn edges read as a path; there is no per-voxel colour noise.
+  const wear = 0.22 * Math.sin(worldX * 0.12 + worldZ * 0.09 + phase)
+    + 0.1 * Math.sin(worldX * 0.29 - worldZ * 0.17);
+  // Signed distance already includes each road/square's complete designed width.
+  // Wear may extend its edge, but never cuts into guaranteed public clearance.
+  const paved = 'version' in layout
+    ? (samplePublicGround(layout, worldX, worldZ)?.pavingDistance ?? Infinity) <= Math.max(0, wear)
+    : roadDistance(layout, worldX, worldZ) <= 1.8 + wear;
+  return height < layout.lake.level + 0.25 ? MAT.waterbed
+    : paved ? MAT.paving : MAT.grass;
+}
+
+/** The skin material of the half-metre terrain cell centred at (x, z), as `prepareTerrainField` stores it. */
+export function terrainCellSurface(layout: TerrainLayout, x: number, z: number): number {
+  return cellSurface(layout, x, z, terrainHeight(layout, x, z), surfacePhase(layout));
+}
+
 /** One globally sampled grid includes every neighbouring column needed by all 34³ halos. */
 export function prepareTerrainField(layout: TerrainLayout): TerrainField {
   const { minX, maxX, minZ, maxZ } = layout.bounds;
@@ -80,7 +100,7 @@ export function prepareTerrainField(layout: TerrainLayout): TerrainField {
   const columns = countX * 32 + 2, rows = countZ * 32 + 2;
   const heights = new Int16Array(columns * rows);
   const surfaces = new Uint16Array(columns * rows);
-  const phase = (seedHash(layout.config.seed) % 6283) / 1000;
+  const phase = surfacePhase(layout);
   for (let z = 0; z < rows; z++) for (let x = 0; x < columns; x++) {
     // Sampling at cell centres is identical on both sides of every chunk seam.
     const worldX = origin[0] + (x - 0.5) * CELL_METRES;
@@ -93,16 +113,7 @@ export function prepareTerrainField(layout: TerrainLayout): TerrainField {
     if (top <= 0 || top > 1024) throw new Error('Terrain exceeds the 32-chunk vertical budget.');
     const index = x + columns * z;
     heights[index] = top;
-    // Long, continuous worn edges read as a path; there is no per-voxel colour noise.
-    const wear = 0.22 * Math.sin(worldX * 0.12 + worldZ * 0.09 + phase)
-      + 0.1 * Math.sin(worldX * 0.29 - worldZ * 0.17);
-    // Signed distance already includes each road/square's complete designed width.
-    // Wear may extend its edge, but never cuts into guaranteed public clearance.
-    const paved = 'version' in layout
-      ? (samplePublicGround(layout, worldX, worldZ)?.pavingDistance ?? Infinity) <= Math.max(0, wear)
-      : roadDistance(layout, worldX, worldZ) <= 1.8 + wear;
-    surfaces[index] = height < layout.lake.level + 0.25 ? MAT.waterbed
-      : paved ? MAT.paving : MAT.grass;
+    surfaces[index] = cellSurface(layout, worldX, worldZ, height, phase);
   }
   const renderColumns = countX * 16 + 1, renderRows = countZ * 16 + 1;
   const renderHeights = new Float32Array(renderColumns * renderRows);

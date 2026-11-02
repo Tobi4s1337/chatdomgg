@@ -765,6 +765,71 @@ is merged into this branch. Nothing below changes a home, a door, a placement or
 - **front-door, hero URL parameters:** `/-/grand-bench` keeps `GrandEngine`, `grandChannel` and every parameter
   front-door reads. `/-/grand` is the live kingdom view (FD13 note).
 
+### Landed on this branch, second GW14 session (2026-11-02, before the integrator merge)
+
+- **play A2 `surfaceAt` (seam 1, "What grand-world adds").** `KingdomLandInterface.surfaceAt?: LandSurfaceAt` with
+  play's exact types, exported from `@chatdom/world`: `GroundSurface`, `LandSurfaceSample { drawnY, surface,
+  waterDepth }`, `LandSurfaceAt`, `GROUND_SURFACES`. A producer passes `surface` to `createKingdomLandInterface`.
+  Malformed samples (non-finite height, unknown ground, negative depth) come back as null.
+  - Grand floor: `grandFloorSurface(plan, { seaLevel })` (`packages/world/src/grand-adoption/surface.ts`).
+    drawnY is the half-metre column top, which equals `foundedGroundAt` and the collision top. Water stands up to
+    the larger of the town's own water and the grand sea. The ground is setts → `cobble`, low shore → `sand`, a lawn
+    bank of 1.5 m or more → `rock`, everything else → `grass`. It is null outside the installed region. Test: every
+    interior column of a graded test island equals the grader's own height, water and cover
+    (`surface.test.ts`; the region's outermost ring is measured against the band and is exempt).
+  - Today's land: `todayLandSurface(layout, waterLevel)` (`apps/web/src/kingdom/terrain-surface.ts`). drawnY is the
+    rendered 1 m triangle; the material is the mesher's own per-metre vote, now one function
+    (`terrainCellSurface`) shared with `prepareTerrainField`. A bounded patch cache keeps the cold cost at
+    0.37 ms per new metre patch, and a lookup after that. Test: material and height equal the meshed patches.
+  - The scene publishes it as `scene.surfaceAt(x, z)`: today's land at once, the grand floor once installed (null
+    while it loads).
+  - **Ask to play** (after the merge, in play's files): give `createKingdomWalk` and `createObservedWalkers` an
+    optional `{ surfaceAt?: DrawnSurfaceAt }` and pass it to `createWalkerGround` and `createPublicStepSurface`.
+    grand-world then passes `(x, z) => sceneSurfaceAt(x, z)` from `scene.ts` in the two calls it owns.
+- **pier 3b, the director's pier shot.** `CameraName` gains `'pier'` (`StreamParams.camera` accepts
+  `?camera=pier`). `pierShot(scene, ground)` (`apps/web/src/kingdom/grand-land/pier-shot.ts`) frames the deck from the
+  pier's own `pier:*` placements and blueprints, using pier's starting pose: 16 m behind the root along the deck,
+  18 m aside, 9 m over the deck, looking at the middle of the walk, fov 45. It takes whichever shore side the drawn
+  land does not cut, pier's side on a tie, and keeps 3 m of air over a rise. The show tour and the break tour carry
+  a 12 s pier beat. The director offers it only while a pier stands (`scene.pierShot()`), so a kingdom without one
+  never cuts to an empty bank. Test: Willowmere's pier from pier's evidence gives eye (254.25, 9, 245.75) to
+  target (228.25, 0, 227.75); the tour cuts window → pier → citizen with a pier and skips it without one. The live
+  scene has no `pier:` placements yet, so no still exists until pier's installation lands.
+- **panel-window, the stream still.** `scene.still(width, { type?, quality? }): Promise<Blob>`
+  (`grand-land/scene-still.ts`). It asks the loop for one draw and copies that frame in the same task, straight
+  after the post stack presents (no preserved drawing buffer and no second draw). It scales to `width`, never above
+  the canvas, keeping its aspect; the default is WebP at quality .85. It rejects after 15 s if nothing is drawn
+  (a hidden or loading scene) and on close. The panel's publisher calls it with smaller widths or qualities until
+  the result fits its 60 KiB.
+  - **Ask to panel-window:** the one call in `apps/web/src/stream/index.tsx` goes in after the merge, when
+    `panel-painter/publish.ts` exists here; grand-world adds it on request with the publisher's exact signature.
+- **front-door FD13, the live hero.** `mountLandHero(canvas, { channel, hour, time, yaw, tier, onFailure })` in
+  `apps/web/src/grand/hero.ts` resolves to `{ settled, setYaw, resize, pause, resume, dispose }`, structurally
+  front-door's `LiveLand` plus pause and resume. It draws straight into the page's canvas, with the same verified
+  watch, feeds and read-only dock as `/-/grand`. It reads no URL and writes no `window.__chatdomGrand`. Every input
+  event stops at the canvas. Tier high/medium/low/software maps to the scene quality high/balanced/low/low.
+  - The handle's promise rejects on bad options or a channel without an adopted grand land (no network touched).
+    Any failure after that calls `onFailure` once and rejects `settled()`.
+  - `pause()` suspends the render loop and its clock; `resume()` continues.
+  - `settled()` resolves on the first frame drawn while ready; it does not wait for far refinement.
+  - `/-/grand`'s `yaw` and `pitch` URL parameters are now degrees, as on `/-/grand-bench` and in the hero.
+    front-door's stills from `/-/grand?…&yaw=120` therefore match the hero at yaw 120.
+  - Known: the scene still sets `window.__chatdomReady` when ready (harmless on the story page, which sets it too).
+    The live clock runs from `time` after the first frame; `pause()` holds it.
+- **gather, the campfire clearing.** The planner now searches the Wilds edge first: 18 m squares just inside the
+  plan's edge, their front toward the town, nearest the market first. Then come the old near-town rings. On
+  Willowmere's real scene (af5df495) it accepts origin [253.2, 2, −10], turn 3, hearth centre [244.2, 2, −1] on the
+  east edge after 227 candidates (2.4 s). Support is flat and continuous under the whole square, and it is clear of
+  lots, roads, civic squares and solids. The site is pinned: `pinnedCampfireSite('129634568')` in
+  `packages/world/src/grand-adoption/pinned-places.ts`, outside the land recipe, so the recipe hash is unchanged.
+  A private test proves the planner's answer equals the pin and that the pin re-validates with no diagnostics.
+  Route connectivity and the sightline to town lights are not proven by this check.
+  - **Ask to gather:** install the clearing from `pinnedCampfireSite(kingdomId)` through your founded hook and
+    `campfirePlacement` (`interactions/places.ts`), and mount it through `places` (`PlaceMounter`), which claims
+    the `gather:campfire:*` visuals. Once installed, the empty-site planner answers `installed-campfire`, as agreed.
+- **Tavern stream source:** still waits on gather's public tavern spectator transport. Nothing on this branch reads
+  a tavern room.
+
 ### Mount after merge (grand-world's next GW14 session, in this order)
 
 1. **play A2 `surfaceAt`:** an additive `KingdomLandInterface.surfaceAt(x, z)`, the drawn height, material and water
