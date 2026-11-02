@@ -826,7 +826,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const treeIndex=trees.indexOf(b);
     const placements=treeIndex>=0?treeBatches[treeIndex]!.placements:renderContent.filter(h=>blueprintKey(h.blueprint)===blueprintKey(b));
     if(shadow&&result.shadowChunks===undefined)throw new Error('The voxel worker omitted requested shadow geometry');
-    instance(b,result.chunks,placements,factor,result.shadowChunks);opening?.assets(completed+1,total);if(completed+1>=total)opening?.step('homes');options.onProgress(castleBuildings.some(module=>module.blueprint.id===b.id)?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
+    instance(b,result.chunks,placements,factor,result.shadowChunks);if(opening&&factor===4)opening.raised(placements.flatMap(piece=>{const slot=(piece as {slot?:unknown}).slot;return typeof slot==='number'&&slot<65534?[slot]:[];}));opening?.assets(completed+1,total);if(completed+1>=total)opening?.step('homes');options.onProgress(castleBuildings.some(module=>module.blueprint.id===b.id)?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
     }
   });
   if(growth)tasks.push(growth.ready);

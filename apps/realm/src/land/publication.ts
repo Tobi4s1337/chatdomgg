@@ -3,6 +3,7 @@ import { canonicalSceneJson, sha256Hex, utf8 } from '../../../../packages/world/
 import { decodeFoundedScene, FOUNDED_SCENE_LIMITS } from '../../../../packages/world/src/founded-world/validate';
 import type { LandArtifactStore, StoredLandBinding, StoredLandPlan } from './store';
 import { verifyLandArtifact } from './verify';
+import { decodeBakedMetadata } from '../../../../packages/world/src/grand/baked/codec';
 
 export interface LandPublicationOptions {
   readonly sceneBytes: Uint8Array;
@@ -11,6 +12,14 @@ export interface LandPublicationOptions {
   readonly store: LandArtifactStore;
   /** Explicit legacy published receipt, never a caller-authored artifact or an inferred current pointer. */
   readonly sourceSceneHash?: string;
+  /**
+   * 'full' (the default) reopens and decodes every referenced blob. 'catalogued' trusts only blobs that a bake
+   * or an earlier full publication already verified (the existing binding or the exact-plan catalogue): it
+   * decodes the metadata and checks every blob is present at its recorded size, in milliseconds instead of
+   * seconds, so the realm can rebind before a receipt becomes public. Serving still verifies each blob it sends
+   * and every browser verifies both digests. An explicit legacy source always takes the full check.
+   */
+  readonly verification?: 'full' | 'catalogued';
   readonly signal?: AbortSignal;
 }
 export interface LandPublicationResult {
@@ -50,7 +59,12 @@ export async function publishFoundedLand(options: LandPublicationOptions): Promi
   const scene = await decodeFoundedScene(new Uint8Array(options.sceneBytes), receipt);
   check();
   if (scene.origin !== 'live') throw new Error('Land publication requires a live founded scene and receipt');
-  if (await store.recipeHash(scene.kingdomId) !== recipeHash) throw new Error('Land publication differs from the pinned kingdom recipe');
+  const pinned = await store.pinnedRecipeHash(scene.kingdomId);
+  check();
+  if (pinned === null) throw new LandNeedsBakeError({ kingdomId: scene.kingdomId, recipeHash,
+    sourcePlanHash: await sha256Hex(utf8(canonicalSceneJson(scene.plan))), layoutRevision: scene.layoutRevision },
+    'This kingdom has no baked land in this store yet');
+  if (pinned !== recipeHash) throw new Error('Land publication differs from the pinned kingdom recipe');
   check();
   const identity = { kingdomId: scene.kingdomId, recipeHash,
     sourcePlanHash: await sha256Hex(utf8(canonicalSceneJson(scene.plan))), layoutRevision: scene.layoutRevision };
@@ -74,7 +88,8 @@ export async function publishFoundedLand(options: LandPublicationOptions): Promi
   if (!source) throw new LandNeedsBakeError(identity);
   const binding: StoredLandBinding = { version: 1, ...identity, sceneHash: receipt.sceneHash,
     collisionRevision: receipt.collisionRevision, manifest: { ...source.manifest } };
-  const { metadata } = await verifyLandArtifact(store, binding, check);
+  const catalogued = options.verification === 'catalogued' && options.sourceSceneHash === undefined;
+  const { metadata } = catalogued ? await verifyCatalogued(store, binding, check) : await verifyLandArtifact(store, binding, check);
   check();
   // Catalogue first: a conflicting bake for this exact immutable key must not acquire a new receipt binding.
   await store.cataloguePlan({ version: 1, ...identity, manifest: binding.manifest }, signal);
@@ -83,6 +98,19 @@ export async function publishFoundedLand(options: LandPublicationOptions): Promi
   check();
   const meshes = metadata.regions.reduce((count, region) => count + region.meshes.length, 0);
   return { binding, disposition: existing ? 'existing' : 'rebound', reused: { regions: metadata.regions.length, meshes, blobs: meshes + 2 } };
+}
+
+/** The cheap check for artifacts that were completely verified before they were catalogued or bound. */
+async function verifyCatalogued(store: LandArtifactStore, binding: StoredLandBinding, check: () => void) {
+  const metadata = decodeBakedMetadata(await store.read(binding.manifest));
+  if (metadata.kingdomId !== binding.kingdomId || metadata.recipeHash !== binding.recipeHash
+    || metadata.sourcePlanHash !== binding.sourcePlanHash || metadata.sourcePlanRevision !== binding.layoutRevision)
+    throw new Error('Baked land does not match the founded receipt binding');
+  for (const ref of [metadata.surface, ...metadata.regions.flatMap(region => region.meshes)]) {
+    check();
+    if (!await store.present(ref)) throw new Error('A catalogued land blob is missing from the store');
+  }
+  return { metadata };
 }
 
 export interface LandPublicationGuardOptions {

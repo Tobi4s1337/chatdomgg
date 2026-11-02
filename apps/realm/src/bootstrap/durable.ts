@@ -15,6 +15,7 @@ import { createRealmServer } from '../server';
 import { mountIngressRoute } from '../ingress';
 import { createNativeHomeGrowth } from '../growth';
 import { createFoundedReader, mountFoundedRoutes, type FoundedReadAccess } from './founded';
+import { withLandPublication, type BeforeFoundedPublication } from '../land/publication-store';
 
 export interface DurableRealmBootOptions {
   readonly pool: Pool;
@@ -29,6 +30,8 @@ export interface DurableRealmBootOptions {
   readonly repositoryOptions?: Omit<PostgresRealmRepositoryOptions, 'origin'>;
   /** Main binds its real Forge/interaction authority here; this callback has the one retained writer. */
   readonly attach?: (kingdom: DurableKingdom) => () => void;
+  /** Runs on each exact founded scene before the store accepts it (the grand land's binding, `land/realm.ts`). */
+  readonly beforeFoundedPublication?: BeforeFoundedPublication;
 }
 
 /** Actual durable composition. Caller owns pool creation/schema assertion, listen and final pool shutdown. */
@@ -36,7 +39,9 @@ export function createDurableRealmBoot(options: DurableRealmBootOptions) {
   const { pool, origin } = options, log = options.log ?? (() => {});
   const allocation = new AllocationService(pool, { origin, verifier: options.verifier,
     ...(options.furnish ? { furnish: options.furnish } : {}), log });
-  const store = new FileFoundedStore(options.foundedDirectory), loader = createFoundedWorldLoader(allocation, store);
+  const store = new FileFoundedStore(options.foundedDirectory);
+  const loader = createFoundedWorldLoader(allocation, options.beforeFoundedPublication
+    ? withLandPublication(store, options.beforeFoundedPublication) : store);
   const repository = new PostgresRealmRepository(pool, { ...options.repositoryOptions, origin });
   const diagnostics = new RealmDiagnostics(), ingress = new RealmIngress(pool, origin, options.ingressCredentials, log);
   const growth = createNativeHomeGrowth({ db: pool, log });

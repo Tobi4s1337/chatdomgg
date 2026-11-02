@@ -118,7 +118,7 @@ export function createOpeningPainter(target: HTMLCanvasElement) {
     const { width, height, dpr, now, reduced } = paint;
     const w = Math.max(1, Math.round(width * dpr)), h = Math.max(1, Math.round(height * dpr));
     const key = `${state.revision}:${w}:${h}`, at = state.at;
-    const settles = reduced ? 0 : Math.max(-Infinity, (at.land ?? -Infinity) + 1700, (at.lit ?? -Infinity) + 1100, (at.scene ?? -Infinity) + 1300,
+    const settles = reduced ? 0 : Math.max(-Infinity, (at.land ?? -Infinity) + 1700, (at.lit ?? -Infinity) + 1100, (state.streetsAt ?? -Infinity) + 1300,
       (state.regions.at(-1)?.at ?? -Infinity) + 700);
     if (key === drawnKey && now > settles) return false;
     drawnKey = key;
@@ -182,7 +182,7 @@ export function createOpeningPainter(target: HTMLCanvasElement) {
 
     if (streets) {
       const [mx, mz] = centre(streets.bounds);
-      const reveal = since(state.at.scene, now, 1300, reduced);
+      const reveal = since(state.streetsAt ?? undefined, now, 1300, reduced);
       const reach = Math.hypot(streets.bounds.maxX - streets.bounds.minX, streets.bounds.maxZ - streets.bounds.minZ) * .62 * reveal;
       ctx.save();
       ctx.beginPath(); ctx.arc(mx, mz, Math.max(.1, reach), 0, Math.PI * 2); ctx.clip();
@@ -212,15 +212,13 @@ export function createOpeningPainter(target: HTMLCanvasElement) {
           ctx.beginPath(); ctx.arc(x, z, line(3.2), 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill();
         }
       }
-      // Lots stand in ink as their homes are meshed: real counts, nearest the market first.
-      const raised = state.assets ? Math.round(state.assets.done / state.assets.total * streets.homes.length) : state.at.lit !== undefined ? streets.homes.length : 0;
-      const order = [...streets.homes].sort((a, b) => Math.hypot(...centre(a).map((v, i) => v - [mx, mz][i]!) as [number, number])
-        - Math.hypot(...centre(b).map((v, i) => v - [mx, mz][i]!) as [number, number]));
+      // Each lot stands in ink once its own home is in the scene (the lit frame stands every one).
+      const standing = new Set(state.raised), lit = state.at.lit !== undefined;
       const inset = Math.min(1.2, line(.6));
-      order.forEach((home, index) => {
+      streets.homes.forEach(home => {
         const x = home.minX + inset, z = home.minZ + inset, hw = home.maxX - home.minX - inset * 2, hd = home.maxZ - home.minZ - inset * 2;
         ctx.lineWidth = line(.8);
-        if (index < raised) { ctx.fillStyle = 'rgba(66,46,28,.78)'; ctx.fillRect(x, z, hw, hd); }
+        if (lit || standing.has(home.slot)) { ctx.fillStyle = 'rgba(66,46,28,.78)'; ctx.fillRect(x, z, hw, hd); }
         else { ctx.strokeStyle = `${INK_SOFT}.5)`; ctx.strokeRect(x, z, hw, hd); }
       });
       ctx.restore();
@@ -238,7 +236,7 @@ export function createOpeningPainter(target: HTMLCanvasElement) {
       // The viewer's own lot carries a small diamond from the moment the streets are inked.
       const size = line(5);
       ctx.save(); ctx.translate(focus[0], focus[1]); ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = '#7a2f1c'; ctx.globalAlpha = since(state.at.scene, now, 900, reduced); ctx.fillRect(-size / 2, -size / 2, size, size); ctx.restore();
+      ctx.fillStyle = '#7a2f1c'; ctx.globalAlpha = since(state.streetsAt ?? undefined, now, 900, reduced); ctx.fillRect(-size / 2, -size / 2, size, size); ctx.restore();
     }
     void px;
     return true;
