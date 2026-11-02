@@ -313,3 +313,7 @@ survey revision, or a malformed one, resolves `false` (the mount option falls ba
 flag's card (its channel ID). Prefer the mount option on the front page (no first frame at the composed start). The
 `/map` side of the recipe (the seal's `view` and `takeReturnView()` at start) is atlas-map's and lands once
 `@chatdom/ui/site` reaches lane/atlas-map through main. Details in atlas-map's `SEAMS.md`.
+
+Newest request wins (2 Nov, AM10 follow-up): each `restore` or `flyTo` cancels the one before it. A superseded call
+resolves `false` and never opens its card or finishes its flight later, and a card the person opens or closes while a
+call is still fetching stays as they left it. The front page needs no guard of its own.
