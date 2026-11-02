@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
-import type { GatherFrame, PongView } from '@chatdom/shared';
+import type { DiceView, GatherFrame, PongView } from '@chatdom/shared';
 import { createTavernKit } from '../../../../packages/content/src/tavern';
-import { createPongHighlights, createTurnBoards } from './boards';
+import { createPongHighlights, createTurnBoards, DICE_PEG_LANES, dicePegs } from './boards';
 
 const pong = (paddles: [number, number]): PongView => ({ match: 'match', phase: 'rally', tick: 1, at: 1,
   serveAt: 0, ball: { x: .2, y: -.3, vx: 1, vy: 1 }, paddles, acknowledged: [0, 0], score: [0, 0],
@@ -64,6 +64,38 @@ describe('batched tavern boards', () => {
     close(instance(boxes, 1).position, [x, y + .046, z - .413]);
     close(instance(boxes, 2).position, [x, y + .046, z + .413]);
     expect(boxes.count).toBe(3);
+    board.dispose();
+  });
+
+  it('shows Hearth Dice as pegs for banked points, chips for the pot and a cap on whose turn it is, all inside the tray', () => {
+    const root = new THREE.Group(), table = createTavernKit('hearth').tables.find(t => t.id === 'hearth')!;
+    const board = createTurnBoards(root, [table]);
+    const boxes = root.getObjectByName('tavern:turn-board-wood-and-dice') as THREE.InstancedMesh;
+    const counters = root.getObjectByName('tavern:turn-board-stones') as THREE.InstancedMesh;
+    const empty = boxes.count;
+    expect(counters.count).toBe(0);
+    const dice = (view: Partial<DiceView>): GatherFrame => ({ at: 1, tables: [{ table: 'hearth', revision: 1, seats: ['A', 'B'], pong: null,
+      dice: { match: 'm', phase: 'playing', revision: 4, scores: [0, 0, 0], active: [true, true, true], turn: 1, pot: 0,
+        die: null, deadline: 0, winner: null, reason: null, last: null, ...view } }] });
+    board.frame(dice({ scores: [12, 50, 4], pot: 13, die: 5 }), 1);
+    // Ten holes per lane are always there; 12 points is two pegs, 50 is the full ten, 4 is none yet.
+    const pegs = 2 + 10, die = 1 + 5;
+    expect(boxes.count).toBe(empty + pegs + die);
+    expect(counters.count).toBe(13 + 1);
+    const [x, y, z] = table.centre, inside = (p: number[]) => {
+      expect(Math.abs(p[0]! - x)).toBeLessThan(.47); expect(Math.abs(p[2]! - z)).toBeLessThan(.305); expect(p[1]! - y).toBeGreaterThan(.06);
+    };
+    for (let i = empty - 40; i < boxes.count; i++) inside(instance(boxes, i).position);
+    for (let i = 0; i < counters.count; i++) inside(instance(counters, i).position);
+    // The turn cap is brass and sits at the near end of the second player's lane.
+    const cap = instance(counters, 0);
+    close([cap.position[0]!], [x + DICE_PEG_LANES[1]]);
+    expect(dicePegs(49)).toBe(9); expect(dicePegs(75)).toBe(10); expect(dicePegs(-1)).toBe(0);
+    // A one sweeps the pot away; a finished match keeps the pegs and drops the turn cap.
+    board.frame(dice({ scores: [12, 50, 4], pot: 0, die: 1, last: 'bust', revision: 5 }), 2);
+    expect(counters.count).toBe(1);
+    board.frame(dice({ scores: [12, 52, 4], phase: 'finished', winner: 1, reason: 'fifty', revision: 6 }), 3);
+    expect(counters.count).toBe(0);
     board.dispose();
   });
 });

@@ -100,6 +100,10 @@ gather does not edit play's files or implement a second generic transfer control
     in the kingdom walk, `const descriptor = tavernPortalDescriptor(portal)`, `registerPortalDoor(descriptor)` and
     `watchTavernDoor(portal, () => void enterPortal(descriptor))` on the predicted feet, where
     `portal = tavernPortalFor(kingdomId, scene, world)`. Gather does not write these lines into play's files.
+  - `apps/web/src/tavern/play-portal.test.ts` checks the join with play's real `createPortalTransfer`. It loads
+    `play/portal.ts` through `import.meta.glob` and skips until that file is on the branch. Against `lane/play`
+    `6ace34fc` it passes, and the destination and descriptor type-check against play's own interfaces
+    (`work/evidence/gather/ga10-portal.md`).
 - All three games consume that lease. Stones uses mouse motion or arrows to select, click/Enter/Space to drop,
   and 1–7 for a direct column. Dice uses click/R to roll and right-click/H to hold. Enter/Space also starts a
   ready table. Pong uses mouse/A/D/arrows and Enter/Space to start. E/Esc remain with the interaction owner;
