@@ -4,7 +4,7 @@ import { createVoxelMaterial } from '@chatdom/render';
 import { MATERIALS } from '@chatdom/content';
 import { MaterialRegistrySchema } from '@chatdom/shared';
 import { grandPalette } from '../../../../../packages/world/src/grand/palette';
-import { createHostedGrandMaterial, hostedPalette, HOSTED_PAVING } from './material';
+import { createHostedGrandMaterial, hostedFragment, hostedPalette, HOSTED_PAVING } from './material';
 
 describe('the hosted grand material', () => {
   const palette = grandPalette({ stone: 'sandstone', grass: 'summer', hueDrift: 0, autumn: .5 });
@@ -22,7 +22,12 @@ describe('the hosted grand material', () => {
     expect(hosted.material.vertexShader).not.toContain('groundHeight(');
     expect(hosted.material.vertexShader).not.toContain('uniform mat4 modelMatrix');
     expect(hosted.material.vertexShader).toContain('out float vSky; out float vLodFade;');
-    expect(hosted.material.fragmentShader).toBe(native.material.fragmentShader);
+    // The only differences are the side faces' sky fill, so grading steps do not read as dark seams,
+    expect(hosted.material.fragmentShader).not.toBe(native.material.fragmentShader);
+    // and the night settling of the grass, which is the identity at night 0.
+    expect(hosted.material.fragmentShader.replace('float facing=n.y<-.5?.5:.74+.26*max(n.y,0.);', 'float facing=.5+.5*max(n.y,0.);')
+      .replace('\n      if(kind==2.)base*=mix(vec3(1.),vec3(.55,.52,.95),uNight);', '')).toBe(native.material.fragmentShader);
+    expect(() => hostedFragment('void main(){}')).toThrow(/facing/);
     hosted.dispose(); native.dispose();
   });
   it('uploads each mesh fade independently when a material is shared', () => {

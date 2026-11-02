@@ -24,6 +24,7 @@ import type { RealmFoundedManifest } from '@chatdom/shared/realm';
 import { createGrandOverview } from './grand-land/overview';
 import { overviewFrame } from './grand-land/overview-pose';
 import { prepareHostedGrandLand, createHostedGrandMaterial, type HostedGrandLand } from './grand-land';
+import { heroLensOnLand, type HeroLens } from './grand-land/hero-lens';
 import { TERRAIN_SURFACE_BOUNDS_PADDING } from './terrain-worker';
 import { createLightField } from './light-field';
 import { createKingdomSound } from './sound';
@@ -229,7 +230,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   focusHome(focusSlot);
   const heroEye=new THREE.Vector3(),heroTarget=new THREE.Vector3(),target=new THREE.Vector3();
   const portrait=()=>canvas.clientWidth<canvas.clientHeight;
-  let heroFov=53;
+  let heroFov=53,heroLand:{key:string;lens:HeroLens}|undefined;
   function setHero(){
     if(options.potential){
       heroEye.set(...options.potential.camera.eye);heroTarget.set(...options.potential.camera.target);
@@ -243,6 +244,12 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     heroTarget.set(layout.castle.centre[0],layout.castle.centre[1]+9,portrait()?-35:market[2]-8);
     camera.fov=portrait()?58:52;
     heroFov=camera.fov;camera.updateProjectionMatrix();
+    // On the grand land the same lens turns, within bounds, toward the real ranges behind the castle.
+    if(grandLand){
+      const key=`${portrait()}:${camera.aspect.toFixed(3)}`;
+      if(heroLand?.key!==key){const land=grandLand;heroLand={key,lens:heroLensOnLand({height:(x,z)=>land.height(x,z),eye:heroEye.toArray(),target:heroTarget.toArray(),pivot:market,fov:camera.fov,aspect:camera.aspect,seaLevel:land.water.raster.seaLevel})};}
+      heroEye.set(...heroLand.lens.eye);heroTarget.set(...heroLand.lens.target);
+    }
   }
   const sunShadows=own(createSunShadows(renderer,{bounds:new THREE.Box3(new THREE.Vector3(layout.bounds.minX-40,-8,layout.bounds.minZ-70),new THREE.Vector3(layout.bounds.maxX+40,60,layout.bounds.maxZ+20)),resolution:portrait()?1024:2048}));
   sunShadows.bindReceiver(clay.material);sunShadows.bindReceiver(ground.material);sunShadows.bindReceiver(crowd.material.material);
@@ -763,7 +770,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       onError:error=>failLight(error.message),
     })).then(async land=>{
       if(disposed){land.dispose();return;}
-      grandLand=land;
+      grandLand=land;setHero();
       if(options.overview){
         const physical=new THREE.Box3(new THREE.Vector3(layout.bounds.minX,layout.castle.centre[1],layout.bounds.minZ),new THREE.Vector3(layout.bounds.maxX,layout.castle.centre[1],layout.bounds.maxZ));
         // Ordered installed blueprints determine the town's true vertical extent; no guessed city layout.

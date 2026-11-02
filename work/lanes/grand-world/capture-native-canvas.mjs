@@ -54,7 +54,8 @@ function ownConnections(httpServer) {
   httpServer.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
 }
 try {
-  release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(600_000) });
+  // Queueing holds nothing; only the capture itself is short. A busy host may need a long queue.
+  release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(Number(process.env.GRAND_NATIVE_QUEUE_MS ?? 600_000)) });
   deadline = setTimeout(() => { void browserServer?.kill(); }, 270_000);
   if (!today) {
   server = createLandReadServer(directory);
