@@ -4,7 +4,12 @@ import type { CollisionWorld, SolidBox } from '@chatdom/shared/realm';
 import { createTavernKit, TAVERN_FLOOR, TAVERN_ROOM_BOUNDS } from '../../../../packages/content/src/tavern';
 import { clearShot } from '../interactions/places/framing';
 import { tableGame } from '../games/boards';
-import { ACROSS_HEAD, tavernTableFraming } from './framing';
+import { MATERIALS } from '@chatdom/content/materials';
+import { PORTRAIT_FIXTURES } from '@chatdom/content/avatar-style';
+import { HAT_STYLE_IDS } from '../../../../packages/content/src/avatar-style/character/recipe';
+import { createVoxelMaterial } from '@chatdom/render';
+import { createCitizenRenderer, createStyledCitizenLook } from '../citizens/index';
+import { ACROSS_HEAD, TALLEST_HAT, tavernTableFraming } from './framing';
 
 function interior(style: 'hearth' | 'tide') {
   const kit = createTavernKit(style), [w, d] = TAVERN_ROOM_BOUNDS;
@@ -57,13 +62,15 @@ describe('seated table framing', () => {
           expect.soft(p.z, label).toBeLessThan(1);
         }
         if (game !== 'stones') {
-          // Whoever sits across stays whole, chin to crown, above the board.
-          const fx = Math.sin(seat.facing), fz = Math.cos(seat.facing);
-          for (const dy of [0, ACROSS_HEAD.top]) {
-            const p = new THREE.Vector3(x + fx * ACROSS_HEAD.reach, y + dy, z + fz * ACROSS_HEAD.reach).project(camera);
+          // Whoever sits across stays whole, chin to the crown of the tallest hat and its tip, above the board.
+          const fx = Math.sin(seat.facing), fz = Math.cos(seat.facing), rx = -fz, rz = fx;
+          for (const [dy, side] of [[0, 0], [ACROSS_HEAD.top, -ACROSS_HEAD.side], [ACROSS_HEAD.top, ACROSS_HEAD.side]] as const) {
+            const p = new THREE.Vector3(x + fx * ACROSS_HEAD.reach + rx * side, y + dy,
+              z + fz * ACROSS_HEAD.reach + rz * side).project(camera);
             expect.soft(p.y, `${label} head across y=${p.y}`).toBeLessThan(.95);
             expect.soft(p.y, `${label} head across y=${p.y}`).toBeGreaterThan(-.3);
             expect.soft(Math.abs(p.x), `${label} head across x=${p.x}`).toBeLessThan(.95);
+            if (aspect >= 1) expect.soft(p.x < .4 || p.y < .24, `${label} head across clears the desktop HUD`).toBe(true);
           }
         }
         if (aspect >= 1) {
@@ -73,5 +80,34 @@ describe('seated table framing', () => {
         }
       }
     }
+  });
+});
+
+describe('the head across the table', () => {
+  it('reserves the tallest hat: every hat style stays within its rise and reach when seated', async () => {
+    const base = PORTRAIT_FIXTURES[0]!.look;
+    const styles = [null, ...HAT_STYLE_IDS];
+    const looks = styles.map(style => createStyledCitizenLook(style ?? 'bare',
+      { ...base, glasses: null, hat: style ? { style, colour: '#31488c', trim: '#f2d785' } : null }));
+    const scene = new THREE.Scene(), material = createVoxelMaterial(MATERIALS, 'avatar');
+    const renderer = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks });
+    try {
+      // Heading 0: the person faces +z, so their sides are along x.
+      for (let i = 0; i < 6; i++) renderer.update(looks.map((look, k) => ({ id: look.id, look: look.id,
+        position: [k * 3, 0, 0] as [number, number, number], heading: 0, distance: 0, moving: 0, time: 0,
+        posture: 'seated' as const })), undefined, i * 70);
+      const bare = renderer.heads.get('bare')!;
+      let tallest = 0;
+      for (const [k, look] of looks.entries()) {
+        const anchor = renderer.heads.get(look.id)!;
+        tallest = Math.max(tallest, anchor.y - bare.y);
+        const mesh = scene.getObjectByName(`Citizen ${look.id} head solid`) as THREE.InstancedMesh;
+        const matrix = new THREE.Matrix4(); mesh.getMatrixAt(0, matrix);
+        const box = mesh.geometry.boundingBox!.clone().applyMatrix4(matrix);
+        expect(Math.max(k * 3 - box.min.x, box.max.x - k * 3), `${look.id} reach`).toBeLessThanOrEqual(ACROSS_HEAD.side);
+      }
+      expect(tallest).toBeGreaterThan(TALLEST_HAT - .02);
+      expect(tallest).toBeLessThanOrEqual(TALLEST_HAT + 1e-6);
+    } finally { renderer.dispose(); material.dispose(); }
   });
 });

@@ -53,7 +53,7 @@ async function checkSound(page, report) {
   assert.ok(resumed.peakSources <= 6 && resumed.peakVoices <= 6, `sound limits exceeded: ${JSON.stringify(resumed)}`);
   assert.ok((resumed.played.hearth ?? 0) > (muted.played.hearth ?? 0), 'hearth ambience resumes');
   report.sound = { before, muted, resumed };
-  report.checks.push('Live accepted game sound played; standing mute stopped all sources, and enable resumed ambience without replaying attacks (peak six voices).');
+  report.checks.push(`Live accepted game sound played; standing mute stopped all sources, and enable resumed ambience without replaying attacks (peak ${Math.max(before.peakVoices, resumed.peakVoices)} voices, limit six).`);
 }
 const freePorts = async () => {
   const free = [];
