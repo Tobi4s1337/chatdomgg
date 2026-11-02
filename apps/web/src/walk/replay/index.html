@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Mouse look replay</title>
+  <style>
+    body { margin: 0; background: #1b1712; color: #f1e6cf; font: 17px/1.45 Georgia, 'Times New Roman', serif; }
+    main { padding: 36px 48px; }
+    h1 { font-size: 28px; margin: 0 0 6px; font-weight: normal; }
+    p { margin: 0 0 18px; color: #cbbd9f; }
+    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #4a3d2b; }
+    th { color: #d9b56b; font-weight: normal; }
+    td.ok { color: #9fd38a; } td.bad { color: #ff8f73; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Mouse look replay</h1>
+    <p id="env">Measuring the frame rate…</p>
+    <table><thead><tr><th>Stream</th><th>Filter</th><th>Frames</th><th>Hand (counts)</th><th>Turned (counts)</th><th>Error</th><th>Turn per count</th><th>Spin after stop</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+  </main>
+  <script type="module" src="./page.ts"></script>
+</body>
+</html>
