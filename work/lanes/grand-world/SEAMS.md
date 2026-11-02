@@ -581,3 +581,53 @@ recipe, physical floor and receipt identity are unchanged; no rebake or migratio
 Evidence and limits: `work/evidence/grand-world/GW10-compact-water.md`. This checkpoint does not resolve the native
 GPU/walk matrix or publication integration. Gather still receives only the exterior tavern portal door on both
 lands, plus the separate optional campfire clearing; the founded tavern building is unchanged.
+
+Measured startup caveat: the town hero at 1920×1080 and 1440×900 transfers 3,967,107 initial land bytes;
+the portrait hero at 390×844 transfers 4,293,080 and truthfully reports `initialBudgetExceeded: true`.
+The phone still needs payload work. All nine land-only canvas states were viewed; a continuous native GPU
+sequence must still judge the noticeable mid-fade treeline stippling. See `GW10-startup.md` for precise scope.
+
+## GW10 complete startup coverage and presentation — 2026-11-02
+
+`prepareHostedGrandLand` first installs the coarsest globally balanced coverage for every visible region and all
+physical regions. Physical regions remain L0; all eight neighbours constrain the coarse map, including offscreen
+physical pins. Nothing is omitted to meet a byte budget. A larger view reports its overrun. For the recorded
+38-region native hero demand, the plan is 3,967,107 compressed response-body bytes including binding, metadata,
+surface and meshes, against the previous 6,326,094. The complete 100-region demand is 7,109,907 bytes and reports
+an overrun. These planned totals are separate from actual transfer diagnostics.
+
+Two additive owner methods form the host boundary:
+
+```ts
+land.canPresent(): boolean; // Call after the final camera pose; hidden lens changes add required coverage.
+land.markPresented(): void; // Call only after a successful complete native render; enables later refinement.
+```
+
+`ready` remains a one-shot promise for the first complete set. It cannot establish coverage for a later hidden
+camera change; `canPresent()` checks that. Before presentation, requirements grow monotonically and downloaded
+levels remain fixed. Refinements begin on a later update after acknowledgment. Diagnostics expose `startupPhase`,
+`initialRequiredRegions`, `initialCoveredRegions`, `initialCoverageReady`, `initialPlannedBytes`, `initialActualBytes`,
+`initialNetworkBytes`, `initialBudgetBytes`, `initialBudgetExceeded` and `fadingRegions`. Initial actual/network
+counters freeze at accepted presentation; transfer counters continue normally. Cache-read bytes count in actual
+consumption, including rejected cache data; they are not misreported as network bytes.
+
+Refinement retains the existing screen-error thresholds and hysteresis. It moves globally balanced endpoints by
+one level per wave, waits for all required endpoint meshes, and draws complementary 400 ms fades. Newly visible
+regions establish their current balanced coarse coverage before joining the wave. Both fade meshes stay registered
+with shadows and count toward residency until the outgoing one detaches. The two-request / 16 MiB decoded-result
+reservation and bounded per-frame geometry installation remain in force. A changing camera waits for an active
+wave before its next desired map is committed; this is not a measured orbit-latency or GPU-upload guarantee.
+
+`HostedGrandMaterial.bindFade(mesh)` binds a per-mesh `userData.grandLodFade` value to the shared shader (default 1).
+Every hosted face is bound. Native light uniforms remain shared; the fade uniform belongs to this material. Shadow
+override draws do not change it. The signed incoming/outgoing values use the native material's existing partition.
+
+The native scene gates post rendering with `canPresent()` and acknowledges after submission. `SceneOptions` adds
+`deferLandPresentation?: boolean` for a hidden replacement. `scene.handoffView(view)` now returns `Promise<void>`:
+the supplied final lens stays fixed until its complete frame draws, and disposal rejects the promise. The owned
+stream mount passes the defer flag, holds the outgoing renderer, awaits the final handoff, rechecks ownership and
+then promotes. Until then the old canvas and feeds remain owned. Timeout, rejection, hide and supersession release
+the hold once; a late promise cannot promote. Citizens are captured after the wait so the latest state transfers.
+
+No persisted recipe, artifact, scene receipt, physical floor or gather/pier anchor changed. Evidence and remaining
+native-device limits are in `work/evidence/grand-world/GW10-startup.md`.

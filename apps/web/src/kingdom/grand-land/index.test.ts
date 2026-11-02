@@ -28,22 +28,22 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
-function fixture(exacts: readonly number[] = [1, 3]) {
+function fixture(exacts: readonly number[] = [1, 3], side = 2) {
   const ref = { hash, gzipHash: hash, rawBytes: 72, gzipBytes: 64, minY: 0, maxY: 32, quadCount: 1 };
-  const regions = Array.from({ length: 4 }, (_, i) => {
-    const rx = i % 2, rz = Math.floor(i / 2), exact = exacts.includes(i);
+  const regions = Array.from({ length: side * side }, (_, i) => {
+    const rx = i % side, rz = Math.floor(i / side), exact = exacts.includes(i);
     return { rx, rz, exact, bounds: { min: [rx * 128 - 16, -5, rz * 128 - 32] as const,
       max: [(rx + 1) * 128 - 16, 11, (rz + 1) * 128 - 32] as const },
     meshes: Array.from({ length: exact ? 1 : 4 }, (_, level) => ({ ...ref, level, rx, rz })) };
   });
   const metadata: BakedMetadata = { version: 1, kingdomId: receipt.kingdomId, recipeHash: hash,
     sourcePlanHash: hash, sourcePlanRevision: plan.revision, compilers: BAKED_COMPILERS,
-    size: 512, height: 32, seaLevel: 10, seat: { offset: [16, 5, 32], columns: { x0: 32, z0: 64, x1: 64, z1: 96 }, band: 96 },
+    size: side * 256, height: 32, seaLevel: 10, seat: { offset: [16, 5, 32], columns: { x0: 32, z0: 64, x1: 64, z1: 96 }, band: 96 },
     physicalRegion: { minX: 0, maxX: 16, minZ: 0, maxZ: 16 }, bounds: { min: [-16, -5, -32], max: [240, 11, 224] },
     palette: [{ id: 1, colour: '#7eaa55', kind: 0 }], surface: ref, regions };
   const pending: { ref: BakedRegionRef; signal: AbortSignal | undefined; result: ReturnType<typeof deferred<BakedRegionMesh>> }[] = [];
   const source: BakedLandSource = { metadata,
-    surface: { size: 512, height: 32, seaLevel: 10, ground: new Uint16Array(512 ** 2).fill(8), water: new Uint16Array(512 ** 2).fill(10) },
+    surface: { size: side * 256, height: 32, seaLevel: 10, ground: new Uint16Array((side * 256) ** 2).fill(8), water: new Uint16Array((side * 256) ** 2).fill(10) },
     stats: { phase: 'ready', networkBytes: 64, cacheBytes: 0, verifiedRawBytes: 72, completedBlobs: 1,
       cacheHits: 0, cacheCorruptions: 0, activeRequests: 0, queuedRequests: 0, pendingCompressedBytes: 0 },
     mesh: vi.fn((ref: BakedRegionRef, signal?: AbortSignal) => {
@@ -52,17 +52,17 @@ function fixture(exacts: readonly number[] = [1, 3]) {
   vi.mocked(openBakedLand).mockResolvedValue(source);
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(65, 1.6, .1, 10000);
   camera.position.set(112, 150, 400); camera.lookAt(112, 0, 90); camera.updateMatrixWorld();
-  const material = new THREE.ShaderMaterial();
+  const material = new THREE.ShaderMaterial(), cleanup = vi.fn(), register = vi.fn(() => cleanup);
   const options = { scene, camera, renderer: { getDrawingBufferSize: (size: THREE.Vector2) => size.set(1440, 900) } as THREE.WebGLRenderer,
-    plan, recipe, receipt, kingdomId: receipt.kingdomId, materialFactory: vi.fn(() => ({ material, dispose: vi.fn(() => material.dispose()) })),
-    onProgress: vi.fn(), onError: vi.fn() };
+    plan, recipe, receipt, kingdomId: receipt.kingdomId, materialFactory: vi.fn(() => ({ material, bindFade: vi.fn(), dispose: vi.fn(() => material.dispose()) })),
+    register, onProgress: vi.fn(), onError: vi.fn() };
   async function prepare(extra: Partial<typeof options> & { signal?: AbortSignal } = {}) {
     const owner = await prepareHostedGrandLand({ ...options, ...extra }); owners.push(owner); return owner;
   }
   async function start(extra: Parameters<typeof prepare>[0] = {}) {
     const owner = await prepare(extra); owner.update(performance.now()); return owner;
   }
-  return { source, pending, scene, camera, options, prepare, start };
+  return { source, pending, scene, camera, options, prepare, start, register, cleanup };
 }
 function mesh(ref: BakedRegionRef, bytes = 8): BakedRegionMesh {
   const count = bytes / 8;
@@ -136,26 +136,126 @@ describe('baked terrain renderer scheduling', () => {
     expect(owner.stats.covered).toBe(4); expect(f.options.onProgress).toHaveBeenLastCalledWith(1);
   });
 
-  it('keeps old coverage on screen until every replacement face has installed', async () => {
-    const f = fixture(), owner = await f.start();
+  it('keeps old coverage until every replacement installs, then fades complementary pairs for 400ms', async () => {
+    const f = fixture([]), owner = await f.start();
     let now = performance.now(), answered = 0;
-    for (let i = 0; i < 12 && owner.stats.phase !== 'ready'; i++) {
+    for (let i = 0; i < 30 && owner.stats.phase !== 'ready'; i++) {
       while (answered < f.pending.length) { const p = f.pending[answered++]!; p.result.resolve(mesh(p.ref)); }
       await flush(); owner.update(now += 50);
     }
     await owner.ready;
+    expect(owner.canPresent()).toBe(true);
     const root = f.scene.children[0]!, before = new Set(root.children);
-    f.camera.position.set(112, 1500, 4000); f.camera.lookAt(112, 0, 90);
-    owner.update(now += 200); owner.update(now += 600);
-    const replacement = f.pending[answered]!;
-    expect(replacement.ref.level).toBe(1);
-    const old = root.children.find(group => group.position.x === replacement.ref.rx * 128 && group.position.z === replacement.ref.rz * 128)!;
-    replacement.result.resolve(mesh(replacement.ref, 512 * 1024)); await flush();
-    owner.update(now += 10);
-    expect(root.children).toContain(old); expect(new Set(root.children)).toEqual(before);
-    for (let i = 0; i < 12 && root.children.includes(old); i++) owner.update(now += 10);
-    expect(root.children).not.toContain(old); expect(root.children).toHaveLength(4);
-    expect(root.children.some(group => group.position.equals(old.position) && group.scale.x === 1)).toBe(true);
+    owner.markPresented(); owner.update(now += 200);
+    expect(f.pending.length).toBeGreaterThan(answered);
+    expect(f.pending[answered]!.ref.level).toBe(2);
+    f.pending[answered]!.result.resolve(mesh(f.pending[answered]!.ref, 512 * 1024)); answered++;
+    await flush(); owner.update(now += 10);
+    expect(new Set(root.children)).toEqual(before);
+    for (let i = 0; i < 40 && owner.stats.fadingRegions === 0; i++) {
+      while (answered < f.pending.length) { const p = f.pending[answered++]!; p.result.resolve(mesh(p.ref)); }
+      await flush(); owner.update(now += 10);
+    }
+    expect(owner.stats.fadingRegions).toBeGreaterThan(0);
+    expect([...before].every(group => root.children.includes(group))).toBe(true);
+    expect(f.register.mock.calls.length).toBeGreaterThan(before.size);
+    expect(f.cleanup).not.toHaveBeenCalled();
+    owner.update(now += 200);
+    const fade = root.children.flatMap(group => group.children.map(child => child.userData.grandLodFade as number));
+    expect(fade.some(value => Math.abs(value - 0.5) < 1e-6)).toBe(true);
+    expect(fade.some(value => Math.abs(value + 1.5) < 1e-6)).toBe(true);
+    owner.update(now + 201);
+    expect([...before].every(group => !root.children.includes(group))).toBe(true);
+    expect(f.cleanup).toHaveBeenCalled();
+    const cleaned = f.cleanup.mock.calls.length;
+    owner.dispose();
+    expect(f.cleanup.mock.calls.length).toBeGreaterThan(cleaned);
+  });
+
+  it('loads a newly visible region at its balanced baseline before refining alongside displayed neighbours', async () => {
+    let reveal = false;
+    const frustum = vi.spyOn(THREE.Frustum.prototype, 'intersectsBox').mockImplementation(box => {
+      const rx = (box.min.x + 16) / 128, rz = (box.min.z + 32) / 128;
+      return rx === 2 && rz === 2 || reveal && rx === 1 && rz === 1;
+    });
+    try {
+      const f = fixture([0], 3), owner = await f.start();
+      let now = performance.now(), answered = 0;
+      for (let i = 0; i < 40 && owner.stats.phase !== 'ready'; i++) {
+        while (answered < f.pending.length) { const p = f.pending[answered++]!; p.result.resolve(mesh(p.ref)); }
+        await flush(); owner.update(now += 50);
+      }
+      await owner.ready; expect(owner.canPresent()).toBe(true);
+      const b = f.pending.find(p => p.ref.rx === 2 && p.ref.rz === 2);
+      expect(b?.ref.level).toBe(2);
+      owner.markPresented();
+      reveal = true;
+      f.camera.position.set(128, 15, 128); f.camera.lookAt(150, 0, 150);
+      const displayed = () => f.scene.children[0]!.children.map(group => ({
+        rx: group.position.x / 128, rz: group.position.z / 128, level: Math.log2(group.scale.x / .5),
+        fade: group.children[0]?.userData.grandLodFade as number,
+      }));
+      let sawBaseline = false, sawFade = false;
+      for (let i = 0; i < 80 && !sawFade; i++) {
+        owner.update(now += 25);
+        while (answered < f.pending.length) { const p = f.pending[answered++]!; p.result.resolve(mesh(p.ref)); }
+        await flush();
+        const levels = displayed(), aLevels = levels.filter(item => item.rx === 1 && item.rz === 1);
+        const bLevels = levels.filter(item => item.rx === 2 && item.rz === 2);
+        if (aLevels.length) {
+          if (!sawBaseline) {
+            expect(aLevels.some(item => item.level === 1)).toBe(true);
+            sawBaseline = true;
+          }
+          for (const a of aLevels) for (const neighbour of bLevels) {
+            if ((a.fade < 0) === (neighbour.fade < 0)) expect(Math.abs(a.level - neighbour.level)).toBeLessThanOrEqual(1);
+          }
+          if (aLevels.some(item => item.fade < 0)) sawFade = true;
+        }
+      }
+      expect(sawBaseline).toBe(true); expect(sawFade).toBe(true);
+      expect(f.pending.some(p => p.ref.rx === 1 && p.ref.rz === 1 && p.ref.level === 1)).toBe(true);
+    } finally { frustum.mockRestore(); }
+  });
+
+  it('extends startup coverage when the camera moves before presentation and waits for acknowledgement before refining', async () => {
+    const f = fixture(), owner = await f.prepare();
+    f.camera.position.set(1000, 100, 1000); f.camera.lookAt(2000, 100, 2000);
+    let now = performance.now(), answered = 0;
+    owner.markPresented();
+    owner.update(now += 50);
+    for (let i = 0; i < 30 && owner.stats.phase !== 'ready'; i++) {
+      while (answered < f.pending.length) { const p = f.pending[answered++]!; p.result.resolve(mesh(p.ref)); }
+      await flush(); owner.update(now += 50);
+    }
+    await owner.ready;
+    expect(owner.stats.startupPhase).toBe('awaiting-presentation');
+    expect(owner.canPresent()).toBe(true);
+    expect(owner.stats.initialRequiredRegions).toBe(2);
+    f.camera.position.set(112, 150, 400); f.camera.lookAt(112, 0, 90);
+    expect(owner.canPresent()).toBe(false);
+    expect(owner.stats.initialRequiredRegions).toBeGreaterThan(2);
+    owner.markPresented();
+    expect(owner.stats.startupPhase).toBe('loading');
+    for (let i = 0; i < 30 && !owner.canPresent(); i++) {
+      owner.update(now += 50);
+      while (answered < f.pending.length) { const p = f.pending[answered++]!; p.result.resolve(mesh(p.ref)); }
+      await flush();
+    }
+    expect(owner.canPresent()).toBe(true);
+    const before = f.pending.length;
+    for (let i = 0; i < 5; i++) { owner.update(now += 100); await flush(); }
+    expect(f.pending).toHaveLength(before);
+    expect(owner.stats.initialCoverageReady).toBe(true);
+    Object.assign(f.source.stats, { networkBytes: 99, cacheBytes: 22 });
+    expect(owner.canPresent()).toBe(true);
+    expect(owner.stats.initialActualBytes).toBe(121);
+    owner.markPresented();
+    expect(owner.stats.startupPhase).not.toBe('awaiting-presentation');
+    Object.assign(f.source.stats, { networkBytes: 500, cacheBytes: 100 });
+    owner.update(now + 100);
+    expect(owner.stats.initialActualBytes).toBe(121);
+    expect(owner.stats.initialNetworkBytes).toBe(99);
   });
 
   it('disposes a source that finishes opening after the scene was aborted', async () => {
