@@ -3,7 +3,7 @@ import { ForgeDraftCandidateSchema, createForgeCallBudget, ForgeCallBudgetError,
   type ForgeProviders, type JudgeVerdict } from './providers';
 import { ForgeRunRequestSchema, ForgeStyleKitSchema, type ForgeRunEvent, type ForgeDraft, type ForgeStyleKit } from '@chatdom/shared';
 import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
-import { renderForgeContactSheet } from './contact-sheet';
+import { renderForgeContactSheetCooperatively } from './contact-sheet';
 import type { ForgeRunSelection } from './wish-decision';
 import { bestForgeCandidate, forgeRunSelection, forgeRunStopMessage, goodForgeQuality, initialForgeRunState } from './run-recovery/state';
 import { forgeEarlyRedraft, forgeQualityRetryUseful, forgeRedraftFeedback, forgeResultMeasure, withForgeQuality } from './quality';
@@ -144,8 +144,10 @@ export async function runForge(input: unknown, providers: ForgeProviders, emit: 
         if (!socket) throw new Error('No matching socket.');
         const assembled = assembleForge(candidate.draft.plan, styleKit, socket);
         checkForge(assembled, request.home, request.hostProfile);
-        sheet = renderForgeContactSheet(assembled.blueprint, { home: request.home, origin: socket.origin });
-      } catch {
+        // In slices, so the realm's rooms keep moving while the sheet is drawn (contact-sheet.ts).
+        sheet = await renderForgeContactSheetCooperatively(assembled.blueprint, { home: request.home, origin: socket.origin }, signal);
+      } catch (error) {
+        if (signal?.aborted) throw error;
         abort(); state.feedback = 'fit'; state.softening = 'fit'; delete state.pending;
         await extend('fit');
         if (state.attempts < 2) { state.attempts += 1; state.phase = 'drafting'; }

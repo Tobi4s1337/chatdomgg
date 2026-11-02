@@ -96,12 +96,16 @@ export function openForge(host: ForgeHost, _from: 'anvil' | 'hud', transport: Fo
     if (!open) return;
     const focused = document.activeElement instanceof HTMLElement && panel.contains(document.activeElement) ? document.activeElement.dataset.focus : undefined;
     panel.replaceChildren();
+    // While the Forge works the wish, the box steps aside: no dimming veil, a compact card docked low, so the
+    // anvil and the ritual the card points to stay in view.
+    const watching = Boolean(active(wish));
+    veil.classList.toggle('forge-wish-veil--watching', watching);
     const head = el('header', 'forge-wish-head'); const top = el('div');
     top.append(el('p', 'forge-wish-kicker', 'THE FORGE'), el('h2', '', 'A wish for the kingdom'));
     top.querySelector('h2')!.id = 'forge-wish-title';
     const closeButton = button('Close', close, 'forge-wish-close'); closeButton.dataset.focus = 'close'; head.append(top, closeButton); panel.append(head);
     const body = el('div', 'forge-wish-body');
-    body.append(el('p', 'forge-wish-intro', 'Imagine something for your home. Your words travel to the Forge through Twitch chat.'));
+    if (!watching) body.append(el('p', 'forge-wish-intro', 'Imagine something for your home. Your words travel to the Forge through Twitch chat.'));
     if (!snapshot && !error) body.append(el('p', 'forge-wish-note', 'Checking the Forge…'));
     if (snapshot?.grant.status === 'signed-out') body.append(el('div', 'forge-wish-slip', 'Sign in to Chatdom to send a wish from here. You can also wish directly in Twitch chat.'));
     if (snapshot?.grant.status === 'required') {

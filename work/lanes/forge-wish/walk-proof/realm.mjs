@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url';
 export const SCHEMA = 'realm_forge_wish';
 // The SIMULATED provider's test range above its six named people (apps/api/src/realm-auth/simulated-provider.ts).
 const PEOPLE_RANGE = [990_100_007, 990_199_999];
+const PROOF_LEASE_MS = 60_000;
 const TERMINAL = new Set(['delivered', 'held', 'refused', 'cold', 'canceled']);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const identity = () => (BigInt('0x' + randomBytes(12).toString('hex')) + 1n).toString();
@@ -116,7 +117,10 @@ export async function startWalkRealm({ loader, repo, directory, mode, wishes, lo
     boot = createDurableRealmBoot({ pool, origin: 'simulated', foundedDirectory,
       verifier: new TenureEvidenceVerifier('simulated', evidenceKey), ingressCredentials: { herald: heraldSecret },
       foundedAccess: target => target.origin === 'simulated', furnish: citizens.furnish,
-      repositoryOptions: gate.install({ origin: 'simulated' }),
+      // The shared development host runs at load 25 to 35, and this one process also serves the build and drives
+      // Chrome; a 15 s writer lease lapsed there with no fault in the realm. The private proof holds its kingdom on a
+      // 60 s lease instead. Production keeps REALM_LEASE_MS; losing a lease is covered by the realm's own tests.
+      repositoryOptions: { ...gate.install({ origin: 'simulated' }), leaseMs: PROOF_LEASE_MS },
       // Operational lines (Forge steps, statuses, reasons), kept privately in summary.json with wish words redacted.
       log: line => { if (facts.realmLog.length < 400) facts.realmLog.push(redact(typeof line === 'string' ? line : JSON.stringify(line)).slice(0, 400)); },
       attach: kingdom => {

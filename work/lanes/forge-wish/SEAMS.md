@@ -337,3 +337,70 @@ actual delivery/reconnect before ritual acceptance. Queued held/refused/withdraw
 `ended` activity projection: the durable coordinator deliberately avoids the old terminal release branch that
 emits it. Runtime startup/reconnect must reconcile lingering activity IDs rather than replay old ceremonies.
 Callback resources must settle separately on shutdown, and lifetime receipt/withdrawal indexing is still open.
+
+## 12. A Forge commit must not reload the walk (FW10, needs play, grand-world and the realm founded owner)
+
+**Found on the real GPU (2026-11-02, walk proof run 6).** A delivered wish adds its piece to the citizen's home in
+the founded scene. The piece is a solid placement, so `assembleFoundedScene` gives a new `geometryDigest`, the
+founded provider builds a new collision world (`apps/realm/src/founded/provider.ts`, `createFoundedWorld`) and the
+room's `collisionRevision` moves. `apps/web/src/kingdom/walk-scene.ts` `frame()` sees the revision differ from its
+manifest, disconnects (close code 4000, 0.25 s after the owner's delivered outcome), and the entry rebuilds the whole
+scene through `onSceneNeeded`. The walk is back about 10 s later with the walker respawned at their own home door.
+The ritual (`apps/web/src/forge/realm-scene`) is lost with the old scene: the citizen who just made the wish sees
+neither the strike, the cooling nor the flight to their home, and everyone else watching loses it too.
+
+The collision change itself is right: a chimney is solid, and the realm's adoption already keeps walkers' poses
+(`foundedWorldAdoption(...).positions`). Only the client's answer to it is wrong. Proposal:
+
+1. **Realm founded owner.** No change in meaning. Keep bumping `collisionRevision` for any geometry change, Forge
+   attachments included. Keep the existing adoption of walker poses (no respawn at the door).
+2. **play (`walk-scene.ts`).** A new `collisionRevision` with the same `layoutRevision` and `origin` is a
+   *hot adoption*, not a reload:
+   - keep the session connected and the walker where they stand;
+   - fetch the new manifest and scene in the background, as `onSceneNeeded` does now, and swap the collision world
+     (`binding.collision.world(revision)`) and `binding.manifest` in place once they are loaded;
+   - until then, keep predicting on the previous world; the realm reconciles poses as it does today;
+   - only a different `layoutRevision` or `origin` (a re-founding) disconnects and rebuilds.
+3. **grand-world (`scene.ts` and the founded static meshes).** Swap the changed placements' meshes in place
+   (one home's attachments), instead of rebuilding the kingdom. The realm scene already asks its host to
+   `hideAttachment(id, true)` while a piece is in its ritual and `hideAttachment(id, false)` when it lands; a swapped
+   mesh for that attachment must start hidden if the last call for its id was `true`.
+4. **forge-wish (this lane).** `apps/web/src/forge/realm-scene` keeps its presentation across a hot adoption (it is
+   not disposed when only placements change). Covered by this lane once steps 2 and 3 exist.
+
+Until then the Forge works and lands, but the ritual is not seen in the walk. The private walk proof records the
+close code and timing in `trail-<label>.json`, so the fix can be checked with the same `--gpu` run.
+
+## 13. A commit must not block the realm's event loop (FW10, needs the realm founded owner and `packages/voxel`)
+
+**Found on the real GPU (2026-11-02, walk proof with three real wishes).** Two of three walkers were closed with
+code 4002 (too many messages) at the moment their piece was committed, about 2 s before their box showed
+**Made in the kingdom**. The walk never came back (CONNECTION LOST until the hold ended). The commit adds one
+placement, and `createFoundedWorldLoader().stage` rebuilds the whole kingdom synchronously on the realm's event
+loop. While it runs, the walker keeps sending its 30 Hz input. Colyseus counts the queued inputs in the one
+second they are read, so 2 to 3 s of block exceeds `REALM_MESSAGE_LIMIT` (90) and the walker is kicked.
+
+Measured on the stored scene of that run (354 placements, 108 assets, load 25, warm):
+
+| step (per commit) | ms |
+|---|---|
+| `compileCollisionWorld`, all placements | 1,390 to 1,950 (8 to 11 s cold, first call) |
+| the same with terrain only | 56 to 129 |
+| `sampleFoundedTerrain` | 6 to 10 (8 s cold) |
+| `validateFoundedScene` | 320 to 470 |
+| `canonicalSceneJson`, `encodeFoundedScene` | 105 to 160 each, each run twice in `assembleFoundedScene` |
+| `foundedSpawnAnchors` | 70 to 235 |
+
+The Forge's own work in the realm already yields (`renderForgeContactSheetCooperatively`, FW10). The rebuild is
+not in this lane's folders. Proposal, either is enough:
+
+1. **Incremental compile** (`packages/voxel/src/collision`): compile per placement into chunk-keyed solids and
+   reuse every unchanged placement's solids from the active world. A Forge commit then compiles one attachment
+   (a few ms). The revision and digest rules stay as they are.
+2. **Off the loop** (`apps/realm/src/founded/provider.ts`): run `assembleFoundedScene` and the compile in a
+   `worker_threads` worker and pass the compiled world back as transferable buffers; the room keeps serving walks
+   on the current world until adoption.
+
+Until one exists, any commit on a busy host can drop the walkers who are standing in the kingdom, not only the
+maker. Section 12 (no reload on a Forge commit) is still needed after this. Without §13, §12's hot adoption would
+keep the session but still get it kicked.

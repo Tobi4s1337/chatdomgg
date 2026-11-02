@@ -138,7 +138,9 @@ export async function runPrivateForgeProof(mode: 'prepare' | 'pilot' | 'twenty' 
       log: line => { if (realmLines.length < 2_000) realmLines.push(`${Math.round(performance.now() - proofStarted)} ${line.slice(0, 400)}`); },
       verifier: new TenureEvidenceVerifier('simulated', evidenceKey), ingressCredentials: { herald: secret },
       foundedAccess: target => target.origin === 'simulated', furnish: citizens.furnish,
-      repositoryOptions: gate.install({ origin: 'simulated' }),
+      // The shared development host runs at load 25 to 35; a fresh kingdom repeatedly failed to open inside a 15 s
+      // writer lease there. The private proof holds its kingdom on a 60 s lease; production keeps REALM_LEASE_MS.
+      repositoryOptions: { ...gate.install({ origin: 'simulated' }), leaseMs: 60_000 },
       attach: kingdom => evening!.attach(kingdom),
     });
     citizens.use(boot.allocation, boot.services);
