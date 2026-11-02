@@ -32,6 +32,27 @@ there is no additional cross-lane contract change to write into another scope.
 
 ## 1. The items API (pier provides; gather, forge-wish, play, raid-show and panel-window call it)
 
+### PI10 authored fish and rod checkpoint — 2 November
+
+The item catalogue now contains twelve reviewed species and `tool:rod.willow`, without granting any copies.
+`apps/realm/src/items/providers.ts` imports `../fishing/content`, which registers the real definitions and exports
+the validated `fishingSpecies`. The fishing room adapter is still absent, so registration alone enables no cast.
+The three-view dusk sheets are in `work/evidence/pier/`; this is a software-rendered content review, not the signed-in
+world or real-GPU demonstration. Earlier references below to the empty catalogue describe the foundation checkpoint.
+
+The browser catalogue now exists at `apps/web/src/bag/index.ts`; importing it loads `providers.ts`.
+`registerItemModels(models)` accepts `{ id: string, create: () => VoxelAsset }[]` and returns an unregister function.
+Factories return fresh CPU-owned buffers. A conflicting batch registers nothing. `itemModels.has(id)` and
+`itemModels.create(id)` resolve a registered model; an unknown id returns false/undefined. A factory returning a
+different id throws. Another lane still adds only its own registration import in `bag/providers.ts`, as below.
+There is no bag UI or fallback portrait yet. Fish assets, lore and definitions live in `packages/content/src/fish`;
+the held rod and its grip/tip anchors live in `packages/content/src/pier/rod.ts`.
+
+Mossback Carp requires an adopted `meadow`/`woodland` recipe biome and Redfin Char requires `highland`. Unknown
+old-plan biomes remain honest: only wildcard fish are eligible. Bell Minnow and Silver Dace guarantee a common
+candidate at every hour/mood/water at one metre depth. The existing adopted-biome ask and fallback still apply.
+Rare catches remain separate protected gathered records; numbered mounted keepsakes are PI11 work.
+
 Owner: pier. Every thing a person owns has one record: what it is, where it came from (who, where, when) and where it
 lives now. Other lanes write into it through the realm service below, never through SQL, and never edit pier's files:
 they register their own item definitions with one import line in pier's `providers.ts` files.

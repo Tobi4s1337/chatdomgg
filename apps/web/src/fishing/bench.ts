@@ -14,8 +14,9 @@ import { createWaterSurface, type WaterLightSource } from '../places/water/surfa
 import { createLightField } from '../kingdom/light-field';
 import { createPierLanternGlow } from './lanterns';
 import { mountPierAssetBench } from './asset-bench';
+import { mountFishBench } from './fish-bench';
 
-type PierView = 'shore' | 'deck' | 'head' | 'asset';
+type PierView = 'shore' | 'deck' | 'head' | 'asset' | 'fish';
 type Angle = 'front' | 'side' | 'back';
 export interface PierBench {
   readonly stats: Record<string, unknown>;
@@ -53,6 +54,7 @@ async function fixture(query: URLSearchParams): Promise<{ plan: SettlementPlan; 
 
 /** Dev-only review surface. It never opens a walking session, grants an item or writes a kingdom. */
 export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearchParams): Promise<PierBench> {
+  if (query.get('view') === 'fish') return mountFishBench(canvas, query);
   if (query.get('view') === 'asset') return mountPierAssetBench(canvas, query);
   W.__chatdomReady = false;
   W.__chatdomPierPhase = 'reading-founded-copy';

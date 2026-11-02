@@ -16,14 +16,14 @@ const software = process.argv.includes('--software');
 async function portFree(port) {
   const probe = createProbe();
   try {
-    await new Promise((ready, reject) => { probe.once('error', reject); probe.listen(port, '127.0.0.1', ready); });
+    await new Promise((ready, reject) => { probe.once('error', reject); probe.listen(port, '0.0.0.0', ready); });
     await new Promise(ready => probe.close(ready)); return true;
   } catch (error) { if (error.code === 'EADDRINUSE') return false; throw error; }
 }
 let previewPort = 5192;
 if (software) {
   previewPort = 0;
-  for (const candidate of [5184, 5185, 5186, 5188, 5189, 5198, 5199]) {
+  for (const candidate of [5184, 5185, 5186, 5188, 5189, 5198, 5199, ...Array.from({ length: 14 }, (_, i) => 5170 + i)]) {
     assertCapturePort(candidate);
     if (await portFree(candidate)) { previewPort = candidate; break; }
   }
@@ -79,7 +79,7 @@ try {
         if (errors.length || result.error || !result.stats?.ready) throw new Error(result.error ?? (errors.join('\n') || 'The pier itself is not ready.'));
         await page.screenshot({ path, timeout: 60_000 });
         measurements.push({ path: path.replace(root + '/', ''), width, height, renderer: 'SwiftShader; no performance evidence', stats: result.stats }); pictures.push(path);
-        console.log(`${path.replace(root + '/', '')} · SwiftShader · ${result.stats.pierDraws} pier draws · ${result.stats.pierTriangles} pier triangles`);
+        console.log(`${path.replace(root + '/', '')} · SwiftShader · ${result.stats.pierDraws ?? result.stats.colorDraws ?? result.stats.calls} color draws · ${result.stats.pierTriangles ?? result.stats.triangles ?? 'see model stats'} triangles`);
       } finally { await page.close(); }
       return;
     }
@@ -111,7 +111,12 @@ try {
       console.log(`${path.replace(root + '/', '')} · ${width}×${height} · ${stats.pierDraws ?? stats.calls} draws · ${stats.pierTriangles ?? stats.triangles} triangles`);
     } finally { await cdp.send('Target.closeTarget', { targetId }).catch(() => {}); }
   }
-  if (process.argv.includes('--assets')) {
+  if (process.argv.includes('--fish')) {
+    const group = process.argv.find(arg => arg.startsWith('--group='))?.slice(8) ?? '0';
+    if (!/^(0|1|2|rod)$/.test(group)) throw new Error('Choose a fish sheet group.');
+    const [width, height] = process.argv.includes('--narrow') ? [390, 844] : [1440, 900];
+    await page(`http://localhost:${previewPort}/-/pier?view=fish&group=${group}&hour=18.6&still=1`, width, height, resolve(output, `pi10-fish-${group}-dusk@${width}x${height}.png`));
+  } else if (process.argv.includes('--assets')) {
     const props = ['lantern', 'rack', 'lectern', 'board', 'bench', 'mooring', 'bucket'];
     for (const style of ['hearth', 'tide', 'grove']) for (const prop of props) for (const angle of ['front', 'side', 'back']) {
       const id = `pier-${style}-${prop}`;
@@ -126,7 +131,7 @@ try {
       await page(`http://localhost:${previewPort}/-/pier?${query}`, width, height, resolve(output, `pi10-${view}-${hour === 12 ? 'noon' : 'dusk'}@${width}x${height}.png`));
     }
   }
-  const statsName = process.argv.includes('--assets') ? 'pi10-furnishing-render-stats.json' : software ? `pi10-${process.argv.includes('--head') ? 'head' : process.argv.includes('--deck') ? 'deck' : 'shore'}-${process.argv.includes('--narrow') ? 'narrow' : 'wide'}-render-stats.json` : 'pi10-pier-render-stats.json';
+  const statsName = process.argv.includes('--fish') ? `pi10-fish-${process.argv.find(arg => arg.startsWith('--group='))?.slice(8) ?? '0'}${process.argv.includes('--narrow') ? '-narrow' : ''}-render-stats.json` : process.argv.includes('--assets') ? 'pi10-furnishing-render-stats.json' : software ? `pi10-${process.argv.includes('--head') ? 'head' : process.argv.includes('--deck') ? 'deck' : 'shore'}-${process.argv.includes('--narrow') ? 'narrow' : 'wide'}-render-stats.json` : 'pi10-pier-render-stats.json';
   await writeFile(resolve(output, statsName), JSON.stringify({ capturedAt: new Date().toISOString(), receipt, measurements }, null, 2) + '\n');
   console.log(`Captured ${pictures.length} ${software ? 'SwiftShader' : 'real-GPU'} stills; owned port ${previewPort}.`);
 } finally {

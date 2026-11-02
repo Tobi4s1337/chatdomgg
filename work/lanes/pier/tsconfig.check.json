@@ -4,10 +4,12 @@
     "../../../packages/shared/src/items.ts",
     "../../../packages/shared/src/fishing.ts",
     "../../../packages/content/src/pier/**/*.ts",
+    "../../../packages/content/src/fish/**/*.ts",
     "../../../apps/realm/src/main.ts",
     "../../../apps/realm/src/items/**/*.ts",
     "../../../apps/realm/src/fishing/**/*.ts",
     "../../../apps/web/src/fishing/**/*.ts",
-    "../../../apps/web/src/fishing/**/*.tsx"
+    "../../../apps/web/src/fishing/**/*.tsx",
+    "../../../apps/web/src/bag/**/*.ts"
   ]
 }
