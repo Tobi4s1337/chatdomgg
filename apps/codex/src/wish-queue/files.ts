@@ -96,6 +96,14 @@ export class PrivateWishFiles {
     if (failed) throw new ForgeWishQueueError('unavailable');
   }
 
+  /** Remove one finished wish record. Only record names; never a link, a key or the header. */
+  async remove(name: string): Promise<void> {
+    if (!/^wish-[a-f0-9]{64}\.json$/.test(name)) throw new ForgeWishQueueError('corrupt');
+    await this.read(name, 1_100_000);
+    try { await unlink(this.path(name)); } catch (error) { if (!isCode(error, 'ENOENT')) throw new ForgeWishQueueError('unavailable'); }
+    await this.root.sync();
+  }
+
   async clearTemporary(name: string): Promise<void> {
     if (!/^\.pending-[a-f0-9-]{36}\.json$/.test(name)) throw new ForgeWishQueueError('corrupt');
     // Refuse links/unexpected modes before deleting anything, even an abandoned temporary.

@@ -154,7 +154,7 @@ describe('Raid Gate controller', () => {
     const departed = await until(controller, s => s.phase === 'departed');
     expect(departed).toMatchObject({ raid: { viewers: 23, evidence: { label: 'SIMULATED' } }, joined: true, optedIn: 1, destination: { target: { kingdomId: FERN } } });
     await controller.refresh();
-    expect(bench.log.followed).toEqual([`simulated-raid-${preview.requestId}`]);
+    expect(bench.log.followed).toEqual([expect.stringMatching(/^raid\.[a-f0-9]{64}$/u)]);
     expect(bench.log.roads).toHaveLength(1);
     // After the news, the monarch can call the realm again; the old preview does not come back as lapsed.
     now += 5 * 60_000;

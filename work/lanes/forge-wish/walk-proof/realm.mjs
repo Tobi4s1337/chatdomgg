@@ -20,7 +20,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const identity = () => (BigInt('0x' + randomBytes(12).toString('hex')) + 1n).toString();
 function check(condition, message) { if (!condition) throw new Error(`Walk proof: ${message}`); }
 
-export async function startWalkRealm({ loader, repo, directory, mode, wishes, log }) {
+export async function startWalkRealm({ loader, repo, directory, mode, wishes, log, queue = false }) {
   const load = path => loader.ssrLoadModule(path);
   const shared = await load('/packages/shared/src/index.ts');
   const { REALM_HERALD_ROUTE } = await load('/packages/shared/src/realm/index.ts');
@@ -89,8 +89,11 @@ export async function startWalkRealm({ loader, repo, directory, mode, wishes, lo
     }
     const personIds = [...ids].map(id => shared.PersonIdSchema.parse(id));
 
+    // --queue: drafting waits while the proof holds the smith, so a line can form behind the wish at the anvil.
+    let held = null, letGo = () => {};
     const controlled = createForgeProviders({ runCodex: async ({ model, image }) => {
       facts.modelCalls.push({ kind: !model ? 'draft' : image ? 'result' : 'words', outcome: 'controlled' });
+      if (!model && held) await held;
       await pause(1000 + randomInt(0, 1500));
       if (!model) return JSON.stringify({ draft: { plan: { version: 2, kind: 'chimney', motif: 'sleeping-dragon', finish: 'native', accent: 'none' },
         title: 'Sleeping keeper', plaque: 'Warm dreams above the hearth.' }, interpretation: 'as-wished', shared: 'subject' });
@@ -145,6 +148,8 @@ export async function startWalkRealm({ loader, repo, directory, mode, wishes, lo
     });
     citizens.use(boot.allocation, boot.services);
     evening = new RealmEveningBridge({ origin: 'simulated', ingress: boot.ingress, gate, approvals, providers,
+      // --queue: the durable wish line, as apps/realm/src/main.ts composes it.
+      ...(queue ? { forgeQueue: { directory: join(foundedDirectory, 'forge-queue') } } : {}),
       beforeObservation: input => citizens.observe(input),
       forgeLog: event => { if (facts.realmLog.length < 400) facts.realmLog.push(redact(JSON.stringify(event)).slice(0, 400)); },
       forgeChatObserver: async observation => {
@@ -157,6 +162,7 @@ export async function startWalkRealm({ loader, repo, directory, mode, wishes, lo
     log('adopt the founded layout');
     await adoptProofLayout(boot, kingdomId);
     await boot.readiness.start();
+    if (queue) await evening.start();
     log('settle citizens with homes and rights');
     const settled = await settleProofPeople(boot, citizens, kingdomId, personIds, true);
     hold = await boot.services.retain(kingdomId);
@@ -176,6 +182,10 @@ export async function startWalkRealm({ loader, repo, directory, mode, wishes, lo
     const app = runtime.transport.app;
     mountEntryRoutes(app, boot.founded, 'simulated', names);
     mountRealmWatchRoutes(app, boot);
+    if (queue) {
+      const { mountForgeQueueRoutes } = await load('/apps/realm/src/forge-queue/http.ts');
+      mountForgeQueueRoutes(app, evening.line, { pool: authPool, origin: 'simulated', secureCookies: false });
+    }
     // The production Forge chat routes need the browser's exact origin, known only once the first lock cycle picks
     // the web port. Reserve the routes now; `open()` mounts mountForgeChatRoutes' own handlers behind them.
     for (const route of Object.values(shared.FORGE_CHAT_ROUTES)) {
@@ -321,6 +331,13 @@ export async function startWalkRealm({ loader, repo, directory, mode, wishes, lo
         check(person, 'unknown citizen.');
         return herald(person, `walk-proof-${randomUUID()}`, words);
       },
+      /** --queue: hold drafting (true) so wishes wait in line, or let the smith work again (false). */
+      holdForge(on) {
+        if (on && !held) held = new Promise(resolve => { letGo = resolve; });
+        if (!on && held) { held = null; letGo(); }
+      },
+      /** --queue: the kingdom's wish line, head first (person ids only). */
+      line: () => queue ? evening.line.line(kingdomId).map(entry => entry.personId) : [],
       door(personId) {
         const home = Object.values(kingdom.privateState.homes).find(item => item.ownerId === personId);
         return home ? registry().get(interactionTargetId.homeDoor(home.id))?.target ?? null : null;

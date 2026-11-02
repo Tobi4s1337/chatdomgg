@@ -204,3 +204,87 @@ export function parseRaidPennantArchivePage(raw: unknown, now: number): RaidPenn
     return parsed.data;
   } catch { return null; }
 }
+
+/**
+ * The gate party, public (RS11). Who chose to march, gathered at this kingdom's own gate, and where the
+ * monarch is taking them. Joining the march is a public act on the stream: names and looks are the same
+ * ones the walker frame already shows. No person ID, session, ticket, Twitch token or chat roster appears.
+ *
+ * - `gather`: the gate is open and walkers join or leave; `countdown`: Twitch holds the raid (from Twitch's
+ *   own `createdAt`); `checking`: past the countdown with no witnessed raid yet; `setout`: Twitch's raid was
+ *   witnessed and the party leaves through the gate. Anything else is no party (the reader returns `null`).
+ * - `marchers` holds at most `RAID_PARTY_DRAWN` real walkers, leader first; `more` counts the rest. Nobody is
+ *   ever drawn from `more`.
+ * - `walker` is the marcher's current public walker ID in this kingdom's room, when they are walking here,
+ *   so a host can draw that body once (at the gate) rather than twice.
+ */
+export const RAID_PARTY_DRAWN = 40;
+export const RAID_PARTY_FRAME_MAX_BYTES = 24 * 1024;
+const PartyName = z.string().min(1).max(64).regex(/^[^\p{Cc}\p{Cf}\p{Cs}]*$/u);
+export const RaidPartyMarcherSchema = z.strictObject({
+  /** Stable per party and person for this frame's lifetime, never a person ID. */
+  key: z.string().regex(/^marcher\.[a-f0-9]{24}$/u),
+  name: PartyName,
+  look: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9_.-]*$/u),
+  walker: z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/u).nullable(),
+  /** The source monarch, walking with their people. At most one, always first. */
+  leader: z.boolean(),
+  joinedAt: EpochMsSchema,
+});
+export type RaidPartyMarcher = z.infer<typeof RaidPartyMarcherSchema>;
+export const RaidPartyPublicFrameSchema = z.strictObject({
+  version: z.literal(1), origin: z.enum(['live', 'simulated']), kingdomId: KingdomIdSchema, asOf: EpochMsSchema,
+  phase: z.enum(['gather', 'countdown', 'checking', 'setout']),
+  /** The source kingdom's own public face; its arms come from the Atlas heraldry of `kingdomId`. */
+  /** Names are Twitch's own, from witnessed raid evidence or the realm's records; null when not yet known here. */
+  source: z.strictObject({ login: z.string().regex(/^[a-z0-9_]{1,64}$/u).nullable(), name: PartyName.nullable() }),
+  destination: z.strictObject({ kingdomId: KingdomIdSchema, login: z.string().regex(/^[a-z0-9_]{1,64}$/u).nullable(),
+    name: PartyName.nullable(), land: z.enum(['founded', 'waiting', 'unknown']) }),
+  countdownEndsAt: EpochMsSchema.nullable(),
+  departedAt: EpochMsSchema.nullable(),
+  raidId: RaidGuestVisualMarkSchema.shape.raidId.nullable(),
+  marchers: z.array(RaidPartyMarcherSchema).max(RAID_PARTY_DRAWN),
+  more: z.number().int().min(0).max(1_000_000),
+}).superRefine((frame, context) => {
+  const leaders = frame.marchers.filter(marcher => marcher.leader).length;
+  if (leaders > 1 || (leaders === 1 && !frame.marchers[0]!.leader)
+      || new Set(frame.marchers.map(marcher => marcher.key)).size !== frame.marchers.length
+      || new Set(frame.marchers.flatMap(marcher => marcher.walker ? [marcher.walker] : [])).size !== frame.marchers.filter(marcher => marcher.walker).length
+      || frame.destination.kingdomId === frame.kingdomId
+      || (frame.phase === 'setout') !== (frame.departedAt !== null && frame.raidId !== null)
+      || (frame.phase === 'countdown' && frame.countdownEndsAt === null)
+      || (frame.more > 0 && frame.marchers.length < RAID_PARTY_DRAWN)) {
+    context.addIssue({ code: 'custom', message: 'A party frame needs one leader first, distinct marchers and a phase its facts support' });
+  }
+});
+export type RaidPartyPublicFrame = z.infer<typeof RaidPartyPublicFrameSchema>;
+
+/** `null` is no party: nobody is gathering here. A frame older than 30 s is stale and draws nobody. */
+export function parseRaidPartyFrame(raw: unknown, now: number): RaidPartyPublicFrame | null {
+  if (!EpochMsSchema.safeParse(now).success) return null;
+  try {
+    if (typeof raw === 'string') {
+      if (raw.length > RAID_PARTY_FRAME_MAX_BYTES || utf8.encode(raw).byteLength > RAID_PARTY_FRAME_MAX_BYTES) return null;
+      raw = JSON.parse(raw) as unknown;
+    }
+    const parsed = RaidPartyPublicFrameSchema.safeParse(raw);
+    if (!parsed.success || parsed.data.asOf > now + 5_000 || parsed.data.asOf < now - 30_000) return null;
+    return parsed.data;
+  } catch { return null; }
+}
+
+/** `GET /realm/raid-party/:kingdomId` reply: the current party, or `party: null` when nobody gathers. */
+export const RaidPartyReplySchema = z.strictObject({
+  version: z.literal(1), origin: z.enum(['live', 'simulated']), kingdomId: KingdomIdSchema, asOf: EpochMsSchema,
+  party: RaidPartyPublicFrameSchema.nullable(),
+}).superRefine((reply, context) => {
+  if (reply.party && (reply.party.kingdomId !== reply.kingdomId || reply.party.origin !== reply.origin)) {
+    context.addIssue({ code: 'custom', message: 'A party reply names one kingdom and origin' });
+  }
+});
+export type RaidPartyReply = z.infer<typeof RaidPartyReplySchema>;
+export interface RaidPartyPublicFeed {
+  readonly origin: RaidPartyPublicFrame['origin'];
+  /** Receives the current party, or `null` when nobody gathers (and on any failed or stale read). */
+  subscribe(receive: (party: RaidPartyPublicFrame | null) => void): () => void;
+}

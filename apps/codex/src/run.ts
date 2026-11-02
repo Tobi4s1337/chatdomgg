@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ForgeDraftCandidateSchema, createForgeCallBudget, ForgeCallBudgetError, type ForgeCallBudget,
+import { ForgeDraftCandidateSchema, createForgeCallBudget, ForgeCallBudgetError, ForgeProviderColdError, type ForgeCallBudget,
   type ForgeProviders, type JudgeVerdict } from './providers';
 import { ForgeRunRequestSchema, ForgeStyleKitSchema, type ForgeRunEvent, type ForgeDraft, type ForgeStyleKit } from '@chatdom/shared';
 import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
@@ -183,6 +183,10 @@ export async function runForge(input: unknown, providers: ForgeProviders, emit: 
     // A failed retry cannot erase a checked safe candidate. Only that candidate's exact evidence can publish.
     if (state.best !== undefined && state.phase !== 'approved' && state.phase !== 'stopped') return await approve();
     if (state.phase === 'approved' || state.phase === 'stopped') throw error;
+    // A queued wish whose model process went away mid-call pauses and resumes from its saved stage. The lost call stays
+    // spent, so the wish's five- or seven-call ceiling still bounds how often it can try; it is never told "cold" for it.
+    if (recovery && error instanceof ForgeProviderColdError)
+      throw new ForgeRunRecoveryError('interrupted');
     await stop('cold', error instanceof ForgeCallBudgetError ? 'budget' : 'service');
   }
 }

@@ -4,6 +4,7 @@ import type { SettlementPlan } from '@chatdom/world';
 import { foundedGroundAt } from '@chatdom/world/founded-collision';
 import { embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmRoomServices, RealmSpawnContext } from '../ports';
+import type { RealmRoomTravel } from './room-travel';
 import type { RaidGuestAuthority } from './guests';
 
 const MAX_ANCHORS = 128, CACHE_GEOMETRIES = 8, SEARCH_RINGS = 8, SPACING = .75;
@@ -196,6 +197,11 @@ export interface RaidGuestSpawnWorld extends RealmSpawnContext {
 }
 export interface RaidGuestSpawnOptions {
   readonly authority: Pick<RaidGuestAuthority, 'pendingEntry'>;
+  /**
+   * Committed journeys through the Raid Gate (RS11): a visitor who marched here steps in at this gate too. Citizens
+   * and the monarch still enter at their own doors; this never admits anyone the room's ticket did not.
+   */
+  readonly marchers?: Pick<RealmRoomTravel, 'arrivalAt'>;
   /** Only the retained, unexpired writer's ADOPTED geometry. Never a prospective/prepared scene. */
   readonly current: (kingdomId: KingdomId) => RaidGuestSpawnWorld | undefined;
   readonly clock?: () => number;
@@ -207,11 +213,16 @@ export function createRaidGuestSpawn(options: RaidGuestSpawnOptions): NonNullabl
   const cache = new Map<string, { world: WeakRef<CollisionWorld>; positions: readonly Vec3[]; faceToward: readonly [number, number] | null }>();
   const now = options.clock ?? Date.now;
   return async (principal, context) => {
-    const pending = await options.authority.pendingEntry({ version: 1, origin: principal.origin, entryId: principal.sessionId,
+    const invited = await options.authority.pendingEntry({ version: 1, origin: principal.origin, entryId: principal.sessionId,
       personId: principal.personId, kingdomId: principal.kingdomId, at: Math.floor(now()) });
-    if (pending.status === 'refused') {
-      if (pending.reason === 'citizen_here' || pending.reason === 'no_intent') return null;
-      throw new Error('This raid invitation can no longer admit you. Open the kingdom again to enter.');
+    let pending: { readonly expiresAt: number };
+    if (invited.status !== 'refused') pending = invited;
+    else {
+      if (invited.reason === 'citizen_here') return null;
+      if (invited.reason !== 'no_intent') throw new Error('This raid invitation can no longer admit you. Open the kingdom again to enter.');
+      const marched = await options.marchers?.arrivalAt(principal.personId, principal.kingdomId, Math.floor(now()));
+      if (!marched) return null;
+      pending = marched;
     }
     const matches = (snapshot: RaidGuestSpawnWorld | undefined) => !!snapshot && snapshot.world === context.world
       && snapshot.world.revision === context.world.revision && snapshot.layoutRevision === context.layoutRevision
