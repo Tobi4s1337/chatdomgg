@@ -1,5 +1,6 @@
 import { createEffect, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { DirectoryError, fetchSearch, type SearchReply, type SearchResult } from '../data/directory';
+import { findOpenKingdom } from '../data/open-kingdoms';
 import type { PreviewSource, PreviewWorld } from '../data/preview';
 import { mapNoun } from './edition';
 import { formatCount, SEARCH_PLACEHOLDER, TIER_NAMES } from './format';
@@ -32,6 +33,8 @@ export function Search(props: {
   onChoose: (result: SearchResult) => void;
   /** Text to search for, set by the page (a route that found nothing hands its login here). */
   seed?: { text: string; at: number } | null;
+  /** The signed-in broadcaster's own hidden channel when the query names it: only they see it, first in the list. */
+  own?: ((query: string) => SearchResult | null) | undefined;
 }) {
   let input: HTMLInputElement | undefined;
   let wrapper: HTMLDivElement | undefined;
@@ -49,14 +52,25 @@ export function Search(props: {
   };
   const [text, setText] = createSignal('');
   const [phase, setPhase] = createSignal<Phase>({ kind: 'idle' });
+  // A name the register does not know may still be a kingdom chatdom.io opens (founded before the survey saw it).
+  const [openKingdom, setOpenKingdom] = createSignal<{ query: string; kingdomId: string; name: string; login: string } | null>(null);
+  createEffect(() => {
+    const now = phase();
+    if (now.kind !== 'results' || now.reply.results.length) { setOpenKingdom(null); return; }
+    const query = now.query;
+    void findOpenKingdom(query).then(kingdom => { if (phase() === now) setOpenKingdom(kingdom ? { query, ...kingdom } : null); });
+  });
   const [showSearching, setShowSearching] = createSignal(false);
   const [open, setOpen] = createSignal(false);
   const [active, setActive] = createSignal(0);
 
   const results = () => {
     const current = phase();
-    return current.kind === 'results' ? current.reply.results : [];
+    if (current.kind !== 'results') return [];
+    const own = props.own?.(current.query) ?? null;
+    return own && !current.reply.results.some((result) => result.channel.id === own.channel.id) ? [own, ...current.reply.results] : current.reply.results;
   };
+  const isOwn = (result: SearchResult) => props.own?.(phase().kind === 'results' ? (phase() as { query: string }).query : '')?.channel.id === result.channel.id;
 
   const ask = (query: string) => {
     cancelSelection();
@@ -251,7 +265,8 @@ export function Search(props: {
                           </Show>
                         </span>
                         <span class="atlas-search-place">
-                          <Show when={props.onAir(result)}><span class="atlas-search-air">On air · </span></Show>
+                          <Show when={isOwn(result)}><span class="atlas-search-own">Hidden by you · </span></Show>
+                          <Show when={!isOwn(result) && props.onAir(result)}><span class="atlas-search-air">On air · </span></Show>
                           {place(result)}<Show when={result.average !== null}> · {formatCount(result.average!)} avg.</Show>
                         </span>
                       </span>
@@ -266,6 +281,10 @@ export function Search(props: {
             <Match when={phase().kind === 'results'}>
               <div class="atlas-search-state" role="status">
                 <p>“<span dir="auto">{(phase() as { query: string }).query.trim()}</span>” is not on the map yet.</p>
+                <Show when={openKingdom()}>{kingdom => <>
+                  <p>{kingdom().name}, {kingdom().login}’s kingdom, is open all the same.</p>
+                  <a class="atlas-search-away atlas-search-door" href={`/kingdom/${encodeURIComponent(kingdom().kingdomId)}`}>Enter {kingdom().name}</a>
+                </>}</Show>
                 <Show when={(phase() as { reply: SearchReply }).reply.unavailable === 'limited' || (phase() as { reply: SearchReply }).reply.unavailable === 'upstream'}>
                   <p class="atlas-quiet">Try again in a moment.</p>
                   <button type="button" class="atlas-search-retry" on:click={() => ask(text())}>Search again</button>

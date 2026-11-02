@@ -1,5 +1,15 @@
 import type { ItemDefinition, ItemEvent, ItemId, ItemRecord, KingdomId, PersonId } from '@chatdom/shared';
 
+/** One person's shelf in one kingdom and origin (PI12). `name` is the approved name given when it was shown. */
+export interface ShelfRow {
+  readonly ownerId: PersonId;
+  readonly origin: ItemRecord['origin'];
+  readonly shown: boolean;
+  readonly name: string | null;
+  readonly revision: number;
+  readonly updatedAt: number;
+}
+
 export interface GrantReceipt {
   readonly key: string;
   readonly ownerId: PersonId;
@@ -27,6 +37,11 @@ export interface ItemTransaction {
   sharedNumber(key: string, defId: ItemDefinition['id'], fingerprint: string): Promise<number>;
   /** Called only after a confirmed commit. Rollback and uncertain commits never notify. */
   afterCommit(callback: () => void): void;
+  /** A swap of two slotted things checks slot uniqueness at commit, not between the two saves. */
+  deferSlots(): Promise<void>;
+  shelf(ownerId: PersonId, origin: ItemRecord['origin']): Promise<ShelfRow | null>;
+  /** Revision-checked: a new row starts at revision 1, every change adds one. */
+  saveShelf(row: ShelfRow): Promise<void>;
 }
 
 export interface ItemStore {
@@ -42,6 +57,9 @@ export interface ItemStore {
   historyPage(id: ItemId, after?: string): Promise<readonly { readonly cursor: string; readonly value: ItemEvent }[]>;
   /** Redaction is applied at read time, including to future grants; provenance stays intact. */
   forgetName(personId: PersonId): Promise<void>;
+  shelf(ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin']): Promise<ShelfRow | null>;
+  /** Shelves their owners show, at most 512, with the shown name withheld for a forgotten name. */
+  shownShelves(kingdomId: KingdomId, origin: ItemRecord['origin']): Promise<readonly ShelfRow[]>;
 }
 
 /** A commit may have reached Postgres. Resolve by repeating the same grant key, never by minting another. */

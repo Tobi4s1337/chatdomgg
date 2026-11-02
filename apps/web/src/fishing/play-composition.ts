@@ -1,14 +1,18 @@
 import * as THREE from 'three';
 import { kingdomAudioHost, type KingdomAudio } from '@chatdom/audio';
-import { kingdomWaterMood, type KingdomId, type PierAlmanac, type PierAlmanacMark, type Vec3 } from '@chatdom/shared';
+import { kingdomWaterMood, type KingdomId, type PierAlmanac, type PierAlmanacMark, type ShelfDoor, type Vec3 } from '@chatdom/shared';
 import { mountAlmanac, type AlmanacHandle, type AlmanacOptions } from '../almanac/book';
 import { almanacFailure, loadAlmanac } from '../almanac/fetch';
 import { createAlmanacSound } from '../almanac/sound';
-import { createBagStore, hotbarSlots, mountBag, mountHotbar, itemPortrait, type BagSound, type BagStore } from '../bag';
+import { createBagStore, HOTBAR_SLOTS, hotbarSlots, mountBag, mountHotbar, itemPortrait, type BagSound, type BagStore } from '../bag';
+import { mountShelf } from '../bag/shelf';
+import type { MountShelf } from '../bag/shelf/types';
+import { createShelfStore, type ShelfStore } from '../bag/shelf-store';
 import { createFishingController, type FishingController } from './controller';
 import { mountPierLayer, type PierLayer, type PierWalker } from './layer';
 import { claimPierScene } from './kingdom-layer';
-import { fishingLink, itemLink, type ChannelRoom } from './link';
+import { fishingLink, itemLink, shelfLink, type ChannelRoom } from './link';
+import { rodFacts, rodNote } from './rod-words';
 import { createPierSound } from './sound';
 import { mountFishingUiStaged } from './ui/mount';
 import type { FishingUi } from './ui/types';
@@ -80,6 +84,8 @@ export interface PierPlaySlots {
 export interface PierWalk {
   readonly controller: FishingController;
   readonly store: BagStore;
+  /** Your shelf and belt arrangement, the doors with shelves to look at; null when nobody is signed in. */
+  readonly shelf: ShelfStore | null;
   readonly ui: FishingUi;
   layer(): PierLayer | null;
   /** Opens the kingdom's Almanac over the walk, at the contents or a species' page; your own marks inside. */
@@ -87,6 +93,12 @@ export interface PierWalk {
   /** Select a hotbar thing: the rod goes into the hand, nothing empties it. */
   select(itemId: string | null): void;
   toggleBag(): void;
+  /** Opens your own shelf over the walk (at your door, or from the ledger's shelf page). */
+  openShelf(): void;
+  /** Looks at the shelf behind a door you stand at. */
+  visitShelf(plotId: string): void;
+  /** Facts the pier knows about one of your things, for its card (a rod's history). */
+  facts(item: { readonly defId: string }): readonly { readonly label: string; readonly value: string }[];
   dispose(): void;
 }
 
@@ -97,30 +109,49 @@ export interface PierViews {
   sound: typeof createPierSound;
   bag: typeof mountBag;
   hotbar: typeof mountHotbar;
+  shelf: MountShelf;
   portrait(defId: string): Promise<CanvasImageSource | null>;
   /** The book and where its facts come from. */
   almanac(host: HTMLElement, options: AlmanacOptions): AlmanacHandle;
   loadAlmanac(kingdomId: string, signal: AbortSignal): Promise<PierAlmanac>;
 }
-const VIEWS: PierViews = { ui: mountFishingUiStaged, layer: mountPierLayer, sound: createPierSound, bag: mountBag, hotbar: mountHotbar,
+const VIEWS: PierViews = { ui: mountFishingUiStaged, layer: mountPierLayer, sound: createPierSound, bag: mountBag, hotbar: mountHotbar, shelf: mountShelf,
   portrait: defId => itemPortrait(defId, 288).catch(() => null), almanac: mountAlmanac,
   loadAlmanac: (kingdomId, signal) => loadAlmanac(kingdomId, { signal }) };
 
 const RACK_REACH = 2.25, RACK_RISE = .75, LECTERN_REACH = 2.4;
+/** A door's shelf is offered from its step; the realm checks the same reach (SHELF_DOOR_REACH_M) before it shows one. */
+const DOOR_REACH = 2.6, DOOR_RISE = 1.6, DOORS_EVERY_MS = 30_000;
 const compact = () => typeof matchMedia === 'function' && matchMedia('(max-width: 640px)').matches;
 const isRod = (defId: string | undefined) => !!defId?.startsWith('tool:rod.');
 
 function walkPier(ctx: PierWalkContext, slots: PierPlaySlots, views: PierViews): PierWalk {
-  const fishing = fishingLink(ctx.room), items = itemLink(ctx.room);
+  const fishing = fishingLink(ctx.room), items = itemLink(ctx.room), shelves = shelfLink(ctx.room);
   const controller = createFishingController({ link: fishing, selfWalkerId: ctx.selfWalkerId() ?? '' });
   const store = createBagStore(items, ctx.self ? { personId: ctx.self.personId } : {});
+  const shelf = ctx.self ? createShelfStore(shelves, store, { personId: ctx.self.personId }) : null;
+  // Others show and hide their shelves without telling you: the doors are read again now and then while you walk.
+  const doorTimer = shelf ? setInterval(() => shelf.refreshDoors(), DOORS_EVERY_MS) : null;
+  const facts = (item: { readonly defId: string }) => (isRod(item.defId) ? rodFacts(controller.state().history) : []);
   let audio: KingdomAudio | null = null;
   const sound = views.sound(() => { audio = ctx.audio(); return audio ? kingdomAudioHost(audio) : null; });
   const surface: BagSound = kind => { ctx.audio()?.cue('wood', { ui: kind }); };
   const ui = views.ui(ctx.overlay, { compact: compact(), kingdomName: ctx.kingdomName,
     onBeat: beat => sound.cue(beat === 'dismiss' ? 'tag' : beat, { intensity: beat === 'dismiss' ? .25 : .5 }) });
   let layer: PierLayer | null = null, mounting = false, disposed = false, closeBag: (() => void) | null = null, unclaim = () => {};
-  let bagHost: HTMLDivElement | null = null;
+  let bagHost: HTMLDivElement | null = null, closeShelf: (() => void) | null = null;
+  /** One layer over the walk, holding the cursor while it is open. */
+  const overlay = (name: string, mount: (host: HTMLElement, close: () => void) => () => void) => {
+    closeShelf?.();
+    const cursor = ctx.requestCursor(name);
+    const host = Object.assign(document.createElement('div'), { className: `pier-${name}-layer` });
+    Object.assign(host.style, { position: 'absolute', inset: '0', pointerEvents: 'auto' });
+    ctx.overlay.append(host);
+    let unmount: (() => void) | null = null;
+    const close = () => { if (closeShelf !== close) return; closeShelf = null; unmount?.(); host.remove(); cursor.release(); };
+    closeShelf = close;
+    unmount = mount(host, close);
+  };
   // The open book over the walk, with what it needs to close cleanly and to refresh after a catch.
   interface OpenBook { handle: AlmanacHandle | null; close(): void; refresh(): void }
   let book: OpenBook | null = null;
@@ -175,7 +206,7 @@ function walkPier(ctx: PierWalkContext, slots: PierPlaySlots, views: PierViews):
   const stopFrame = ctx.onFrame((_dt, now) => { layer?.update(now / 1000); poseOthers(); });
   controller.sync();
   return {
-    controller, store, ui, layer: () => layer,
+    controller, store, shelf, ui, layer: () => layer, facts,
     openAlmanac(page) {
       if (disposed) return;
       if (book) { if (page) book.handle?.show(page); return; }
@@ -215,24 +246,53 @@ function walkPier(ctx: PierWalkContext, slots: PierPlaySlots, views: PierViews):
       Object.assign(host.style, { position: 'absolute', inset: '0', pointerEvents: 'auto' });
       ctx.overlay.append(host);
       const unmount = views.bag(host, store, { ...(ctx.self ? { viewerPersonId: ctx.self.personId } : {}), compact: compact(), sound: surface,
-        onClose: () => closeBag?.() });
+        facts, onClose: () => closeBag?.() });
       closeBag = () => { closeBag = null; unmount(); host.remove(); cursor.release(); };
+    },
+    openShelf() {
+      if (disposed || !shelf) return;
+      overlay('shelf', (host, close) => views.shelf(host, shelf, { compact: compact(), sound: surface, hour: ctx.hour(), kingdomName: ctx.kingdomName,
+        onClose: close }));
+    },
+    visitShelf(plotId) {
+      if (disposed || !shelf) return;
+      void shelf.visit(plotId).then(result => {
+        if (disposed) return;
+        if (!result.ok) { ui.note(result.message, 'warn'); return; }
+        overlay('shelf', (host, close) => views.shelf(host, result.source, { compact: compact(), sound: surface, hour: ctx.hour(),
+          kingdomName: ctx.kingdomName, onClose: close }));
+      });
     },
     dispose() {
       if (disposed) return;
       disposed = true;
-      closeBag?.(); book?.close(); stopFrame(); stopEvents();
+      closeBag?.(); closeShelf?.(); book?.close(); stopFrame(); stopEvents();
+      if (doorTimer) clearInterval(doorTimer);
       for (const walkerId of posed.keys()) slots.observedWalkerPose(walkerId, null);
       posed.clear();
       layer?.dispose(); layer = null; unclaim();
-      ui.dispose(); sound.dispose(); store.dispose(); controller.dispose(); fishing.dispose(); items.dispose();
+      ui.dispose(); sound.dispose(); shelf?.dispose(); store.dispose(); controller.dispose(); fishing.dispose(); items.dispose(); shelves.dispose();
     },
   };
 }
 
+/** The nearest door with a shelf you may look at from where you stand: your own, or one whose owner shows it. */
+export function nearestDoor(shelf: Pick<ShelfStore, 'doors' | 'door'>, pose: { readonly position: readonly [number, number, number] }): ShelfDoor | null {
+  const doors = shelf.doors(), own = shelf.door();
+  const candidates = own && !doors.some(door => door.plotId === own.plotId) ? [own, ...doors] : doors;
+  let best: ShelfDoor | null = null, distance = Infinity;
+  for (const door of candidates) {
+    if (!door.mine && !door.shown) continue;
+    if (Math.abs(pose.position[1] - door.at[1]) > DOOR_RISE) continue;
+    const d = Math.hypot(pose.position[0] - door.at[0], pose.position[2] - door.at[2]);
+    if (d <= DOOR_REACH && d < distance) { best = door; distance = d; }
+  }
+  return best;
+}
+
 /** Registers the pier with play: the walk feature, the rod, the hotbar, the bag, their keys and the rack's prompt. */
 export function registerPierInPlay(slots: PierPlaySlots, views: PierViews = VIEWS): () => void {
-  let walk: PierWalk | null = null;
+  let walk: PierWalk | null = null, offered: ShelfDoor | null = null;
   const walking = (ctx: PierPlayContext) => ctx.mode === 'walking' && !!ctx.self && !!walk;
   const stops = [
     slots.registerWalkFeature({ id: 'pier', mount(ctx) {
@@ -265,14 +325,24 @@ export function registerPierInPlay(slots: PierPlaySlots, views: PierViews = VIEW
       if (!mine) return () => {};
       const hotbar = views.hotbar(host, mine.store, { compact: compact(),
         selected: () => (slots.equippedTool() === 'rod' ? mine.controller.state().rod?.id ?? null : null),
-        onSelect: itemId => mine.select(itemId) });
-      const stop = mine.controller.subscribe(event => { if (event.kind === 'state' || event.kind === 'rod' || event.kind === 'taken') hotbar.refresh(); });
+        onSelect: itemId => mine.select(itemId),
+        ...(mine.shelf ? { arrange: mine.shelf.arrangeBelt } : {}),
+        note: item => (isRod(item.defId) ? rodNote(mine.controller.state().history) : null) });
+      const stop = mine.controller.subscribe(event => {
+        if (event.kind === 'state' || event.kind === 'rod' || event.kind === 'taken' || event.kind === 'kept') hotbar.refresh();
+      });
       return () => { stop(); hotbar.dispose(); };
     } }),
     slots.registerLedgerPage({ id: 'bag', title: 'Bag', order: 25, available: walking, mount(host, ctx) {
       const mine = walk;
       if (!mine) return () => {};
-      return views.bag(host, mine.store, { ...(ctx.self ? { viewerPersonId: ctx.self.personId } : {}), compact: compact(), onClose: () => ctx.closeLedger() });
+      return views.bag(host, mine.store, { ...(ctx.self ? { viewerPersonId: ctx.self.personId } : {}), compact: compact(), facts: mine.facts,
+        onClose: () => ctx.closeLedger() });
+    } }),
+    slots.registerLedgerPage({ id: 'shelf', title: 'Shelf', order: 27, available: ctx => walking(ctx) && !!walk?.shelf, mount(host, ctx) {
+      const mine = walk;
+      if (!mine?.shelf) return () => {};
+      return views.shelf(host, mine.shelf, { compact: compact(), onClose: () => ctx.closeLedger() });
     } }),
     slots.registerLedgerPage({ id: 'almanac', title: 'Almanac', order: 35, available: () => true, mount(host, ctx) {
       // Walking, the book carries your own marks from the room; watching, it is the kingdom's public book.
@@ -292,12 +362,14 @@ export function registerPierInPlay(slots: PierPlaySlots, views: PierViews = VIEW
       return () => { gone = true; abort.abort(); handle?.dispose(); host.replaceChildren(); };
     } }),
     slots.registerActionBinding({ id: 'bag', label: 'Open your bag', defaultCode: 'KeyB', onPress(ctx) { if (walking(ctx)) walk!.toggleBag(); } }),
-    slots.registerActionBinding({ id: 'hotbar.1', label: 'Hold the first thing on your belt', defaultCode: 'Digit1', onPress(ctx) {
-      if (!walking(ctx)) return;
-      const first = hotbarSlots(walk!.store.items())[0]?.item;
-      if (!first) return;
-      walk!.select(slots.equippedTool() === 'rod' && walk!.controller.state().rod?.id === first.id ? null : first.id);
-    } }),
+    ...Array.from({ length: HOTBAR_SLOTS }, (_, index) => slots.registerActionBinding({ id: `hotbar.${index + 1}`,
+      label: `Hold the tool on belt key ${index + 1}`, defaultCode: `Digit${index + 1}`, onPress(ctx) {
+        if (!walking(ctx)) return;
+        // The same key the rail shows: a tool's belt place, or the first free key for one held in hand.
+        const tool = hotbarSlots(walk!.store.items()).find(slot => slot.key === index + 1)?.item;
+        if (!tool) return;
+        walk!.select(slots.equippedTool() === 'rod' && walk!.controller.state().rod?.id === tool.id ? null : tool.id);
+      } })),
     slots.registerWorldPrompt({ id: 'pier.rack',
       prompt(pose) {
         const state = walk?.controller.state(), rack = state?.rack;
@@ -315,6 +387,17 @@ export function registerPierInPlay(slots: PierPlaySlots, views: PierViews = VIEW
         return near ? { label: 'Read the Almanac', at: lectern as Vec3 } : null;
       },
       use(ctx) { if (walking(ctx)) walk!.openAlmanac(); } }),
+    slots.registerWorldPrompt({ id: 'pier.shelf',
+      prompt(pose) {
+        offered = walk?.shelf ? nearestDoor(walk.shelf, pose) : null;
+        if (!offered) return null;
+        return { label: offered.mine ? 'Your shelf' : offered.name ? `${offered.name}’s shelf` : 'A neighbour’s shelf', at: offered.at };
+      },
+      use(ctx) {
+        const door = offered;
+        if (!walking(ctx) || !door) return;
+        if (door.mine) walk!.openShelf(); else walk!.visitShelf(door.plotId);
+      } }),
   ];
   return () => { for (const stop of stops.reverse()) stop(); walk?.dispose(); walk = null; };
 }

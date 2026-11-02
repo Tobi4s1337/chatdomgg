@@ -192,7 +192,7 @@ describe('separate Forge chat permission', () => {
     const wrong = await service.callback({ ...principal, sessionId: '00000000-0000-4000-8000-000000000099' }, query, async () => true).catch(error => error);
     expect(typeof wrong === 'string' ? wrong : wrong.code).toMatch(/expired|forbidden/u);
     expect(fetcher).not.toHaveBeenCalled();
-    expect(await service.callback(principal, query, async () => true)).toContain(`/kingdom/${kingdomId}`);
+    expect(await service.callback(principal, query, async () => true)).toBe(`/?walk=1&kingdom=${kingdomId}&forgeChat=connected`);
     expect(store.grants.get(personId)?.accessToken).toBe('SIMULATED-rotated-access');
     const used = await service.callback(principal, query, async () => true).catch(error => error);
     expect(typeof used === 'string' ? used : used.code).toMatch(/expired|forbidden/u);

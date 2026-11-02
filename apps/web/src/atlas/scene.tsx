@@ -6,7 +6,7 @@ import { AtlasChannelSchema, type AtlasChannel } from '@chatdom/shared';
 import type { AtlasTravelStage } from '../raid-gate/ports';
 import { fetchBusiest, fetchChannelRoads, fetchFinder, fetchRoadStory, type BusyRoad, type CaravanRaid, type ChannelRoads, type FinderEntry, type FinderReply, type MapPoint, type RoadStory } from './data/roads';
 import type { AtlasRaid, KingdomId } from '../../../api/src/raid-gate/contracts';
-import { AtlasRoadsLayer, type InkRoad, type JourneyStage } from './road/atlas-roads';
+import type { AtlasRoadsLayer, InkRoad, JourneyStage } from './road/atlas-roads';
 import { FinderBoard, type FinderState } from './gate/FinderBoard';
 import { selectable } from './gate/select';
 import { LedgerRoads, RoadStoryCard } from './ui/Roads';
@@ -14,6 +14,7 @@ import { LatestRequest, savedView } from './saved-view';
 import type { HistoryLike } from './ui/history';
 import { adoptPreview, loadPreview, type LoadedPreview } from './data/load';
 import { dabHashOf, DirectoryError, fetchCard, type CardReply, type CardRoad, type ChannelFace, type Lookup, type PencilPosition, type SearchResult } from './data/directory';
+import { findOpenKingdom } from './data/open-kingdoms';
 import { decodeRings, geographyOf, labelWorld, SettlerStore, type Geography, type Ring, type Settler } from './data/model';
 import { fetchChunk, fetchNames, type PreviewSource } from './data/preview';
 import { atlasFailureState, mountAtlasWithRetry } from './recovery';
@@ -21,7 +22,9 @@ import { LiveFeed, type LiveStatus } from './live/feed';
 import { LivePaint, type Dab } from './live/paint';
 import { DISTANCE_STOP, MAX_SCALE, type Distance, type Insets, type Viewport } from './map/camera';
 import type { CameraState } from './map/motion';
-import { MapView, type MapStats } from './map/view';
+import type { TileKey } from './map/pyramid';
+import type { TileImage } from './map/tiles';
+import type { MapStats, MapView } from './map/view';
 import { Still } from './still/Still';
 import { stillView } from './still/compose';
 import { Card, type NamesState } from './ui/Card';
@@ -39,6 +42,8 @@ import { DabCard, type LiveSummary } from './ui/Live';
 import { faceName, WaitingCard, type RegisterState } from './ui/Register';
 import { formatRoute, parseRoute, type AtlasRoute } from './ui/route';
 import { Search } from './ui/Search';
+import { ownerAct, OwnerActError, ownSearchRow, readOwner, type OwnerState } from './data/owner';
+import { OwnerCard, OwnerLine, type OwnerPress } from './ui/Owner';
 
 type State = 'loading' | 'ready' | 'still' | 'empty' | 'unavailable' | 'invalid' | 'unsupported';
 
@@ -60,6 +65,8 @@ const FOLLOW_WAIT_MS = 120_000;
 
 /** Open maps re-read the names projection this often, so withholding and refreshed names reach them. */
 const NAMES_REFRESH_MS = 5 * 60_000;
+/** The whole names projection is asked for again this soon when it failed after the head arrived. */
+const NAMES_RETRY_MS = 30_000;
 /** The first view waits this long at most for the live paint; the land never waits on it longer. */
 const LIVE_WAIT_MS = 4_000;
 const FACES = ['16px "IM Fell English"', 'italic 16px "IM Fell English"', '16px "IM Fell English SC"', '16px "Alegreya"', 'italic 16px "Alegreya"'];
@@ -89,6 +96,20 @@ async function loadFaces(signal: AbortSignal): Promise<void> {
     void Promise.all(FACES.map(face => document.fonts.load(face, 'Atlas Кириллица'))).then(finish, finish);
   });
 }
+
+type Engine = typeof import('./map/engine');
+let engine: Promise<Engine> | null = null;
+let engineModule: Engine | null = null;
+/** The moving map's code, asked for once per page and only after a first frame is up; a failed read is asked again. */
+function loadEngine(): Promise<Engine> {
+  engine ??= import('./map/engine').then((module) => (engineModule = module), (error: unknown) => {
+    engine = null;
+    throw error;
+  });
+  return engine;
+}
+/** The moving map waits this long at most for the still before it starts on its own. */
+const STILL_FIRST_MS = 8_000;
 
 function webglAvailable(): boolean {
   try {
@@ -237,7 +258,16 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   let pendingRoute: { route: AtlasRoute; adopted: boolean } | null = null;
   /** The view the page asked to start at (a return from sign-in), used once by the first revision drawn. */
   let startView: unknown = props.options.view ?? null;
-  const anyOpen = () => !!selected() || !!selectedDab() || !!waiting() || !!road();
+  /**
+   * The signed-in broadcaster's own channel (decision 39), read once the explore map is drawn. `ownerOpen` is the card
+   * only they see while their channel is hidden; `ownerHeldBack` is set when they showed it again yet the map still
+   * does not (the operator's list wins, and the card says only that it stays off the map for now).
+   */
+  const [owner, setOwner] = createSignal<OwnerState | null>(null);
+  const [ownerPress, setOwnerPress] = createSignal<OwnerPress>('idle');
+  const [ownerOpen, setOwnerOpen] = createSignal(false);
+  const [ownerHeldBack, setOwnerHeldBack] = createSignal(false);
+  const anyOpen = () => !!selected() || !!selectedDab() || !!waiting() || !!road() || ownerOpen();
 
   const settle = () => { if (!disposed) props.ready(state() === 'ready' ? 'map' : state() === 'still' ? 'still' : 'failed'); };
 
@@ -299,6 +329,9 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       setWaitingPosition(null);
       setRoad(null);
       setChannelRoads(null);
+      setOwnerOpen(false);
+      setOwnerHeldBack(false);
+      setOwnerPress('idle');
     });
     roadsController?.abort();
     roadsController = null;
@@ -317,7 +350,8 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   /** A new map gets its own roads layer, with the network, the open card's roads and the gate's journey drawn again. */
   const attachRoads = (target: MapView) => {
     dropRoads(target);
-    const layer = new AtlasRoadsLayer(target.resolution, Date.now, reduceMotion, worldSpan());
+    // A map exists only once the engine is in, so its roads layer is always at hand here.
+    const layer = new engineModule!.AtlasRoadsLayer(target.resolution, Date.now, reduceMotion, worldSpan());
     layer.setNetwork(networkRoads);
     target.attachLayer(layer);
     roadsLayer = layer;
@@ -565,7 +599,99 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
 
   const openSearchResult = (result: SearchResult) => {
     if (mode() !== 'hero' && visible()) materialSound.play('wax');
+    const own = owner();
+    if (own?.status === 'broadcaster' && own.hidden && own.channelId === result.channel.id) return openOwnerCard();
     void openFace(result.channel, result.position);
+  };
+
+  /** The broadcaster's own hidden channel: its card, standing where its land or pencil place is. */
+  const openOwnerCard = (fly = true) => {
+    const own = owner();
+    if (own?.status !== 'broadcaster') return;
+    clearCards();
+    opening(own.channelId);
+    setOwnerOpen(true);
+    const settler = store?.byId.get(own.channelId);
+    const point = settler ?? own.card?.position ?? null;
+    if (fly && point && view) view.flyTo(point.x, point.y, Math.max(view.cameraState().scale, DISTANCE_STOP.realm));
+  };
+
+  /** Read who is signed in, once per drawn explore map. Every failure leaves the cards without an owner line. */
+  let ownerAsked: { worldId: string; answer: Promise<OwnerState | null> } | null = null;
+  const askOwner = (worldId: string, signal: AbortSignal): Promise<OwnerState | null> => {
+    if (ownerAsked?.worldId === worldId) return ownerAsked.answer;
+    const answer = readOwner(worldId, signal).then((state) => {
+      if (signal.aborted || loaded()?.world.id !== worldId) return null;
+      setOwner(state);
+      return state;
+    }, () => null);
+    ownerAsked = { worldId, answer };
+    return answer;
+  };
+
+  /** Read the names projection again now (a hide, a show, or the service saying the withheld set changed). */
+  let namesNow: (() => Promise<void>) | null = null;
+  let namesSoon: ReturnType<typeof setTimeout> | undefined;
+  const refreshNamesSoon = () => {
+    clearTimeout(namesSoon);
+    namesSoon = setTimeout(() => void namesNow?.(), 250);
+  };
+
+  /** The owner pressed "Hide my channel": recorded by the Atlas first, then the map lets it go at once. */
+  const hideOwn = async () => {
+    const own = owner();
+    const world = loaded()?.world;
+    if (own?.status !== 'broadcaster' || own.hidden || !world || ownerPress() === 'busy') return;
+    const cardNow = (() => { const known = register(); return known.status === 'ready' && known.reply.channel.id === own.channelId ? known.reply : null; })();
+    setOwnerPress('busy');
+    try {
+      const next = await ownerAct('hide', own, world.id, controller?.signal);
+      if (disposed) return;
+      batch(() => {
+        setOwner({ ...next, card: cardNow });
+        openOwnerCard(false);
+      });
+      materialSound.play('wax');
+      await namesNow?.();
+      // The card the map would draw without the hide, fresh from the Atlas (its portrait and place).
+      const fresh = await readOwner(world.id, controller?.signal);
+      if (!disposed && fresh.status === 'broadcaster' && fresh.channelId === own.channelId) setOwner(fresh.card ? fresh : { ...fresh, card: cardNow });
+    } catch (error) {
+      if ((error as Error).name === 'AbortError' || disposed) return;
+      setOwnerPress(error instanceof OwnerActError && error.reason === 'signed-out' ? 'signed-out' : 'failed');
+    }
+  };
+
+  /** "Show my channel": recorded, the names read again, and its own public card opens where it stands. */
+  const showOwn = async () => {
+    const own = owner();
+    const world = loaded()?.world;
+    if (own?.status !== 'broadcaster' || !own.hidden || !world || ownerPress() === 'busy') return;
+    setOwnerPress('busy');
+    try {
+      const next = await ownerAct('show', own, world.id, controller?.signal);
+      if (disposed) return;
+      setOwner(next);
+      await namesNow?.();
+      if (disposed) return;
+      if (!next.onMap) {
+        batch(() => { setOwnerPress('idle'); setOwnerHeldBack(true); });
+        return;
+      }
+      setOwnerOpen(false);
+      setOwnerPress('idle');
+      if (!await flyTo({ channelId: own.channelId }, { openCard: true })) closeCard();
+    } catch (error) {
+      if ((error as Error).name === 'AbortError' || disposed) return;
+      setOwnerPress(error instanceof OwnerActError && error.reason === 'signed-out' ? 'signed-out' : 'failed');
+    }
+  };
+
+  /** The owner line, only on the signed-in broadcaster's own shown card. */
+  const ownerLine = (id: string) => () => {
+    const own = owner();
+    if (own?.status !== 'broadcaster' || own.hidden || own.channelId !== id) return null;
+    return <OwnerLine press={ownerPress()} onHide={() => void hideOwn()} />;
   };
 
   /** Whether a search result is on air in the frame shown now (its holding's class, or its pencil flag). */
@@ -648,6 +774,20 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       } catch (error) {
         if ((error as Error).name === 'AbortError') return;
         if (error instanceof DirectoryError && error.reason === 'not-found') {
+          // The owner of a channel they hid comes back to it by its address too.
+          const world = loaded()?.world;
+          const own = mode() === 'explore' && world && controller ? await askOwner(world.id, controller.signal) : null;
+          if (ownSearchRow(own, route.login)?.channel.login === route.login) {
+            if (adopted) history.closed();
+            openOwnerCard();
+            return;
+          }
+          // A kingdom chatdom.io opens is entered even before the survey draws it on the map.
+          const kingdom = await findOpenKingdom(route.login);
+          if (kingdom) return drop(`${kingdom.name}, ${kingdom.login}’s kingdom, is not drawn on the map yet.`, {
+            label: `Enter ${kingdom.name}`,
+            run: () => location.assign(`/kingdom/${encodeURIComponent(kingdom.kingdomId)}`),
+          });
           drop(`“${route.login}” is not on the map yet.`, {
             label: 'Look on Twitch',
             run: () => { const url = watchUrl(route.login); if (url) window.open(url, '_blank', 'noopener,noreferrer'); },
@@ -715,24 +855,41 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     }, Math.min(2_147_000_000, Math.max(1_000, next - Date.now() + 50)));
   };
 
-  /** Read the names projection; a failure keeps the names already held (they still expire on time). */
-  async function readNames(target: SettlerStore, worldId: string, signal: AbortSignal): Promise<void> {
+  /**
+   * Read the names projection; a failure keeps the names already held (they still expire on time). The first read
+   * of a map takes only the head part (the capitals' and cities' names and every withheld id, ~6% of the whole), so
+   * the first frame never waits on a village's name; the whole follows at once. A head that fails falls back to the
+   * whole, and a service that answers the whole to a head request has simply named everything.
+   */
+  async function readNames(target: SettlerStore, worldId: string, signal: AbortSignal, first = false): Promise<void> {
     clearTimeout(namesTimer);
+    namesNow = () => (store === target && !signal.aborted ? readNames(target, worldId, signal) : Promise.resolve());
+    let whole = !first;
     try {
-      target.applyNames(await fetchNames(SOURCE, { id: worldId }, signal));
+      const served = await fetchNames(SOURCE, { id: worldId }, signal, first ? 'head' : 'all');
+      if (first && served.ids.length > target.headSize) whole = true;
+      target.applyNames(served, whole);
       if (signal.aborted || store !== target) return;
-      setNames('ready');
+      if (target.namedWhole) setNames('ready');
       if (notice()?.text.startsWith('Channel names')) setNotice(null);
     } catch (error) {
       if (signal.aborted || (error as Error).name === 'AbortError' || store !== target) return;
-      if (!target.named) {
+      if (first) return readNames(target, worldId, signal);
+      if (!target.namedWhole) {
         setNames('failed');
-        setNotice({ text: 'Channel names could not be read. The land and each channel’s arms are drawn; names return when the Atlas service answers.' });
+        if (!target.named) setNotice({ text: 'Channel names could not be read. The land and each channel’s arms are drawn; names return when the Atlas service answers.' });
       }
     }
     scheduleExpiry(target);
     namesChanged();
-    namesTimer = setTimeout(() => void readNames(target, worldId, signal), NAMES_REFRESH_MS);
+    if (!whole) {
+      // The head is drawn; the rest of the names follow once the first frame is up, never competing with it.
+      void firstFrame.then(() => {
+        if (!signal.aborted && store === target) void readNames(target, worldId, signal);
+      });
+      return;
+    }
+    namesTimer = setTimeout(() => void readNames(target, worldId, signal), target.namedWhole ? NAMES_REFRESH_MS : NAMES_RETRY_MS);
   }
 
   const stopLive = () => {
@@ -773,7 +930,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       }
       setLive({ status, holdings: livePaint.liveCount, dabs: livePaint.dabs.length });
       if (frame || status.refused || status.source) settled();
-    }, { onRaid: (raid) => { if (feed === liveFeed) rideCaravan(raid); } });
+    }, { onRaid: (raid) => { if (feed === liveFeed) rideCaravan(raid); }, onNames: () => { if (feed === liveFeed) refreshNamesSoon(); } });
     feed = liveFeed;
     paint = livePaint;
     view?.setLive(livePaint);
@@ -843,7 +1000,18 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     setNames('loading');
     try {
       let still = noWebgl;
-      const [preview] = await Promise.all([loadPreview(SOURCE, sessionStore(), signal), loadFaces(signal).catch(error => console.error('Atlas lettering could not load', error))]);
+      // The still waits for its own faces before lettering; the moving map waits for them below. Neither holds the land.
+      const faces = loadFaces(signal).catch(error => console.error('Atlas lettering could not load', error));
+      // The first frame is the still, drawn from the world head alone; the moving map is built only once it is up.
+      let stillFirst: () => void = () => undefined;
+      const stillShown = new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, STILL_FIRST_MS);
+        stillFirst = () => { clearTimeout(timer); resolve(); };
+        signal.addEventListener('abort', stillFirst, { once: true });
+      });
+      stillUp = stillFirst;
+      firstFrame = stillShown;
+      const preview = await loadPreview(SOURCE, sessionStore(), signal);
       if (signal.aborted) return;
       const world = labelWorld(preview.world);
       const holdings = new SettlerStore(world);
@@ -858,7 +1026,8 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       // A saved view is honoured once, and only by the revision it was taken on.
       const resumed = savedView(startView, world.id);
       startView = null;
-      // Names travel beside the land: the first view waits for both (or for the names to fail on their own).
+      // Names travel beside the land: the first view waits for the head of the names (the capitals' and cities',
+      // every withheld id) or for them to fail on their own; the villages' names follow after the first frame.
       let mapDrawn = false;
       let namesSettled = false;
       // The first view also waits briefly for the live paint, so it does not arrive as a flash after the reveal.
@@ -878,7 +1047,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         else if (resumed?.selected && mode() === 'explore') void openSaved(resumed.selected, signal);
         else if (!resumed && props.options.focus) void flyTo(props.options.focus, { openCard: mode() === 'explore' });
       };
-      void readNames(holdings, world.id, signal).then(() => {
+      void readNames(holdings, world.id, signal, true).then(() => {
         namesSettled = true;
         reveal();
       });
@@ -908,7 +1077,9 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         return;
       }
       if (!host) return;
-      const mount = async (initial: CameraState | null) => MapView.create(host!, {
+      await Promise.all([stillShown, faces]);
+      if (signal.aborted) return;
+      const mount = async (initial: CameraState | null) => (await loadEngine()).MapView.create(host!, {
         world,
         geo: geography,
         store: holdings,
@@ -939,7 +1110,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
           else if (next === 'restored') setContext('ok');
           else if (view) void rebuild?.(view.cameraState());
         },
-      }, chromeInsets, initial, { interactive: mode() !== 'hero', wheel: activated(), hero: mode() === 'hero', signal });
+      }, chromeInsets, initial, { interactive: mode() !== 'hero', wheel: activated(), hero: mode() === 'hero', signal, seed: () => stillTiles?.() ?? Promise.resolve([]) });
       const mounted = await mountAtlasWithRetry(() => mount(resumed?.camera ?? null), error => console.error('Atlas renderer could not mount', error));
       if (signal.aborted) { mounted?.dispose(); return; }
       view = mounted;
@@ -1003,6 +1174,12 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   }
 
   let stillReady: () => void = () => undefined;
+  /** Settles once the current start's first frame is up (or after STILL_FIRST_MS); later reads wait for it. */
+  let firstFrame: Promise<void> = Promise.resolve();
+  /** Told when the still of the current start has drawn its first frame. */
+  let stillUp: () => void = () => undefined;
+  /** Copies of the still's baked land, for the moving map that follows it (null without a still). */
+  let stillTiles: (() => Promise<{ key: TileKey; image: TileImage }[]>) | null = null;
 
   const noticeNewer = (preview: LoadedPreview) => {
     if (!preview.newer) return;
@@ -1340,6 +1517,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     clearTimeout(liveWait);
     clearTimeout(backdropTimer);
     clearTimeout(namesTimer);
+    clearTimeout(namesSoon);
     clearTimeout(expiryTimer);
     registerController?.abort();
     stopLive();
@@ -1370,6 +1548,11 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     return w ? new Date(w.asOf).toISOString() : undefined;
   };
   const drawn = () => state() === 'ready' || state() === 'still';
+  // Only the full Atlas asks who is signed in, and only after its first frame: hero and gate never ask.
+  createEffect(() => {
+    const world = loaded()?.world;
+    if (mode() === 'explore' && drawn() && world && controller) askOwner(world.id, controller.signal);
+  });
 
   /** Without WebGL the still stands in for the map; once it is drawn, the page's notice hangs from its ribbon. */
   const stillMode = createMemo(() => state() === 'still' || backdrop());
@@ -1431,7 +1614,8 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
             liveTick={liveTick()}
             selected={selected()}
             onSelect={(settler) => choose(settler)}
-            onReady={() => { setStillDrawn(true); if (!noWebgl && state() === 'loading') props.ready('still'); stillReady(); }}
+            onReady={() => { setStillDrawn(true); if (!noWebgl && state() === 'loading') props.ready('still'); stillReady(); stillUp(); }}
+            shareTiles={(copy) => { stillTiles = copy; }}
             loadChunk={(region) => loadChunk(region)}
             onView={(next) => {
               setScale(next.scale);
@@ -1460,7 +1644,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
             <Show when={mode() === 'explore'}>
               <Cartouche world={w()} seal={<SurveySeal world={w()} summary={live()} still={state() === 'still'} />}>
                 <Show when={drawn()}>
-                  <Search keyboardRoot={root!} source={SOURCE} world={w()} onAir={onAirResult} onChoose={openSearchResult} />
+                  <Search keyboardRoot={root!} source={SOURCE} world={w()} onAir={onAirResult} onChoose={openSearchResult} own={(query) => ownSearchRow(owner(), query)} />
                 </Show>
               </Cartouche>
             </Show>
@@ -1526,6 +1710,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                   ledger={ledgerView}
                   onRetry={() => readRegister({ id: settler.id }, settler.id)}
                   onEnter={enter}
+                  owner={ownerLine(settler.id)}
                 />
               )}
             </Show>
@@ -1551,6 +1736,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                       onRoad={(next) => openCardRoad(known.reply.channel, next)}
                       ledger={ledgerView}
                       onRetry={() => readRegister({ dab: dab.hash }, `dab:${dab.hash}`)}
+                      owner={ownerLine(known.reply.channel.id)}
                     />
                   )}
                 </Show>
@@ -1569,6 +1755,20 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                   onRoad={(next) => openCardRoad(face, next)}
                   ledger={ledgerView}
                   onRetry={() => readRegister({ id: face.id }, `waiting:${face.id}`)}
+                  owner={ownerLine(face.id)}
+                />
+              )}
+            </Show>
+            <Show when={ownerOpen() && owner()?.status === 'broadcaster' ? owner() as Extract<OwnerState, { status: 'broadcaster' }> : null}>
+              {(own) => (
+                <OwnerCard
+                  card={own().card}
+                  channelId={own().channelId}
+                  world={w()}
+                  heldBack={ownerHeldBack()}
+                  press={ownerPress()}
+                  onShow={() => void showOwn()}
+                  onClose={closeCard}
                 />
               )}
             </Show>

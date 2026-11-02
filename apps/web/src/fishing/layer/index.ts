@@ -4,7 +4,7 @@ import { createVoxelMaterial, geometryFromChunks, getEnvironment, windowGlowForH
 import { VoxelWorkerPool } from '@chatdom/voxel';
 import type { FishingCaughtFish, FishingMood, FishingPierSite, Vec3, VoxelAsset } from '@chatdom/shared';
 import { createFishModel, FISH_SPECIES } from '../../../../../packages/content/src/fish';
-import { createWillowRod } from '../../../../../packages/content/src/pier/rod';
+import { createRodNotch, createRodRibbon, createWillowRod, ROD_NOTCH_CELLS, type RodMarks } from '../../../../../packages/content/src/pier/rod';
 import { createPierFloat } from '../../../../../packages/content/src/pier/float';
 import { formatLength, formatWeight } from '../../bag/words';
 import type { FishingController, FishingEvent } from '../controller';
@@ -124,16 +124,20 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
   const material = createVoxelMaterial(MATERIALS, 'avatar');
   const rodModel = createWillowRod(), floatModel = createPierFloat();
   const disposers: (() => void)[] = [];
-  let rods: THREE.InstancedMesh[] = [], floats: THREE.InstancedMesh;
+  let rods: THREE.InstancedMesh[] = [], floats: THREE.InstancedMesh, notches: THREE.InstancedMesh, ribbons: THREE.InstancedMesh;
   try {
-    const geometries = await Promise.all([...SEGMENTS.map(([a, b], index) => mesh(pool, sliceAsset(rodModel.asset, index ? a - 1 : a, b, `pier:rod.${index}`))), mesh(pool, floatModel.asset)]);
+    const geometries = await Promise.all([...SEGMENTS.map(([a, b], index) => mesh(pool, sliceAsset(rodModel.asset, index ? a - 1 : a, b, `pier:rod.${index}`))), mesh(pool, floatModel.asset),
+      mesh(pool, createRodNotch()), mesh(pool, createRodRibbon())]);
     rods = geometries.slice(0, 3).map((geometry, index) => instanced(geometry, material.material, MAX_FISHERS, `pier-rod-${index}`));
     floats = instanced(geometries[3]!, material.material, MAX_FISHERS, 'pier-floats');
+    // A rod's history: one pale notch per ten fish and a legend's ribbon, drawn on every rod in two draws.
+    notches = instanced(geometries[4]!, material.material, MAX_FISHERS * ROD_NOTCH_CELLS.length, 'pier-rod-notches');
+    ribbons = instanced(geometries[5]!, material.material, MAX_FISHERS, 'pier-rod-ribbons');
     for (const geometry of geometries) disposers.push(() => geometry.dispose());
   } catch (error) { pool.dispose(); material.dispose(); throw error; }
   const root = new THREE.Group(); root.name = 'pier-layer';
   for (const rod of rods) root.add(rod);
-  root.add(floats);
+  root.add(floats, notches, ribbons);
   // One buffer for every line: LINE_POINTS - 1 segments per fisher.
   const linePositions = new Float32Array(MAX_FISHERS * (LINE_POINTS - 1) * 2 * 3);
   const lineGeometry = new THREE.BufferGeometry();
@@ -191,7 +195,7 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
   const temp = { matrix: new THREE.Matrix4(), rotation: new THREE.Quaternion(), bend: new THREE.Quaternion(), yaw: new THREE.Quaternion(),
     axisX: new THREE.Vector3(1, 0, 0), axisY: new THREE.Vector3(0, 1, 0), point: new THREE.Vector3(), offset: new THREE.Vector3(), scale: new THREE.Vector3(1, 1, 1),
     pivot: new THREE.Vector3(), centre: new THREE.Matrix4(), project: new THREE.Vector3(), line: [0, 0, 0] as Vec, pose: { pitch: 0, bend: 0, shake: 0 },
-    hand: new THREE.Matrix4(), handQ: new THREE.Quaternion(), handP: new THREE.Vector3(), fishQ: new THREE.Quaternion(), euler: new THREE.Euler() };
+    notch: new THREE.Matrix4(), hand: new THREE.Matrix4(), handQ: new THREE.Quaternion(), handP: new THREE.Vector3(), fishQ: new THREE.Quaternion(), euler: new THREE.Euler() };
 
   const fisher = (id: string, create: boolean): Fisher | null => {
     const at = index.get(id);
@@ -357,7 +361,15 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
     }
   };
 
-  const writeRod = (entry: Fisher, slot: number) => {
+  let notchCount = 0, ribbonCount = 0;
+  const NO_MARKS: RodMarks = { notches: 0, ribbon: false };
+  const marksFor = (entry: Fisher, state: ReturnType<FishingController['state']> | null): RodMarks => {
+    if (!state) return NO_MARKS;
+    // Your own rod follows your history the moment a catch is kept; others' rods follow what the pier shows of them.
+    if (entry.self && state.history) return { notches: state.history.notches, ribbon: !!state.history.legend };
+    return state.rodMarks.get(entry.id) ?? NO_MARKS;
+  };
+  const writeRod = (entry: Fisher, slot: number, marks: RodMarks) => {
     const pose = rodPose(entry.phase, now - entry.since, now, { tension: entry.tension, progress: entry.progress, run: entry.run > .5, tired: entry.tired, reeling: entry.reeling },
       now - entry.since, temp.pose);
     const shake = pose.shake * Math.sin(now * 113 + entry.seed);
@@ -386,6 +398,13 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
       temp.centre.makeTranslation(-GRIP[0] * CELL, -anchor * CELL, -GRIP[2] * CELL);
       temp.matrix.compose(temp.pivot, temp.rotation, temp.scale).multiply(temp.centre);
       rods[segment]!.setMatrixAt(slot, temp.matrix);
+      // The ribbon is tied just under the foregrip joint and the notches are cut into the foregrip: both ride their segment.
+      if (segment === 0 && marks.ribbon) ribbons.setMatrixAt(ribbonCount++, temp.matrix);
+      if (segment === 1) for (let notch = 0; notch < Math.min(marks.notches ?? 0, ROD_NOTCH_CELLS.length); notch++) {
+        const [x, y, z] = ROD_NOTCH_CELLS[notch]!;
+        temp.notch.copy(temp.matrix).multiply(temp.centre.makeTranslation(x * CELL, y * CELL, z * CELL));
+        notches.setMatrixAt(notchCount++, temp.notch);
+      }
       y0 = segment === 0 ? GRIP[1] : from;
       if (segment === 2) {
         temp.offset.set((TIP[0] - GRIP[0]) * CELL, (TIP[1] - from) * CELL, (TIP[2] - GRIP[2]) * CELL).applyQuaternion(temp.rotation);
@@ -477,7 +496,7 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
       entry.position[0] = walker.position[0]; entry.position[1] = walker.position[1]; entry.position[2] = walker.position[2]; entry.yaw = walker.yaw;
     }
     let rodCount = 0, floatCount = 0, lineSegments = 0, shadowCount = 0;
-    active = 0;
+    notchCount = 0; ribbonCount = 0; active = 0;
     for (const entry of fishers) {
       if (!entry.used) continue;
       if (!entry.posed) { release(entry); continue; }
@@ -493,7 +512,7 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
       entry.deck[0] = entry.position[0] + Math.sin(entry.yaw) * LAND_AHEAD + entry.right[0] * entry.landSide * LAND_ACROSS; entry.deck[1] = site.deckY + .1;
       entry.deck[2] = entry.position[2] + Math.cos(entry.yaw) * LAND_AHEAD + entry.right[2] * entry.landSide * LAND_ACROSS;
       entry.near[0] = entry.position[0] + Math.sin(entry.yaw) * 2.2; entry.near[1] = waterY; entry.near[2] = entry.position[2] + Math.cos(entry.yaw) * 2.2;
-      writeRod(entry, rodCount++);
+      writeRod(entry, rodCount++, marksFor(entry, state));
       if (entry.phase === 'fighting' || entry.phase === 'hauling') {
         fishPath(now, entry.seed, entry.target, entry.near, entry.right, entry.phase === 'hauling' ? 1 : entry.progress, entry.run, waterY, entry.fishAt);
         const mx = entry.fishAt[0] - entry.fishPrev[0], mz = entry.fishAt[2] - entry.fishPrev[2];
@@ -551,6 +570,8 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
     for (const entry of fishers) if (entry.used && entry.slot >= 0) writeFish(entry);
     for (const rod of rods) { rod.count = rodCount; if (rodCount) rod.instanceMatrix.needsUpdate = true; }
     floats.count = floatCount; if (floatCount) floats.instanceMatrix.needsUpdate = true;
+    notches.count = notchCount; if (notchCount) notches.instanceMatrix.needsUpdate = true;
+    ribbons.count = ribbonCount; if (ribbonCount) ribbons.instanceMatrix.needsUpdate = true;
     shadows.show(shadowCount);
     lineGeometry.setDrawRange(0, lineSegments * 2); if (lineSegments) { lineAttribute.needsUpdate = true; lineAttribute.clearUpdateRanges(); lineAttribute.addUpdateRange(0, lineSegments * 6); }
     // The person's own fight and hint, and the pier bed.
@@ -596,6 +617,8 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
     draws = 0; triangles = 0;
     for (const rod of rods) if (rod.count) { draws++; triangles += (rod.geometry.index?.count ?? 0) / 3 * rod.count; }
     if (floatCount) { draws++; triangles += (floats.geometry.index?.count ?? 0) / 3 * floatCount; }
+    if (notchCount) { draws++; triangles += (notches.geometry.index?.count ?? 0) / 3 * notchCount; }
+    if (ribbonCount) { draws++; triangles += (ribbons.geometry.index?.count ?? 0) / 3 * ribbonCount; }
     if (lineSegments) draws++;
     if (shadowCount) { draws++; triangles += shadowCount * 2; }
     draws += (rings.mesh.visible ? 1 : 0) + (droplets.points.visible ? 1 : 0) + (mist.mesh.visible ? 1 : 0) + (host.lights.length ? 1 : 0);
@@ -624,7 +647,7 @@ export async function mountPierLayer(host: PierLayerHost): Promise<PierLayer> {
       if (disposed) return;
       disposed = true; unsubscribe(); host.scene.remove(root);
       for (const rod of rods) rod.dispose();
-      floats.dispose(); lineGeometry.dispose(); lineMaterial.dispose(); rings.dispose(); droplets.dispose(); mist.dispose(); shadows.dispose(); glow.dispose();
+      floats.dispose(); notches.dispose(); ribbons.dispose(); lineGeometry.dispose(); lineMaterial.dispose(); rings.dispose(); droplets.dispose(); mist.dispose(); shadows.dispose(); glow.dispose();
       for (const holder of fishMeshes) holder.object.geometry = new THREE.BufferGeometry();
       for (const dispose of disposers) dispose();
       material.dispose(); pool.dispose();

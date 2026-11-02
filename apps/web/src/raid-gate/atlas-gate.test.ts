@@ -142,4 +142,51 @@ describe('deferGateAtlas', () => {
     expect(attempts).toBe(2);
     expect(fake.calls).toEqual([`open:${SOURCE}`]);
   });
+
+  it('warms the map ahead of need without opening anything, once, and tells how far it got', async () => {
+    const fake = fakeGate();
+    const dispose = vi.fn();
+    let drawn!: (state: 'map' | 'still' | 'failed') => void;
+    const ready = new Promise<'map' | 'still' | 'failed'>(resolve => { drawn = resolve; });
+    const mountAtlas = vi.fn(() => ({ gate: fake.gate, ready, dispose }));
+    const modules: GateAtlasModules = { [EMBED]: async () => ({ mountAtlas }) };
+    const life = new AbortController();
+    const heard: string[] = [];
+    const host = deferGateAtlas(() => el, life.signal, modules, { onReady: state => heard.push(state) })!;
+    host.warm();
+    host.warm();
+    await flush();
+    expect(mountAtlas).toHaveBeenCalledTimes(1);
+    expect(fake.calls).toEqual([]);
+    expect(heard).toEqual([]);
+    drawn('still');
+    await flush();
+    expect(heard).toEqual(['still']);
+    host.travel?.({ kind: 'rise', ticket: 't', from: SOURCE, to: '22' as KingdomId, state: 'reserved' }, life.signal);
+    await flush();
+    expect(fake.calls).toEqual(['travel:rise']);
+  });
+
+  it('takes an embed that does not say how far it got as drawn, and says nothing once the walk ended', async () => {
+    const fake = fakeGate();
+    const atlas = embed(fake.gate);
+    const life = new AbortController();
+    const heard: string[] = [];
+    deferGateAtlas(() => el, life.signal, atlas.modules, { onReady: state => heard.push(state) })!.warm();
+    atlas.release();
+    await flush();
+    expect(heard).toEqual(['map']);
+
+    let drawn!: (state: 'map') => void;
+    const late = new Promise<'map'>(resolve => { drawn = resolve; });
+    const ended = new AbortController();
+    const quiet: string[] = [];
+    const modules: GateAtlasModules = { [EMBED]: async () => ({ mountAtlas: () => ({ gate: fakeGate().gate, ready: late, dispose: () => undefined }) }) };
+    deferGateAtlas(() => el, ended.signal, modules, { onReady: state => quiet.push(state) })!.warm();
+    await flush();
+    ended.abort();
+    drawn('map');
+    await flush();
+    expect(quiet).toEqual([]);
+  });
 });

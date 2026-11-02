@@ -33,7 +33,18 @@ database: one environment's locations never become application constants.
 | `SURVEYOR_HTTP_TIMEOUT_MS` | Per-request timeout (default 8000). Two attempts for a 5xx or timeout, none for a 4xx. |
 | `ATLAS_HOST`, `ATLAS_PORT` | Serve bind address, default `127.0.0.1:5193`. |
 | `ATLAS_LIVE_INTERVAL_MS` | How often `atlas:live` re-reads the source (default 30000, 5000–600000). |
+| `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` | The Twitch app for the search fallback's public reads (app token, never a user's). Without them search and cards answer from the survey only. Load them with `node --env-file`. |
+| `ATLAS_TRUST_LOOPBACK_PROXY` | `1` takes the visitor's address from `X-Forwarded-For` when the request comes from a loopback proxy (the public gateway). |
+| `ATLAS_LOOKUPS_PER_CLIENT_MINUTE` | Twitch lookups one client address may start per minute (default 6, 1–600). Behind a proxy that cannot name the visitor every visitor shares one address: raise it (60, the shared budget); the shared Twitch budget still bounds the service. |
+| `SURVEYOR_BASE_URL`, `SURVEYOR_DB_PATH` (serve) | The collector's live raid stream and recorder, read-only, for the road ledger. Without them roads come only from imports and the ingest. |
+| `ATLAS_RAID_FEED_URL` | Optional: raid-show's `/realm/raid-roads` feed, pulled into the road ledger. |
+| `ATLAS_INGEST_PORT`, `ATLAS_INGEST_HOST`, `ATLAS_INGEST_TOKEN` | Optional private listener (loopback by default) for road observations, claims and owner hide/show. |
 | `ATLAS_FOUNDER_PUBLIC_KEY` | The founder's Ed25519 public key (PEM text or a path to it). Without it no founding authorization can verify, so `found` refuses and `check` reports a founded edition as unverifiable. |
+
+Running it for chatdom.io: `scripts/atlas-live.sh seed | serve | wash | refresh | health [base]` (after a build) seeds a
+data directory read-only from another one, runs the service, the live producer and the 6-hourly import as restarting
+loops, and gates the switch on a health check that finds a channel outside the survey and never invents one. Defaults
+and steps: `work/lanes/atlas-map/SEAMS.md` "deploy:".
 
 ## What an import does
 

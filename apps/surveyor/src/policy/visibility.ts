@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { EpochMsSchema, KingdomIdSchema } from '@chatdom/shared';
 import { RAW_CONTENT_MAX_AGE_MS, type ChannelObservation } from '../export/schema';
+import { ownerHiddenReader, readOwnerHidden } from './owner-hide';
 
 /**
  * The one public-visibility gate (Spec 01 R16). Everything this service publishes about a channel (land, holding,
@@ -80,11 +81,44 @@ export const WithheldSchema = z.strictObject({
 export type Withheld = z.infer<typeof WithheldSchema>;
 
 export interface WithheldReader {
-  /** The current set. A file that cannot be read keeps the last good set; a first unreadable file withholds nothing but is reported. */
-  current(): { ids: ReadonlySet<string>; key: string; error: string | null };
+  /**
+   * The current set: the operator's withheld list and every channel its owner hid, as one set (published files never
+   * learn which). `operator` and `owner` are the two parts, for the private visibility reply only. A file that cannot
+   * be read keeps the last good set; a first unreadable file withholds nothing but is reported.
+   */
+  current(): { ids: ReadonlySet<string>; key: string; error: string | null; operator: ReadonlySet<string>; owner: ReadonlySet<string> };
 }
 
 export function withheldReader(dataDir: string): WithheldReader {
+  const operator = operatorReader(dataDir);
+  const owner = ownerHiddenReader(dataDir);
+  let cached: { key: string; ids: ReadonlySet<string> } | null = null;
+  return {
+    current() {
+      const op = operator.current();
+      const own = owner.current();
+      const key = `${op.key}${own.key}`;
+      if (cached?.key !== key) {
+        const ids = own.ids.size === 0 ? op.ids : op.ids.size === 0 ? own.ids : new Set([...op.ids, ...own.ids]);
+        cached = { key, ids };
+      }
+      return { ids: cached.ids, key, error: op.error ?? own.error, operator: op.ids, owner: own.ids };
+    },
+  };
+}
+
+/**
+ * The withheld set for one run that must never fall back to an earlier set (live paint, founding, settlement): the
+ * operator's list and the owners' hides, read once. Throws when either is unreadable.
+ */
+export function readWithheldIds(dataDir: string): ReadonlySet<string> {
+  const path = join(dataDir, WITHHELD_FILE);
+  const operator = existsSync(path) ? WithheldSchema.parse(JSON.parse(readFileSync(path, 'utf8'))).kingdomIds : [];
+  const owner = readOwnerHidden(dataDir);
+  return owner.size === 0 ? new Set(operator) : new Set([...operator, ...owner]);
+}
+
+function operatorReader(dataDir: string): { current(): { ids: ReadonlySet<string>; key: string; error: string | null } } {
   const path = join(dataDir, WITHHELD_FILE);
   let key = 'none';
   let ids: ReadonlySet<string> = EMPTY;

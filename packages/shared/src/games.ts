@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DisplayNameSchema, EpochMsSchema, KingdomIdSchema, TokenSchema, UIntSchema } from './identity';
+import { DisplayNameSchema, EpochMsSchema, KingdomIdSchema, PersonIdSchema, TokenSchema, TwitchLoginSchema, UIntSchema } from './identity';
 import { schema, t } from '@colyseus/schema';
 import { WalkerSchema } from './realm/schema';
 
@@ -196,3 +196,154 @@ export function createThresholdWatch(threshold: TavernThreshold): (feet: readonl
     return crossed;
   };
 }
+
+/*
+ * The campfire at night: Dusk Court (GA11). The fire lives in the kingdom room, beside its walkers and its logs.
+ * One of the seated circle is the Wolf, who snuffs a lantern each night; the circle has until the lanterns run out to
+ * find them. Public views carry only what everyone may know; a seat's own card and night taps go to that seat alone.
+ */
+export const DUSK_COURT = Object.freeze({
+  minPlayers: 4, maxPlayers: 10, secondWolfAt: 8, nights: 4,
+  /** After a round is asked for: the circle sees it coming and may still sit down or stand up. */
+  callMs: 10_000,
+  /** Everyone turns their own card. */
+  dealMs: 8_000,
+  nightMs: 30_000, dawnMs: 8_000, talkMs: 60_000, ballotMs: 20_000, verdictMs: 8_000,
+  /** With a Magistrate in the chair, the dawn, the verdict and the end of talk wait this much longer for their call. */
+  magistrateGraceMs: 20_000,
+  /** A player off their log keeps their place this long, then leaves the round. */
+  awayMs: 60_000,
+  /** The last word stays by the fire this long before the fire is free again. */
+  endMs: 30_000,
+});
+export const DUSK_COURT_ROLES = ['wolf', 'watchman', 'townsfolk'] as const;
+export type DuskCourtRole = typeof DUSK_COURT_ROLES[number];
+export const DUSK_COURT_PHASES = ['call', 'deal', 'night', 'dawn', 'talk', 'ballot', 'verdict', 'ended'] as const;
+export type DuskCourtPhase = typeof DUSK_COURT_PHASES[number];
+/** Log seats are numbered 1..12 around the ring; 0 is the Magistrate's chair, which never plays. */
+export const CAMPFIRE_SEATS = 12;
+const fireSeat = z.number().int().min(1).max(CAMPFIRE_SEATS);
+
+export interface DuskCourtPlayerView {
+  readonly seat: number;
+  /** The approved public name this person entered the kingdom with. */
+  readonly name: string;
+  /** lit: playing; snuffed: put out by the Wolf at night; sent: sent away by the ballot. Both dark ones watch, never vote. */
+  readonly lantern: 'lit' | 'snuffed' | 'sent';
+  /** Shown only for a dark lantern, or for everyone once the round has ended. */
+  readonly role: DuskCourtRole | null;
+  /** Off their log (a dropped connection, a restart); the place is held for `DUSK_COURT.awayMs`. */
+  readonly away: boolean;
+  /** Left the fire for good. Their card stays sealed until the end. */
+  readonly gone: boolean;
+  /** The Gallery's suspicion today, relative: 0 none, 3 the most. Advice only. */
+  readonly embers: 0 | 1 | 2 | 3;
+  /** During the ballot: has this seat cast its vote (never whom for). */
+  readonly voted: boolean;
+}
+export interface DuskCourtView {
+  readonly match: string;
+  readonly revision: number;
+  readonly phase: DuskCourtPhase;
+  /** 1..nights. */
+  readonly night: number;
+  readonly startedAt: number;
+  readonly deadline: number;
+  /** The clock has run out and the fire is waiting for the Magistrate's call (at most the grace). */
+  readonly waiting: boolean;
+  readonly wolves: 1 | 2;
+  readonly players: readonly DuskCourtPlayerView[];
+  /** The last dawn: whose lantern went out in the night, if anyone's. */
+  readonly dawn: { readonly night: number; readonly seat: number | null } | null;
+  /** The last verdict: who was sent away (null: a tie or no votes) and how many voted. */
+  readonly verdict: { readonly night: number; readonly seat: number | null; readonly tie: boolean; readonly votes: number } | null;
+  readonly result: { readonly winner: 'town' | 'wolves' | null; readonly reason: 'caught' | 'outnumbered' | 'lanterns' | 'left' } | null;
+}
+export interface CampfireFrame {
+  readonly at: number;
+  /** The installed clearing (`fire:<site>:seat:<n>` targets). */
+  readonly site: string;
+  /** Is the channel live now (the kingdom's own stream record)? Offline the fire keeps time on its own. */
+  readonly live: boolean;
+  /** The streamer's public name while they sit in the Magistrate's chair with the stream live. */
+  readonly magistrate: string | null;
+  /** Who sits on which log now, by approved public name. */
+  readonly seated: readonly { readonly seat: number; readonly name: string }[];
+  readonly court: DuskCourtView | null;
+}
+export interface CampfireSelf {
+  /** Your log, 0 for the Magistrate's chair, null when you are not sitting at this fire. */
+  readonly seat: number | null;
+  readonly magistrate: boolean;
+  /** You may ask the fire for a round now (seated, enough people, no round running). */
+  readonly canAsk: boolean;
+  /** You may call the next phase now (the Magistrate only). */
+  readonly canCall: boolean;
+  readonly match: string | null;
+  /** Your own card, once dealt. */
+  readonly role: DuskCourtRole | null;
+  /** Fellow Wolves' seats, for a Wolf only. */
+  readonly wolves: readonly number[];
+  /** The one choice open to you now: the Wolf's snuff and the Watchman's question at night, everyone's vote by day. */
+  readonly choice: { readonly kind: 'snuff' | 'watch' | 'vote'; readonly targets: readonly number[]; readonly chosen: number | null; readonly deadline: number } | null;
+  /** The Watchman's answers, for the Watchman only. */
+  readonly answers: readonly { readonly night: number; readonly seat: number; readonly wolf: boolean }[];
+}
+export const CampfireActSchema = z.discriminatedUnion('action', [
+  /** A seated player asks for a round; the Magistrate calls one. */
+  z.strictObject({ action: z.literal('ask'), id: TokenSchema }),
+  /** Your night tap or your vote. Null rests or abstains. A later choice in the same phase replaces the earlier one. */
+  z.strictObject({ action: z.literal('choose'), id: TokenSchema, match: TokenSchema, seat: fireSeat.nullable() }),
+  /** The Magistrate calls the next phase: reads the dawn, ends the talk, reads the verdict. */
+  z.strictObject({ action: z.literal('call'), id: TokenSchema, match: TokenSchema }),
+]);
+export type CampfireAct = z.infer<typeof CampfireActSchema>;
+const fireName = DisplayNameSchema;
+export const DuskCourtViewSchema: z.ZodType<DuskCourtView> = z.strictObject({
+  match: TokenSchema, revision: UIntSchema, phase: z.enum(DUSK_COURT_PHASES), night: z.number().int().min(1).max(DUSK_COURT.nights),
+  startedAt: EpochMsSchema, deadline: EpochMsSchema, waiting: z.boolean(), wolves: z.union([z.literal(1), z.literal(2)]),
+  players: z.array(z.strictObject({ seat: fireSeat, name: fireName, lantern: z.enum(['lit', 'snuffed', 'sent']),
+    role: z.enum(DUSK_COURT_ROLES).nullable(), away: z.boolean(), gone: z.boolean(),
+    embers: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]), voted: z.boolean() })).max(DUSK_COURT.maxPlayers),
+  dawn: z.strictObject({ night: z.number().int().min(1).max(DUSK_COURT.nights), seat: fireSeat.nullable() }).nullable(),
+  verdict: z.strictObject({ night: z.number().int().min(1).max(DUSK_COURT.nights), seat: fireSeat.nullable(), tie: z.boolean(), votes: z.number().int().min(0).max(DUSK_COURT.maxPlayers) }).nullable(),
+  result: z.strictObject({ winner: z.enum(['town', 'wolves']).nullable(), reason: z.enum(['caught', 'outnumbered', 'lanterns', 'left']) }).nullable(),
+});
+export const CampfireFrameSchema: z.ZodType<CampfireFrame> = z.strictObject({
+  at: EpochMsSchema, site: TokenSchema, live: z.boolean(), magistrate: fireName.nullable(),
+  seated: z.array(z.strictObject({ seat: z.number().int().min(0).max(CAMPFIRE_SEATS), name: fireName })).max(CAMPFIRE_SEATS + 1),
+  court: DuskCourtViewSchema.nullable(),
+});
+export const CampfireSelfSchema: z.ZodType<CampfireSelf> = z.strictObject({
+  seat: z.number().int().min(0).max(CAMPFIRE_SEATS).nullable(), magistrate: z.boolean(), canAsk: z.boolean(), canCall: z.boolean(),
+  match: TokenSchema.nullable(), role: z.enum(DUSK_COURT_ROLES).nullable(), wolves: z.array(fireSeat).max(2),
+  choice: z.strictObject({ kind: z.enum(['snuff', 'watch', 'vote']), targets: z.array(fireSeat).max(DUSK_COURT.maxPlayers),
+    chosen: fireSeat.nullable(), deadline: EpochMsSchema }).nullable(),
+  answers: z.array(z.strictObject({ night: z.number().int().min(1).max(DUSK_COURT.nights), seat: fireSeat, wolf: z.boolean() })).max(DUSK_COURT.nights),
+});
+/** Kingdom room message names for the fire: client → room `campfire.act`; room → clients `campfire`; room → one seat `campfire.self`. */
+export const CAMPFIRE_MESSAGES = Object.freeze({ act: 'campfire.act', hello: 'campfire.hello', frame: 'campfire', self: 'campfire.self', receipt: 'campfire.receipt' });
+
+/*
+ * Chat commands for the gathering places (SEAMS §3). The herald hands matching lines to the realm; the realm counts
+ * one voice per Twitch identity and never answers in chat.
+ */
+export const GATHER_CHAT_COMMANDS = ['sus', 'drop', 'roll', 'hold', 'pull'] as const;
+export type GatherChatCommand = typeof GATHER_CHAT_COMMANDS[number];
+export const GATHER_CHAT_ROUTE = '/internal/realm/gather/chat';
+/** Pure: `!drop 4` → `{ command: 'drop', arg: '4' }`; `!sus @Mira` → `{ command: 'sus', arg: '@Mira' }`; anything else → null. */
+export function parseGatherCommand(text: string): { command: GatherChatCommand; arg: string | null } | null {
+  const match = /^!([a-z]+)(?:\s+(\S.{0,31}?))?\s*$/i.exec(text.trim());
+  if (!match) return null;
+  const command = match[1]!.toLowerCase();
+  if (!(GATHER_CHAT_COMMANDS as readonly string[]).includes(command)) return null;
+  const arg = match[2]?.trim() ?? null;
+  return { command: command as GatherChatCommand, arg: arg && arg.length <= 32 ? arg : null };
+}
+export const GatherChatEnvelopeSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('command'), kingdomId: KingdomIdSchema, messageId: TokenSchema, at: EpochMsSchema,
+    chatter: z.strictObject({ twitchId: PersonIdSchema, login: TwitchLoginSchema, displayName: DisplayNameSchema }),
+    command: z.enum(GATHER_CHAT_COMMANDS), arg: z.string().max(32).nullable() }),
+  z.strictObject({ kind: z.literal('cleanup'), kingdomId: KingdomIdSchema, twitchId: PersonIdSchema, at: EpochMsSchema }),
+]);
+export type GatherChatEnvelope = z.infer<typeof GatherChatEnvelopeSchema>;

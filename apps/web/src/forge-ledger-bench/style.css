@@ -1,0 +1,20 @@
+html, body { width: 100%; min-height: 100%; margin: 0; }
+body { background: #2a1a10; }
+body[data-view='wall'] #bench { position: fixed; inset: 0; }
+body[data-view='wall'] canvas { display: block; width: 100%; height: 100%; }
+/* A stand-in for play's ledger: walnut boards and one parchment leaf, so the page is judged in place. */
+body[data-view='page'] { min-height: 100dvh; background:
+  repeating-linear-gradient(93deg, #ffdcae08 0 2px, transparent 2px 9px, #1a0c0412 9px 10px, transparent 10px 17px),
+  linear-gradient(160deg, #6b4630, #3d2718 70%, #2b1b10); }
+body[data-view='page'] #bench { box-sizing: border-box; min-height: 100dvh; padding: 26px clamp(10px, 4vw, 48px); display: grid; place-items: start center; }
+.bench-leaf { box-sizing: border-box; width: min(860px, 100%); padding: 30px 34px 34px 44px; border-radius: 2px 6px 6px 2px; color: #38261a;
+  background: radial-gradient(ellipse at 30% 0%, #fbf1d8, transparent 70%), linear-gradient(170deg, #f3e6c6, #e6d3a9);
+  box-shadow: inset 14px 0 18px -12px #5a3a1a80, 0 10px 30px #0b050399; }
+.bench-leaf-head { margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #8a6a4266; }
+.bench-eyebrow { margin: 0; font: 13px/1.2 var(--cd-face-label, Georgia, serif); letter-spacing: .1em; color: #654a31; }
+.bench-title { margin: 6px 0 0; font: 34px/1 var(--cd-face-story, Georgia, serif); font-weight: 400; color: #38261a; }
+@media (max-width: 480px) {
+  body[data-view='page'] #bench { padding: 10px; }
+  .bench-leaf { padding: 22px 18px 24px 22px; }
+  .bench-title { font-size: 28px; }
+}

@@ -81,21 +81,8 @@ export default function GenesisPreview() {
     // The holding: handed over by the Atlas card, or read from the survey this tab draws.
     let holding = takeHandOff(sessionStore(), id);
     setDoor({ id, name: holding?.name ?? channel?.name ?? 'A holding', subtitle: holding ? holdingPlace(holding) : 'Reading the Atlas' });
-    if (!holding) {
-      step('The survey is read');
-      try {
-        holding = await readDoorHolding(SOURCE, sessionStore(), id, abort.signal);
-      } catch (cause) {
-        if (abort.signal.aborted) return;
-        // The three composed kingdoms keep their own recorded facts and open without the survey.
-        if (!authored) throw cause instanceof HoldingError ? new Error(holdingMessage(cause)) : cause;
-        setDoor({ id, name: authored.channel.name, subtitle: 'Drawn from its recorded survey' });
-      }
-      if (holding) setDoor({ id, name: holding.name, subtitle: holdingPlace(holding) });
-    }
-    const from = query.get('from');
-    if (from && from !== id && /^[1-9][0-9]{0,31}$/.test(from)) setRaid({ from, to: id, viewers: Number(query.get('viewers') ?? 0) || 0 });
-
+    // Adopted land is asked for first: a founded kingdom opens from its own bytes, whether or not the Atlas survey
+    // has observed the channel (a small channel may never cross the survey's floor).
     step('The gate is opened');
     const response = await fetch(REALM_FOUNDED_ROUTES.manifest.replace(':kingdomId', id), {
       signal: abort.signal, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
@@ -110,6 +97,22 @@ export default function GenesisPreview() {
     }
     const unavailable = RealmApiErrorSchema.safeParse(body);
     if (response.status !== 404 || !unavailable.success) throw new Error(unavailable.success ? unavailable.data.message : 'The adopted-land service is unavailable. Its outage cannot generate a replacement world.');
+
+    // Only an unfounded holding is drawn from the survey.
+    if (!holding) {
+      step('The survey is read');
+      try {
+        holding = await readDoorHolding(SOURCE, sessionStore(), id, abort.signal);
+      } catch (cause) {
+        if (abort.signal.aborted) return;
+        // The three composed kingdoms keep their own recorded facts and open without the survey.
+        if (!authored) throw cause instanceof HoldingError ? new Error(holdingMessage(cause)) : cause;
+        setDoor({ id, name: authored.channel.name, subtitle: 'Drawn from its recorded survey' });
+      }
+      if (holding) setDoor({ id, name: holding.name, subtitle: holdingPlace(holding) });
+    }
+    const from = query.get('from');
+    if (from && from !== id && /^[1-9][0-9]{0,31}$/.test(from)) setRaid({ from, to: id, viewers: Number(query.get('viewers') ?? 0) || 0 });
 
     const composed = authored ? await composeAuthored(id, authored) : await composeFromHolding(holding!);
     if (abort.signal.aborted) return;
@@ -192,7 +195,7 @@ export default function GenesisPreview() {
       <Kingdom kingdomName={current().name} potential={current().potential} presenceFeed={current().feed} />
       <aside class="genesis-caption"><strong>{current().landscape}</strong>
         <span>{current().place ? `${current().place} · ` : ''}{current().category ? `${current().category} · ` : ''}about {Math.round(current().average).toLocaleString('en')} viewers in the recorded survey</span>
-        <p>{current().lore}</p><a href="/map">Return to the Atlas</a><Show when={current().authored}> · <a href="/showcase">Compare the three kingdoms ↗</a></Show></aside>
+        <p>{current().lore}</p><a href="/map">Return to the Atlas</a></aside>
     </>}</Show>
     <Show when={phase() !== 'gone' && raid()}>
       {current => <div classList={{ 'raid-ride-out': phase() === 'wake' }}><RaidRide from={current().from} to={current().to} viewers={current().viewers} signal={abort.signal}

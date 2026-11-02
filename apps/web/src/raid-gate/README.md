@@ -36,8 +36,9 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 | Welcome controller | `welcome.ts` | Created by the gate controller once a raid journey commits as a visitor; lost presses re-sent under the same request |
 | The welcome tableau and gift tags | `GuestArrival.tsx`, `VisitorGifts.tsx`, `welcome.css` | Torchlit column at the destination's gate; gifts, ledger and shelf on the board |
 | The gate in the walking view | `play-slot.ts`, `walk-gate.ts` | play's HUD piece `raid-gate.march` and key `raid-gate.answer` (G); the march call bound to the session's gate |
-| The walker's journey | `journey.ts`, `JourneyLayer.tsx`, `journey.css` | Ink and parchment while a place is held, atlas-map's rise and road inside it, the page walks in at the destination's gate on the authority's commit and home again |
-| Walking-view bench | `walk-gate-bench.tsx` | `/-/raid-gate?walkGate=gathering\|countdown\|ride\|road\|through` |
+| The walker's journey | `journey.ts`, `JourneyLayer.tsx`, `journey.css` | Ink and parchment while a place is held, atlas-map's rise and road inside it (warmed by `walk-gate.ts` once the walker may travel; a journey that begins before the map is drawn keeps the parchment road), the page walks in at the destination's gate on the authority's commit and home again |
+| Walking-view bench | `walk-gate-bench.tsx` | `/-/raid-gate?walkGate=gathering\|countdown\|ride\|road\|through`; `&map=atlas` stages the rehearsed road's real channels so an integrated build rides the Atlas |
+| Gate mode on the bench | `index.tsx` | `/-/raid-gate?bench=simulated&map=atlas&finder=1` opens atlas-map's own gate mode for the monarch (when the build carries it) instead of the bench's stand-in finder |
 | Captures | `capture.mjs` | `node apps/web/src/raid-gate/capture.mjs [--only a,b]` after `pnpm build` |
 
 ## What main binds

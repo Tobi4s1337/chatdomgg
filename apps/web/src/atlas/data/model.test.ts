@@ -263,6 +263,30 @@ describe('SettlerStore', () => {
     expect(store.expireNames()).toBe(Number.POSITIVE_INFINITY);
   });
 
+  it('takes the names head first, then the whole, and never lets a late head undo the whole', () => {
+    const world = makeWorld();
+    const store = new SettlerStore(world, () => world.asOf + 3_600_000);
+    store.addChunk(makeChunk(world, 1));
+    const whole = makeNames(world, { withheld: ['108586685'] });
+    const head = new Set(world.head.ids);
+    const keep = whole.ids.map((id, i) => (head.has(id) ? i : -1)).filter((i) => i >= 0);
+    const part = { ...whole, ids: keep.map((i) => whole.ids[i]!), logins: keep.map((i) => whole.logins[i]!), names: keep.map((i) => whole.names[i]!), freshUntil: keep.map((i) => whole.freshUntil[i]!) };
+    expect(part.ids.length).toBeLessThan(whole.ids.length);
+    expect(store.headSize).toBe(world.head.ids.length);
+    store.applyNames(part, false);
+    expect(store).toMatchObject({ named: true, namedWhole: false });
+    // The head names its own; a withheld chunk holding is bare from the first frame, the others wait for the whole.
+    expect(store.byId.get(part.ids[0]!)!.name).not.toBeNull();
+    expect(store.byId.get('108586685')).toMatchObject({ withheld: true, name: null });
+    const later = store.all.find((s) => !head.has(s.id) && !s.withheld)!.id;
+    expect(store.byId.get(later)!.name).toBeNull();
+    store.applyNames(whole);
+    expect(store.namedWhole).toBe(true);
+    expect(store.byId.get(later)!.name).not.toBeNull();
+    store.applyNames(part, false);
+    expect(store.byId.get(later)!.name).not.toBeNull();
+  });
+
   it('ignores a names projection for another preview', () => {
     const world = makeWorld();
     const store = new SettlerStore(world, () => world.asOf);

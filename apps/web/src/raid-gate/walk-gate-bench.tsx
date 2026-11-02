@@ -4,11 +4,14 @@
  * real application (its Twitch, rooms and people are private simulated fixtures; nothing visible says so, decision 25).
  * Stages: `gathering`, `countdown`, `ride` (Twitch confirmed, the walker may ride out), `road` (a place is held and the
  * destination draws its world, so the journey layer covers the world) and `through` (the step is acknowledged and the
- * page would walk on; the bench records the path instead of leaving).
+ * page would walk on; the bench records the path instead of leaving). `&map=atlas` stages the rehearsed raid road's
+ * real channels (`ROAD_PAIR`) instead, so a build that carries the Atlas rides the journey on it; a build without it
+ * draws the parchment road, as the product does.
  */
 import { onCleanup, onMount } from 'solid-js';
 import type { KingdomId } from '../../../api/src/raid-gate/contracts';
 import { createKingdomScene } from '../kingdom/scene';
+import type { BenchCast } from './bench';
 import type { RaidGateController } from './controller';
 import { mountWalkGate } from './walk-gate';
 import './raid-gate.css';
@@ -18,8 +21,23 @@ const STAGES = ['gathering', 'countdown', 'ride', 'road', 'through'] as const;
 type Stage = typeof STAGES[number];
 const FERNHOLLOW = '41000002' as KingdomId;
 
-export default function WalkGateBench(props: { stage: string }) {
+/** Resolves once the Atlas warmed by the walk says it is drawn (or failed), or after `ms` whatever it says. */
+function mapDrawn(ms: number): Promise<void> {
+  const until = Date.now() + ms;
+  return new Promise(resolve => {
+    const look = () => {
+      const state = document.querySelector<HTMLElement>('[data-chatdom-atlas]')?.dataset.atlasReady;
+      // The still picture comes first; the journey waits for the drawn map, as a walker who joined early would.
+      if (state === 'map' || state === 'failed' || Date.now() > until) resolve();
+      else setTimeout(look, 200);
+    };
+    look();
+  });
+}
+
+export default function WalkGateBench(props: { stage: string; map?: string | null }) {
   const stage: Stage = STAGES.find(each => each === props.stage) ?? 'gathering';
+  const onMap = props.map === 'atlas';
   const life = new AbortController();
   const bench = window as BenchWindow;
   bench.__chatdomReady = false;
@@ -45,11 +63,17 @@ export default function WalkGateBench(props: { stage: string }) {
     void (async () => {
       const { createGateBench } = await import('./bench');
       const clock = () => Date.now();
-      const made = createGateBench({ viewer: 'walker', authority: 'ready', clock, rooms: stage === 'road' ? 'hold' : 'ready' });
+      let cast: BenchCast | undefined, destination = FERNHOLLOW;
+      if (onMap) {
+        const [{ castFor }, { roadLand, ROAD_PAIR }] = await Promise.all([import('./road/cast'), import('./road/lands')]);
+        cast = castFor(roadLand(ROAD_PAIR.from), roadLand(ROAD_PAIR.to), 'founded');
+        destination = ROAD_PAIR.to as KingdomId;
+      }
+      const made = createGateBench({ viewer: 'walker', authority: 'ready', clock, rooms: stage === 'road' ? 'hold' : 'ready', ...(cast ? { cast } : {}) });
       let controller: RaidGateController | null = null;
       const heard = new Promise<RaidGateController>(resolve => {
         const dispose = mountWalkGate({
-          kingdomId: made.source.kingdomId, host: region, api: made.api, origin: made.api.origin, storage: null, clock, mapBundled: false,
+          kingdomId: made.source.kingdomId, host: region, api: made.api, origin: made.api.origin, storage: null, clock, ...(onMap ? {} : { mapBundled: false }),
           readName: async () => made.source.name, keyHint: () => 'G',
           navigate: path => { bench.__walkGate!.walkedTo = path; },
           onController: next => { controller = next; if (next) resolve(next); },
@@ -62,7 +86,7 @@ export default function WalkGateBench(props: { stage: string }) {
         const stop = gate.subscribe(() => { if (done()) { stop(); resolve(); } });
       });
       await settled(() => gate.snapshot().phase !== 'loading');
-      await made.monarchPreview(FERNHOLLOW);
+      await made.monarchPreview(destination);
       await gate.refresh();
       const requestId = gate.snapshot().requestId;
       if (requestId) {
@@ -71,6 +95,8 @@ export default function WalkGateBench(props: { stage: string }) {
         if (stage !== 'gathering') { await made.monarchStart(requestId); await gate.refresh(); }
         if (stage === 'ride' || stage === 'road' || stage === 'through') { await made.witness(requestId, 214); await gate.refresh(); }
         if (stage === 'road' || stage === 'through') {
+          // A walker joins long before riding out, so the map is drawn by then; the bench gives it that time too.
+          if (onMap) await mapDrawn(30_000);
           void gate.travel();
           await settled(() => stage === 'road' ? gate.snapshot().journey?.state === 'preparing' : gate.snapshot().journey?.state === 'committed');
         }
@@ -79,8 +105,8 @@ export default function WalkGateBench(props: { stage: string }) {
       const s = (controller as RaidGateController | null)?.snapshot();
       bench.__walkGate = { ...bench.__walkGate!, phase: s?.phase ?? null, journey: s?.journey?.state ?? null };
       staged = true;
-      // Let the plaque and the ink settle into the picture before the capture.
-      setTimeout(ready, stage === 'road' || stage === 'through' ? 4200 : 900);
+      // Let the plaque and the ink settle into the picture before the capture (the map flies to the road meanwhile).
+      setTimeout(ready, stage === 'road' || stage === 'through' ? (onMap ? 7000 : 4200) : 900);
     })();
   });
 

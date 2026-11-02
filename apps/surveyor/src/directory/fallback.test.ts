@@ -36,7 +36,7 @@ function empty(query: string): SearchReply | DirectoryRefusal {
   });
 }
 
-function fixture() {
+function fixture(options: { perClientMinute?: number } = {}) {
   const known = new Set<string>();
   const denied = new Set<string>();
   const search = vi.fn((query: string): SearchReply | DirectoryRefusal => empty(query));
@@ -53,7 +53,7 @@ function fixture() {
   const cached = vi.fn<(query: string) => boolean>(() => false);
   const twitch: TwitchLookup = { lookup, cached, close: () => {} };
   let now = NOW;
-  const fallback = new DirectoryFallback(twitch, { now: () => now });
+  const fallback = new DirectoryFallback(twitch, { now: () => now, ...options });
   return { register, search, card, project, known, denied, lookup, cached, fallback, advance: (ms: number) => { now += ms; } };
 }
 
@@ -170,6 +170,15 @@ describe('survey-first directory fallback', () => {
     expect(reply(await f.fallback.search(f.register, 'new8', NONE, 'client-b', true)).results).toHaveLength(1);
     f.advance(10_000);
     expect(reply(await f.fallback.search(f.register, 'new9', NONE, 'client-a', true)).results).toHaveLength(1);
+  });
+
+  it('takes a configured per-client allowance for a proxy that shares one address among visitors', async () => {
+    const f = fixture({ perClientMinute: 60 });
+    for (let i = 0; i < 60; i++) expect(reply(await f.fallback.search(f.register, `shared${i}`, NONE, 'proxy', true)).results).toHaveLength(1);
+    expect(reply(await f.fallback.search(f.register, 'shared60', NONE, 'proxy', true))).toMatchObject({ results: [], unavailable: 'limited' });
+    await expect(f.fallback.card(f.register, { login: 'shared61' }, NONE, 'proxy', true)).rejects.toMatchObject({ reason: 'limited', retryAfter: 1 });
+    f.advance(1_000);
+    expect(reply(await f.fallback.search(f.register, 'shared62', NONE, 'proxy', true)).results).toHaveLength(1);
   });
 
   it('lets the sixth search result open and cached cards repeat after the external allowance is exhausted', async () => {

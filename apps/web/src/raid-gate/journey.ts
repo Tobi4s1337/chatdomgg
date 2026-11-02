@@ -116,3 +116,11 @@ export function stepThroughAt(roadShownAt: number | null, committedAt: number): 
 export function arrivingHere(memo: JourneyMemo | null, here: KingdomId, now: number): boolean {
   return memo !== null && memo.to === here && now - memo.at >= 0 && now - memo.at <= ARRIVAL_FRESH_MS;
 }
+
+/**
+ * Whether the Atlas can carry a journey's road: its map is drawn, and it placed both ends on it (`resolve` answered
+ * a land that is not off the map's edge). Anything unknown keeps the parchment road; a map is never waited on.
+ */
+export function mapCarriesJourney(drawn: boolean, placed: ReadonlyMap<KingdomId, boolean>, journey: Pick<JourneySnapshot, 'from' | 'to'>): boolean {
+  return drawn && placed.get(journey.from) === true && placed.get(journey.to) === true;
+}

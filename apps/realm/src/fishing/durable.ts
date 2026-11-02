@@ -12,6 +12,7 @@ import { createPostgresFishingCatchWriter, type FishingCatchAuthority } from './
 import { createPostgresFishingAdmission } from './entry';
 import { createFishingInstallationReader } from './installation';
 import { createPostgresRodRack, isEquippedWillowRod, WILLOW_ROD_ID } from './rod';
+import { readRodHistory } from './rod-history';
 import type { FishingSpecies } from './species';
 import type { RealmPier } from './pier';
 
@@ -65,6 +66,8 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
       });
       const installation = () => live() && options.visible(room.kingdomId) ? source() : null;
       const facts = new Map<PersonId, RodFact>();
+      /** Earned reach, read with the rod's history; the cast reads it synchronously. */
+      const reaches = new Map<PersonId, number>();
       const listeners = new Set<(personId: PersonId) => void>();
       const forget = (from: RealmChannelSender) => {
         const fact = facts.get(from.principal.personId);
@@ -92,7 +95,7 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
           if (!from || !fact || fact.until <= now() || fact.walkerId !== from.walkerId || fact.principal !== from.principal
             || selected(personId, from.walkerId) !== fact.itemId || !fact.present() || !from.present()) return null;
           const pose = from.pose();
-          return pose ? { token: fact.token, pose, ownsRod: true } : null;
+          return pose ? { token: fact.token, pose, ownsRod: true, reachM: reaches.get(personId) ?? 0 } : null;
         },
       });
       const stopItems = options.items.onChange((personId, kingdomId, items) => {
@@ -129,6 +132,14 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
           },
         } : {}),
         keep: (from, castId) => writer.keep(from, castId),
+        async rodHistory(from) {
+          const history = await readRodHistory(options.pool, { kingdomId: room.kingdomId, origin: room.origin, ownerId: from.principal.personId, species });
+          if (reaches.size >= 300 && !reaches.has(from.principal.personId)) {
+            for (const person of reaches.keys()) if (!room.person(person)) reaches.delete(person);
+          }
+          if (reaches.size < 300 || reaches.has(from.principal.personId)) reaches.set(from.principal.personId, history.reachM);
+          return history;
+        },
         async refreshRod(from, itemId) {
           if (!live() || !await from.current() || !live() || !from.present()) { forget(from); return null; }
           const item = await options.items.get(itemId);
@@ -136,7 +147,7 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
           return remember(from, item);
         },
         onRodChange(listener) { if (closed) return () => {}; listeners.add(listener); return () => { listeners.delete(listener); }; },
-        dispose() { if (closed) return; closed = true; stopItems(); listeners.clear(); facts.clear(); casts.dispose(); },
+        dispose() { if (closed) return; closed = true; stopItems(); listeners.clear(); facts.clear(); reaches.clear(); casts.dispose(); },
       };
     },
   });

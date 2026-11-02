@@ -10,11 +10,11 @@ import { Gestures } from './gestures';
 import { centreForFocus, easeOut, focusOf, freeWidth, HERO_DRIFT_STEP_PX, heroDrift, insideFree, planAnchoredZoom, planFlight, screenShift, type CameraState, type Flight } from './motion';
 import { markedTiers, Overlay } from './overlay';
 import type { Stamp } from './paint';
-import { pyramidFor } from './pyramid';
+import { pyramidFor, type TileKey } from './pyramid';
 import { paintSceneFor } from './scene';
 import { INK, PAPER, PAPER_DEEP } from './theme';
 import { TILE_BUDGET_BYTES } from './tile-plan';
-import { TileFarm, TileLayer } from './tiles';
+import { closeImage, TileFarm, TileLayer, type TileImage } from './tiles';
 import { WashLayer } from './wash';
 import type { MapLayer } from '../road/layer';
 
@@ -46,6 +46,8 @@ export interface MapViewOptions {
   wheel?: boolean;
   hero?: boolean;
   signal?: AbortSignal;
+  /** Land tiles already baked for this scene (the still's copies); the map owns them and bakes only the rest. */
+  seed?: () => Promise<{ key: TileKey; image: TileImage }[]>;
 }
 
 /** Evidence of the last drawn frame, for the page's test hook and budgets. */
@@ -167,7 +169,7 @@ export class MapView {
   private readonly captured = new Set<number>();
   private backgroundCancel: (() => void) | null = null;
 
-  private constructor(private readonly app: Application, private readonly host: HTMLElement, private readonly data: MapData, private readonly sheet: ImageBitmap | null, private readonly events: MapEvents, private readonly pixelRatio: number, private readonly chromeInsets: (view: Viewport) => Insets, initial: CameraState | null, options: MapViewOptions) {
+  private constructor(private readonly app: Application, private readonly host: HTMLElement, private readonly data: MapData, private readonly sheet: ImageBitmap | null, private readonly events: MapEvents, private readonly pixelRatio: number, private readonly chromeInsets: (view: Viewport) => Insets, initial: CameraState | null, options: MapViewOptions, seeded: { key: TileKey; image: TileImage }[] = []) {
     this.interactive = options.interactive ?? true;
     this.wheel = options.wheel ?? true;
     this.view = { width: host.clientWidth || 1, height: host.clientHeight || 1 };
@@ -180,6 +182,7 @@ export class MapView {
     const scene = paintSceneFor(data.world, data.geo, this.rings);
     this.farm = new TileFarm(scene, stampSheetUrl, stamps, async () => sheet, pixelRatio);
     this.tiles = new TileLayer(pyramid, this.farm, pixelRatio, phone ? TILE_BUDGET_BYTES.phone : TILE_BUDGET_BYTES.laptop);
+    this.tiles.seed(seeded);
     this.tiles.setHome(this.homeCamera().snapshot(), this.view);
     const source = sheet ? new ImageSource({ resource: sheet, resolution: 1, scaleMode: 'linear', autoGenerateMipmaps: true }) : null;
     this.overlay = new Overlay(data.world, data.geo, data.store, source, stamps, pixelRatio);
@@ -218,6 +221,7 @@ export class MapView {
     const app = new Application();
     let sheet: ImageBitmap | null = null;
     let mounted: MapView | null = null;
+    let seeded: { key: TileKey; image: TileImage }[] = [];
     try {
     await app.init({
       width: host.clientWidth || 1,
@@ -233,7 +237,10 @@ export class MapView {
     options.signal?.throwIfAborted();
     sheet = await loadImage(stampSheetUrl, options.signal);
     options.signal?.throwIfAborted();
-    mounted = new MapView(app, host, data, sheet, events, pixelRatio, chromeInsets ?? (() => NO_INSETS), initial ?? null, options);
+    seeded = options.seed ? await options.seed().catch(() => []) : [];
+    options.signal?.throwIfAborted();
+    mounted = new MapView(app, host, data, sheet, events, pixelRatio, chromeInsets ?? (() => NO_INSETS), initial ?? null, options, seeded);
+    seeded = [];
     if (options.signal) mounted.listen(options.signal, 'abort', () => mounted?.dispose(), { once: true });
     options.signal?.throwIfAborted();
     if ((app.renderer as { gl?: WebGLRenderingContext }).gl?.isContextLost()) {
@@ -244,6 +251,7 @@ export class MapView {
       // A retry must release the failed renderer and create its own fresh canvas.
       if (mounted) mounted.dispose();
       else {
+        for (const tile of seeded) closeImage(tile.image);
         sheet?.close();
         try { app.destroy(true, { children: true }); } catch { /* init may have failed before a renderer existed */ }
       }

@@ -2,6 +2,7 @@ import '../kit.css';
 import './passport.css';
 import { createRenderEffect, createSignal, Match, onCleanup, Show, Switch, type Accessor, type JSX } from 'solid-js';
 import { ProvenanceSeal } from '../ProvenanceSeal';
+import { STAGED_ALLOWED } from '../staged';
 import { CoverEmblem, PassportBook, type PassportBookProps } from './Book';
 import type { BookLayout, PageDensity } from './pages';
 import {
@@ -38,7 +39,7 @@ export function PassportReading(props: PassportReadingProps): JSX.Element {
       {...(props.density ? { density: props.density } : {})} {...(props.initialView === undefined ? {} : { initialView: props.initialView })} {...(props.places ? { places: props.places } : {})}
       {...(props.onMore ? { onMore: props.onMore } : {})} {...(props.onTurn ? { onTurn: props.onTurn } : {})} {...(props.class ? { class: props.class } : {})} />}</Match>
     <Match when={props.state.kind === 'hidden' ? props.state : undefined}>{hidden =>
-      <ClosedPassport state="private" layout={props.layout ?? 'spread'} simulated={hidden().origin === 'simulated'} class={props.class} />}</Match>
+      <ClosedPassport state="private" layout={props.layout ?? 'spread'} staged={STAGED_ALLOWED && hidden().origin === 'simulated'} class={props.class} />}</Match>
     <Match when={props.state.kind === 'unavailable'}>
       <ClosedPassport state="unavailable" layout={props.layout ?? 'spread'} class={props.class} onRetry={props.onRetry} />
     </Match>
@@ -52,7 +53,7 @@ const CLOSED_WORDS = {
   unavailable: { label: 'A passport that could not be read', note: 'This passport could not be read just now' },
 } as const;
 
-function ClosedPassport(props: { state: keyof typeof CLOSED_WORDS; layout: BookLayout; simulated?: boolean; class?: string | undefined; onRetry?: (() => void) | undefined }): JSX.Element {
+function ClosedPassport(props: { state: keyof typeof CLOSED_WORDS; layout: BookLayout; staged?: boolean; class?: string | undefined; onRetry?: (() => void) | undefined }): JSX.Element {
   const words = () => CLOSED_WORDS[props.state];
   return <section class={`pp-book cd-kit${props.class ? ` ${props.class}` : ''}`} data-layout={props.layout} data-view="closed" data-state={props.state}
     aria-roledescription="passport" aria-label={words().label} aria-busy={props.state === 'pending' ? 'true' : undefined}>
@@ -70,7 +71,7 @@ function ClosedPassport(props: { state: keyof typeof CLOSED_WORDS; layout: BookL
       </div>
       <Show when={props.state === 'unavailable' && props.onRetry}>{retry =>
         <button type="button" class="pp-more-action pp-retry" onClick={() => retry()()}>Try again</button>}</Show>
-      <Show when={props.simulated}><ProvenanceSeal class="pp-provenance pp-provenance-cover" state="simulated" /></Show>
+      {STAGED_ALLOWED && <Show when={props.staged}><ProvenanceSeal class="pp-provenance pp-provenance-cover" state="simulated" /></Show>}
     </div>
   </section>;
 }

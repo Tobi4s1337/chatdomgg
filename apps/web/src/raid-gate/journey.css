@@ -26,7 +26,8 @@
 /* The Atlas's gate mode draws the rise and the road; it is only seen once the place is held. */
 .rj-map { position: absolute; inset: 0; opacity: 0; transition: opacity .8s .6s var(--rj-ease); }
 .rj-layer[data-map='atlas'][data-state='road'] .rj-map, .rj-layer[data-map='atlas'][data-state='through'] .rj-map { opacity: 1; }
-.rj-layer[data-map='paper'] .rj-map { display: none; }
+/* A map that is not riding this journey stays laid out (so it can be drawn ahead of need) but unseen. */
+.rj-layer[data-map='paper'] .rj-map { visibility: hidden; }
 
 /* Without the Atlas: the road inked across the parchment between the two seals. */
 .rj-road { position: absolute; left: 50%; top: 44%; width: min(1000px, 92vw); aspect-ratio: 5 / 2; translate: -50% -50%;

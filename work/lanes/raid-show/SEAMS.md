@@ -289,8 +289,9 @@ Evidence and limits: `work/evidence/raid-show/raid-show-scale.md`. SwiftShader s
 - **The road shows it in the world (`/-/raid-gate?bench=simulated&road=1`, `&to=waiting`).** The gathering, countdown and set-out play in the leaving kingdom's real scene: the bench's gate records feed the same party frame the realm builds (`raid-party-frame.ts`, shared by `raid-party.ts` and `bench.ts`), the party layer draws the people, and its gate shot leases the camera. The shot check now counts the scene's planted trees as canopy balls (`sceneTreeCrowns` in `kingdom/moments/raid-shot-clear.ts`, read from the `tree-*` instanced meshes). If no clear party shot exists, the road holds the gate's standing shot instead of letting the town's hero view return. Home is the leaving kingdom's own world at its gate.
   - **needs: atlas-map** — a settler action for waiting land: a guest who came on a raid pledges a tent at the edge of the pencilled kingdom, kept until the streamer founds it live. The land card says what happens and offers only "Watch on Twitch" and "Come home" until that action exists.
   - **needs: grand-world** — native tree occlusion for shots (a query on the scene's own tree placements, e.g. `scene.treeCrowns()`), so the gate shot need not read instanced mesh bounds.
-- **The walker's own journey (`walk-gate.ts`, `journey.ts`, `JourneyLayer.tsx`).** While the authority holds a place (`reserved` → `preparing` → `ready`/`committing`/`unknown`) the walking view washes into ink and parchment; the parchment road rises and draws inside it when the Atlas is absent (the Atlas travel stages still need binding; without the Atlas the road is inked between the two seals, with the torch column riding only what is drawn). The march call speaks from the foot of the layer meanwhile, with Turn back while it is allowed. On the authority's `committed`, and never before the rise and road have been seen (0.8 s + 2.2 s), the page walks on through the ordinary door, `/?walk=1&kingdom=<to>` (keeping `source=simulated` only on the mock stack); the destination room admits the committed visitor at its gate (above). The destination page opens on the drawing and fades into the world. Return home is the same, through the home gate, back to `/?walk=1&kingdom=<home>`. Bench: `/-/raid-gate?walkGate=gathering|countdown|ride|road|through` runs the production `mountWalkGate` against the gate bench; `through` records the path instead of leaving.
+- **The walker's own journey (`walk-gate.ts`, `journey.ts`, `JourneyLayer.tsx`).** While the authority holds a place (`reserved` → `preparing` → `ready`/`committing`/`unknown`) the walking view washes into ink and parchment, and the road rises and draws inside it. The Atlas carries it when it can: the walk warms atlas-map's gate mode (`deferGateAtlas(...).warm()`, into the layer's `mapHost`, laid out but unseen) as soon as the walker may travel (joined, may follow, under way or abroad), the controller hands it `travel(rise|road|drawing|arrived)` once per ticket at the authority's pace, and the embed reports `ready`. A journey rides on the map only if the map said `map` before its road began; otherwise (no Atlas in the build, a still or failed map, or a map still loading) the road is inked between the two seals on the parchment, with the torch column riding only what is drawn. One journey never switches surface halfway. The march call speaks from the foot of the layer meanwhile, with Turn back while it is allowed. On the authority's `committed`, and never before the rise and road have been seen (0.8 s + 2.2 s), the page walks on through the ordinary door, `/?walk=1&kingdom=<to>` (keeping `source=simulated` only on the mock stack); the destination room admits the committed visitor at its gate (above). The destination page opens on the drawing and fades into the world. Return home is the same, through the home gate, back to `/?walk=1&kingdom=<home>`. Bench: `/-/raid-gate?walkGate=gathering|countdown|ride|road|through` runs the production `mountWalkGate` against the gate bench; `through` records the path instead of leaving.
   - Doubt: between the commit and the destination's world the walker sees the kingdom entry's own loading screen; one continuous scene would need play to switch rooms in place.
+  - **Verified on an integrated build (2026-11-02).** The integrator's tree with this lane's files over it, served with `/map-data` from the public map service (`work/lanes/raid-show/capture-integrated.mjs`, real GPU): the monarch's board opens atlas-map's gate mode (`gpu-integrated-gate-mode@1920x1080.png`; the board steps to the left of the Atlas's own finder), a preview resolves its land through the Atlas (`gpu-integrated-preview@1920x1080.png`), and the walker's warmed map receives `travel(rise)` and `travel(road)` in the scene (traced). **needs: atlas-map** — the deployed map service answers 404 for `/v1/gate/<preview>/finder` and `/v1/roads/<preview>/…`, so the finder says it cannot be read; and the scene could not place MashaD4 (`154972160`) or PinkKittyRose (`4363967`) on the published preview (resolve answers `edge`), so the walker's road correctly stays on the parchment (`gpu-integrated-walk-road@1920x1080.png`, `…-phone@390x844.png`). Once the service carries those routes and places both ends, the same build rides the road on the Atlas with no change here.
 - **Migration (the integrator).** Apply `0011e_realm_raid_rooms.sql` before deploying a realm or API bundle that carries RS11 travel. It is additive (two tables, indexes, checks).
 - Verified by `apps/realm/src/raid-gate/travel-flow.integration.test.ts` on real Postgres and actual Colyseus rooms (spec 23: two founded kingdoms, SIMULATED OIDC sign-in, Wren seated in the source room, preview, join, one Start through a recording Herald, a mock witnessed outgoing raid, reserve, readiness on the retained destination writer, commit with a lost answer: Wren's source seat is ended before the realm acknowledges; API restart and recovery reconcile the one commit; Wren walks into the destination's room at its gate wearing the source crest; a fresh source entry is not fenced; return home works once; waiting land refused; a wrong credential refused; exactly one Herald write), `room-door.test.ts` (a seat outliving the wait stays pending/unknown; readiness refusals) and `realm-rooms.test.ts`, and by `bind.integration.test.ts` with a recording Herald on loopback: one start across a lost answer and an API restart (reconciled from Herald's ledger), one cancel, and a landing committed by a separate realm ledger reaching the API's open stream.
 
@@ -303,6 +304,65 @@ Evidence and limits: `work/evidence/raid-show/raid-show-scale.md`. SwiftShader s
 ```
 
 Until then the gate answers through the standalone API (`apps/api/src/main.ts`) and the public gateway returns 404 for it.
+
+## 13. Passport stamps and "Hide my travels" (raid-show provides; front-door binds the panel)
+
+**2026-11-02 — RS12.** `apps/api/src/raid-gate/passport.ts` reads the gate's verified stamp history (`realm_raid_guest_stamps`, 0011d) for the passport reader of `apps/api/src/passport/read.ts`:
+
+- `gatePassportPorts(store)` answers `stamps`, `visits`, `kingdoms`, `roads` and `gifts`. Stamps are newest first (cursor `gate-stamps.<sequence>`, 24 a page), under the person's stamp head as the revision. Kingdoms reached are grouped from the same stamps. Each kingdom is named as its channel was named in the newest witnessed raid (`realm_raid_observations`) and drawn in the Atlas arms seeded from its channel ID (`gateCrest`: the Atlas heater in the Atlas's two pigments; the Atlas charge, or the line of partition when it carries none, folded into the passport's four charges). The road is the witnessed raid's Atlas road ID with `leader: null`. Gifts are `[]`: no accepted receipt is linked to a guest stamp. A stamp whose kingdom no witnessed raid names makes the read unavailable; nothing is drawn with invented parts.
+- "Hide my travels" is `realm_raid_passport_privacy` (`0011f_realm_raid_passport.sql`). `createPostgresGatePassportStore` reads the choice in the same REPEATABLE READ snapshot as each page. Hidden makes `stamps` answer hidden (the whole book closes) and `visits` refuse. `choose` commits a change and always moves `changed_ms` forward. `cardTravels(choice, personRevision)` gives the card source its `travelsHidden` and a person revision that has passed the change, so the reader's never-backwards rule refuses a stale "shown".
+- The holder's own switch: `GET|POST /api/raid-gate/passport/travels` (`passport-http.ts`), cookie-owned, same Origin plus session CSRF for POST, `{version:1,travels}` in, `{version,origin,travels,revision}` out after the commit. It is mounted in `apps/api/src/main.ts` and allowlisted in `apps/api/src/public/routes.ts`. `gateTravelsOwner()` in `apps/web/src/passport/gate-owner.ts` is the `CardPassportOwner` for the card page's clasp.
+- The private bench `/-/passport?surface=card&source=gate&owner=1` draws the card page's book from the gate ports and the real reader over the in-memory store (fixture people only).
+
+**needs: front-door** — the panel reads the real stamps and the choice. In `apps/api/src/public/panel/http.ts`:
+
+```diff
++import { createPostgresGatePassportStore, gatePassportPorts } from '../../raid-gate/passport';
+ export interface PanelHttpOptions {
+   readonly authority: PanelAuthority;
++  /** The Raid Gate's stamps and the holder's travel choice (RS12). */
++  readonly gate?: import('../../raid-gate/passport').GatePassportStore;
+@@
+   const reader = createPassportReader({
+     origin: options.origin,
+     card: (citizen, signal) => options.authority.cardSource(citizen, Date.now(), signal),
+-    // No Gate stamps, visits, bonds or keepsakes are recorded for anyone yet: each answers its honest empty page.
+-    stamps: async () => ({ hidden: false, revision: 0, stamps: [], nextCursor: null }),
+-    visits: async () => empty, bonds: async () => empty, keepsakes: async () => empty,
+-    kingdoms: async () => new Map(), roads: async () => new Map(), gifts: async () => [],
++    stamps: async () => ({ hidden: false, revision: 0, stamps: [], nextCursor: null }),
++    visits: async () => empty, kingdoms: async () => new Map(), roads: async () => new Map(), gifts: async () => [],
++    ...(options.gate ? gatePassportPorts(options.gate) : {}),
++    // No bonds or keepsakes are recorded for anyone yet: each answers its honest empty page.
++    bonds: async () => empty, keepsakes: async () => empty,
+   }, …);
+```
+
+In `apps/api/src/public/main.ts`, pass `gate: createPostgresGatePassportStore({ pool, origin })` to `createPanelHttp` (import from `./../raid-gate/passport`). In `apps/api/src/public/panel/reading.ts`, add `readonly gate?: GatePassportStore` to `PanelAuthorityOptions`, pass the same store from `main.ts`, and in `cardSource` fold the choice in:
+
+```diff
++import { cardTravels, SHOWN, type GatePassportStore } from '../../raid-gate/passport';
++import type { PersonId } from '../../raid-gate/contracts';
+-      const latest = Math.max(0, ...record.deeds.map(deed => deed.at));
++      const latest = Math.max(0, ...record.deeds.map(deed => deed.at));
++      const travels = cardTravels(options.gate ? await options.gate.choice(key.personId as PersonId) : SHOWN, Math.max(record.signedInAt ?? 0, latest));
+@@
+-          revision: { person: Math.max(record.signedInAt ?? 0, latest), citizen: latest },
++          revision: { person: travels.personRevision, citizen: latest },
+@@
+-        travelsHidden: false,
++        travelsHidden: travels.travelsHidden,
+```
+
+and the public gateway's auth dispatch, beside the guest hook:
+
+```diff
+     case 'auth':
++      if (await (await import('../raid-gate/passport-http')).handleRaidPassport(request, response, { pool, config: auth })) return;
+       if (!await authRoutes(request, response)) unavailableJson(response, 404, 'No such route');
+```
+
+The panel's own clasp (the extension token, not a cookie) needs a panel route owned by panel-window/front-door calling `store.choose(viewer.personId, hidden, Date.now())` for a `shared` viewer only; until then the holder hides their travels from the web card page. **Migration (the integrator):** apply `0011f_realm_raid_passport.sql` before deploying a bundle that carries it. **Not yet stamped:** an outgoing marcher's committed march (spec 23 R8) has no stamp row; the gate's stamp history today holds incoming walk-ins and source-citizen rides.
 
 ## Other seams
 
@@ -321,7 +381,7 @@ Until then the gate answers through the standalone API (`apps/api/src/main.ts`) 
 
   Until that hook lands, the public gateway correctly returns 404 for the setting. The standalone API and private welcome flow work independently; no route is advertised as bound before its owner installs it.
 
-- **Passport stamps (raid-show to front-door, panel-window and the integrator).** raid-show exports a reader from `apps/api/src/raid-gate` that implements the `stamps(person, cursor, signal)` port of `apps/api/src/passport/read.ts`, with the hide switch. The hard-coded empty travel lists (`apps/api/src/public/panel/reading.ts:188`, front-door; panel adapters, panel-window) switch to it.
+- **Passport stamps.** Built in RS12; the binding and its exact patches are §13.
 - **Forged gifts (forge-wish).** A forged piece becomes giftable only through a typed port from forge-wish: owner, revision, transferable, and a conditional owner change in one transaction. Until then, the only giftable thing is the welcome offering, held in raid-show's own tables.
 - **Migration (the integrator).** `apps/realm/src/persistence/migrations/0011_realm_raid_gate.sql` is a new file in its own commit. The live schema must be migrated before the live realm runs a build that carries it.
 - **Guest migration (the integrator).** Apply `0011d_realm_raid_guests.sql` before deploying the carrying API/realm bundles. It adds incoming guest evidence, leases, history/reward reservations and the atomic deed guard. No live schema was changed here.

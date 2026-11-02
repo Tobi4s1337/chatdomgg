@@ -226,7 +226,7 @@ try {
   diagnose = async () => ({ door: await page.evaluate(() => ({ report: window.__gatherDoor, walk: window.__chatdomWalk && { owner: window.__chatdomWalk.owner, self: window.__chatdomWalk.self, input: window.__chatdomWalk.input },
     prompts: [...document.querySelectorAll('button, [role="button"], [class*="portal"], [class*="door"]')].map(node => `${node.className}: ${node.textContent?.trim().slice(0, 60)}`).slice(0, 20) })).catch(error => String(error)),
     square: body(square) && { x: body(square).x, y: body(square).y, z: body(square).z, yaw: body(square).yaw }, inn: body(inn) && { x: body(inn).x, z: body(inn).z } });
-  await page.goto(`http://${host}:${webPort}/?hour=19.5`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await page.goto(`http://${host}:${webPort}/?walk=1&kingdom=${REFERENCE_KINGDOM}&hour=19.5`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await page.waitForFunction(() => window.__chatdomWalk?.ready === true && window.__chatdomWalk.owner === 'walking', null, { timeout: 200_000 });
   report.checks.push(`The real kingdom entry opened the founded hamlet and placed the browser walker (${((Date.now() - locked) / 1000).toFixed(0)} s after the lock).`);
   const outside = await until(() => body(square), 'the browser walker on the square');

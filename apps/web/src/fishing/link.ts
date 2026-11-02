@@ -1,4 +1,5 @@
-import { FISHING_CHANNEL, type FishingChannelReply, type FishingChannelRequest, type ItemReply, type ItemRequest } from '@chatdom/shared';
+import { FISHING_CHANNEL, SHELF_CHANNEL, type FishingChannelReply, type FishingChannelRequest, type ItemReply, type ItemRequest, type ShelfReply,
+  type ShelfRequest } from '@chatdom/shared';
 
 /** The retained walking room's own typed message surface. Never a second socket. */
 export interface ChannelRoom {
@@ -32,6 +33,8 @@ export type FishingLink = ChannelLink<FishingChannelRequest, FishingChannelReply
 export type ItemLink = ChannelLink<ItemRequest, ItemReply>;
 export const fishingLink = (room: ChannelRoom): FishingLink => channel(room, FISHING_CHANNEL);
 export const itemLink = (room: ChannelRoom): ItemLink => channel(room, 'items');
+export type ShelfLink = ChannelLink<ShelfRequest, ShelfReply>;
+export const shelfLink = (room: ChannelRoom): ShelfLink => channel(room, SHELF_CHANNEL);
 
 let counter = 0;
 /** Request ids match the server's `[A-Za-z0-9_.:-]{1,64}`. */

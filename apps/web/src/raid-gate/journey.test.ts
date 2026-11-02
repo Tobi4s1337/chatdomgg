@@ -3,8 +3,7 @@ import type { KingdomId } from '../../../api/src/raid-gate/contracts';
 import type { GateSnapshot, JourneySnapshot } from './controller';
 import {
   ARRIVAL_FRESH_MS, arrivingHere, clearJourneyMemo, gateForPage, JOURNEY_MEMO_KEY, JOURNEY_MEMO_MS, journeyScene, readJourneyMemo, RISE_MS, ROAD_MS,
-  stepThroughAt, walkPath, writeJourneyMemo, type JourneyMemo,
-} from './journey';
+  stepThroughAt, walkPath, writeJourneyMemo, type JourneyMemo, mapCarriesJourney } from './journey';
 
 const T0 = 1_800_000_000_000;
 const HOME = { kingdomId: '129634568' as KingdomId, name: 'Willowmere', login: '' };
@@ -105,5 +104,17 @@ describe('walking on', () => {
     expect(arrivingHere(memo({ to: FERN }), HOME.kingdomId, T0 + 5_000)).toBe(false);
     expect(arrivingHere(memo(), FERN, T0)).toBe(false);
     expect(arrivingHere(null, FERN, T0)).toBe(false);
+  });
+});
+
+describe('which surface carries the road', () => {
+  const from = '154972160' as KingdomId, to = '4363967' as KingdomId;
+  it('rides the Atlas only when it is drawn and placed both ends', () => {
+    expect(mapCarriesJourney(true, new Map([[from, true], [to, true]]), { from, to })).toBe(true);
+  });
+  it('keeps the parchment for a map still loading, an end off the map, or an end not yet looked up', () => {
+    expect(mapCarriesJourney(false, new Map([[from, true], [to, true]]), { from, to })).toBe(false);
+    expect(mapCarriesJourney(true, new Map([[from, true], [to, false]]), { from, to })).toBe(false);
+    expect(mapCarriesJourney(true, new Map([[from, true]]), { from, to })).toBe(false);
   });
 });

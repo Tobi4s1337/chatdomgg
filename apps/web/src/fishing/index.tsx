@@ -3,6 +3,7 @@ import { mountPierBench, type PierBench, type PierBenchWindow } from './bench';
 import { fishSheet } from './fish-bench';
 import { FURNISHING_ANGLES, furnishingSheet } from './furnishing-sheet';
 import { mountBagBench } from '../bag/bench';
+import { mountShelfBench } from '../bag/shelf/bench';
 import { mountAlmanacBench } from '../almanac/bench';
 import { mountChatBench } from './chat/bench';
 import { mountPlayHud, type PlayHud } from './play-hud';
@@ -24,6 +25,7 @@ export default function PierReview() {
   onMount(() => {
     if (view === 'ui') { unmount = mountFishingUiBench(hud, query); return; }
     if (view === 'bag') { unmount = mountBagBench(hud, query); return; }
+    if (view === 'shelf') { unmount = mountShelfBench(hud, query); return; }
     if (view === 'sound') { unmount = mountPierSoundBench(hud); return; }
     if (view === 'almanac') { unmount = mountAlmanacBench(hud, query); return; }
     if (view === 'chat') { unmount = mountChatBench(hud, query); return; }
@@ -37,8 +39,8 @@ export default function PierReview() {
   });
   onCleanup(() => { ended = true; host?.dispose(); play?.dispose(); unmount?.(); });
   return <div style={{ position: 'fixed', inset: 0, background: '#282b36', overflow: 'hidden' }}>
-    {!['ui', 'bag', 'sound', 'almanac', 'chat'].includes(view ?? '') && <canvas ref={element => { canvas = element; }} style={{ width: '100%', height: '100%', display: 'block', 'touch-action': 'none' }} aria-label="The fishing pier" />}
-    <div ref={element => { hud = element; }} style={{ position: 'absolute', inset: 0, 'pointer-events': ['bag', 'sound', 'almanac'].includes(view ?? '') ? 'auto' : 'none' }} />
+    {!['ui', 'bag', 'shelf', 'sound', 'almanac', 'chat'].includes(view ?? '') && <canvas ref={element => { canvas = element; }} style={{ width: '100%', height: '100%', display: 'block', 'touch-action': 'none' }} aria-label="The fishing pier" />}
+    <div ref={element => { hud = element; }} style={{ position: 'absolute', inset: 0, 'pointer-events': ['bag', 'shelf', 'sound', 'almanac'].includes(view ?? '') ? 'auto' : 'none' }} />
     {sheet && <div style={{ position: 'absolute', inset: 0, 'pointer-events': 'none', color: '#e8ddc6', 'font-family': 'Georgia, serif' }}>
       <div style={{ height: '48px', display: 'flex', 'align-items': 'center', 'justify-content': 'space-around', 'font-size': '16px' }}><span>Three-quarter · dusk</span><span>Profile</span><span>Reverse</span></div>
       <div style={{ height: 'calc(100% - 48px)', display: 'grid', 'grid-template-rows': `repeat(${sheet.length}, 1fr)` }}>

@@ -1,11 +1,13 @@
 import { VOXEL_METRES, type Vec3 } from '@chatdom/shared';
 import type { CollisionWorld } from '@chatdom/shared/realm';
-import type { RealmFoundedScene } from '../founded-world/types';
+import { CAMPFIRE_CLEARING_ID, CAMPFIRE_SITE, createCampfireClearing } from '../../../content/src/campfire';
+import type { RealmFoundedPlacement, RealmFoundedScene } from '../founded-world/types';
 import { transformCardinalPoint } from '../settlement/geometry';
 import { interactionTargetId } from './ids';
 import { standingClear } from './geometry';
 import { foundedInstalledHomes, homeThreshold } from './homes';
-import { createInteractionRegistry, homeZone, type InteractionPlacement, type InteractionRegistry } from './registry';
+import { campfirePlacement, SEAT_REACH } from './places';
+import { createInteractionRegistry, homeZone, STREET_ZONE, type InteractionPlacement, type InteractionRegistry } from './registry';
 
 /** The hero anvil mounted by the kingdom's Forge, in the market's metre frame. */
 export const foundedAnvilPosition = (scene: RealmFoundedScene): Vec3 => [0, scene.plan.market.elevation, 8];
@@ -21,6 +23,23 @@ function standingNear(world: CollisionWorld, point: Vec3): Vec3 | null {
     if (standingClear(world, feet)) return feet;
   }
   return null;
+}
+
+/**
+ * The installed kingdom campfire clearing: its log seats through `campfirePlacement`, at the hearth on the ground in
+ * the clearing's own frame, and the Magistrate's chair, which that helper leaves to its owner, as seat 0.
+ */
+function campfireClearingPlacement(placement: RealmFoundedPlacement): InteractionPlacement {
+  const clearing = createCampfireClearing(), [px, py, pz] = clearing.pivot;
+  const origin = transformCardinalPoint(placement.position, placement.rotation, [px * VOXEL_METRES.build, py * VOXEL_METRES.build, pz * VOXEL_METRES.build]);
+  const routes = new Map(clearing.seats.map(seat => [seat.seat, seat.approach]));
+  const logs = campfirePlacement({ site: CAMPFIRE_SITE, origin, turn: placement.rotation, seatTop: clearing.seatTop, seats: clearing.seats,
+    approach: seat => routes.get(seat) ?? [], source: 'campfire:clearing@v1' });
+  const chair = clearing.seats.find(seat => seat.kind === 'magistrate'), stand = chair?.approach[chair.approach.length - 1];
+  if (!chair || !stand) return logs;
+  const [x, z] = chair.hip;
+  return { ...logs, anchors: [...logs.anchors, { id: interactionTargetId.campfireSeat(CAMPFIRE_SITE, String(chair.seat)), kind: 'campfire-seat',
+    zone: STREET_ZONE, position: [x, clearing.seatTop, z], approach: [stand[0], 0, stand[1]], reach: SEAT_REACH, rest: [x, 0, z], facing: chair.heading }] };
 }
 
 /**
@@ -74,6 +93,8 @@ export function createFoundedInteractionRegistry(scene: RealmFoundedScene, world
       break;
     }
   }
+  const fire = scene.placements.find(placement => placement.id === CAMPFIRE_CLEARING_ID);
+  if (fire && assets.get(fire.assetHash)?.id === createCampfireClearing().blueprint.id) placements.push(campfireClearingPlacement(fire));
   const homes = ownedHomeRevisions ? foundedInstalledHomes(scene, ownedHomeRevisions).homes.map(home => homeThreshold(home, world)) : [];
   return createInteractionRegistry({ layoutRevision: scene.layoutRevision, world, placements, homes });
 }

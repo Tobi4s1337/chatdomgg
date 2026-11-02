@@ -10,10 +10,21 @@ import type { AtlasGateEvent, AtlasGateHost } from './ports';
 /** A lazily loadable module map, shaped like `import.meta.glob`'s result. Tests pass their own. */
 export type GateAtlasModules = Readonly<Record<string, () => Promise<unknown>>>;
 
+/** How far the map got: drawn (`map`), only its still picture (`still`), or not at all (`failed`). The Atlas's own words. */
+export type GateAtlasReady = 'map' | 'still' | 'failed';
+
 /** The part of the Atlas embed this file relies on. Anything else about the module is the Atlas's business. */
 type GateEmbed = Readonly<{
-  mountAtlas(el: HTMLElement, options: { mode: 'gate'; signal: AbortSignal }): { readonly gate: AtlasGateHost | null; dispose(): void };
+  mountAtlas(el: HTMLElement, options: { mode: 'gate'; signal: AbortSignal }): {
+    readonly gate: AtlasGateHost | null; readonly ready?: Promise<GateAtlasReady>; dispose(): void;
+  };
 }>;
+
+/**
+ * Hears how far a mounted map got, each time that changes. The Atlas shows its still picture first and is drawn
+ * later, so a listener may hear `still` and then `map`. An embed that does not say is taken as drawn.
+ */
+export type GateAtlasReadyListener = (state: GateAtlasReady) => void;
 
 const EMBED = '../atlas/embed.ts';
 const bundled: GateAtlasModules = import.meta.glob('../atlas/embed.ts');
@@ -32,7 +43,9 @@ function embedOf(value: unknown): GateEmbed | null {
  * Resolves `null` when the build has no Atlas, when it fails to load, when the embed offers no gate, or when the
  * signal ended first. It never resolves a stand-in.
  */
-export async function mountGateAtlas(el: HTMLElement, signal: AbortSignal, modules: GateAtlasModules = bundled): Promise<AtlasGateHost | null> {
+export async function mountGateAtlas(
+  el: HTMLElement, signal: AbortSignal, modules: GateAtlasModules = bundled, onReady?: GateAtlasReadyListener,
+): Promise<AtlasGateHost | null> {
   const load = modules[EMBED];
   if (!load || signal.aborted) return null;
   let embed: GateEmbed | null;
@@ -42,8 +55,38 @@ export async function mountGateAtlas(el: HTMLElement, signal: AbortSignal, modul
   const dispose = () => handle.dispose();
   if (!handle.gate) { dispose(); return null; }
   signal.addEventListener('abort', dispose, { once: true });
+  if (onReady) {
+    let last: GateAtlasReady | null = null;
+    const tell = (state: GateAtlasReady) => { if (!signal.aborted && state !== last) { last = state; onReady(state); } };
+    const ready = handle.ready ?? Promise.resolve<GateAtlasReady>('map');
+    void ready.then(tell, () => tell('failed'));
+    // The ready promise settles on the first state only; the embed's root keeps saying where it got to since.
+    if (typeof MutationObserver === 'function') {
+      const read = () => {
+        const state = el.querySelector<HTMLElement>('[data-chatdom-atlas]')?.dataset.atlasReady;
+        if (state === 'map' || state === 'still' || state === 'failed') tell(state);
+      };
+      const watch = new MutationObserver(read);
+      watch.observe(el, { subtree: true, attributes: true, attributeFilter: ['data-atlas-ready'] });
+      signal.addEventListener('abort', () => watch.disconnect(), { once: true });
+    }
+  }
   return handle.gate;
 }
+
+/** A gate map mounted on first need, which a host may also warm ahead of it (see `deferGateAtlas`). */
+export type DeferredGateAtlas = AtlasGateHost & Readonly<{
+  /**
+   * Mounts the map now, without opening anything, so it is drawn by the time a journey asks for the rise. A walker
+   * who joined a march warms it; a monarch's board never needs to. Repeated calls do nothing more.
+   */
+  warm(): void;
+}>;
+
+export type DeferGateAtlasOptions = Readonly<{
+  /** Hears how far the mounted map got, as it changes. A map that is not drawn leaves the host its own road. */
+  onReady?: GateAtlasReadyListener;
+}>;
 
 /**
  * An `AtlasGateHost` that mounts the map only when the board first needs it (opening the finder, naming a destination,
@@ -54,7 +97,9 @@ export async function mountGateAtlas(el: HTMLElement, signal: AbortSignal, modul
  * Returns null when the build has no Atlas, so the board says the map is not available rather than waiting on one.
  * `origin` is `live` until the embed answers: the product embed is always fed by the Surveyor.
  */
-export function deferGateAtlas(place: () => HTMLElement, signal: AbortSignal, modules: GateAtlasModules = bundled): AtlasGateHost | null {
+export function deferGateAtlas(
+  place: () => HTMLElement, signal: AbortSignal, modules: GateAtlasModules = bundled, options: DeferGateAtlasOptions = {},
+): DeferredGateAtlas | null {
   if (!gateAtlasBundled(modules)) return null;
   const listeners = new Set<(event: AtlasGateEvent) => void>();
   let host: AtlasGateHost | null = null;
@@ -71,7 +116,7 @@ export function deferGateAtlas(place: () => HTMLElement, signal: AbortSignal, mo
   function ready(): Promise<AtlasGateHost | null> {
     if (host) return Promise.resolve(host);
     if (signal.aborted) return Promise.resolve(null);
-    mounting ??= mountGateAtlas(place(), signal, modules).then(mounted => {
+    mounting ??= mountGateAtlas(place(), signal, modules, options.onReady).then(mounted => {
       mounting = null;
       if (mounted && !signal.aborted) {
         host = mounted;
@@ -84,6 +129,7 @@ export function deferGateAtlas(place: () => HTMLElement, signal: AbortSignal, mo
 
   return {
     get origin() { return host?.origin ?? 'live'; },
+    warm() { void ready(); },
     open(from, openSignal) {
       if (signal.aborted || openSignal.aborted) return;
       const mine = ++turn;

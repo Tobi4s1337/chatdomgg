@@ -3,6 +3,7 @@ import { createKingdomAudio, kingdomAudioHost } from '@chatdom/audio';
 import { createBagStore, itemPortrait, mountBag, mountHotbar, type BagSound } from '../bag';
 import { createStagedItemLink } from '../bag/staged';
 import type { FishingController } from './controller';
+import { rodFacts, rodNote } from './rod-words';
 import { createPierSound } from './sound';
 import { mountFishingUiStaged } from './ui/mount';
 import type { FishingUiTimers } from './ui/stepped';
@@ -28,14 +29,16 @@ export function mountPlayHud(hud: HTMLElement, options: { readonly personId: str
   window.addEventListener('pointerdown', unlock, { signal: abort.signal, once: true });
   window.addEventListener('keydown', unlock, { signal: abort.signal, once: true });
   let controller: FishingController | null = null, closeBag: (() => void) | null = null, stopController: (() => void) | null = null;
+  const isRod = (defId: string) => defId.startsWith('tool:rod.');
   const hotbar = mountHotbar(hud, store, { compact, sound: surface, selected: () => controller?.state().rod?.id ?? null,
-    onSelect: itemId => controller?.equip(itemId) });
+    onSelect: itemId => controller?.equip(itemId), note: item => (isRod(item.defId) ? rodNote(controller?.state().history ?? null) : null) });
   const bagLayer = document.createElement('div');
   Object.assign(bagLayer.style, { position: 'absolute', inset: '0', pointerEvents: 'auto' });
   const toggleBag = (openItemId?: string) => {
     if (closeBag) { closeBag(); closeBag = null; bagLayer.remove(); return; }
     hud.append(bagLayer);
     closeBag = mountBag(bagLayer, store, { viewerPersonId: options.personId, compact, sound: surface, onClose: () => toggleBag(),
+      facts: item => (isRod(item.defId) ? rodFacts(controller?.state().history ?? null) : []),
       ...(openItemId ? { openItemId } : {}) });
   };
   window.addEventListener('keydown', event => {
@@ -49,7 +52,7 @@ export function mountPlayHud(hud: HTMLElement, options: { readonly personId: str
     /** Joins the belt to the person's controller: the rod in hand is the chosen tool. */
     attach(next: FishingController) {
       stopController?.(); controller = next;
-      stopController = next.subscribe(event => { if (event.kind === 'state' || event.kind === 'rod' || event.kind === 'taken') hotbar.refresh(); });
+      stopController = next.subscribe(event => { if (event.kind === 'state' || event.kind === 'rod' || event.kind === 'taken' || event.kind === 'kept') hotbar.refresh(); });
       hotbar.refresh();
     },
     bag: toggleBag,

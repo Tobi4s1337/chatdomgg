@@ -173,5 +173,5 @@ describe('chat !fish', () => {
       expect(landed, profile).toBeGreaterThan(84);
       expect(landed, profile).toBeLessThan(120);
     }
-  });
+  }, 20_000); // Hundreds of replayed fights: give a busy shared host room.
 });

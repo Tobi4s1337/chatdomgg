@@ -243,3 +243,10 @@ These are not seams between lanes, but the panel depends on them:
 3. **Turn Bits on** for the test version, and run Hosted Test on tobi4s_.
 4. **For real Bits after review:** complete developer monetisation onboarding on a separate account (`Twitch.md` §17).
 5. **Register the sign-in redirect URI**, so that "Walk in" can sign viewers in.
+
+## from launch
+
+- 2 Nov (LA10): the zip passes; the panel build defines `__CHATDOM_STAGED__=false` (front-door's `## from launch`).
+- needs (2 Nov, LA10 walk, for whoever owns the passport now that panel-window is finished): there is no passport on the
+  web. On chatdom.io a visitor cannot see their passport or raid stamps at all; inside Twitch it opens from the panel's
+  "You" tab. Either a signed-in web route (`/passport`) or a decision that it lives only in the panel.

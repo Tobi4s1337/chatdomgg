@@ -42,7 +42,7 @@ function pool(count: number, size: number, opacity = 1): Pool {
 export function createFire(): FireEffect {
   const group = new THREE.Group();
   group.name = 'campfire.fire';
-  const flame = pool(64, .085), sparks = pool(18, .028), embers = pool(26, .05), smoke = pool(14, .09, .32);
+  const flame = pool(90, .1), sparks = pool(18, .028), embers = pool(26, .05), smoke = pool(14, .09, .32);
   for (const p of [smoke, flame, sparks, embers]) group.add(p.mesh);
   const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), scale = new THREE.Vector3(), rotation = new THREE.Quaternion(), euler = new THREE.Euler(), colour = new THREE.Color();
   const place = (p: Pool, index: number, x: number, y: number, z: number, s: number, spin: number, c: THREE.Color): void => {
@@ -55,11 +55,11 @@ export function createFire(): FireEffect {
       const strength = Math.max(0, Math.min(1, state.strength));
       // A slow breathing of the whole flame, plus a quicker licking; neither strobes.
       const breathe = .9 + .07 * Math.sin(time * 1.7) + .04 * Math.sin(time * 4.3 + 1.1);
-      const height = (.25 + .5 * strength) * breathe;
+      const height = (.32 + .62 * strength) * breathe;
       for (let i = 0; i < flame.count; i++) {
         const period = .62 + hash(i) * .5, age = ((time + hash(i + 50) * period) / period) % 1;
         const cycle = Math.floor((time + hash(i + 50) * period) / period);
-        const angle = hash(i * 7 + cycle * 13) * Math.PI * 2, radius = (.04 + hash(i * 3 + cycle) * .13) * (1 - age * .75);
+        const angle = hash(i * 7 + cycle * 13) * Math.PI * 2, radius = (.05 + hash(i * 3 + cycle) * .17) * (1 - age * .75);
         const rise = smooth(age) * height * (.55 + hash(i + cycle * 3) * .6);
         const lick = Math.sin(time * 6 + i) * .015 * age;
         const x = Math.cos(angle) * radius + state.wind * rise * rise * 1.4 + lick, z = Math.sin(angle) * radius;
@@ -96,10 +96,13 @@ export function createFire(): FireEffect {
   };
 }
 
-/** The little flame inside each game lantern; an extinguished lantern shows a thread of smoke. */
+/** One game lantern's flame this frame. `level` 1 burns, 0 is out; `smoke` 0..1 is the wisp after a flame goes out. */
+export interface LanternFlame { readonly flame: THREE.Vector3; readonly level: number; readonly smoke: number; readonly seed: number }
+
+/** The little flame inside each game lantern; one going out shrinks and leaves a thread of smoke. */
 export function createLanternFlames(capacity: number): {
   readonly group: THREE.Group;
-  update(time: number, lanterns: readonly { readonly flame: THREE.Vector3; readonly lit: boolean; readonly seed: number }[]): void;
+  update(time: number, lanterns: readonly LanternFlame[], count?: number): void;
   dispose(): void;
 } {
   const group = new THREE.Group();
@@ -108,20 +111,25 @@ export function createLanternFlames(capacity: number): {
   const matrix = new THREE.Matrix4(), scale = new THREE.Vector3(), position = new THREE.Vector3(), rotation = new THREE.Quaternion(), colour = new THREE.Color();
   return {
     group,
-    update(time, lanterns) {
-      if (lanterns.length > capacity) throw new Error(`At most ${capacity} game lanterns.`);
-      flames.mesh.count = wisps.mesh.count = lanterns.length * 3;
-      for (const [l, lantern] of lanterns.entries()) for (let k = 0; k < 3; k++) {
-        const i = l * 3 + k, t = time * (1.3 + k * .4) + lantern.seed * 9.1;
-        const flicker = .85 + .15 * Math.sin(t * 3.1) * Math.sin(t * 1.7 + k);
-        position.copy(lantern.flame).add(new THREE.Vector3(Math.sin(t) * .006, k * .028 * flicker, Math.cos(t * 1.3) * .006));
-        scale.setScalar(lantern.lit ? (1 - k * .28) * flicker : 0);
-        colour.copy(CORE).lerp(BODY, k * .45);
-        flames.mesh.setMatrixAt(i, matrix.compose(position, rotation, scale)); flames.mesh.setColorAt(i, colour);
-        const age = ((time * .35 + lantern.seed + k / 3) % 1);
-        position.copy(lantern.flame).add(new THREE.Vector3(Math.sin(time + k) * .02 * age, .1 + age * .45, 0));
-        scale.setScalar(lantern.lit ? 0 : (1 - age) * .9);
-        wisps.mesh.setMatrixAt(i, matrix.compose(position, rotation, scale)); wisps.mesh.setColorAt(i, SMOKE);
+    update(time, lanterns, count = lanterns.length) {
+      if (count > capacity) throw new Error(`At most ${capacity} game lanterns.`);
+      flames.mesh.count = wisps.mesh.count = count * 3;
+      for (let l = 0; l < count; l++) {
+        const lantern = lanterns[l]!, level = Math.max(0, Math.min(1, lantern.level)), smoke = Math.max(0, Math.min(1, lantern.smoke));
+        for (let k = 0; k < 3; k++) {
+          const i = l * 3 + k, t = time * (1.3 + k * .4) + lantern.seed * 9.1;
+          const flicker = .85 + .15 * Math.sin(t * 3.1) * Math.sin(t * 1.7 + k);
+          // A dying flame gutters: it shrinks into the wick, its tip going first.
+          const size = level <= 0 ? 0 : (1 - k * .28) * flicker * Math.min(1, level * (1.6 - k * .3));
+          position.copy(lantern.flame); position.x += Math.sin(t) * .006; position.y += k * .028 * flicker * level; position.z += Math.cos(t * 1.3) * .006;
+          scale.setScalar(Math.max(0, size));
+          colour.copy(CORE).lerp(BODY, k * .45 + (1 - level) * .4);
+          flames.mesh.setMatrixAt(i, matrix.compose(position, rotation, scale)); flames.mesh.setColorAt(i, colour);
+          const age = ((time * .35 + lantern.seed + k / 3) % 1);
+          position.copy(lantern.flame); position.x += Math.sin(time + k) * .02 * age; position.y += .1 + age * .45;
+          scale.setScalar(smoke * (1 - age) * .9);
+          wisps.mesh.setMatrixAt(i, matrix.compose(position, rotation, scale)); wisps.mesh.setColorAt(i, SMOKE);
+        }
       }
       for (const p of [flames, wisps]) { p.mesh.instanceMatrix.needsUpdate = true; if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true; }
     },
@@ -132,7 +140,7 @@ export function createLanternFlames(capacity: number): {
 /** Gallery suspicion: a few motes rising from a small ember beside a log. Advisory, never a mark on a person. */
 export function createSuspicionEmbers(capacity: number): {
   readonly group: THREE.Group;
-  update(time: number, embers: readonly { readonly at: THREE.Vector3; readonly glow: 1 | 2 | 3 }[]): void;
+  update(time: number, embers: readonly { readonly at: THREE.Vector3; readonly glow: number }[], count?: number): void;
   dispose(): void;
 } {
   const per = 7, group = new THREE.Group(), motes = pool(capacity * per, .032);
@@ -140,13 +148,14 @@ export function createSuspicionEmbers(capacity: number): {
   const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), scale = new THREE.Vector3(), rotation = new THREE.Quaternion(), colour = new THREE.Color();
   return {
     group,
-    update(time, embers) {
-      if (embers.length > capacity) throw new Error(`At most ${capacity} suspicion embers.`);
-      motes.mesh.count = embers.length * per;
-      for (const [e, ember] of embers.entries()) for (let k = 0; k < per; k++) {
+    update(time, embers, count = embers.length) {
+      if (count > capacity) throw new Error(`At most ${capacity} suspicion embers.`);
+      motes.mesh.count = count * per;
+      for (let e = 0; e < count; e++) for (let k = 0; k < per; k++) {
+        const ember = embers[e]!;
         const i = e * per + k, period = 1.8 + hash(i + 600) * 1.4, age = ((time + hash(i + 610) * period) / period) % 1;
         const live = k === 0 || k < 1 + ember.glow * 2;
-        position.copy(ember.at).add(new THREE.Vector3(Math.sin(time * 1.3 + k) * .04 * age, k === 0 ? .02 : age * (.25 + ember.glow * .12), Math.cos(time + k * 2) * .04 * age));
+        position.copy(ember.at); position.x += Math.sin(time * 1.3 + k) * .04 * age; position.y += k === 0 ? .02 : age * (.25 + ember.glow * .12); position.z += Math.cos(time + k * 2) * .04 * age;
         scale.setScalar(!live ? 0 : k === 0 ? 1.3 + .2 * Math.sin(time * 2) : (1 - age) * .9);
         colour.copy(EMBER).lerp(EMBER_HOT, k === 0 ? .4 + .2 * Math.sin(time * 2.2) : 1 - age);
         motes.mesh.setMatrixAt(i, matrix.compose(position, rotation, scale)); motes.mesh.setColorAt(i, colour);
