@@ -111,7 +111,7 @@ export function findPierSite(plan: SettlementPlan): FishingPierSite | null {
         const x = Math.round((shoreline[0] - direction[0] * back) / CELL) * CELL, z = Math.round((shoreline[2] - direction[2] * back) / CELL) * CELL;
         const ground = foundedGroundAt(plan, x, z);
         for (const walk of WALKS) {
-          const draft: FishingPierSite = { version: 1, id: 'pier:lake', root: ground, turn, deckY: lake.level + FREEBOARD, waterY: lake.level, walk, water: 'lake', biome: plan.genesisSurface?.character ?? 'meadow', depth: [] };
+          const draft: FishingPierSite = { version: 1, id: 'pier:lake', root: ground, turn, deckY: lake.level + FREEBOARD, waterY: lake.level, walk, water: 'lake', biome: 'unknown', depth: [] };
           if (!supportedSite(plan, draft)) continue;
           const depth = Array.from({ length: walk + 5 }, (_, i) => {
             const at = pierLocalToWorld(draft, [10, 0, i / CELL]), water = pierWaterAt(plan, at[0], at[2]);

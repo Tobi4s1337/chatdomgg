@@ -26,7 +26,7 @@ contribution run there. **The production kingdom layer is not mounted yet.** The
 `mountPierLayer(host)` to request at this checkpoint; section 3's eventual mount ask still applies once
 the fishing layer exists. Static timber renders through the ordinary founded placements already.
 
-No room channel, fishing intent, public feed, clock mapping, bag or tool registration is added yet. This
+At that physical checkpoint no room channel, fishing intent, public feed, clock mapping, bag or tool registration was added. It
 checkpoint does not change any existing API in sections 1–6. No other lane's SEAMS file is present here;
 there is no additional cross-lane contract change to write into another scope.
 
@@ -482,6 +482,52 @@ the transport is created. The room takes one optional `channels` field on `Realm
 registration block; feature rules stay in pier's module. No other lane's SEAMS file is present in this
 checkout. This freezes this lane's implementation of the already agreed room hook, without another lane
 needing to change its files.
+
+### PI10 fishing rules checkpoint — 2 November
+
+[Fishing rules](fishing-rules.md) freeze the new domain. `FishingRequestSchema` accepts only draw, release,
+strike, reel and cancel controls. Cast id and increasing sequence belong to the server's current seat;
+no request accepts time, pose, seed, fish, outcome or a replay tape. The new cast domain takes trusted ports
+for the authenticated controlling seat, equipped owned rod, adopted installation and real water sampler.
+It validates the fishing lip, byte yaw, full water corridor, depth and collision revision; moving away,
+seat/rod/revision/biome loss or disconnect cancels. Restart begins empty. There are at most 48 casts, finite
+charge/wait/fight/landing lifetimes, no resting timers and at most 256 returned beats per operation.
+
+`fight.ts` runs immutable integer 50 ms steps, at most 600. Seeded rest/warning/run rhythms and fatigue use
+no render randomness. The server records actual next-tick reel edges, coalesces edges in one step, replays
+the entire bounded tape and compares every terminal field. A won fight remains an expiring immutable
+candidate. Candidate access rechecks seat, rod, geometry and expiry. It grants nothing and never emits a
+`caught` beat. The eventual writer must take that candidate from the server domain, recheck admission and
+writer fencing inside its item transaction, then commit catch, item and receipt atomically before publishing.
+Verifying an arbitrary supplied tape is not authorization to write a catch.
+
+This checkpoint adds **no fishing channel registration or public endpoint**. It is intentionally unmounted
+until the durable writer, real content and visible mood presentation exist. The existing items channel
+and physical geometry remain available. Species used in domain tests are fixtures, not production content.
+
+The shared module now supplies `kingdomFishingHour`, `fishingHourBand` and `kingdomWaterMood`. The documented
+fallback maps realm epoch time to actual UTC hours; it does not use a device's local time or invent a fast
+day cycle. Water mood is a stable kingdom-specific half-hour bucket and must be drawn before it affects a
+reachable fishing path. The single hour function is the clock replacement point.
+
+The review found that persisted founded plans have no biome identity. A landscape's `character` is not a
+biome, and homes' style cannot recover one. The physical site finder now honestly says `biome: 'unknown'`.
+`FishingInstallation.biome: string | null` is a mandatory trusted input from adopted recipe identity. Null
+qualifies wildcard habitats only; species definitions cannot reserve `unknown` as a special habitat.
+Authored species are validated/copy-frozen once and sorted by ASCII id so catalogue order never changes a roll.
+
+needs: grand-world kingdom clock export. Provide `kingdomHour(serverTime: number): number` (0 inclusive,
+24 exclusive), then replace only the body of `kingdomFishingHour` with `return kingdomHour(serverTime)`.
+Until it lands, the documented UTC mapping remains the single fallback. Sky adoption of water mood must
+call the existing shared `kingdomWaterMood(kingdomId, serverTime)` rather than roll another mood.
+
+needs: grand-world adopted biome metadata. Exact additive plan contract in
+`packages/world/src/settlement/types.ts`: `readonly biome?: import('../genesis/contracts').GenesisBiome;`.
+In `compileGenesisSettlement`'s `body`, persist `biome: recipe.identity.biome` alongside `genesisSurface`
+before hashing the revision. Preserve this optional metadata through adopted plan persistence. Pier's
+trusted installation can then use `biome: adoptedPlan.biome ?? null`; old stored plans remain null unless
+their original approved recipe identity is available. Never infer it from character, style or channel id.
+Until that lands, only wildcard-biome fish can bite on those plans. Pier did not edit world or old plans.
 
 needs: integrator apply the reviewed `0017b_realm_pier_pages.sql` migration alongside 0017 when preparing
 the release schema; this lane migrated only `pier`, never live data. Use the existing migration runner
