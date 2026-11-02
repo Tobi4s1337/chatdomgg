@@ -25,6 +25,7 @@ import { foundedLandReceipt } from './grand-land/scene-receipt';
 import { probePublishedLand } from './grand-land/land-availability';
 import type { RealmFoundedManifest } from '@chatdom/shared/realm';
 import { createGrandOverview } from './grand-land/overview';
+import { createProgramWarmer } from './grand-land/program-warm';
 import { overviewFrame } from './grand-land/overview-pose';
 import { prepareHostedGrandLand, openHostedGrandLand, createHostedGrandMaterial, type HostedGrandLand } from './grand-land';
 import { foundedHeightSampler, prepareFoundedGround, type FoundedGround } from './terrain-founded';
@@ -236,6 +237,12 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       renderer.setRenderTarget(null);if(!post.diagnostics().hdr)void renderer.compileAsync(objects,camera,scene).catch(()=>undefined);
     }finally{renderer.setRenderTarget(previous,face,mip);}
   }
+  // Linking is not finishing: the driver completes each program at its first draw in the state it is drawn in, so the
+  // grand land's first frame used to wait ~85 ms per program. Draw each once, unseen, while the land still arrives.
+  // Only where the driver links in parallel: without KHR_parallel_shader_compile (a software renderer) the warm draw
+  // itself would wait out every compile on the main thread, which is exactly what the land and assets need meanwhile.
+  const warmable=!software&&renderer.extensions.has('KHR_parallel_shader_compile');
+  const warmer=own(createProgramWarmer({renderer,scene,camera,target:()=>post.sceneTarget(),live:()=>warmable&&!disposed&&!loaded}));let postWarmed=false;
   const warmGeometry=new THREE.BufferGeometry();
   function warmPrograms(list:readonly {readonly material:THREE.Material;readonly instanced:boolean}[]){
     if(!useGrandLand||!list.length)return;
@@ -652,9 +659,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const townTask=useGrandLand?dressingReady.then(()=>{
     if(disposed)return;
     const keptCover={...coverPlan,pieces:new Map([...coverPlan.pieces].filter(([,list])=>list.length&&!yields(list[0]!)))};
-    return planTownGroundAway(layout,{occupied:content,existing:keptCover},abort.signal).then(planned=>{
+    return planTownGroundAway(layout,{occupied:content,existing:keptCover},abort.signal,sampledGround?.floor).then(planned=>{
     if(disposed)return;
-    townMs=Math.round(performance.now()-townStarted);townGround=planned;
+    townMs=Math.round(performance.now()-townStarted);townGround=planned;loadMark('town-planned');
     const {origin:[ux,uz],width:uw,depth:ud,data}=planned.mask;
     const planted=(x:number,z:number)=>{const i=Math.floor(x-ux),j=Math.floor(z-uz);return i>=0&&j>=0&&i<uw&&j<ud&&data[i+j*uw]!>0;};
     townYielded=dressing!.yieldGround(piece=>yields(piece)&&footprintCorners(piece.blueprint,piece.position,piece.yaw).some(([x,z])=>planted(x,z)));
@@ -663,7 +670,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     townCover=own(createGroundDressing({...coverInput,land:{plan:layout,sites:[],places:{court:{boundary:layout.castle.court.boundary}}},
       seed:layout.config.seed,tier:layout.config.tier,plan:{pieces:planned.pieces,blockers:[],collisionPieces:[],seatAnchors:[],report:{counts:planned.report.counts,homesWithVignette:0,omissions:[]}},
       scene,camera,pool,clay,signal:abort.signal,registerShadow:mesh=>sunShadows.register(mesh)}));
-    return townCover.ready;
+    return townCover.ready.then(()=>loadMark('town-covered'));
   });}):undefined;
   const sites:TreeSite[]=[];
   const treeCount=options.tier==='hamlet'?115:260;
@@ -1031,7 +1038,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const treeIndex=trees.indexOf(b);
     const placements=treeIndex>=0?treeBatches[treeIndex]!.placements:renderContent.filter(h=>blueprintKey(h.blueprint)===blueprintKey(b));
     if(shadow&&result.shadowChunks===undefined)throw new Error('The voxel worker omitted requested shadow geometry');
-    instance(b,result.chunks,placements,factor,result.shadowChunks);if(!precompiledAssets){precompiledAssets=true;precompile();}if(opening&&factor===4)opening.raised(placements.flatMap(piece=>{const slot=(piece as {slot?:unknown}).slot;return typeof slot==='number'&&slot<65534?[slot]:[];}));opening?.assets(completed+1,total);if(completed+1>=total)opening?.step('homes');options.onProgress(castleBuildings.some(module=>module.blueprint.id===b.id)?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
+    instance(b,result.chunks,placements,factor,result.shadowChunks);if(!precompiledAssets){precompiledAssets=true;precompile();}else if(useGrandLand)warmer.request();if(opening&&factor===4)opening.raised(placements.flatMap(piece=>{const slot=(piece as {slot?:unknown}).slot;return typeof slot==='number'&&slot<65534?[slot]:[];}));opening?.assets(completed+1,total);if(completed+1>=total)opening?.step('homes');options.onProgress(castleBuildings.some(module=>module.blueprint.id===b.id)?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
     }
   });
   if(growth)tasks.push(growth.ready);
@@ -1062,7 +1069,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       onError:error=>failLight(error.message),
       ...(opening?{onRegionShown:(region:{readonly rx:number;readonly rz:number;readonly level:number;readonly exact:boolean;readonly bounds:{readonly min:readonly number[];readonly max:readonly number[]}})=>{
         opening.region({rx:region.rx,rz:region.rz,level:region.level,exact:region.exact,bounds:{minX:region.bounds.min[0]!,maxX:region.bounds.max[0]!,minZ:region.bounds.min[2]!,maxZ:region.bounds.max[2]!}});
-        if(exactShown===0)queueMicrotask(precompile);
+        if(exactShown===0)queueMicrotask(precompile);else warmer.request();
         if(region.exact&&++exactShown>=exactTotal)opening.step('street');
       }}:{}),
     })).then(async land=>{
@@ -1093,7 +1100,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }
     opening?.step('ground');
   }));
-  function dispose(){if(disposed)return;stills.dispose();handoffAwaiter?.reject(new DOMException('The kingdom closed during view handoff','AbortError'));handoffAwaiter=undefined;const checkpoint=options.founded&&!options.replay&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);overview?.dispose();kingdomLayers?.dispose();placeMounts.dispose();walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();dressing?.dispose();grandLand?.dispose();clearInterval(soulClockTimer);soul?.dispose();civicLife?.dispose();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();emptyPoints.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();gpuTimer?.dispose();post.dispose();precompileTarget.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;stills.dispose();handoffAwaiter?.reject(new DOMException('The kingdom closed during view handoff','AbortError'));handoffAwaiter=undefined;const checkpoint=options.founded&&!options.replay&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);overview?.dispose();kingdomLayers?.dispose();placeMounts.dispose();walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();dressing?.dispose();grandLand?.dispose();clearInterval(soulClockTimer);soul?.dispose();civicLife?.dispose();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();emptyPoints.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();gpuTimer?.dispose();warmer.dispose();post.dispose();precompileTarget.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();opening?.fail('The kingdom lost its rendering context');options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
@@ -1110,7 +1117,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   // render targets without tone mapping, the canvas through ACES into sRGB. compile() takes the variant of the target
   // bound at that moment, so the scene is compiled for a render target (every frame's reflection, and the main pass
   // whenever the post stack composes) and for the canvas only when the main pass draws there directly.
-  const precompile=()=>{if(!disposed&&useGrandLand)compileVariants(scene);};
+  const precompile=()=>{if(disposed||!useGrandLand)return;compileVariants(scene);warmer.request();if(!postWarmed){postWarmed=true;warmer.task(()=>post.warm());}};
   precompile();
   try {await Promise.all(tasks);loadMark('tasks');precompile();
     if(disposed)throw new Error('Scene closed while loading');
@@ -1143,7 +1150,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       void moments.ready.catch(()=>{});
     }
     }catch(error){dispose();throw error;}
-  loaded=true;loadMark('loaded');lastFrame=performance.now();options.onProgress('The gate is opening',1);
+  try{performance.mark('chatdom:load:warm',{detail:{...warmer.stats(),warmable}});}catch{/* Marks are diagnostics only. */}loaded=true;loadMark('loaded');lastFrame=performance.now();options.onProgress('The gate is opening',1);
   function detachWalk(){walkGeneration++;walkSelected=false;walk?.dispose();walk=undefined;options.onWalkers?.([]);camera.clearViewOffset();camera.filmOffset=0;camera.updateProjectionMatrix();instancesDirty=true;}
   const overviewControls=overview?{orbit:overview.orbit,reset:overview.reset,inspect:overview.inspect}:undefined;
   return {layout,debug,sound,build,forge,get overview(){return overviewControls;},forgeDirecting:()=>forgeCameraDirected,momentDirecting:()=>forgeCameraDirected||arrivalCameraDirected||momentCameraDirected||growthCameraDirected||dockCameraDirected,
@@ -1170,7 +1177,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     seekGrowthCeremony(seconds:number|null){growth?.seek(seconds);},
     /** Whether this kingdom can frame a camera now; the grand land's wide shots exist only once its land is searched. */
     offers:(view:CameraName)=>view==='island'||view==='vista'?!!shotOf(view):true,
-    inspect:()=>({quality:{...sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth),governed:!software&&!fixedTime&&qualityChoice===null,gpuTimer:gpuTimer?.supported??false,obs:insideObs,governor:governor.state()},townGround:townGround?{...townGround.report,ms:townMs,yielded:townYielded,cover:townCover?.stats()??null}:null,fringe:{trees:fringeTrees,region:physicalRegion??null},shots:{island:landShots?.island??null,hero:landShots?.hero??null,vista:landShots?.vista??null,searching:!!shotSteps,opening:openingState,openingElapsed},overview:overview?.inspect()??null,placeShot:placeShot.inspect(),reveal:reveal?{...reveal.inspect(),opening:reveal.opening?{kind:reveal.opening.kind,line:reveal.opening.line,lifting:reveal.opening.lifting}:null}:null,land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),shadow:{...sunShadows.stats},moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing?.stats(),counts:coverCounts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
+    inspect:()=>({warm:warmer.stats(),quality:{...sceneQualityBudget(qualityChoice,automaticQuality,canvas.clientWidth),governed:!software&&!fixedTime&&qualityChoice===null,gpuTimer:gpuTimer?.supported??false,obs:insideObs,governor:governor.state()},townGround:townGround?{...townGround.report,ms:townMs,yielded:townYielded,cover:townCover?.stats()??null}:null,fringe:{trees:fringeTrees,region:physicalRegion??null},shots:{island:landShots?.island??null,hero:landShots?.hero??null,vista:landShots?.vista??null,searching:!!shotSteps,opening:openingState,openingElapsed},overview:overview?.inspect()??null,placeShot:placeShot.inspect(),reveal:reveal?{...reveal.inspect(),opening:reveal.opening?{kind:reveal.opening.kind,line:reveal.opening.line,lifting:reveal.opening.lifting}:null}:null,land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),shadow:{...sunShadows.stats},moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing?.stats(),counts:coverCounts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
       if(!crowd.receiveChat(input))return false;
       const cue=CitizenChatCueSchema.parse(input),at=Date.now();
       if(cue.asOf<=at&&at-cue.asOf<=5000&&cue.expiresAt>at)arrivalDirector?.chat(cue.slot,at);

@@ -5,7 +5,7 @@
 // reserved lot, so a home growing on its lot never has to uproot a crop.
 import type { VoxelBlueprint } from '@chatdom/shared';
 import { homeFrame, randomUnit, seedHash, type SettlementHome, type SettlementPlan, type XZ } from '@chatdom/world';
-import { foundedGroundAt, sampleFoundedTerrain } from '@chatdom/world/founded-collision';
+import { foundedGroundAt, primeFoundedTerrain, sampleFoundedTerrain } from '@chatdom/world/founded-collision';
 import { frameSettlement } from '../../../../../../packages/world/src/grand/kingdom/frame';
 import { polygonDistance, type GroundDressingPlan, type GroundPiece } from '../../ground-dressing/plan';
 import { CROP_FORMS, townBlueprint, type TownForm } from './forms';
@@ -295,18 +295,42 @@ class StreetGrain {
       this.ids.push(line.id); this.lengths.push(s);
     });
   }
+  /**
+   * Each bucket's segments ring by ring, in the order a ring search from that bucket meets them, each segment only
+   * at its first meeting. A segment met again can never change the nearest (its distance is the one already
+   * weighed), so walking these lists answers exactly what walking every bucket of every ring would.
+   */
+  private readonly rings = new Map<number, { readonly lists: Int32Array[]; readonly met: Set<number> }>();
+  private ring(bx: number, bz: number, ring: number): Int32Array {
+    const key = (bx + 4096) * 8192 + bz + 4096;
+    let entry = this.rings.get(key);
+    if (!entry) { entry = { lists: [], met: new Set() }; this.rings.set(key, entry); }
+    while (entry.lists.length <= ring) {
+      const r = entry.lists.length, out: number[] = [], met = entry.met;
+      const visit = (ox: number, oz: number) => {
+        const list = this.buckets.get((bx + ox + 4096) * 8192 + bz + oz + 4096);
+        if (list) for (const id of list) if (!met.has(id)) { met.add(id); out.push(id); }
+      };
+      // The ring's own cells in row order: its first row, its two sides, its last row.
+      if (r === 0) visit(0, 0);
+      else {
+        for (let ox = -r; ox <= r; ox++) visit(ox, -r);
+        for (let oz = 1 - r; oz < r; oz++) { visit(-r, oz); visit(r, oz); }
+        for (let ox = -r; ox <= r; ox++) visit(ox, r);
+      }
+      entry.lists.push(Int32Array.from(out));
+    }
+    return entry.lists[ring]!;
+  }
   /** The nearest grain segment to a point: its index, arc position along its street, distance and side. */
   nearest(x: number, z: number): { segment: number; s: number; t: number; side: 1 | -1 } {
     const bx = Math.floor(x / BUCKET), bz = Math.floor(z / BUCKET);
     let best = Infinity, found = -1, along = 0;
     for (let ring = 0; ring < 64; ring++) {
-      for (let oz = -ring; oz <= ring; oz++) for (let ox = -ring; ox <= ring; ox++) {
-        if (Math.max(Math.abs(ox), Math.abs(oz)) !== ring) continue;
-        for (const id of this.buckets.get((bx + ox + 4096) * 8192 + bz + oz + 4096) ?? []) {
-          const g = this.segments[id]!, t = Math.max(0, Math.min(1, ((x - g.ax) * g.dx + (z - g.az) * g.dz) / (g.length * g.length)));
-          const d = Math.hypot(x - g.ax - t * g.dx, z - g.az - t * g.dz);
-          if (d < best - 1e-9) { best = d; found = id; along = t; }
-        }
+      for (const id of this.ring(bx, bz, ring)) {
+        const g = this.segments[id]!, t = Math.max(0, Math.min(1, ((x - g.ax) * g.dx + (z - g.az) * g.dz) / (g.length * g.length)));
+        const d = Math.hypot(x - g.ax - t * g.dx, z - g.az - t * g.dz);
+        if (d < best - 1e-9) { best = d; found = id; along = t; }
       }
       if (found >= 0 && best <= ring * BUCKET) break;
     }
@@ -763,6 +787,16 @@ function chamfer(grid: Grid, source: (k: number) => boolean): Float32Array {
     if (j < depth - 1) { pass(k, k + width, 1); if (i < width - 1) pass(k, k + width + 1, Math.SQRT2); if (i > 0) pass(k, k + width - 1, Math.SQRT2); }
   }
   return d;
+}
+
+/**
+ * Hand the planner the founded floor tops the scene's ground workers already sampled (`sampleFoundedTerrain`'s
+ * layout). Sampling that floor again was most of the planner's time. A floor that does not fit the plan exactly is
+ * refused and the planner samples it itself, so the plan is the same either way.
+ */
+export function primeTownFloor(plan: SettlementPlan, floor: Float32Array | null | undefined): boolean {
+  if (!floor || plan.version !== 2 || plan.landform.version !== 1) return false;
+  try { primeFoundedTerrain(plan, floor); return true; } catch { return false; }
 }
 
 /**
