@@ -223,7 +223,7 @@ without a code change.
     and §4): the Herald parsing the two chat commands, and the stream's public name projection honouring quiet. If they
     land during the round, an end-to-end test covers them.
 
-- [ ] **PW12 — Gifts, ready for Bits.**
+- [x] **PW12 — Gifts, ready for Bits.**
   *Outcome.* The Gifts tab becomes the real shelf (decision 27, C04):
   - It is always one tap away, and it never opens or moves by itself.
   - It holds a catalogue of 15 to 25 moments that the whole kingdom sees. Examples: fireworks for a friend, light every

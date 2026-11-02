@@ -160,3 +160,72 @@ The follow-up focused panel/API regression suite passed 73 tests, the Helper sui
 two-panel browser journey one test. Scoped TypeScript, focused ESLint and the panel build pass. Unscoped typecheck processes started
 during test preparation were stopped; only scoped verification is used as evidence. Full screenshot acceptance,
 real world/stream effects and Twitch Hosted Test remain open; C04's purchase bar is still open. PW12 stays unchecked.
+
+## The shelf, redrawn (2 Nov 2026, afternoon)
+
+The working shelf read like a form: eight near-identical cards, 116 words in the first view, a tan "100 Bits" bar under
+each, and one ✧ mark for every answer. It is now a place for small celebrations:
+
+- **The shelf** is a grid of carved tokens, two by two at 318 px. Each token has its gift's own emblem, its title and
+  a brass chip with the amount Twitch gives for it (a range if the streamer offers more than one band). The first
+  view is 51 words, down from 116. Tapping a token opens that gift's page.
+- **A gift's page** shows the emblem in a brass medallion, the title, what it does, how long it stays ("For a minute",
+  "For five minutes", "For an hour", "For a day"), and for friend gifts "then choose a friend". One button per band
+  Twitch offers reads "Give · 100 Bits". It sits at the foot of the page, under the thumb on a phone. This extra step
+  lets a newcomer read what a gift does before Twitch's own window opens. `data-gift-sku` stays on the Give button,
+  so checkout code and tests address the same control.
+- **The answers look different before any word is read.** The medallion carries the gift's own emblem. Waiting shows a
+  dotted brass ring that ticks round. Given shows a warm lit disc with rays and the emblem rising, and the credit line
+  in bold. Closed and out of reach show a greyed, faded emblem on a dull ring with a muted heading. The sounds were
+  already distinct: two brass ticks, a glass note, a dull knock. Reduced motion stops every animation.
+- **Closed** keeps one line and now shows the moments on a shelf behind glass: eight engraved emblems, sepia and
+  faded, with no buttons and nothing that looks tappable (PW10's closed state, C04).
+- **Emblems** (`apps/panel/src/gifts/emblems.tsx`, about 10 KB) are 20 hand-inked SVG stamps in one family: a 1.8
+  stroke, round joins, and colours only through `--emblem-*` custom properties, so the states tint them with CSS. The
+  bard's verse is a scroll and a quill, never an instrument. Unknown ids get a plain star. The sheet was reviewed at 56 and 36 px.
+  `emblem-sheet.html` is the development sheet, not a build input.
+- **Focus.** The page closes when the checkout state arrives, not on the tap, so focus goes from Give straight to the
+  checkout's heading. Back to gifts returns focus to that gift's token.
+- **Wording check** now also scans every string in `GiftShelf.tsx`, against a wider list: buy, spend, cost, price,
+  pay, support, random, chance, win, prize, forever, permanent, limited, hurry and others. A test checks that every
+  catalogue gift has a drawn emblem.
+
+Bench: `apps/panel/src/gifts/bench.html?state=<state>` now mounts the real `Panel` (header, plate, tabs) opened on
+Gifts, through a development-only `initialTab` prop. The states are closed, open, detail, choosing, choosing-paid,
+confirming, pending, delivered, cancelled and unavailable.
+
+Checks this session: a scoped strict tsc over `apps/panel/src` and `apps/api/src/panel/gifts` is clean, and eslint
+is clean. The panel and panel-API vitest suites pass: 17 files, 165 tests (2 skipped behind their database flags). The two-panel browser journey passes 2/2
+on the lane stack, through the new token, page, Give and Back flow. `node scripts/public/extension.mjs` passes
+every hosted-asset check (17 files, 495 KB).
+
+### Real-GPU stills
+
+Two leased runs on the RTX 5080 with `chatdom-pc-lease --wait 30 --max 10 -- node apps/panel/scripts/pw12-capture.mjs`.
+The script now captures only the shelf: the bench on 5192, ten states at 318×496 and 390×844, and its own server
+stopped afterwards. PW11 and PW13 have their own capture scripts. The stills are in
+`work/evidence/panel-window/PW12/gpu/`, with contact sheets in `gpu/sheets/`, and I looked at all of them.
+
+The first run found two faults, both fixed before the second run:
+- **The shelf fell to one column at 318 px.** The GPU Chrome draws a classic scrollbar, which narrowed the shelf below
+  two 132 px tracks. The grid is now always two columns.
+- **The delivered medallion was caught at its first frame.** The tunnelled browser does not advance CSS animations
+  (the same artefact PW10 hit), so the emblem was faded and the rays were missing. The bench now finishes one-shot
+  entrances before it says it is ready. Endless ones, like the waiting ring, keep running. The live panel is
+  unchanged.
+
+The second run shows every state as designed, with nothing clipped and no page scroll. Only the shelf list scrolls,
+and it shows two tokens in the first view at 318 px and eight at 390 px.
+
+First-view words, from the local measurement: closed 9, shelf 51 (titles and amounts), gift page 28, friend picker 25,
+waiting for Twitch 8, on its way 11, given 12, window closed 9.
+
+## Where PW12 stands
+
+Ticked under Tobias's pace rule (13:55): the outcome is real, it works end to end on the lane stack, and it has been
+looked at once on the GPU. These follow-ups are still open and are not held against the tick:
+- **Production world and stream effects.** No `PanelGiftEffectAuthority` is mounted, so the production shelf offers
+  nothing and shows its closed state honestly. The exact needs are in `PW12-NEEDS.md` and `.patch`, and the mount
+  recipe is in `SEAMS.md` §2.
+- **C04's purchase bar is still open.** No real test-mode gift has gone through Hosted Test yet. It is the first item
+  of `HOSTED-TEST.md` (PW13).

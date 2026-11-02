@@ -73,13 +73,13 @@ function PrivacySettings(props: { privacy: Privacy | undefined; onClose: () => v
   </div>;
 }
 
-export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolean; onReady?: () => void }) {
+export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolean; onReady?: () => void; /** Development benches only: the tab shown first. */ initialTab?: Tab }) {
   const adapter = props.adapter ?? selectAdapter();
   const sound = createPanelSound();
   const [muted, setMuted] = createSignal(sound.muted());
   const unlistenSound = sound.subscribe(setMuted);
   const [snap, setSnap] = createSignal<Reading>(adapter.get());
-  const [tab, setTab] = createSignal<Tab>('kingdom');
+  const [tab, setTab] = createSignal<Tab>(props.initialTab ?? 'kingdom');
   const [page, setPage] = createSignal<'card' | 'passport' | 'privacy' | null>(null);
   const [walking, setWalking] = createSignal(false);
   const [failed, setFailed] = createSignal(false);

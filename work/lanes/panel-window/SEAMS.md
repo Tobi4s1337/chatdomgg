@@ -128,6 +128,18 @@ adds tables and never alters existing ones.
   mounting through the scene's existing moment hooks. For each gift, the exact payload and a proposed mount go in a
   `needs:` line. A gift with no effect mounted is not offered on the shelf.
 
+**Mount recipe for the gifts (PW12), for grand-world's install on the grand land.**
+- Entry: the realm's gift feed, `RealmPanelGifts.feed(kingdomId, afterSequence)` (64 facts a page), carried to the
+  stream and the walkable kingdom by the transport in `PW12-NEEDS.patch` as a `panel-gifts` event of `PanelGiftFact`
+  (`packages/shared/src/panel.ts`). A gift fact is its own type, never a Twitch moment.
+- Anchors: each fact names its gift (`giftId`), and `target` is the committed `{plotId, slot}` of a real home, or
+  null. The plaza, the gate, the streets, water and the sky are the land's own anchors. The full table of the 20 gifts
+  with their anchor and duration is in `PW12-NEEDS.md`.
+- Props: one effect per gift id, the same for all three bands. It runs for `endsAt - committedAt` at most (a minute
+  to a day), ends by itself, and restores quietly on reconnect without replaying sounds or camera moves.
+- Switch-on: an effect is offered on the panel only once `PanelGiftEffectAuthority.ready(giftId)` answers for it from
+  `apps/realm/src/main.ts` (contract in `PW12-NEEDS.md`). Until then the shelf stays closed, honestly.
+
 ## 3. front-door: the `packages/ui` kit, fonts and the gateway
 
 **Owners.**
@@ -173,6 +185,17 @@ keep every export, and the bench protocol still reads.
   `apps/api/src/passport/{contracts.ts,contracts-core.ts,live-contracts.ts}` and this `SEAMS.md`. The panel change
   follows: `apps/panel/src/{Panel.tsx,card/CardSheet.tsx,passport/PanelPassport.tsx,passport/transport.ts,passport/transport.test.ts}`,
   together with `PRD.md`, `PW10-NOTES.md`, `progress.txt` and `work/evidence/panel-window/PW10/passport-live/`.
+
+**Integrator merge, found 2 Nov 2026 at 14:35.** `lane/integrator` (f3b19e19) has both this lane's Passport commit
+and front-door's FD11, but its merge kept FD11's text in `packages/ui/src/passport/Book.tsx` and `Reading.tsx`: the
+three `ProvenanceSeal state="simulated"` branches and the import came back. Through `@chatdom/ui/passport/live` they
+reach the panel's viewer chunk, so `scripts/public/build.mjs` fails with `assets/viewer-*.js: simulation string in the
+extension`. `apps/panel/src/model.ts` is not the cause: its `'simulated'` kinds are types, which never reach the bundle.
+- `needs: integrator` Apply `PW12-INTEGRATOR-PASSPORT.patch` (`patch -p1`; Book.tsx and Reading.tsx only, the same two
+  file hunks as `PW13-PASSPORT-NEEDS-FRONT-DOOR.patch`). Checked on an exported copy of f3b19e19: the patch applies
+  cleanly, strict tsc over `packages/ui`, `apps/panel` and `apps/web/src/passport` is clean, and
+  `node scripts/public/extension.mjs` passes every hosted-asset check (17 files, 489 KB). The removed props
+  (`Cover.simulated`, `ClosedPassport.simulated`) are internal to those files.
 
 **The gateway.**
 - `apps/api/src/public/routes.ts` already sends `/api/panel/*` to the panel handler, so it needs no change.
