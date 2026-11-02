@@ -537,9 +537,12 @@ export async function fetchChunk(source: PreviewSource, world: PreviewWorld, reg
   return validateChunk(value, world, region);
 }
 
-/** The current names projection for this preview. Not hash-pinned: it changes as names refresh or are withheld. */
-export async function fetchNames(source: PreviewSource, world: Pick<PreviewWorld, 'id'>, signal?: AbortSignal): Promise<ServedNames> {
-  const body = await getBytes(source, `${source.base}/v1/preview/${world.id}/names`, READ_TIMEOUT_MS.names, signal);
+/**
+ * The current names projection for this preview. Not hash-pinned: it changes as names refresh or are withheld. The
+ * `head` part holds only the head's names (and every withheld id), small enough for the first frame to wait on.
+ */
+export async function fetchNames(source: PreviewSource, world: Pick<PreviewWorld, 'id'>, signal?: AbortSignal, part: 'all' | 'head' = 'all'): Promise<ServedNames> {
+  const body = await getBytes(source, `${source.base}/v1/preview/${world.id}/names${part === 'head' ? '?part=head' : ''}`, READ_TIMEOUT_MS.names, signal);
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)) as unknown;

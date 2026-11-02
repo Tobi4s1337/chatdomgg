@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writ
 import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
-import { gunzipSync } from 'node:zlib';
+import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ImportConfig } from '../config';
 import { runImport, type ImportOutcome } from '../import';
@@ -151,12 +151,23 @@ describe('survey preview routes', () => {
     expect(revalidated.headers).toMatchObject({ etag, 'cache-control': IMMUTABLE });
     expect((await get(port, pointer.world.url, { headers: { 'if-none-match': '"stale"' } })).status).toBe(200);
 
-    const gzipped = await get(port, pointer.world.url, { headers: { 'accept-encoding': 'gzip, deflate, br' } });
+    const gzipped = await get(port, pointer.world.url, { headers: { 'accept-encoding': 'gzip, deflate' } });
     expect(gzipped.status).toBe(200);
     expect(gzipped.headers['content-encoding']).toBe('gzip');
     expect(gzipped.headers['content-length']).toBe(String(gzipped.body.byteLength));
     expect(gzipped.body.byteLength).toBeLessThan(pointer.world.bytes);
     expect(sha(gunzipSync(gzipped.body))).toBe(pointer.world.sha256);
+    // Brotli is made once off the event loop; until then a reader that takes it gets gzip, never a wait.
+    let brotli = await get(port, pointer.world.url, { headers: { 'accept-encoding': 'gzip, deflate, br' } });
+    for (let tries = 0; brotli.headers['content-encoding'] !== 'br' && tries < 50; tries++) {
+      expect(brotli.headers['content-encoding']).toBe('gzip');
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      brotli = await get(port, pointer.world.url, { headers: { 'accept-encoding': 'gzip, deflate, br' } });
+    }
+    expect(brotli.headers['content-encoding']).toBe('br');
+    expect(brotli.headers.vary).toBe('accept-encoding');
+    expect(brotli.body.byteLength).toBeLessThan(gzipped.body.byteLength);
+    expect(sha(brotliDecompressSync(brotli.body))).toBe(pointer.world.sha256);
 
     const head = await get(port, pointer.world.url, { method: 'HEAD' });
     expect(head).toMatchObject({ status: 200, text: '' });
@@ -286,6 +297,24 @@ function withhold(dataDir: string, ids: string[]): void {
   renameSync(`${path}.tmp`, path);
 }
 
+describe('compressed JSON replies', () => {
+  it('gzips a larger JSON reply for a reader that takes it, and leaves small ones and other readers plain', async () => {
+    const { dataDir, first } = await imported();
+    const port = await start(dataDir, { now: () => sweepAt(12), gzipMin: 600 });
+    const survey = await get(port, '/map-data/v1/survey');
+    expect(survey.text.length).toBeGreaterThan(600);
+    expect(survey.headers['content-encoding']).toBeUndefined();
+    const zipped = await get(port, '/map-data/v1/survey', { headers: { 'accept-encoding': 'gzip, deflate, br' } });
+    expect(zipped.headers).toMatchObject({ 'content-encoding': 'gzip', vary: 'accept-encoding' });
+    expect(gunzipSync(zipped.body).toString('utf8')).toBe(survey.text);
+    const pointer = await get(port, '/map-data/v1/preview', { headers: { 'accept-encoding': 'gzip' } });
+    expect(pointer.text.length).toBeLessThan(600);
+    expect(pointer.headers['content-encoding']).toBeUndefined();
+    const small = await get(port, `/map-data/v1/preview/${first.preview.id}/nothing-here`, { headers: { 'accept-encoding': 'gzip' } });
+    expect(small.headers['content-encoding']).toBeUndefined();
+  });
+});
+
 describe('names projection (R16)', () => {
   it('serves each drawn holding\'s login and name with its freshness, revalidated on every use', async () => {
     const { dataDir, first } = await imported();
@@ -343,6 +372,38 @@ describe('names projection (R16)', () => {
 
     withhold(dataDir, []);
     expect(ServedNamesSchema.parse(JSON.parse((await get(port, url)).text)).ids).toEqual([CAPITAL, TOWN, VILLAGE]);
+  });
+
+  it('serves a small head first: the head\'s names and every withheld id, under the same withholding', async () => {
+    const { dataDir, first } = await imported();
+    const port = await start(dataDir, { now: () => sweepAt(12) });
+    const base = `/map-data/v1/preview/${first.preview.id}/names`;
+    const world = PreviewWorldSchema.parse(JSON.parse((await get(port, `/map-data/v1/preview/${first.preview.id}/world.json`)).text));
+    const head = new Set(world.head.ids);
+    const whole = ServedNamesSchema.parse(JSON.parse((await get(port, base)).text));
+    const part = await get(port, `${base}?part=head`);
+    expect(part.status).toBe(200);
+    expect(part.headers['cache-control']).toBe('no-cache');
+    const names = ServedNamesSchema.parse(JSON.parse(part.text));
+    expect(names.ids.length).toBeGreaterThan(0);
+    expect(names.ids.length).toBeLessThan(whole.ids.length);
+    expect(names.ids).toEqual(whole.ids.filter((id) => head.has(id)));
+    expect(names.logins).toEqual(names.ids.map((id) => whole.logins[whole.ids.indexOf(id)]));
+    expect(part.headers.etag).not.toBe((await get(port, base)).headers.etag);
+
+    // A withheld channel outside the head is still listed in the head, so its land is bare from the first frame.
+    const outside = whole.ids.find((id) => !head.has(id))!;
+    const inside = names.ids[0]!;
+    withhold(dataDir, [outside, inside]);
+    const held = ServedNamesSchema.parse(JSON.parse((await get(port, `${base}?part=head`)).text));
+    expect(held.withheld.sort()).toEqual([outside, inside].sort());
+    expect(held.ids).not.toContain(inside);
+    withhold(dataDir, []);
+    expect(ServedNamesSchema.parse(JSON.parse((await get(port, `${base}?part=head`)).text)).ids).toContain(inside);
+
+    expect((await get(port, `${base}?part=villages`)).status).toBe(400);
+    writeFileSync(join(dataDir, WITHHELD_FILE), '{"version":1,"kingdomIds":[');
+    expect((await get(port, `${base}?part=head`)).status).toBe(503);
   });
 
   it('refuses every name while the withheld list is unreadable, rather than reviving a withheld channel', async () => {

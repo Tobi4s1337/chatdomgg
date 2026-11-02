@@ -1,7 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { asAtlasError } from '../errors';
-import { WITHHELD_FILE, WithheldSchema } from '../policy/visibility';
+import { readWithheldIds } from '../policy/visibility';
 import { readLiveSource, type SourceLiveSnapshot } from '../source/sqlite';
 import { buildFrame, followsGap, judgeSweep, regateFrame, SWEEP_RULE, type FrameCounts } from './frame';
 import { publishFrame, pruneLiveTargets, readFrame, readLiveManifest, readLiveState, writeLiveState, type LiveSourceState, type PublishOutcome } from './store';
@@ -24,9 +22,8 @@ export interface LiveDeps {
  * wash either, so an unreadable list publishes nothing new (fail closed) and the last frame stays.
  */
 function readWithheld(dataDir: string): ReadonlySet<string> {
-  const path = join(dataDir, WITHHELD_FILE);
-  if (!existsSync(path)) return new Set();
-  return new Set(WithheldSchema.parse(JSON.parse(readFileSync(path, 'utf8'))).kingdomIds);
+  // The operator's list and every owner's own hide, read once: a channel hidden since the last sweep loses its wash now.
+  return readWithheldIds(dataDir);
 }
 
 /**
