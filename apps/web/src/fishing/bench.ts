@@ -17,6 +17,7 @@ import { mountPierKingdomLayer } from './kingdom-layer';
 import { mountPierLayer, type PierLayer } from './layer';
 import { mountPierAssetBench } from './asset-bench';
 import { mountFishBench } from './fish-bench';
+import { mountFurnishingSheet } from './furnishing-sheet';
 import { createPlayStage, type PlayStage, type PlayStageOptions } from './play-bench';
 
 type PierView = 'shore' | 'deck' | 'head' | 'asset' | 'fish' | 'play';
@@ -61,6 +62,7 @@ async function fixture(query: URLSearchParams): Promise<{ plan: SettlementPlan; 
 export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearchParams, stage?: Pick<PlayStageOptions, 'hud' | 'sound' | 'ui' | 'portrait' | 'onGrant' | 'attach' | 'onClock'>): Promise<PierBench> {
   if (query.get('view') === 'fish') return mountFishBench(canvas, query);
   if (query.get('view') === 'asset') return mountPierAssetBench(canvas, query);
+  if (query.get('view') === 'furnishings') return mountFurnishingSheet(canvas, query);
   W.__chatdomReady = false;
   W.__chatdomPierPhase = 'reading-founded-copy';
   const { plan, pieces } = await fixture(query);

@@ -839,6 +839,16 @@ do with fishing but make a cold kingdom slow or impossible to join. Each patch i
    `loader.prepare()` (before `repository.acquire`), so the leased section only binds an already compiled world; or to
    compile in chunks that yield. The pier's own share of the compile is about 0.5 s (`pierFurnishings`).
 
+**Applied by pier, 2 November (12:40).** Main takes no patches this round and no round lane owns these realm-core
+files, so pier applied the two smallest fixes as part of the PI10 checkpoint:
+- 1, in part: `onCreate` now sets `this.roomId` before `await services.open(...)`. The dispose half of the patch above
+  is not needed: Colyseus 0.18 already disposes a room whose `onCreate` throws (`discardRoom` emits `dispose`, which
+  runs `onDispose` and so `handle.dispose()`); an explicit dispose would release the hold twice. A new test in
+  `kingdom-room.test.ts` fails the first creation after the open, then checks the handle was disposed exactly once
+  and the next join creates `k:999000001`.
+- 2, as written: `reservation.on('connection', socket => socket.destroy())` in `serve()`.
+- 3 is still open for the integrator (it touches `founded/provider.ts` and the loader's lease order).
+
 Fallback until they land: none is needed for production correctness; the own-stack check seats a walker first and
 retries the join (recorded under `recoveries` in its JSON).
 

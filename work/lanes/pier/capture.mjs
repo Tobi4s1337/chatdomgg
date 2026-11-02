@@ -123,6 +123,14 @@ try {
       const id = `pier-${style}-${prop}`;
       await page(`http://localhost:${previewPort}/-/pier?view=asset&asset=${id}&angle=${angle}&hour=18.6&still=1`, 480, 480, resolve(output, `pi10-${id}-${angle}@480x480.png`));
     }
+  } else if (process.argv.includes('--kits')) {
+    // Every kit: its seven furnishings from three angles, then the whole pier in that kit on the copied kingdom's shore at dusk.
+    const only = process.argv.find(arg => arg.startsWith('--style='))?.slice(8);
+    for (const style of only ? [only] : ['hearth', 'tide', 'grove']) {
+      await page(`http://localhost:${previewPort}/-/pier?view=furnishings&style=${style}&hour=18.6&still=1`, 1440, 900, resolve(output, `pi10-kit-${style}-dusk@1440x900.png`));
+      const query = new URLSearchParams({ kingdom: scene.kingdomId, view: 'shore', style, hour: '18.6', still: '1', ...(software ? { software: '1' } : {}) });
+      await page(`http://localhost:${previewPort}/-/pier?${query}`, 1440, 900, resolve(output, `pi10-shore-${style}-dusk@1440x900.png`));
+    }
   } else if (process.argv.includes('--watch')) {
     // The watcher's lanterns and mood (kingdom-layer.ts), read back from the installed placements: shore and head at dusk.
     const sizes = software ? [[1440, 900]] : [[1440, 900], [390, 844]];
@@ -139,7 +147,7 @@ try {
       await page(`http://localhost:${previewPort}/-/pier?${query}`, width, height, resolve(output, `pi10-${view}-${hour === 12 ? 'noon' : 'dusk'}@${width}x${height}.png`));
     }
   }
-  const statsName = process.argv.includes('--fish') ? `pi10-fish-${process.argv.find(arg => arg.startsWith('--group='))?.slice(8) ?? '0'}${process.argv.includes('--narrow') ? '-narrow' : ''}-render-stats.json` : process.argv.includes('--assets') ? 'pi10-furnishing-render-stats.json' : process.argv.includes('--watch') ? 'pi10-watch-render-stats.json' : software ? `pi10-${process.argv.includes('--head') ? 'head' : process.argv.includes('--deck') ? 'deck' : 'shore'}-${process.argv.includes('--narrow') ? 'narrow' : 'wide'}-render-stats.json` : 'pi10-pier-render-stats.json';
+  const statsName = process.argv.includes('--fish') ? `pi10-fish-${process.argv.find(arg => arg.startsWith('--group='))?.slice(8) ?? '0'}${process.argv.includes('--narrow') ? '-narrow' : ''}-render-stats.json` : process.argv.includes('--assets') ? 'pi10-furnishing-render-stats.json' : process.argv.includes('--watch') ? 'pi10-watch-render-stats.json' : process.argv.includes('--kits') ? 'pi10-kits-render-stats.json' : software ? `pi10-${process.argv.includes('--head') ? 'head' : process.argv.includes('--deck') ? 'deck' : 'shore'}-${process.argv.includes('--narrow') ? 'narrow' : 'wide'}-render-stats.json` : 'pi10-pier-render-stats.json';
   await writeFile(resolve(output, statsName), JSON.stringify({ capturedAt: new Date().toISOString(), receipt, measurements }, null, 2) + '\n');
   console.log(`Captured ${pictures.length} ${software ? 'SwiftShader' : 'real-GPU'} stills; owned port ${previewPort}.`);
 } finally {

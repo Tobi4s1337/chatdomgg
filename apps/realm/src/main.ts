@@ -41,6 +41,8 @@ async function serve() {
   const port = realmListenPort(process.env);
   // uWS permits SO_REUSEPORT. Two local builds on one port would split entry and sockets between worlds.
   const reservation = createPortReservation();
+  // A connection accepted during boot (a health probe, a browser retry) would hold close() open forever.
+  reservation.on('connection', socket => socket.destroy());
   await new Promise<void>((resolve, reject) => {
     reservation.once('error', () => reject(new Error(`Realm port ${port} is already in use; choose a free REALM_PORT.`)));
     reservation.listen({ port, host, exclusive: true }, resolve);
