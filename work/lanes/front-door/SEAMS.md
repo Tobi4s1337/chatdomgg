@@ -302,3 +302,14 @@ host prerequisite in the test only and names its evidence `with-bootstrap`;
 that evidence proves the consumer under the required host configuration, never
 production bootstrap completion. Provenance is in
 `work/evidence/atlas-map/am10-phone-final-provenance.json`.
+
+## Atlas return view landed — 2 Nov, atlas-map AM10 (answers "Asked of atlas-map for FD12")
+
+Both forms, additive in `apps/web/src/atlas/embed.ts` on `lane/atlas-map`: `mountAtlas(el, { mode, view })` starts
+exactly at a saved `AtlasView` (position, zoom, open card; wins over `focus`), and `handle.restore(view, { signal? })`
+puts a mounted map there without a flight and resolves `true` once it stands there. A view whose `mapId` is another
+survey revision, or a malformed one, resolves `false` (the mount option falls back to the usual start). A view with
+`selected: null` closes an open card; a hero takes only the position. `view().selected` is now also set for a pencil
+flag's card (its channel ID). Prefer the mount option on the front page (no first frame at the composed start). The
+`/map` side of the recipe (the seal's `view` and `takeReturnView()` at start) is atlas-map's and lands once
+`@chatdom/ui/site` reaches lane/atlas-map through main. Details in atlas-map's `SEAMS.md`.
