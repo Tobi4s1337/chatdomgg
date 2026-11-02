@@ -52,6 +52,8 @@ export interface KingdomWalkBinding {
    * and joining it again at a door. Without it no door opens (play/portal.ts).
    */
   readonly portal?: Pick<PortalSource, 'entry' | 'endpoint' | 'title' | 'leave' | 'rejoin'>;
+  /** Dev stills only (walk/stills, the "before" sole close-ups): false draws every body at its physics height. */
+  readonly drawnGround?: boolean;
 }
 
 /** Building in a founded kingdom opens with the street; until then the ledger says so in one honest line. */
@@ -253,11 +255,12 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
       drawnHeights.clear();
       const bodyY = (pose: WalkerPresentation) => {
         let y = drawnHeights.get(pose.id);
+        if (y === undefined && binding.drawnGround === false) drawnHeights.set(pose.id, y = pose.y);
         if (y === undefined) drawnHeights.set(pose.id, y = ground.bodyY(pose.id, { x: pose.x, y: pose.y, z: pose.z, posed: !!pose.posture,
           ...(pose.self ? { grounded: client.predicted?.grounded ?? true } : {}) }, dt));
         return y;
       };
-      const gaitGround = (id: string) => ({ ground: ground.groundFor(id), floor: ground.floorAt });
+      const gaitGround = (id: string) => binding.drawnGround === false ? {} : { ground: ground.groundFor(id), floor: ground.floorAt };
       figures.update(simple.map(({ pose, opacity }) => ({ id: pose.id, position: [pose.x, bodyY(pose), pose.z] as const,
         heading: pose.yaw * Math.PI * 2 / 256, distance: pose.distance, speed: pose.posture ? 0 : pose.speed, opacity })), now);
       people.update(full.map(({ pose, opacity: detail }) => ({ id: pose.id,

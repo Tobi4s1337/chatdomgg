@@ -357,6 +357,22 @@ REALM_SIMULATED=1 REALM_STORAGE=memory REALM_PORT=5191 pnpm --filter @chatdom/re
 Do not start a second process on an occupied port. The actual kingdom entry above consumes its founded collision
 world through realm wiring; the separate reference court remains a labelled diagnostic.
 
+### PL10 stills (`stills/`)
+
+```sh
+node apps/web/src/walk/stills/stills.mjs [--land town|hamlet] [--only third,first]      # SwiftShader, capture lock
+chatdom-pc-lease -- node apps/web/src/walk/stills/stills.mjs --target pc [--land town]  # real GPU, web 5192, realm 5191
+```
+
+The real kingdom page on a stills fixture (`stills/fixture.ts`: Willowmere or the Brackenfold hamlet, full production
+collision, spots found in that collision: an open street, the slope where the drawn ground and the half-metre physics
+differ most, a stair tread and a raised floor) with a memory realm the script owns. `stills/page.tsx` stages each
+still from `?still=` and sets `__chatdomReady` only once it has settled, so `chatdom-pc shot`, which can only open a
+URL, takes the same pictures: `third`, `first`, `dusk` (bubbles over lit homes, only walkers in the street) and
+`<slope|stairs|floor>-<before|after>` (the "before" binds the walk with `drawnGround: false`, bodies at the physics
+height). The hamlet is nine people: three walking and six chatting from home. Settings the page changes (first or
+third person) are put back when it closes. Dev only: never a route, never built.
+
 ## WC07 founder finish (main, 2026-10-31)
 
 The distance-driven avatar cycle is 1.8 m per complete left/right cycle rather than .75 m. Arm swing is .30 rad,

@@ -107,10 +107,19 @@ const FIGURE: readonly Box[] = [
   { min: [-.225, 1.42, -.215], max: [.225, 1.66, -.12], paint: '#3d2f26', limb: 0, tint: 0 },
 ];
 
-/** Box-built figure geometry with the attributes the citizens' paint material reads, plus limb and tint masks. */
+/**
+ * WebGL 2 promises 16 vertex attribute slots, and Chrome on desktop GPUs (ANGLE) offers exactly 16: past that the
+ * shader does not link and the kingdom stops drawing. A mat4 (`instanceMatrix`) takes four.
+ */
+export const FIGURE_ATTRIBUTE_SLOTS = 16;
+
+/**
+ * Box-built figure geometry for the citizens' paint material, packed to fit the attribute budget: the limb, the tint
+ * mask and the occlusion share `aMask`; edges and paint alpha are the same on every face, so the shader states them.
+ */
 export function walkerFigureGeometry(): THREE.BufferGeometry {
-  const position: number[] = [], normal: number[] = [], paint: number[] = [], occlusion: number[] = [], faceUv: number[] = [];
-  const edges: number[] = [], tangentU: number[] = [], tangentV: number[] = [], alpha: number[] = [], limb: number[] = [], tint: number[] = [], index: number[] = [];
+  const position: number[] = [], normal: number[] = [], paint: number[] = [], faceUv: number[] = [];
+  const tangentU: number[] = [], tangentV: number[] = [], mask: number[] = [], index: number[] = [];
   const faces: readonly { n: [number, number, number]; u: [number, number, number]; v: [number, number, number] }[] = [
     { n: [1, 0, 0], u: [0, 0, -1], v: [0, 1, 0] }, { n: [-1, 0, 0], u: [0, 0, 1], v: [0, 1, 0] },
     { n: [0, 1, 0], u: [1, 0, 0], v: [0, 0, -1] }, { n: [0, -1, 0], u: [1, 0, 0], v: [0, 0, 1] },
@@ -126,8 +135,8 @@ export function walkerFigureGeometry(): THREE.BufferGeometry {
         normal.push(...face.n); tangentU.push(...face.u); tangentV.push(...face.v);
         paint.push(colour.r, colour.g, colour.b);
         // Undersides sit in their own shade; a soft gradient keeps the block from reading as a flat cut-out.
-        occlusion.push(face.n[1] < 0 ? .62 : face.n[1] > 0 ? 1 : sv < 0 ? .84 : 1);
-        faceUv.push((su + 1) / 2, (sv + 1) / 2); edges.push(0, 0, 0, 0); alpha.push(1); limb.push(box.limb); tint.push(box.tint);
+        mask.push(box.limb, box.tint, face.n[1] < 0 ? .62 : face.n[1] > 0 ? 1 : sv < 0 ? .84 : 1);
+        faceUv.push((su + 1) / 2, (sv + 1) / 2);
       }
       index.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
@@ -136,29 +145,29 @@ export function walkerFigureGeometry(): THREE.BufferGeometry {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normal, 3));
   geometry.setAttribute('aPaint', new THREE.Float32BufferAttribute(paint, 3));
-  geometry.setAttribute('aOcclusion', new THREE.Float32BufferAttribute(occlusion, 1));
   geometry.setAttribute('aFaceUv', new THREE.Float32BufferAttribute(faceUv, 2));
-  geometry.setAttribute('aEdges', new THREE.Float32BufferAttribute(edges, 4));
   geometry.setAttribute('aTangentU', new THREE.Float32BufferAttribute(tangentU, 3));
   geometry.setAttribute('aTangentV', new THREE.Float32BufferAttribute(tangentV, 3));
-  geometry.setAttribute('aPaintAlpha', new THREE.Float32BufferAttribute(alpha, 1));
-  geometry.setAttribute('aLimb', new THREE.Float32BufferAttribute(limb, 1));
-  geometry.setAttribute('aTintMask', new THREE.Float32BufferAttribute(tint, 1));
+  /** x: the limb (0 body, 1 and 2 legs, 3 and 4 arms), y: the tunic dye mask, z: occlusion. */
+  geometry.setAttribute('aMask', new THREE.Float32BufferAttribute(mask, 3));
   geometry.setIndex(index);
   geometry.computeBoundingBox(); geometry.computeBoundingSphere();
   return geometry;
 }
 
-/** The citizens' paint vertex stage, with a swinging stride for the limbs and a per-person tunic dye. */
-const FIGURE_VERTEX = /* glsl */ `
-  in vec3 aPaint, aTangentU, aTangentV, aTint;
-  in float aOcclusion, aPaintAlpha, aLodFade, aLimb, aTintMask;
-  in vec2 aFaceUv, aGait; in vec4 aEdges;
+/**
+ * The citizens' paint vertex stage, with a swinging stride for the limbs and a per-person tunic dye. Per instance:
+ * `aGait` (stride phase, swing, fade) and `aTint`.
+ */
+export const FIGURE_VERTEX = /* glsl */ `
+  in vec3 aPaint, aTangentU, aTangentV, aTint, aMask, aGait;
+  in vec2 aFaceUv;
   out vec3 vWorld, vNormal, vPaint, vTangentU, vTangentV;
   out float vAo, vSky, vLodFade, vPaintAlpha;
   out vec2 vFaceUv; out vec4 vEdges;
   mat3 swingX(float a){float c=cos(a),s=sin(a);return mat3(1.,0.,0.,0.,c,s,0.,-s,c);}
   void main() {
+    float aLimb=aMask.x;
     float swing=sin(aGait.x)*aGait.y;
     float angle=aLimb<.5?0.:aLimb<1.5?swing:aLimb<2.5?-swing:aLimb<3.5?-swing*.8:swing*.8;
     vec3 pivot=vec3(0.,aLimb<2.5?${HIP_M.toFixed(2)}:${SHOULDER_M.toFixed(2)},0.);
@@ -171,8 +180,8 @@ const FIGURE_VERTEX = /* glsl */ `
     vec4 world=transform*vec4(p,1.);
     vWorld=world.xyz;vNormal=normalize(mat3(transform)*n);
     vTangentU=normalize(mat3(transform)*tu);vTangentV=normalize(mat3(transform)*tv);
-    vPaint=aPaint*mix(vec3(1.),aTint,aTintMask);vPaintAlpha=aPaintAlpha;vLodFade=aLodFade;
-    vAo=aOcclusion;vSky=1.;vFaceUv=aFaceUv;vEdges=aEdges;
+    vPaint=aPaint*mix(vec3(1.),aTint,aMask.y);vPaintAlpha=1.;vLodFade=aGait.z;
+    vAo=aMask.z;vSky=1.;vFaceUv=aFaceUv;vEdges=vec4(0.);
     gl_Position=projectionMatrix*viewMatrix*world;
   }
 `;
@@ -198,16 +207,15 @@ export function createWalkerFigures(scene: THREE.Object3D, lighting: VoxelRender
   const material = createWalkerFigureMaterial(lighting);
   const tints = TINTS.map(linear);
   let capacity = 0, mesh: THREE.InstancedMesh | undefined;
-  let fades!: THREE.InstancedBufferAttribute, tintAttribute!: THREE.InstancedBufferAttribute, gait!: THREE.InstancedBufferAttribute;
+  let tintAttribute!: THREE.InstancedBufferAttribute, gait!: THREE.InstancedBufferAttribute;
   const allocate = (size: number) => {
     // three.js frees a geometry's attribute buffers only when the geometry is disposed: release the outgrown
     // per-instance buffers before swapping in larger ones (the shared shape re-uploads on the next draw).
     if (mesh) { scene.remove(mesh); mesh.dispose(); geometry.dispose(); }
     capacity = size;
-    fades = new THREE.InstancedBufferAttribute(new Float32Array(size), 1); fades.setUsage(THREE.DynamicDrawUsage);
     tintAttribute = new THREE.InstancedBufferAttribute(new Float32Array(size * 3), 3); tintAttribute.setUsage(THREE.DynamicDrawUsage);
-    gait = new THREE.InstancedBufferAttribute(new Float32Array(size * 2), 2); gait.setUsage(THREE.DynamicDrawUsage);
-    geometry.setAttribute('aLodFade', fades); geometry.setAttribute('aTint', tintAttribute); geometry.setAttribute('aGait', gait);
+    gait = new THREE.InstancedBufferAttribute(new Float32Array(size * 3), 3); gait.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute('aTint', tintAttribute); geometry.setAttribute('aGait', gait);
     mesh = new THREE.InstancedMesh(geometry, material, size);
     mesh.name = 'walker-figures'; mesh.count = 0; mesh.frustumCulled = false; mesh.castShadow = false;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -245,15 +253,14 @@ export function createWalkerFigures(scene: THREE.Object3D, lighting: VoxelRender
         rotation.setFromAxisAngle(up, heading);
         matrix.compose(at.set(position[0], position[1], position[2]), rotation, unit);
         mesh!.setMatrixAt(count, matrix);
-        fades.setX(count, entry.opacity);
         const colour = tints[hash(id) % tints.length]!;
         tintAttribute.setXYZ(count, colour.r, colour.g, colour.b);
-        gait.setXY(count, distance / STRIDE_M * Math.PI * 2, Math.min(1, Math.max(0, speed / 1.2)) * SWING_RAD);
+        gait.setXYZ(count, distance / STRIDE_M * Math.PI * 2, Math.min(1, Math.max(0, speed / 1.2)) * SWING_RAD, entry.opacity);
         if (present) heads.set(id, new THREE.Vector3(position[0], position[1] + FIGURE_HEAD_TOP_M + .08, position[2]));
         count++;
       }
       mesh!.count = count;
-      mesh!.instanceMatrix.needsUpdate = true; fades.needsUpdate = true; tintAttribute.needsUpdate = true; gait.needsUpdate = true;
+      mesh!.instanceMatrix.needsUpdate = true; tintAttribute.needsUpdate = true; gait.needsUpdate = true;
     },
     clear() { shown.clear(); heads.clear(); if (mesh) mesh.count = 0; lastNow = undefined; },
     dispose() { shown.clear(); heads.clear(); if (mesh) { scene.remove(mesh); mesh.dispose(); } geometry.dispose(); material.dispose(); },
