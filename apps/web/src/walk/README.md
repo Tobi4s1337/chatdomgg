@@ -142,8 +142,11 @@ for it.
 - **The re-centre echo (Firefox only).** Firefox on X11 does not really re-centre the hidden cursor and reports its
   offset from the centre as movement after every real move. `createEchoFilter` predicts each echo (the last one
   plus the real movement since) and drops only events that match it; the first echo is learnt by holding an event
-  over 200 counts for at most 12 ms (one 60 Hz frame) until its twin proves it. Real flicks are never lost, only a
-  large event's arrival may wait that one frame. Chromium has no filter at all. Six echoes in one capture set
+  over 200 counts for at most 12 ms (one 60 Hz frame) until its twin proves it. A smaller echo (the lock began with
+  the cursor near the centre) is the size of a hand's move, so it is learnt from its arithmetic instead: three events
+  in a row, each the last plus the small real movement between, to the count; the links that already turned the
+  world are then taken back. Real flicks are never lost, only a large event's arrival may wait that one frame.
+  Chromium has no filter at all. Six echoes in one capture set
   `drifting`; the first lock lost after that is `onLetGo('drift')`, which keeps the street (no ledger) with one calm
   line about the right-button look.
 - **Right-button look.** Holding the right button on the world turns the view 1:1 by movementX/Y without any capture

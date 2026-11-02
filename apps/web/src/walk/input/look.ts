@@ -54,7 +54,11 @@ export const LOOK = {
 export const ECHO = {
   /** With no echo learnt, an event this large (counts, either axis) is held until its twin proves it an echo. */
   learnPx: 200,
-  /** An echo matches its prediction within 3 counts plus 2 % of the predicted offset, on both axes. */
+  /**
+   * A learnt echo matches its prediction within 3 counts plus 2 % of the predicted offset, on both axes. Proving an
+   * echo (a held twin, a chain link) takes the exact sum, within `chainSlackPx`: two of Firefox-on-Windows's re-centre
+   * pairs close together come within 2 % of a twin.
+   */
   slackPx: 3,
   slackShare: .02,
   /** A large event this close to the last echo is the same echo after a missed event. */
@@ -66,6 +70,27 @@ export const ECHO = {
   forgetMs: 1000,
   /** Echoes in one capture that mean the browser lets the hidden cursor drift. */
   driftEchoes: 6,
+  /**
+   * Below `learnPx` (the lock began with the hidden cursor near the centre) an echo is the size of a hand's move, so
+   * it is learnt from its arithmetic instead: `chainLinks` events in a row, each the one before plus the small real
+   * movement between them (at most `chainShare` of it, from `chainPx` counts up, within `chainSlackPx`).
+   * The links that already turned the world are then taken back, so the turn ends exactly the hand's.
+   */
+  chainPx: 6,
+  /** Once a chain (or a held twin) is proven, earlier links are taken back too: from this size, with up to this share between. */
+  chainTailPx: 2,
+  chainTailShare: 1,
+  chainShare: .5,
+  chainSlackPx: 1,
+  chainLinks: 3,
+  /** Real events that may sit between two links, and how far back (events and ms) a chain is looked for. */
+  chainGap: 3,
+  chainEvents: 12,
+  chainMs: 250,
+  /** Under this size (counts, larger axis) a learnt echo matches within `chainSlackPx`, not `slackPx`. */
+  smallPx: 32,
+  /** A learnt echo is forgotten after this many real events in a row with no echo among them. */
+  missEvents: 8,
 } as const;
 
 interface Delta { x: number; y: number }
@@ -87,43 +112,113 @@ export interface EchoFilter {
  * large event with nothing learnt is held for a moment: if a second large event arrives that equals it plus the small
  * real movement between them, both were echoes and W is learnt; otherwise it is released whole. A steady fast turn
  * (equal large events with nothing between) never pairs up, and a flick's events are only held, never lost.
+ * A small offset (the lock began near the centre) is learnt from a chain of three echoes, each the last plus the
+ * small real movement between, and the two that already turned the world are taken back.
  */
 export function createEchoFilter(): EchoFilter {
   let out: Delta = { x: 0, y: 0 };
   let echo: (Delta & { at: number }) | null = null;
   let since: Delta = { x: 0, y: 0 };
-  let held: (Delta & { at: number; events: number; since: Delta }) | null = null;
-  let echoes = 0;
-  const big = (x: number, y: number) => Math.abs(x) > ECHO.learnPx || Math.abs(y) > ECHO.learnPx;
-  const near = (v: number, predicted: number) => Math.abs(v - predicted) <= ECHO.slackPx + Math.abs(predicted) * ECHO.slackShare;
-  const learn = (x: number, y: number, at: number, count: number) => { echo = { x, y, at }; since = { x: 0, y: 0 }; echoes += count; };
-  const keep = (x: number, y: number) => {
+  /** An unproven large event; `mark` is how many events `recent` held when it came. */
+  let held: (Delta & { at: number; events: number; since: Delta; mark: number }) | null = null;
+  let echoes = 0, misses = 0;
+  /** How far the hand's last small move went (counts): how far an echo may lead its prediction when its own move never came. */
+  let pace = 0;
+  /** The last kept events, newest last, each still part of the turn: where a missed chain of echoes is found. */
+  let recent: (Delta & { at: number })[] = [];
+  const size = (x: number, y: number) => Math.max(Math.abs(x), Math.abs(y));
+  const big = (x: number, y: number) => size(x, y) > ECHO.learnPx;
+  const near = (v: number, predicted: number, slack: number = ECHO.slackPx) => Math.abs(v - predicted) <= slack + Math.abs(predicted) * ECHO.slackShare;
+  /** Proof is exact: a twin or a chain link adds up to the count, give or take one. */
+  const exact = (v: number, predicted: number) => Math.abs(v - predicted) <= ECHO.chainSlackPx;
+  const learn = (x: number, y: number, at: number, count: number) => { echo = { x, y, at }; since = { x: 0, y: 0 }; echoes += count; misses = 0; };
+  const keep = (x: number, y: number, at: number) => {
     out.x += x; out.y += y; since.x += x; since.y += y;
     if (held) { held.since.x += x; held.since.y += y; }
+    if (echo && ++misses >= ECHO.missEvents) echo = null;
+    if (size(x, y) < ECHO.smallPx) pace = size(x, y);
+    recent.push({ x, y, at });
+    if (recent.length > ECHO.chainEvents) forgetOldest();
   };
+  const forgetOldest = () => { recent.shift(); if (held) held.mark = Math.max(0, held.mark - 1); };
   const release = () => {
     if (!held) return;
-    const { x, y } = held; held = null;
-    keep(x, y);
+    const { x, y, at } = held; held = null;
+    keep(x, y, at);
+  };
+  /**
+   * The index of the event in `recent` before `before` that `e` echoes: it plus the small real movement between.
+   * With `adjacent`, `e` may also follow its echo directly, ahead of it by 1 to that many counts (an echo whose own
+   * move never came; never by nothing, which is a steady real turn or a dead-centre start's first real move).
+   */
+  const link = (e: Delta, before: number, least: number, share: number, adjacent?: number): number => {
+    let bx = 0, by = 0;
+    for (let j = before - 1; j >= 0 && before - 1 - j <= ECHO.chainGap; j--) {
+      const candidate = recent[j]!;
+      if (j === before - 1 && adjacent !== undefined && size(candidate.x, candidate.y) >= Math.max(least, 2 * adjacent)
+        && size(e.x - candidate.x, e.y - candidate.y) <= adjacent && size(e.x - candidate.x, e.y - candidate.y) > 0) return j;
+      if (j < before - 1) {
+        const offset = size(candidate.x, candidate.y), between = size(bx, by);
+        if (offset >= least && between > 0 && between <= offset * share
+          && exact(e.x, candidate.x + bx) && exact(e.y, candidate.y + by)) return j;
+      }
+      bx += candidate.x; by += candidate.y;
+    }
+    return -1;
+  };
+  /** Earlier links of a proven echo `e` (seen when `recent` held `before` events), ready to leave the turn. */
+  const tail = (e: Delta, before: number): number[] => {
+    const links: number[] = [];
+    const next = () => link(e, before, ECHO.chainTailPx, ECHO.chainTailShare, ECHO.chainSlackPx + pace);
+    for (let j = next(); j >= 0; j = next()) {
+      links.push(j); e = recent[j]!; before = j;
+    }
+    return links;
+  };
+  /** Takes these kept events back out of the turn: they were echoes. */
+  const takeBack = (links: readonly number[]) => {
+    for (const j of links) { out.x -= recent[j]!.x; out.y -= recent[j]!.y; }
+    recent = recent.filter((_, j) => !links.includes(j));
+    return links.length;
+  };
+  /** A chain of echoes ending in this event, each the one before plus the small real movement between. */
+  const chain = (x: number, y: number, at: number): boolean => {
+    const links: number[] = [];
+    let e: Delta = { x, y }, before = recent.length;
+    for (let j = link(e, before, ECHO.chainPx, ECHO.chainShare); j >= 0 && links.length + 1 < ECHO.chainLinks;
+      j = link(e, before, ECHO.chainPx, ECHO.chainShare)) { links.push(j); e = recent[j]!; before = j; }
+    if (links.length + 1 < ECHO.chainLinks) return false;
+    learn(x, y, at, 1 + takeBack([...links, ...tail(e, before)]));
+    return true;
   };
   return {
     push(x, y, at) {
       if (echo && at - echo.at > ECHO.forgetMs) echo = null;
-      if (echo && ((near(x, echo.x + since.x) && near(y, echo.y + since.y))
-        || (big(x, y) && Math.abs(x - echo.x) < ECHO.relearnPx && Math.abs(y - echo.y) < ECHO.relearnPx))) { learn(x, y, at, 1); return; }
+      while (recent.length && at - recent[0]!.at > ECHO.chainMs) forgetOldest();
+      if (echo) {
+        const px = echo.x + since.x, py = echo.y + since.y, small = size(px, py) < ECHO.smallPx;
+        // A small echo is only told from the hand's own move once the hand has moved since the last one.
+        // A large one may lead its prediction by the hand's last move: the echo of a move whose own event never came.
+        const lead = since.x || since.y ? 0 : pace;
+        const matches = small ? (since.x || since.y) && near(x, px, ECHO.chainSlackPx) && near(y, py, ECHO.chainSlackPx)
+          : near(x, px, ECHO.slackPx + lead) && near(y, py, ECHO.slackPx + lead);
+        const again = big(x, y) && Math.abs(x - echo.x) < ECHO.relearnPx && Math.abs(y - echo.y) < ECHO.relearnPx;
+        if (matches || again) { learn(x, y, at, 1); return; }
+      }
       if (held) {
-        const between = held.since, size = Math.max(Math.abs(held.x), Math.abs(held.y));
+        const between = held.since, heldSize = size(held.x, held.y);
         // Its twin: the held offset moved by exactly the small real movement since. Both were echoes.
-        const twin = (between.x || between.y) && Math.max(Math.abs(between.x), Math.abs(between.y)) <= size * .25
-          && near(x, held.x + between.x) && near(y, held.y + between.y);
-        if (twin) { held = null; learn(x, y, at, 2); return; }
-        if (big(x, y)) { release(); held = { x, y, at, events: 0, since: { x: 0, y: 0 } }; return; }
-        keep(x, y);
+        const twin = (between.x || between.y) && size(between.x, between.y) <= heldSize * .25
+          && exact(x, held.x + between.x) && exact(y, held.y + between.y);
+        if (twin) { const back = takeBack(tail(held, held.mark)); held = null; learn(x, y, at, 2 + back); return; }
+        if (big(x, y)) { release(); held = { x, y, at, events: 0, since: { x: 0, y: 0 }, mark: recent.length }; return; }
+        keep(x, y, at);
         if (held && (++held.events >= ECHO.holdEvents || at - held.at > ECHO.holdMs)) release();
         return;
       }
-      if (big(x, y)) { held = { x, y, at, events: 0, since: { x: 0, y: 0 } }; return; }
-      keep(x, y);
+      if (big(x, y)) { held = { x, y, at, events: 0, since: { x: 0, y: 0 }, mark: recent.length }; return; }
+      if (!echo && chain(x, y, at)) return;
+      keep(x, y, at);
     },
     take(at) {
       if (held && at - held.at > ECHO.holdMs) release();
@@ -132,7 +227,7 @@ export function createEchoFilter(): EchoFilter {
       return delta;
     },
     get echoes() { return echoes; },
-    reset() { out = { x: 0, y: 0 }; echo = null; since = { x: 0, y: 0 }; held = null; echoes = 0; },
+    reset() { out = { x: 0, y: 0 }; echo = null; since = { x: 0, y: 0 }; held = null; echoes = 0; misses = 0; pace = 0; recent = []; },
   };
 }
 
