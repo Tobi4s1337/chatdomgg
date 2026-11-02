@@ -71,7 +71,12 @@ export function mountTavernDoor(walk: TavernDoorWalk, doors: PlayDoorKeeper, der
     watch = watchTavernDoor(portal, () => {
       if (going || ended) return;
       going = true;
-      void doors.enterPortal(descriptor).catch(() => undefined).finally(() => { going = false; });
+      // Never inside the walk's frame: the journey leaves this room, and the scene must finish the frame it is drawing
+      // before its walk is taken away.
+      queueMicrotask(() => {
+        if (ended) { going = false; return; }
+        void doors.enterPortal(descriptor).catch(() => undefined).finally(() => { going = false; });
+      });
     });
   };
   find();

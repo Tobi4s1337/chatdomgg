@@ -1,7 +1,5 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { createTavernStage, type TavernFraming } from './stage';
-import '@chatdom/ui/kit.css';
-import './tavern.css';
 import { TavernRoomSurface } from './Surface';
 import { requestBenchGameInput } from './bench-input';
 import { openLocalTestTavern } from './test-entry';

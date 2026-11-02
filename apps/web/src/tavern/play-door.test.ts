@@ -69,20 +69,38 @@ describe('the tavern door joins play by itself', () => {
     expect(doors.entered).toHaveLength(0);
     w.step(outside);
     w.step(onDoor);
+    // Never inside the walk's frame: the journey starts once the frame that saw the crossing has finished.
+    expect(doors.entered).toHaveLength(0);
+    await settle();
     w.step(onDoor);
     expect(doors.entered).toHaveLength(1);
     // A second crossing while play is still taking you through is not a second journey.
-    w.step(outside); w.step(onDoor);
+    w.step(outside); w.step(onDoor); await settle();
     expect(doors.entered).toHaveLength(1);
     doors.finish(); await settle();
-    w.step(outside); w.step(onDoor);
+    w.step(outside); w.step(onDoor); await settle();
     expect(doors.entered).toHaveLength(2);
     stop();
     expect(doors.doors).toEqual([]);
     doors.finish(); await settle();
-    w.step(outside); w.step(onDoor);
+    w.step(outside); w.step(onDoor); await settle();
     expect(doors.entered).toHaveLength(2);
     expect(w.frames.size).toBe(0);
+  });
+
+  it('goes in after the frame that saw the crossing, and not at all once the walk has ended in that frame', async () => {
+    const doors = keeper(), w = walk(), stop = mountTavernDoor(w.walk, doors, derived);
+    let during = -1;
+    w.frames.add(() => { during = doors.entered.length; });
+    w.step(outside); w.step(onDoor);
+    expect(during).toBe(0);
+    await settle();
+    expect(doors.entered).toHaveLength(1);
+    doors.finish(); await settle();
+    // The walk is taken away in the same frame as the crossing: nothing goes in afterwards.
+    w.step(outside); w.step(onDoor); stop();
+    await settle();
+    expect(doors.entered).toHaveLength(1);
   });
 
   it('never goes in on arriving back outside, or walking in backwards from the room side', () => {

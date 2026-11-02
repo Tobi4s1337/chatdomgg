@@ -191,7 +191,7 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
     (window as Window & { __chatdomTavernLive?: unknown }).__chatdomTavernLive = {
       ready, nameViewport, connected: client.connected, disconnects: client.disconnects, reconnects: client.reconnects,
       ended: client.ended, resumeStored: client.resumeStored,
-      self: controller.debug.self, input: controller.debug.input,
+      self: controller.debug.self, input: controller.debug.input, camera: controller.debug.camera,
       ...(drive ? { approach: { done: drive.done, requested: asked, ...drive.progress, input: drivenInput,
         predicted: { x: client.predicted.x, y: client.predicted.y, z: client.predicted.z }, authority: controller.debug.authority } } : {}),
       walkers: poses.map(pose => ({ id: pose.id, name: pose.name, x: pose.x, y: pose.y, z: pose.z, posture: pose.posture ?? 'standing' })),

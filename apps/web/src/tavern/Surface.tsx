@@ -1,6 +1,9 @@
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import type { GatherFrame, GatherTableView } from '@chatdom/shared';
 import type { GameInputLease } from '../games/input';
+// The surface carries its own look wherever it is mounted: the inspection page, or behind play's door.
+import '@chatdom/ui/kit.css';
+import './tavern.css';
 import { createTavernStage } from './stage';
 import type { TavernClient } from './client';
 import { mountTavernWalk, type TavernWalkState } from './walk';
