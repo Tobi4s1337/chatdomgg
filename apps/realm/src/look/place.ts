@@ -3,6 +3,7 @@ import { approvedPublicName, DISPLAY_NAME_APPROVAL } from '../../../api/src/real
 import type { AllocationService, Deed } from '../allocation';
 import type { createRealmCitizens } from '../evening/citizens';
 import { decodeIngressCheckpoint, presencePerson } from '../ingress/codec';
+import { forgotten, renewConsent } from '../ingress/panel/privacy';
 import type { DurableKingdom, DurableRealmServices, RealmDatabase } from '../persistence';
 import type { LookOrigin } from './ports';
 
@@ -82,6 +83,7 @@ export function createHomePlaces(options: {
     if (!row) return false;
     if (row.codec !== 'presence-v1') throw new Error('The presence checkpoint is unavailable.');
     const checkpoint = decodeIngressCheckpoint({ version: 1, revision: Number(row.revision), codec: 'presence-v1', data: new Uint8Array(row.data) }, kingdom.kingdomId, origin);
+    if (forgotten(checkpoint.presence, personId)) return false;
     const restriction = presencePerson(checkpoint.presence, personId)?.restriction;
     return !!restriction && (restriction.until === null || restriction.until > kingdom.databaseNow());
   };
@@ -97,6 +99,8 @@ export function createHomePlaces(options: {
       const kingdom = hold.kingdom;
       assertCurrent(kingdom);
       if (await held(kingdom, personId)) return placeRefusal('held');
+      await renewConsent(db, kingdom, personId);
+      assertCurrent(kingdom);
       const settled = await citizens.settle(kingdom, { personId, name }, {});
       assertCurrent(kingdom);
       // `settle` returns null for guests; the allocator's idempotent answer says which.

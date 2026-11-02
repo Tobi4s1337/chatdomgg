@@ -27,6 +27,7 @@ function rig(options: { name?: string | null; approval?: string; founded?: boole
   const query = vi.fn(async (sql: string) => {
     if (sql.includes('FROM realm_persons')) return { rows: name === null ? [] : [{ public_name: name, name_approval: options.approval ?? DISPLAY_NAME_APPROVAL }] };
     if (sql.includes('FROM realm_ingress_checkpoints')) return { rows: [] };
+    if (sql.includes('realm_panel_withheld')) return { rows: [{ withheld: false }] };
     throw new Error(`Unexpected SIMULATED query: ${sql}`);
   });
   const kingdom = { kingdomId: KINGDOM, origin: 'simulated', current: true, databaseNow: () => Date.now(),
