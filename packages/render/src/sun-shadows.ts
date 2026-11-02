@@ -24,6 +24,25 @@ export interface SunShadowStats {
   readonly textureBytes: number;
   readonly transformBytes: number;
   readonly enabled: boolean;
+  readonly depthGeometryCasters: number;
+  /** Unique alternate geometry backing buffers; source colour geometry remains unchanged. */
+  readonly depthGeometryBytes: number;
+}
+
+export interface SunShadowRegistration {
+  /** Caller-owned, proven equivalent opaque surface for this exact static vertex transform.
+   * Keep alive until unregistering. Never substitute approximate LOD or deforming geometry here. */
+  readonly depthGeometry?: THREE.BufferGeometry;
+}
+
+function geometryBuffers(geometry: THREE.BufferGeometry): Set<ArrayBufferLike> {
+  const arrays = new Set<ArrayBufferLike>();
+  for (const attribute of Object.values(geometry.attributes)) {
+    const array = attribute instanceof THREE.InterleavedBufferAttribute ? attribute.data.array : attribute.array;
+    arrays.add(array.buffer);
+  }
+  if (geometry.index) arrays.add(geometry.index.array.buffer);
+  return arrays;
 }
 
 /**
@@ -139,7 +158,7 @@ void main(){
 export function createSunShadows(renderer: THREE.WebGLRenderer, options: SunShadowOptions): {
   bindReceiver(material: THREE.ShaderMaterial): void;
   setResolution(resolution: 1024 | 2048): void;
-  register(mesh: THREE.Mesh): () => void;
+  register(mesh: THREE.Mesh, options?: SunShadowRegistration): () => void;
   invalidate(): void;
   updateSunDirection(direction: THREE.Vector3 | readonly [number, number, number]): boolean;
   readonly stats: SunShadowStats;
@@ -170,8 +189,12 @@ export function createSunShadows(renderer: THREE.WebGLRenderer, options: SunShad
   const receivers = new Set<THREE.ShaderMaterial>();
   const materials = new Map<THREE.ShaderMaterial, THREE.ShaderMaterial>();
   const casters = new Map<THREE.Mesh, THREE.Mesh>();
+  const alternate = new Map<THREE.Mesh, THREE.BufferGeometry>();
+  const depthBuffers = new Map<THREE.BufferGeometry, { references: number; buffers: Set<ArrayBufferLike> }>();
+  const bufferReferences = new Map<ArrayBufferLike, number>();
   const stats = { updates: 0, casters: 0, drawCalls: 0, triangles: 0,
-    textureBytes: resolution * resolution * 5, transformBytes: 0, enabled: false };
+    textureBytes: resolution * resolution * 5, transformBytes: 0, enabled: false,
+    depthGeometryCasters: 0, depthGeometryBytes: 0 };
   const lastSun = new THREE.Vector3();
   let dirty = true, disposed = false;
 
@@ -180,6 +203,19 @@ export function createSunShadows(renderer: THREE.WebGLRenderer, options: SunShad
     if (!caster) return;
     scene.remove(caster);
     if (caster instanceof THREE.InstancedMesh) { stats.transformBytes -= caster.instanceMatrix.array.byteLength; caster.dispose(); }
+    const geometry = alternate.get(mesh);
+    if (geometry) {
+      const entry = depthBuffers.get(geometry)!;
+      if (--entry.references === 0) {
+        depthBuffers.delete(geometry);
+        for (const buffer of entry.buffers) {
+          const count = bufferReferences.get(buffer)!;
+          if (count === 1) { bufferReferences.delete(buffer); stats.depthGeometryBytes -= buffer.byteLength; }
+          else bufferReferences.set(buffer, count - 1);
+        }
+      }
+      alternate.delete(mesh); stats.depthGeometryCasters--;
+    }
     casters.delete(mesh); stats.casters = casters.size; dirty = true;
   }
 
@@ -213,11 +249,13 @@ export function createSunShadows(renderer: THREE.WebGLRenderer, options: SunShad
       material.needsUpdate = true;
       receivers.add(material);
     },
-    register(mesh) {
+    register(mesh, registration = {}) {
       if (disposed) throw new Error('Sun shadows are disposed');
       if (!(mesh.material instanceof THREE.ShaderMaterial) || mesh.material.glslVersion !== THREE.GLSL3) {
         throw new Error('Sun casters require their exact GLSL3 vertex transform');
       }
+      const geometry = registration.depthGeometry ?? mesh.geometry;
+      if (!(geometry instanceof THREE.BufferGeometry)) throw new Error('Sun caster depth geometry must be a BufferGeometry');
       removeCaster(mesh);
       let material = materials.get(mesh.material);
       if (!material) {
@@ -233,10 +271,23 @@ export function createSunShadows(renderer: THREE.WebGLRenderer, options: SunShad
       mesh.updateWorldMatrix(true, false);
       let caster: THREE.Mesh;
       if (mesh instanceof THREE.InstancedMesh) {
-        caster = new THREE.InstancedMesh(mesh.geometry, material, mesh.count);
+        caster = new THREE.InstancedMesh(geometry, material, mesh.count);
         (caster as THREE.InstancedMesh).instanceMatrix = new THREE.InstancedBufferAttribute(new Float32Array(mesh.instanceMatrix.array), 16);
         stats.transformBytes += (caster as THREE.InstancedMesh).instanceMatrix.array.byteLength;
-      } else caster = new THREE.Mesh(mesh.geometry, material);
+      } else caster = new THREE.Mesh(geometry, material);
+      if (geometry !== mesh.geometry) {
+        alternate.set(mesh, geometry); stats.depthGeometryCasters++;
+        const entry = depthBuffers.get(geometry);
+        if (entry) entry.references++;
+        else {
+          const buffers = geometryBuffers(geometry); depthBuffers.set(geometry, { references: 1, buffers });
+          for (const buffer of buffers) {
+            const count = bufferReferences.get(buffer) ?? 0;
+            if (!count) stats.depthGeometryBytes += buffer.byteLength;
+            bufferReferences.set(buffer, count + 1);
+          }
+        }
+      }
       caster.matrix.copy(mesh.matrixWorld); caster.matrixAutoUpdate = false;
       caster.frustumCulled = true; caster.name = `${mesh.name}:sun-caster`;
       scene.add(caster); casters.set(mesh, caster); stats.casters = casters.size; dirty = true;

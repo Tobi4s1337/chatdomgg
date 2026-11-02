@@ -4,9 +4,10 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
+import { preview as createPreview } from 'vite';
 import { acquireCaptureLock } from '../../../packages/testing/capture-lock.mjs';
 import { assertCapturePort } from '../../../packages/testing/capture-ports.mjs';
-import { startCapturePreview, closeCapturePreview } from '../../../packages/testing/preview.mjs';
+import { closeCapturePreview } from '../../../packages/testing/preview.mjs';
 
 // One native-canvas still per lease. Read in the actual draw task, before the browser discards
 // its default framebuffer. Production renderer settings and DOM composition are left untouched.
@@ -14,23 +15,28 @@ const hour = Number(process.env.GRAND_NATIVE_HOUR ?? 17.5);
 const hours = new Map([[6.5, 'dawn'], [12, 'noon'], [17.5, 'golden'], [22, 'night']]);
 assert.ok(hours.has(hour), 'Use a named evidence hour');
 const width = 1920, height = 1080;
+const label = process.env.GRAND_NATIVE_LABEL ?? 'canvas';
+assert.match(label, /^[a-z][a-z0-9-]{0,40}$/);
 const landPort = assertCapturePort(Number(process.env.GRAND_LAND_PORT ?? 5182));
 const browserPort = assertCapturePort(Number(process.env.GRAND_NATIVE_BROWSER_PORT ?? 5184));
-process.env.GRAND_NATIVE_PREVIEW_PORT ??= '5173';
+const previewPort = assertCapturePort(Number(process.env.GRAND_NATIVE_PREVIEW_PORT ?? 5173));
+const host = process.env.GRAND_NATIVE_HOST ?? '127.0.0.1';
+assert.ok(/^127\.0\.0\.(?:[1-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-4])$/.test(host), 'Capture host must be loopback');
+assert.equal(new Set([landPort, browserPort, previewPort]).size, 3, 'Capture ports must be distinct');
 process.env.CHATDOM_REALM_TARGET = 'http://127.0.0.1:5197';
 process.env.CHATDOM_API_TARGET = 'http://127.0.0.1:5196';
-process.env.CHATDOM_LAND_TARGET = `http://127.0.0.1:${landPort}`;
+process.env.CHATDOM_LAND_TARGET = `http://${host}:${landPort}`;
 const directory = resolve('shots/grand-world/land-bake-a');
 const { createLandReadServer } = await import(pathToFileURL(resolve('shots/grand-world/land-server/server.mjs')).href);
 const receipt = JSON.parse(await readFile('/tmp/grand-world-manifest.json', 'utf8'));
 const live = await fetch(`http://127.0.0.1:5197/api/realm/founded/${receipt.kingdomId}`, { signal: globalThis.AbortSignal.timeout(5000) });
 assert.equal(live.status, 200);
 assert.deepEqual(await live.json(), receipt, 'Current public receipt changed; do not capture a stale binding');
-const stem = `work/evidence/grand-world/gw10-native-canvas-${hours.get(hour)}@${width}x${height}`;
+const stem = `work/evidence/grand-world/gw10-native-${label}-${hours.get(hour)}@${width}x${height}`;
 await mkdir('work/evidence/grand-world', { recursive: true });
 const report = { kind: 'full-native-kingdom-canvas', renderer: 'Chrome SwiftShader',
   capture: 'PNG exported synchronously after the native draw; excludes DOM overlays and loading UI',
-  viewport: { width, height }, hour, receipt, landRequests: [], errors: [], workerScripts: [], passed: false };
+  viewport: { width, height }, hour, receipt, host, ports: { landPort, browserPort, previewPort }, landRequests: [], errors: [], workerScripts: [], passed: false };
 let release, server, preview, browserServer, browser, page, deadline;
 const sockets = new Set();
 function ownConnections(httpServer) {
@@ -41,10 +47,11 @@ try {
   deadline = setTimeout(() => { void browserServer?.kill(); }, 210_000);
   server = createLandReadServer(directory);
   ownConnections(server);
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen({ port: landPort, host: '127.0.0.1', exclusive: true }, resolve); });
-  preview = await startCapturePreview('GRAND_NATIVE_PREVIEW_PORT');
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen({ port: landPort, host, exclusive: true }, resolve); });
+  const previewServer = await createPreview({ root: 'apps/web', configFile: 'apps/web/vite.config.ts', preview: { host, port: previewPort, strictPort: true } });
+  preview = { server: previewServer, base: `http://${host}:${previewPort}` };
   ownConnections(preview.server.httpServer);
-  browserServer = await chromium.launchServer({ host: '127.0.0.1', port: browserPort, channel: 'chrome', headless: true,
+  browserServer = await chromium.launchServer({ host, port: browserPort, channel: 'chrome', headless: true,
     args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   browser = await chromium.connect(browserServer.wsEndpoint());
   page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
@@ -73,7 +80,7 @@ try {
         const png = canvas.toDataURL('image/png');
         result.png = png;
         result.state = JSON.parse(JSON.stringify({ beforeCompletedAt: prior, afterCompletedAt: state.renderCompletedAt,
-          renderStartedAt: state.renderStartedAt, land: state.land, water: state.water,
+          renderStartedAt: state.renderStartedAt, land: state.land, water: state.water, shadow: state.shadow,
           fields: state.fields, uploadedBytes: state.uploadedBytes, presence: state.presence,
           stats: kingdom.stats, canvas: { width: canvas.width, height: canvas.height } }));
         result.done = true;

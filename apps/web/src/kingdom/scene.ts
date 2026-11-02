@@ -342,7 +342,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const debug:KingdomDebug={citizens:0,walking:0,ready:false,lightingReady:false,workers:pool.stats.size+4,homes:houses.length,activeWindows:0,geometryBuilds:0,fieldUploads:0,drawCalls:0,triangles:0,time:0,hour,camera:camName,fieldBytes:0,source:source.label,fieldSettled:false,shadowUpdates:0,shadowDrawCalls:0,shadowTriangles:0,shadowBytes:0,shadowEnabled:false,windowFieldVisited:0,beaconFieldVisited:0};
   type Placement={position:Vec3;yaw:number;placementId?:string};
   const hiddenAttachments=new Set<string>(),growthHidden=new Set<string>(),growthLifeHidden=new Set<number>();
-  type RenderBatch={transitions:Map<Placement,DetailTransition>;blueprint:VoxelBlueprint;placements:readonly Placement[];levels:Map<number,THREE.InstancedMesh>};
+  type RenderBatch={transitions:Map<Placement,DetailTransition>;blueprint:VoxelBlueprint;placements:readonly Placement[];levels:Map<number,THREE.InstancedMesh>;depthGeometry?:THREE.BufferGeometry};
   const batches=new Map<string,RenderBatch>();
   let buildHidden=false;
   let instancesDirty=true;
@@ -372,9 +372,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const batch=batches.get(blueprintKey(first.blueprint)),mesh=batch?.levels.get(1);if(!batch||!mesh)return;
     mesh.count=0;const matrix=new THREE.Matrix4(),rotation=new THREE.Quaternion();
     for(const placement of batch.placements){if(buildHidden&&placement===first)continue;matrix.compose(new THREE.Vector3(...placement.position),rotation.setFromAxisAngle(new THREE.Vector3(0,1,0),placement.yaw),new THREE.Vector3(1,1,1));mesh.setMatrixAt(mesh.count++,matrix);}
-    sunShadows.register(mesh);instancesDirty=true;
+    sunShadows.register(mesh,batch.depthGeometry?{depthGeometry:batch.depthGeometry}:undefined);instancesDirty=true;
   }
-  function instance(blueprint:VoxelBlueprint,chunks:readonly AssetChunkMesh[],placements:readonly Placement[],factor:1|2|4=1){
+  function instance(blueprint:VoxelBlueprint,chunks:readonly AssetChunkMesh[],placements:readonly Placement[],factor:1|2|4=1,shadowChunks?:readonly AssetChunkMesh[]){
     const geometry=geometryFromChunks(chunks,'build');geometry.setAttribute('aLodFade',new THREE.InstancedBufferAttribute(new Float32Array(placements.length).fill(1),1));geometries.push(geometry);
     const treeBatch=treeBatches.find(batch=>batch.blueprint===blueprint);
     const match = /^tree-(oak|pine|birch|willow|elder)-(hearth|tide|grove)-(\d+)$/.exec(blueprint.id);
@@ -386,10 +386,16 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const keepMesh=installed?.forgeHosts.some(home=>home.slot===65534&&blueprintKey(home.blueprint)===blueprintKey(blueprint));
     const standardMesh=lifeSites.standard&&blueprintKey(lifeSites.standard.blueprint)===blueprintKey(blueprint);
     const mesh=new THREE.InstancedMesh(geometry,motion?canopy.material:blueprint.kind==='flora'?floraMaterial:standardMesh&&royalLife.standardMaterial?royalLife.standardMaterial:keepMesh&&royalLife.keepMaterial?royalLife.keepMaterial:clay.material,placements.length);const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
+    let depthGeometry:THREE.BufferGeometry|undefined;
+    if(shadowChunks!==undefined){
+      if(factor!==1||motion||mesh.material!==clay.material)throw new Error('Alternate shadow geometry requires static base clay');
+      depthGeometry=geometryFromChunks(shadowChunks,'build');geometries.push(depthGeometry);
+    }
     placements.forEach((p,i)=>{m.compose(v.set(...p.position),q.setFromAxisAngle(new THREE.Vector3(0,1,0),p.yaw),new THREE.Vector3(factor,factor,factor));mesh.setMatrixAt(i,m);});
     mesh.instanceMatrix.needsUpdate=true;mesh.frustumCulled=false;mesh.name=blueprint.id;scene.add(mesh);meshes.push(mesh);geometryBuilds++;
-    if(factor===(blueprint.kind==='flora'?2:1))sunShadows.register(mesh);
-    const batch=batches.get(blueprintKey(blueprint))??{transitions:new Map<Placement,DetailTransition>(),blueprint,placements,levels:new Map<number,THREE.InstancedMesh>()};
+    if(factor===(blueprint.kind==='flora'?2:1))sunShadows.register(mesh,depthGeometry?{depthGeometry}:undefined);
+    const batch:RenderBatch=batches.get(blueprintKey(blueprint))??{transitions:new Map<Placement,DetailTransition>(),blueprint,placements,levels:new Map<number,THREE.InstancedMesh>()};
+    if(depthGeometry)batch.depthGeometry=depthGeometry;
     batch.levels.set(factor,mesh);batches.set(blueprintKey(blueprint),batch);instancesDirty=true;
   }
   const lastInstanceEye=new THREE.Vector3(Infinity,Infinity,Infinity),lastInstanceTarget=new THREE.Vector3(),lastInstanceRotation=new THREE.Quaternion(),lastInstanceProjection=new THREE.Matrix4(),frustum=new THREE.Frustum();
@@ -724,17 +730,25 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   fullDispose=dispose;earlyCleanups.length=0;
   raf=requestAnimationFrame(render);
+  function staticClayShadow(blueprint:VoxelBlueprint):boolean{
+    if(blueprint.kind==='flora'||treeBatches.some(batch=>batch.blueprint===blueprint&&batch.canopy))return false;
+    const key=blueprintKey(blueprint);
+    return !installed?.forgeHosts.some(home=>home.slot===65534&&blueprintKey(home.blueprint)===key)
+      && !(lifeSites.standard&&blueprintKey(lifeSites.standard.blueprint)===key);
+  }
   const assets=[...blueprints.values(),...trees],total=assets.length*3;let completed=0;
   // Coarse geometry is available first. Every resolution is prepared in workers; window anchors stay exact.
   const assetJobs=([4,2,1] as const).flatMap(factor=>assets.map(blueprint=>({factor,blueprint})));let nextAsset=0;
   // Keep room for shore, dressing and citizen jobs in the shared bounded pool.
   const tasks:Promise<unknown>[]=Array.from({length:Math.min(8,assetJobs.length)},async()=>{
     while(nextAsset<assetJobs.length){const {factor,blueprint:b}=assetJobs[nextAsset++]!;
-    const job={kind:'blueprint' as const,blueprint:b,revision:1,materials:registry.materials,materialRevision:registry.revision,...(factor===1?{}:{lodFactor:factor})};
+    const shadow=factor===1&&staticClayShadow(b);
+    const job={kind:'blueprint' as const,blueprint:b,revision:1,materials:registry.materials,materialRevision:registry.revision,...(factor===1?{}:{lodFactor:factor}),...(shadow?{shadow:'opaque-faces-v1' as const}:{})};
     const result=await pool.submit(job);if(disposed||result?.kind!=='asset')return;
     const treeIndex=trees.indexOf(b);
     const placements=treeIndex>=0?treeBatches[treeIndex]!.placements:renderContent.filter(h=>blueprintKey(h.blueprint)===blueprintKey(b));
-    instance(b,result.chunks,placements,factor);options.onProgress(castleBuildings.some(module=>module.blueprint.id===b.id)?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
+    if(shadow&&result.shadowChunks===undefined)throw new Error('The voxel worker omitted requested shadow geometry');
+    instance(b,result.chunks,placements,factor,result.shadowChunks);options.onProgress(castleBuildings.some(module=>module.blueprint.id===b.id)?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
     }
   });
   if(growth)tasks.push(growth.ready);
@@ -829,7 +843,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     walkSelected:()=>walkSelected,
     selectWalk(selected:boolean){walkSelected=selected&&!!walk;overview?.setActive(overviewOwnsLens());if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
     seekGrowthCeremony(seconds:number|null){growth?.seek(seconds);},
-    inspect:()=>({overview:overview?.inspect()??null,placeShot:placeShot.inspect(),land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
+    inspect:()=>({overview:overview?.inspect()??null,placeShot:placeShot.inspect(),land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),shadow:{...sunShadows.stats},moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
       if(!crowd.receiveChat(input))return false;
       const cue=CitizenChatCueSchema.parse(input),at=Date.now();
       if(cue.asOf<=at&&at-cue.asOf<=5000&&cue.expiresAt>at)arrivalDirector?.chat(cue.slot,at);

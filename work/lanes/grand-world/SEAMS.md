@@ -647,3 +647,26 @@ the hold once; a late promise cannot promote. Citizens are captured after the wa
 
 No persisted recipe, artifact, scene receipt, physical floor or gather/pier anchor changed. Evidence and remaining
 native-device limits are in `work/evidence/grand-world/GW10-startup.md`.
+
+## GW10 exact static shadow geometry — 2026-11-02
+
+The optional local voxel blueprint job field `shadow: 'opaque-faces-v1'` requests `shadowChunks` alongside
+unchanged colour `chunks`. It is valid only at full detail (omitted `lodFactor` or `1`). Every source chunk has
+an ordered matching shadow chunk, including empty ones, with the same coordinate and stamp and separately
+owned transfer buffers. Unrequested jobs keep their original result shape. The pool rejects missing,
+malformed, mismatched or aliased results before installing geometry.
+
+`createSunShadows().register(mesh, { depthGeometry })` accepts caller-owned alternate geometry. It retains
+the exact source vertex shader, build scale, world matrix and instance placement snapshot. The caller keeps
+geometry alive until unregistering and disposes it; the shadow owner does not dispose borrowed buffers.
+`depthGeometryCasters` and `depthGeometryBytes` report the alternate caster count and unique retained backing
+buffer bytes; `scene.inspect().shadow` exposes those counters with the existing shadow diagnostics.
+
+Only the native static base-clay full-detail batches opt in. Flora, animated canopy, royal custom materials,
+grand terrain and ground dressing retain their original path. The depth compiler merges the existing opaque
+oriented face union, preserving holes and chunk boundaries; it never reconstructs hidden occupancy faces.
+Glass follows the original depth-discard rule. Greedy output cannot exceed the opaque source quad count.
+Colour geometry, source detail, physics, scene receipts and place anchors are unchanged.
+
+Algorithm reference: [bounded integer face masks](../../references/grand-world/shadow-depth.md).
+No gather or pier consumer action is required for this renderer-local addition.
