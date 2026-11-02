@@ -55,8 +55,12 @@ Rules:
 - play routes Escape: while the Forge panel is open, Esc closes it first, then the Esc menu works as usual.
 - While the wish box has focus, typed keys never reach the walk controller. forge-wish stops propagation only
   inside `root`; it adds no window-level listeners and never calls the pointer-lock API itself.
-- The anvil is also an entry: walking up to it opens the same panel with `from: 'anvil'`. Until play's slot
-  lands, the anvil card (`apps/web/src/interactions/places/AnvilVisit.tsx`, this lane's) opens it directly.
+- The anvil is also an entry: walking up to it opens the same panel with `from: 'anvil'`. When play hands the
+  anvil card (`apps/web/src/interactions/places/AnvilVisit.tsx`, this lane's) a `forgeHost`, its "Make a wish"
+  opens the panel in play's node. In the kingdom view's own walk (no play binding),
+  `apps/web/src/forge/play/anvil-entry.tsx` opens the wish box as soon as the visit starts in a founded kingdom.
+  It never touches pointer lock: the walk released the pointer for the visit, and closing the box ends the visit.
+  Without a founded kingdom it shows the chat line.
 - The panel uses the carved kit from `packages/ui` (front-door's), read-only.
 
 ## 2. The wardrobe catalogue (forge-wish and play)
@@ -199,6 +203,12 @@ the same. New authority work captures one trusted kit across result rendering, a
 assembly. A result receipt must not approve another kit revision; legacy digest-only receipts may authorize
 revision one only. Commit fit checks still require the current kit, so a preview cannot opt into publishing
 revision two while the default is one.
+
+**2 November (policy v7):** revision 2 also re-authors the sleeping fox, the shooting star and the scallop shell.
+It passes the blind likeness certification (`CERTIFICATION.md`): every motif reads in its native finish in every
+family. Revision 1's fox and star do not read, so until this promotion lands, fox and star wishes are delivered
+softened and FW10's frozen twenty cannot meet "every known motif delivered as asked". This promotion is what
+unblocks the twenty.
 
 `needs: main` — before changing `CURRENT_FORGE_STYLE_KIT_REVISION` to 2, update both core-owned reconstruction
 paths and demonstrate native growth of a home carrying mixed revision-one and revision-two attachments. This

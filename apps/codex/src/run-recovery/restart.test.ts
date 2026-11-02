@@ -17,6 +17,10 @@ const words = 'A sleeping dragon on my chimney, private words';
 const request = { words, family: 'hearth' as const, home: createHome('house', 'hearth', 0) };
 const safetyIdentifier = 'stable-hashed-citizen-identifier';
 const styleKit = forgeStyleKit('hearth');
+/** What both gates read from these words, in catalogue terms. */
+const dragon = { motif: 'sleeping-dragon', slot: 'chimney' } as const;
+// Every judged candidate renders a real contact sheet, which is slow on a shared software renderer.
+vi.setConfig({ testTimeout: 60_000 });
 
 it.each([
   { stage: 'words', phase: 'drafting', calls: ['words'] },
@@ -36,7 +40,7 @@ it.each([
       title: 'Sleeping keeper', plaque: 'Warm dreams above the hearth.' }, interpretation: 'as-wished', shared: 'subject' }); }
     madeCalls.push(image ? 'result' : 'words');
     return JSON.stringify({ answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })),
-      ...(image ? { quality: { recognisability: 0.95, completeness: 1, cleanMarks: 1 }, detailMatch: 'met' } : {}) });
+      subject: dragon });
   } });
   const stop = new AbortController(), original = queue.checkpoint.bind(queue);
   let savedRunId: string | undefined, reached = false;
@@ -80,7 +84,7 @@ it('does not reuse a stored word verdict for a different authoritative home', as
   let invocations = 0;
   const providers = createForgeProviders({ runCodex: async () => {
     invocations++;
-    return JSON.stringify({ answers: forgeJudgeQuestions(false).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })) });
+    return JSON.stringify({ answers: forgeJudgeQuestions(false).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })), subject: dragon });
   } });
   const stop = new AbortController(), original = queue.checkpoint.bind(queue);
   let reached = false;
@@ -124,7 +128,7 @@ it('retains the debit for an interrupted unanswered call and only retries within
       await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('interrupted')), { once: true }));
     }
     return JSON.stringify({ answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })),
-      ...(image ? { quality: { recognisability: 0.95, completeness: 1, cleanMarks: 1 }, detailMatch: 'met' } : {}) });
+      subject: dragon });
   } });
   const stop = new AbortController();
   const running = runForge(request, providers, () => {}, async () => {}, stop.signal,
@@ -166,7 +170,7 @@ it('charges an interrupted second judge read and repeats the incomplete gate onl
     calls.push(image ? 'result' : 'words');
     const uncertain = !image && primaryWords++ === 0;
     return JSON.stringify({ answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: uncertain && name === 'hate' ? 0.4 : 0.01 })),
-      ...(image ? { quality: { recognisability: 0.95, completeness: 1, cleanMarks: 1 }, detailMatch: 'met' } : {}) });
+      subject: dragon });
   } });
   const stop = new AbortController();
   const running = runForge(request, providers, () => {}, async () => {}, stop.signal,
@@ -207,7 +211,8 @@ it('selects the earlier checked candidate when an interrupted second result has 
       await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('interrupted')), { once: true }));
     }
     return JSON.stringify({ answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })),
-      ...(image ? { quality: { recognisability: 0.3, completeness: 1, cleanMarks: 1 }, detailMatch: 'unclear' } : {}) });
+      // The result gate's independent reading disagrees with the word gate, so the piece earns one quality retry.
+      subject: image ? { motif: 'none', slot: 'chimney' } : dragon });
   } });
   const stop = new AbortController();
   const running = runForge(request, providers, () => {}, async () => {}, stop.signal,
@@ -225,4 +230,53 @@ it('selects the earlier checked candidate when an interrupted second result has 
   expect(calls).toEqual(['words', 'draft', 'result', 'draft', 'result']);
   expect(records.at(-1)).toMatchObject({ outcome: 'approved', modelCalls: 5, draft: { title: 'First keeper' },
     selection: { delivery: 'softened', reason: 'quality' } });
+});
+
+it('reopens a quiet unjudged redraft with its subject feedback and recomputes the measure on restore', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'forge-run-early-redraft-'));
+  cleanups.push(() => rm(directory, { recursive: true, force: true }));
+  let queue = await FileForgeWishQueue.open({ directory, origin: 'simulated' });
+  cleanups.push(() => queue.close());
+  await queue.enqueue({ kingdomId: KingdomIdSchema.parse('123'), personId: PersonIdSchema.parse('456'),
+    messageId: 'early-redraft-message', slot: 19, observedAt: Date.now(), words });
+  const first = await queue.claimNext(); if (!first) throw new Error('Expected claim');
+  const calls: string[] = [], feedback: (string | null)[] = [];
+  const providers = createForgeProviders({ runCodex: async ({ model, image, prompt }) => {
+    if (!model) {
+      calls.push('draft');
+      feedback.push(prompt.includes('"feedback":null') ? null : prompt.includes('use motif sleeping-dragon') ? 'subject' : 'other');
+      const motif = calls.filter(call => call === 'draft').length === 1 ? 'watchful-owl' : 'sleeping-dragon';
+      return JSON.stringify({ draft: { plan: { version: 2, kind: 'chimney', motif, finish: 'native', accent: 'none' },
+        title: 'Hearth keeper', plaque: 'Warm dreams above the hearth.' }, interpretation: 'as-wished', shared: 'subject' });
+    }
+    calls.push(image ? 'result' : 'words');
+    return JSON.stringify({ answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })), subject: dragon });
+  } });
+  const stop = new AbortController(), original = queue.checkpoint.bind(queue);
+  let reached = false;
+  vi.spyOn(queue, 'checkpoint').mockImplementation(async (owned, checkpoint) => {
+    const result = await original(owned, checkpoint);
+    const state = (checkpoint.data as { state?: { phase?: string; feedback?: string; attempts?: number } }).state;
+    if (!reached && checkpoint.stage === 'drafting' && state?.phase === 'drafting' && state.feedback === 'subject') {
+      expect(state.attempts).toBe(2); reached = true; stop.abort();
+    }
+    return result;
+  });
+  await expect(runForge(request, providers, () => {}, async () => {}, stop.signal,
+    { safetyIdentifier, styleKit, recovery: createQueuedForgeRunRecovery(queue, first) })).rejects.toBeDefined();
+  expect(reached).toBe(true);
+  expect(calls).toEqual(['words', 'draft']);
+  await queue.close();
+  queue = await FileForgeWishQueue.open({ directory, origin: 'simulated' });
+  const restored = await queue.claimNext(); if (!restored) throw new Error('Expected restored claim');
+  const records: ForgeRunRecord[] = [];
+  await runForge(request, providers, () => {}, async value => { records.push(value); }, restored.signal,
+    { safetyIdentifier, styleKit, recovery: createQueuedForgeRunRecovery(queue, restored) });
+  expect(calls).toEqual(['words', 'draft', 'draft', 'result']);
+  expect(feedback).toEqual([null, 'subject']);
+  expect(records.at(-1)).toMatchObject({ outcome: 'approved', modelCalls: 4, attempts: 2,
+    draft: { plan: { motif: 'sleeping-dragon' } }, selection: { delivery: 'retried', attempt: 2, verdict: 1, shared: 'subject' } });
+  expect(records.at(-1)!.verdicts[1]).toMatchObject({ measure: { words: dragon, result: dragon, certificate: 'reads' }, detailMatch: 'met',
+    quality: { score: 1 } });
+  expect(JSON.stringify(records)).not.toContain(words);
 });

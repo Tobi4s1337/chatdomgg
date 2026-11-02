@@ -9,7 +9,8 @@ import { REALM_CASTLE_SLOT, REALM_NO_HOME_SLOT, type KingdomForgeCommand, type R
 import { createRealmState } from '@chatdom/world/realm';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import type { ForgeProviders, JudgeVerdict } from '../../../codex/src/providers';
-import { FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, forgeJudgeQuestions, scoreForgeQuality } from '../../../codex/src/providers/policy';
+import { FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, combineForgeWishSubject, forgeJudgeQuestions,
+  type ForgeWishSubject } from '../../../codex/src/providers/policy';
 import { createDurableRealmServices, type DurableRepository, type RealmOutboxRow } from '../persistence';
 import type { RealmOutboxStore } from '../outbox';
 import { IngressGate, presenceTransition } from '../ingress';
@@ -19,11 +20,11 @@ import { RealmEveningBridge } from './bridge';
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await close(); });
 
-function pass(image: boolean): JudgeVerdict {
-  const quality = { recognisability: 0.95, completeness: 0.95, cleanMarks: 0.95 };
+/** Both gates read the words' catalogue subject; the host scores quality from those readings and the plan. */
+function pass(image: boolean, subject: ForgeWishSubject = { motif: 'sleeping-dragon', slot: 'chimney' }): JudgeVerdict {
   const base = { backend: 'codex-cli', status: 'complete', policy: FORGE_JUDGE_POLICY_VERSION, evidenceHash: (image ? 'b' : 'a').repeat(64),
-    ...(image ? { quality, qualityStatus: 'complete' } : {}) };
-  return { outcome: 'pass', reason: 'controlled approval', ...(image ? { quality: scoreForgeQuality(quality, quality) } : {}), records: [
+    subject, subjectStatus: 'complete' };
+  return { outcome: 'pass', reason: 'controlled approval', subject: combineForgeWishSubject(subject, subject), records: [
     { ...base, judge: 'gpt-6-luna', model: 'gpt-6-luna', probabilitySource: 'model-self-estimate', thresholds: FORGE_JUDGE_THRESHOLDS,
       answers: Object.fromEntries(forgeJudgeQuestions(image).map(({ name }) => [name, 0.01])) },
     { ...base, judge: 'gpt-6.1-terra', model: 'gpt-6.1-terra', outcome: 'pass' },
@@ -128,8 +129,13 @@ it('sends the closest-shape explanation only to the maker after a real durable c
   const f = await fixture();
   const draft = await f.providers.draft({ words: f.command.words, family: 'hearth', availableSockets: [] });
   f.providers.draftCandidate = vi.fn(async () => ({ draft, interpretation: 'closest' as const, shared: 'family' as const }));
+  // Both gates agree the words name no catalogue subject: the closest piece is final and softened for vocabulary.
+  const unsupported = { motif: 'none', slot: 'chimney' } as const;
+  vi.mocked(f.providers.judgeWords).mockImplementation(async () => pass(false, unsupported));
+  vi.mocked(f.providers.judgeResult).mockImplementation(async () => pass(true, unsupported));
   expect(await f.bridge.run(f.command)).toMatchObject({ kind: 'committed' });
-  expect(f.privateReply).toHaveBeenCalledWith(personId, expect.objectContaining({ receipt: expect.objectContaining({ status: 'committed', message: expect.stringContaining('The closest I can make') }) }));
+  expect(f.providers.judgeResult).toHaveBeenCalledOnce();
+  expect(f.privateReply).toHaveBeenCalledWith(personId, expect.objectContaining({ receipt: expect.objectContaining({ status: 'committed', message: expect.stringMatching(/^The closest I can make .*beyond my kit\. It keeps the same family of shapes\.$/) }) }));
   expect(JSON.stringify([f.rows, f.transient, f.delivered])).not.toContain('closest');
   expect(f.state().coals[personId]).toBe(0);
 });
@@ -275,6 +281,32 @@ it('observes witnessed work before judging and delivery only from the actual com
   expect(await f.bridge.run(f.command)).toEqual({ kind: 'already-committed' });
   expect(observations.filter(item => item.status === 'delivered')).toHaveLength(1);
   expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(1);
+});
+
+it('tells the maker a landed piece was delivered even when the commit reply is lost', async () => {
+  const observations: Parameters<ForgeChatObserver>[0][] = [];
+  const f = await fixture(false, { forgeChatObserver: async observation => { observations.push(observation); } });
+  const execute = f.repository.execute;
+  let lost = 0;
+  f.repository.execute = async (lease, id, command, decide, current) => {
+    let committing = false;
+    const result = await execute(lease, id, command, (state, at) => {
+      const decision = decide(state, at);
+      if (decision.kind === 'accepted' && decision.fact.body.type === 'forge.commitApproved') committing = true;
+      return decision;
+    }, current);
+    // The durable transaction applied; only its answer is lost on the way back.
+    if (committing && !lost++) throw new Error('SIMULATED lost commit reply');
+    return result;
+  };
+  const outcome = await f.bridge.run(f.command);
+  expect(lost).toBe(1);
+  expect(outcome).toMatchObject({ kind: 'committed', published: false, privateMessage: expect.stringContaining('Your home now carries') });
+  expect(observations.map(item => item.status)).toEqual(['working', 'delivered']);
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(1);
+  expect(f.state().coals[personId]).toBe(0);
+  expect(f.privateReply).toHaveBeenCalledExactlyOnceWith(personId, expect.objectContaining({ receipt: expect.objectContaining({ status: 'committed' }) }));
+  expect(JSON.stringify(observations)).not.toContain('unchanged');
 });
 
 it('reports an offline witnessed wish as cold with the real private reason and no working or delivery', async () => {

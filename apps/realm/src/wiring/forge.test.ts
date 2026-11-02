@@ -20,6 +20,7 @@ import { bindForgeCandidate } from '../../../codex/src/kingdom-forge/candidate';
 import { createForgeProviders } from '../../../codex/src/providers';
 import { forgeJudgeQuestions } from '../../../codex/src/providers/policy';
 import { renderForgeContactSheet } from '../../../codex/src/contact-sheet';
+import { forgeResultMeasure, withForgeQuality } from '../../../codex/src/quality';
 import { forgeAuthorityDeferred } from '../../../codex/src/kingdom-forge/defer';
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -269,18 +270,23 @@ it('binds the real private approval to the selected draft, host and exact kit be
   const input = commitInput(attempt, reservation, 'bound-selected-run');
   const directory = await mkdtemp(join(tmpdir(), 'chatdom-selected-forge-'));
   cleanup.push(() => rm(directory, { recursive: true, force: true }));
-  const approvals = new FileForgeApprovals(directory), quality = { recognisability: 0.9, completeness: 0.9, cleanMarks: 0.9 };
+  const approvals = new FileForgeApprovals(directory);
   const providers = createForgeProviders({ runCodex: async ({ image }) => JSON.stringify({
-    answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })), ...(image ? { quality, detailMatch: 'met' } : {}),
+    answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })),
+    subject: { motif: 'sleeping-dragon', slot: 'chimney' },
   }) });
-  const socket = findForgeSockets(reservation.home).find(socket => socket.kind === input.attachment.draft.plan.kind)!;
-  const piece = assembleForge(input.attachment.draft.plan, forgeStyleKit(reservation.family), socket);
+  const kit = forgeStyleKit(reservation.family), sockets = findForgeSockets(reservation.home);
+  const socket = sockets.find(socket => socket.kind === input.attachment.draft.plan.kind)!;
+  const piece = assembleForge(input.attachment.draft.plan, kit, socket);
   const words = await providers.judgeWords({ words: input.creation.words, safetyIdentifier: reservation.safetyIdentifier });
-  const result = await providers.judgeResult({ wish: input.creation.words, draft: input.attachment.draft, safetyIdentifier: reservation.safetyIdentifier,
+  const read = await providers.judgeResult({ wish: input.creation.words, draft: input.attachment.draft, safetyIdentifier: reservation.safetyIdentifier,
     contactSheet: renderForgeContactSheet(piece.blueprint, { home: reservation.home, origin: socket.origin }) });
+  // The host scores quality from both gates' readings, the plan and the kit certificate, exactly as runForge does.
+  const result = withForgeQuality(read, forgeResultMeasure({ words: words.subject, result: read.subject, draft: input.attachment.draft, styleKit: kit, sockets }));
+  expect(result).toMatchObject({ outcome: 'pass', detailMatch: 'met', quality: { recognisability: 1 } });
   await approvals.record({ key: attempt.key, runId: input.attachment.runId, at: Date.now(), judgment: 'approved',
-    verdicts: [words, result].map(({ outcome, records, quality, detailMatch }) => ({ outcome, records,
-      ...(quality ? { quality } : {}), ...(detailMatch ? { detailMatch } : {}) })),
+    verdicts: [words, result].map(({ outcome, records, subject, measure, quality, detailMatch }) => ({ outcome, records,
+      ...(subject ? { subject } : {}), ...(measure ? { measure } : {}), ...(quality ? { quality } : {}), ...(detailMatch ? { detailMatch } : {}) })),
     candidate: bindForgeCandidate(input.attachment.draft, reservation.home, piece.kit) });
   f.approvals.approved.mockImplementation((key, id, expected) => approvals.approved(key, id, expected));
   for (const attachment of [

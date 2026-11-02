@@ -18,7 +18,7 @@ export interface ForgeRunState {
   pending?: ForgeDraftCandidate;
   best?: number;
   softening?: 'fit';
-  feedback?: 'fit' | 'quality';
+  feedback?: 'fit' | 'quality' | 'subject';
   stop?: { readonly outcome: 'hold' | 'refuse' | 'cold'; readonly code: ForgeRunStopCode };
 }
 export interface ForgeRunRecoveryInput {

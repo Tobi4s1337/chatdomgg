@@ -6,6 +6,8 @@ import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, homeFingerp
 import { renderForgeContactSheet } from './contact-sheet';
 import type { ForgeRunSelection } from './wish-decision';
 import { bestForgeCandidate, forgeRunSelection, forgeRunStopMessage, goodForgeQuality, initialForgeRunState } from './run-recovery/state';
+import { forgeEarlyRedraft, forgeQualityRetryUseful, forgeRedraftFeedback, forgeResultMeasure, withForgeQuality } from './quality';
+import { forgeReadableFinishes } from './certificates';
 import { ForgeRunRecoveryError, type ForgeRecoveryStage, type ForgeRunRecovery, type ForgeRunStopCode } from './run-recovery/types';
 
 /** Audit metadata deliberately omits the original wish and the whole home. */
@@ -25,10 +27,6 @@ export interface ForgeRunContext {
   readonly styleKit?: ForgeStyleKit;
   readonly recovery?: ForgeRunRecovery;
 }
-const feedback = {
-  fit: 'The first shape did not fit the available house socket. Choose a simpler authored part that fits; preserve the original subject where the kit allows it.',
-  quality: 'The result is safe, but its subject or small details were hard to read. Strengthen the original subject using the authored kit, try a simpler finish and fewer accents, or explicitly choose the closest related shape. Do not claim an absent subject in the title or plaque.',
-} as const;
 
 /** Both gates surround each candidate. Durable runs resume completed stages within their original call budget. */
 export async function runForge(input: unknown, providers: ForgeProviders, emit: (event: ForgeRunEvent) => void,
@@ -89,6 +87,12 @@ export async function runForge(input: unknown, providers: ForgeProviders, emit: 
     if (state.phase === 'approved') return await approve();
     if (state.phase === 'stopped') { await publishStop(); return; }
     const sockets = findForgeSockets(request.home, request.hostProfile, styleKit.revision);
+    /** Whether a plan the words name would actually assemble on this home; redrafts never chase a piece that cannot land. */
+    const fits = (plan: ForgeDraft['plan']) => {
+      const socket = sockets.find(socket => socket.kind === plan.kind);
+      if (!socket) return false;
+      try { checkForge(assembleForge(plan, styleKit, socket), request.home, request.hostProfile); return true; } catch { return false; }
+    };
     if (state.phase === 'words') {
       lastStage = 'words'; emit({ type: 'stage', stage: 'judging-words' });
       const raw = await providers.judgeWords({ words: request.words, safetyIdentifier, budget: budgetFor('words'), ...(signal ? { signal } : {}) });
@@ -108,11 +112,21 @@ export async function runForge(input: unknown, providers: ForgeProviders, emit: 
           throw new ForgeCallBudgetError();
         }
         emit({ type: 'stage', stage: 'drafting' });
+        const readableFinishes = forgeReadableFinishes(request.family, styleKit.revision);
+        const lastVerdict = state.candidates.length ? state.verdicts[state.candidates.at(-1)!.verdict] : undefined;
         const draftInput = { words: request.words, family: request.family, availableSockets: sockets, budget: budgetFor('drafting'),
-          ...(state.feedback ? { feedback: feedback[state.feedback] } : {}), ...(signal ? { signal } : {}) };
+          ...(Object.keys(readableFinishes).length ? { readableFinishes } : {}),
+          ...(state.feedback ? { feedback: forgeRedraftFeedback(state.feedback, state.verdicts[0]?.subject, lastVerdict) } : {}),
+          ...(signal ? { signal } : {}) };
         const candidate = providers.draftCandidate ? await providers.draftCandidate(draftInput)
           : { draft: await providers.draft(draftInput), interpretation: 'as-wished' as const, shared: 'subject' as const };
-        state.pending = ForgeDraftCandidateSchema.parse(candidate); state.phase = 'assembling';
+        const parsed = ForgeDraftCandidateSchema.parse(candidate);
+        // The word gate named a kit subject or an available slot the draft missed: redraft quietly, unjudged.
+        if (state.attempts < 2 && forgeEarlyRedraft(state.verdicts[0]?.subject, parsed.draft, sockets, fits)
+          && budgetFor('drafting').remaining >= 2) {
+          state.feedback = 'subject'; state.attempts += 1; await save('drafting'); continue;
+        }
+        state.pending = parsed; state.phase = 'assembling';
         await save('drafting');
       }
       const candidate = state.pending;
@@ -141,7 +155,10 @@ export async function runForge(input: unknown, providers: ForgeProviders, emit: 
       abort(); lastStage = 'result'; emit({ type: 'stage', stage: 'judging-piece' });
       const raw = await providers.judgeResult({ draft: candidate.draft, wish: request.words, contactSheet: sheet,
         safetyIdentifier, budget: resultBudget, ...(signal ? { signal } : {}) });
-      const judged = recovery ? recovery.verdict(raw, true, candidate.draft, sheet) : raw;
+      const checked = recovery ? recovery.verdict(raw, true, candidate.draft, sheet) : raw;
+      // Quality is computed, never read: the two independent word readings, the plan and the kit certificate.
+      const judged = withForgeQuality(checked, forgeResultMeasure({ words: state.verdicts[0]?.subject, result: checked.subject,
+        draft: candidate.draft, styleKit, sockets }));
       state.verdicts.push(judged);
       state.candidates.push({ ...candidate, verdict: state.verdicts.length - 1, attempt: state.attempts });
       delete state.pending;
@@ -151,7 +168,8 @@ export async function runForge(input: unknown, providers: ForgeProviders, emit: 
         await stop(judged.outcome, judged.outcome === 'refuse' ? 'safety-refuse' : 'safety-hold', 'result', judged.reason); return;
       }
       if (judged.outcome === 'pass' && !goodForgeQuality(judged) && state.attempts < 2
-        && budgetFor('drafting').remaining >= 2) {
+        && forgeQualityRetryUseful(judged, request.family, styleKit.revision,
+          partial => fits({ ...candidate.draft.plan, ...partial })) && budgetFor('drafting').remaining >= 2) {
         state.feedback = 'quality'; state.attempts += 1; state.phase = 'drafting';
       } else state.phase = 'selecting';
       await save('result');

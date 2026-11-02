@@ -52,7 +52,7 @@ async function worker(directory: string, port: number, stage: Stage, restarting:
       const file = await open(join(directory, 'calls'), 'a', 0o600);
       try { await file.writeFile(stageName + '\n'); await file.sync(); } finally { await file.close(); }
       if (!model) return JSON.stringify({ draft: { plan: { version: 2, kind: 'chimney', motif: 'sleeping-dragon', finish: 'native', accent: 'none' }, title: 'Sleeping keeper', plaque: 'Warm dreams above the hearth.' }, interpretation: 'as-wished', shared: 'subject' });
-      return JSON.stringify({ answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })), ...(image ? { quality: { recognisability: 0.95, completeness: 1, cleanMarks: 1 }, detailMatch: 'met' } : {}) });
+      return JSON.stringify({ answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })), subject: { motif: 'sleeping-dragon', slot: 'chimney' } });
     } });
     boot = createDurableRealmBoot({ pool, origin: 'simulated', foundedDirectory: join(directory, 'founded'), verifier: new TenureEvidenceVerifier('simulated', Buffer.from(config.key, 'hex')), ingressCredentials: { herald: config.secret }, foundedAccess: target => target.origin === 'simulated', furnish: citizens.furnish, repositoryOptions: gate.install({ origin: 'simulated' }), attach: kingdom => bridge!.attach(kingdom) });
     citizens.use(boot.allocation, boot.services);

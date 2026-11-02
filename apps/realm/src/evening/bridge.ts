@@ -5,7 +5,8 @@ import { createKingdomForgeApplication, type KingdomForgeResult } from '../../..
 import { createForgeProviders, type ForgeProviders } from '../../../codex/src/providers';
 import { decodeIngressCheckpoint, presenceEpoch, presencePerson, type IngressReply, type RealmIngress } from '../ingress';
 import type { DurableKingdom, DurableRealmServices } from '../persistence';
-import { createForgeAuthority, type FileForgeApprovals, type ForgeWriteGate } from '../wiring';
+import { createForgeAuthority, forgeMessageKey, type FileForgeApprovals, type ForgeWriteGate } from '../wiring';
+import { forgeDeliveryMessage } from '../../../codex/src/wish-decision';
 
 const MAX_PENDING = 32;
 const RUN_LEASE_MS = 600_000;
@@ -145,7 +146,7 @@ export class RealmEveningBridge {
         };
         const timer = setTimeout(() => abort.abort(), RUN_LEASE_MS); timer.unref?.();
         try {
-          const outcome = await context.run(command, { signal, current });
+          const outcome = this.landed(kingdom, command, await context.run(command, { signal, current }));
           this.privateOutcome(kingdom, command, outcome);
           return outcome;
         } finally { clearTimeout(timer); }
@@ -323,6 +324,19 @@ export class RealmEveningBridge {
       await new Promise<void>(resolve => setTimeout(resolve, 25));
     }
     return false;
+  }
+
+  /**
+   * The maker hears the authoritative truth, never a lost reply: when a commit landed but its answer did not arrive in
+   * time, the kingdom's durable state already holds the piece, and the wish is delivered, not cold.
+   */
+  private landed(kingdom: DurableKingdom, command: KingdomForgeCommand, outcome: KingdomForgeResult): KingdomForgeResult {
+    if (outcome.kind === 'committed' || outcome.kind === 'already-committed' || outcome.kind === 'refused') return outcome;
+    const key = forgeMessageKey(command.kingdomId, command.messageId);
+    const made = Object.values(kingdom.privateState.attachments).find(item => item.forgeKey === key && item.ownerId === command.personId);
+    if (!made) return outcome;
+    return { kind: 'committed', attachment: structuredClone(made.attachment), published: false,
+      privateMessage: forgeDeliveryMessage(made.attachment.draft) };
   }
 
   private privateOutcome(kingdom: DurableKingdom, command: KingdomForgeCommand, outcome: KingdomForgeResult): void {

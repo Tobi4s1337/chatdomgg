@@ -3,31 +3,35 @@
 `createForgeProviders()` supplies the independent word gate, Codex draft, and result gate. The host orders
 these, assembles the actual grammar plan, renders shaded isolated views and the actual home placement, and persists private records
 before releasing an approval. A provider verdict never mints or publishes a part. The result gate sees the
-original wish alongside the actual image, title and plaque. Safety and quality are separate outputs.
+original wish alongside the actual image, title and plaque.
+
+**Policy v7: the image read is safety only.** Every read (word gate and result gate, primary and escalation)
+answers the fixed floor questions and also returns `subject`: which catalogue motif and house slot the ORIGINAL
+WISH's words ask for (`none` for anything else). The verdict carries the field-wise agreement of its reads
+(`combineForgeWishSubject`; a disagreement is `unclear`). No read rates likeness, completeness or stray marks.
+
+Quality is computed by the host, not read: `forgeResultMeasure` (`../quality.ts`) combines the word gate's reading,
+the result gate's independent reading, the plan's motif and kind, the blind kit certificate (`../certificates`,
+see `work/lanes/forge-wish/CERTIFICATION.md`) and whether the named slot exists on the home. `scoreForgeMeasure`
+keeps the historical 60/25/15 weights; `forgeMeasureDetailMatch` gives met/adapted/unclear. Both readings must
+agree on the plan's motif, and the motif must be certified readable, before a delivery is exact. A disputed reading
+is never resolved by either read alone. The same evidence always gives the same score, so repeatability of quality is
+structural; only the safety verdict comes from a model. Quality never causes a hold or refusal.
 
 The current policy refuses only when the independent reads agree on the same safety-floor concern. A single
 confident objection, different objections or uncertainty holds privately; neither read can refuse alone.
-Subject recognition, completeness and incidental stray marks produce bounded quality scores, never safety
-holds or refusals. Every actual image read records those dimensions. A single read, or the mean of two actual reads, is combined as 60% recognition,
-25% completeness and 15% clean marks, rounded deterministically to four decimal places. This is a versioned
-selection score, not a calibrated safety probability or a visual acceptance claim. The rubric gives generic
-visual anchors and reads all views as projections of one object; a thin relief is not a failed identity merely
-because its side view is edge-on. Identity comes from pixels, never the title or plan enum. Missing/malformed quality
-scores become zero without changing safety. Explicit harmful text, symbols and shapes still meet the floor.
-The private realm audit retains scores and policy even when a wish is held or refused; no score enters a
-public event. Each image read also reports finite `detailMatch: met | adapted | unclear`. Missing or
-malformed output becomes `unclear`, with invalid status, without changing safety. Actual reads combine
-conservatively: any adapted read means adapted, otherwise every actual read must say met to produce met.
-A normal exact rendition requires met details, recognition at least .75, aggregate at least .72, and completeness
-and clean marks at least .7. A qualifying whole subject wins over a higher-scoring ambiguous/adapted candidate.
-Otherwise the existing bounded retry or private quality softening applies; no extra judge call is made. The receipt verifier recomputes the same safety rule and quality aggregate before authorizing.
+The private realm audit retains the measure, score and policy even when a wish is held or refused; no score enters
+a public event. The receipt verifier recomputes the safety rule, the subject agreement and the score from its measure
+before authorizing, and checks that the measure's word reading is the word gate's own.
 
 FW10 providers expose optional `draftCandidate(input)` alongside the compatible `draft(input)` method.
 Its strict result is `{draft, interpretation: 'as-wished' | 'closest', shared: 'subject' | 'family' | 'slot' | 'mood' | 'colour'}`.
 The model chooses an authored catalogue motif and must mark an unsupported subject `closest`; the title and
 plaque describe the actual motif, never pretend an absent subject exists. An `as-wished` result must share
 `subject`. No freeform private cause is accepted: the host derives its warm private message from these enums.
-Metadata is a model assertion, not visual proof; the independent result quality score still measures faithfulness.
+Metadata is a model assertion: the gates' agreed reading of the words outranks it when the host selects the outcome.
+When the word gate names a kit motif or an available slot the draft missed, the host redrafts once before any result
+read. The drafter is offered the finishes that read clearly in the home's kingdom.
 
 All three provider inputs accept an optional shared `budget: ForgeCallBudget`. `createForgeCallBudget()` starts
 at five calls; `increaseLimit(7)` explicitly allows a softened wish up to seven. The host owns this decision;
@@ -40,10 +44,10 @@ fallback is used. Each gate starts one fresh, ephemeral Luna run, independent of
 strictly below the pass threshold pass immediately. Otherwise it escalates to a fresh Terra run, without giving
 Terra the primary answer. A malformed or unavailable primary cannot pass even if Terra passes. A refusal
 requires the same floor concern from both reads. The deterministic `primaryForgeSafetyPass` and
-`decideForgeSafety` exports let the receipt verifier replay policy v6. Records contain exactly the actual calls:
+`decideForgeSafety` exports let the receipt verifier replay policy v7. Records contain exactly the actual calls:
 one Luna record on a confident pass or primary transport failure, otherwise Luna and Terra attempt records. Each retains backend, model,
 policy and evidence hash; complete Luna records add thresholds, self-estimated answers and probability source;
-Terra records add outcome and concerns. Image records add raw bounded quality and its validity status.
+Terra records add outcome and concerns. Every record adds `subjectStatus` and, when complete, `subject`.
 No skipped model is recorded as if it ran. Luna answers the fixed versioned questions with explicit self-estimates, not calibrated
 Decisions endpoint probabilities. Terra returns an independent verdict. A transport failure or timeout in
 either required read throws `ForgeProviderColdError` with its actual attempt records. A failed primary read
@@ -82,6 +86,6 @@ This transport implements Tobias’s explicit no-local-API-key instruction, supe
 transport in the older Safety §4.2 prose. Independent safety contexts and all content/publication rules remain.
 See `work/DECISIONS.md` and `policy.ts` for the current boundary and policy version.
 
-Policy v6 identifies this rubric and finite detail contract. Historical evidence keeps its original policy;
-it is never relabelled. Current approval verification rejects stale pending audits. Committed request recovery
-uses the durable realm command binding rather than treating a stale audit as new approval.
+Policy v7 identifies this safety-only image read, the subject readings and the computed score. Historical v5/v6
+evidence keeps its original policy; it is never relabelled. Current approval verification rejects stale pending
+audits. Committed request recovery uses the durable realm command binding rather than treating a stale audit as new approval.

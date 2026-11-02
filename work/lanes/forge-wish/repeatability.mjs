@@ -4,12 +4,12 @@ import { resolve } from 'node:path';
 import { clearTimeout } from 'node:timers';
 
 const mode = process.argv[2];
-if (mode !== 'prepare' && !(['check', 'contrast'].includes(mode) && process.argv[3])) throw new Error('Use prepare, check or contrast <private-fixture-directory>.');
+if (mode !== 'prepare' && !(['check', 'certify'].includes(mode) && process.argv[3])) throw new Error('Use prepare, check <private-fixture-directory> or certify <kit-revision> [evidence-directory].');
 const outDir = resolve('apps/codex/src/forge-repeatability/dist');
 await build({ root: resolve('apps/codex'), configFile: false, logLevel: 'warn',
   build: { ssr: resolve('work/lanes/forge-wish/runtime/repeatability-entry.ts'), outDir, emptyOutDir: true, target: 'node22',
     rollupOptions: { output: { entryFileNames: 'repeatability.mjs' } } }, ssr: { noExternal: true, target: 'node' } });
-const child = spawn(process.execPath, [resolve(outDir, 'repeatability.mjs'), mode, ...(process.argv[3] ? [process.argv[3]] : [])], {
+const child = spawn(process.execPath, [resolve(outDir, 'repeatability.mjs'), mode, ...process.argv.slice(3, 5)], {
   env: process.env, stdio: ['ignore', 'inherit', 'inherit'],
 });
 const stop = () => { child.kill('SIGTERM'); };

@@ -18,27 +18,8 @@ export function createForgeOrnament(id: ForgeOrnament, family: StyleKey, revisio
   // A modest foot makes the point of attachment part of the carving.
   add(10,0,7,15,1,12,p.shade);
   let emitter: Cell;
-  if (id === 'sleeping-fox' && revision === 2) {
-    // A low, tucked head faces left; broad, short ears step to small tips.
-    // The light cheek sits below the closed eye, separate from the dark nose.
-    add(9,1,5,19,3,13,p.shade); add(9,3,5,19,6,13,p.body);
-    add(10,6,6,18,7,12,p.body); add(12,7,7,17,8,11,p.body);
-    add(5,2,6,11,5,12,p.body); add(4,2,7,7,4,11,p.body);
-    add(2,1,7,6,3,11,p.light); add(1,2,8,3,3,10,p.dark);
-    add(5,5,5,8,6,8,p.body); add(5,6,6,7,8,8,p.body);
-    add(5,8,7,6,9,8,p.body);
-    add(5,5,10,8,6,13,p.body); add(5,6,10,7,8,12,p.body);
-    add(5,8,10,6,9,11,p.body);
-    add(6,6,6,7,7,7,p.shade); add(6,6,11,7,7,12,p.shade);
-    add(4,2,12,8,4,13,p.light); add(4,2,5,8,4,6,p.light);
-    add(5,4,12,8,5,13,p.dark); add(5,4,5,8,5,6,p.dark);
-    add(5,1,11,10,2,13,p.light); add(7,1,4,11,2,6,p.light);
-    // The brush grows out of the rump, rounds its outer corner and folds
-    // forward into a wide pale tip held beside the sleeping cheek.
-    add(17,1,10,21,4,15,p.body); add(17,1,14,21,3,16,p.body);
-    add(13,1,13,19,4,17,p.body); add(11,1,14,15,4,17,p.light);
-    add(8,1,13,12,3,16,p.light); add(7,1,13,9,2,15,p.light);
-    emitter = [1,2,9];
+  if (revision === 2 && id !== 'sunflower') {
+    emitter = carveRevisionTwo(id, p, add);
   } else if (id === 'sleeping-fox') {
     // Compact curled body, head laid low on its paws, and a broad white-tipped tail.
     add(9,1,5,19,3,13,p.shade); add(9,3,5,18,6,13,p.body);
@@ -97,4 +78,152 @@ export function createForgeOrnament(id: ForgeOrnament, family: StyleKey, revisio
     emitter = [13,8,12];
   }
   return { boxes, size:[24,16,18], mount:[12,0,9], emitter };
+}
+
+type Tones = { body:number; shade:number; light:number; dark:number; gold:number };
+type Add = (x:number,y:number,z:number,X:number,Y:number,Z:number,material:number) => void;
+
+/**
+ * Revision two carves each piece from side elevations: row 0 sits at `top`, column 0 at x 0, and every
+ * character is one build cell (b body, s shade, l light, d dark, g gold). Equal runs on consecutive rows
+ * merge into one box. Flat faces are carved on both sides, so a weathervane's mirrored vane reads too.
+ */
+function carveRevisionTwo(id: Exclude<ForgeOrnament, 'sunflower'>, p: Tones, add: Add): Cell {
+  const tone: Record<string, number> = { b:p.body, s:p.shade, l:p.light, d:p.dark, g:p.gold };
+  const carve = (art: readonly string[], top: number, z0: number, z1: number, pick: (c: string) => number | undefined = c => tone[c]) => {
+    const open = new Map<string, { start: number; x0: number; x1: number; material: number }>();
+    const close = (key: string, last: number) => { const run = open.get(key)!; add(run.x0, top-last, z0, run.x1, top-run.start+1, z1, run.material); open.delete(key); };
+    art.forEach((row, i) => {
+      const runs = new Map<string, { x0: number; x1: number; material: number }>();
+      for (let x = 0; x < row.length;) {
+        const material = pick(row[x]!);
+        let end = x + 1;
+        while (end < row.length && pick(row[end]!) === material) end++;
+        if (material !== undefined) runs.set(`${x}:${end}:${material}`, { x0:x, x1:end, material });
+        x = end;
+      }
+      for (const key of [...open.keys()]) if (!runs.has(key)) close(key, i-1);
+      for (const [key, run] of runs) if (!open.has(key)) open.set(key, { start:i, ...run });
+    });
+    for (const key of [...open.keys()]) close(key, art.length-1);
+  };
+  const only = (chars: string, material: number) => (c: string) => chars.includes(c) ? material : undefined;
+  if (id === 'sleeping-fox') {
+    // An upright fox dozes in profile, nose to the left: two tall dark-tipped ears, a long pointed muzzle,
+    // a closed eye over a pale cheek, a pale bib, dark stockings, and a long brush laid out behind it
+    // whose pale tip turns up off the ground.
+    const core = [
+      '....bbbbbb..............', // y10
+      '...bbbbbbb..............',
+      '...bbbbbbb..............',
+      '...lbbbbbbb.............',
+      '...llbbbbbbb............',
+      '....llbbbbbbb...........',
+      '....lbbbbbbbbbb.........',
+      '....dd.bbbbbbbbb........',
+      '....dd.bbbbbbbbb........',
+      '...ddd.sssbbbbbb........', // y1
+    ];
+    const side = [
+      '.....bbbb...............', // y10
+      '....bddbb...............',
+      '...lllbbb...............',
+      '...lllbbbb..............',
+      '....lbbbbbb.............',
+      '.....bbbbbbb............',
+      '.....bbbbbbbbb..........',
+      '....dd.bbbbbbbb.........',
+      '....dd.bbbbbbbb.........',
+      '...ddd.ssbbbbbb.........', // y1
+    ];
+    const snout = ['dbbb', '.lll']; // y8..y7, narrower than the head
+    const ear = (shift: string) => [
+      shift + '......d', // y15
+      shift + '.....dd',
+      shift + '.....bb',
+      shift + '.....bbb',
+      shift + '....bbbb', // y11
+    ];
+    const brush = [
+      '.................bbbb...', // y6
+      '...............bbbbbbll.',
+      '..............bbbbbblll.',
+      '..............bbbbbblll.',
+      '..............bbbbbblll.',
+      '...............bbbbbl...', // y1
+    ];
+    carve(core, 10, 7, 11); carve(side, 10, 6, 7); carve(side, 10, 11, 12); carve(snout, 8, 8, 10);
+    carve(ear(''), 15, 6, 8); carve(ear('....'), 15, 10, 12);
+    carve(brush, 6, 6, 12); carve(brush.slice(1, 5), 5, 5, 6); carve(brush.slice(1, 5), 5, 12, 13);
+    return [0,8,9];
+  }
+  if (id === 'shooting-star') {
+    // One bold five-pointed star, bevelled on both faces, leads three straight, tapering streaks that
+    // trail down and behind it from one side, clearly apart from each other and from the points.
+    const star = [
+      '.......g', // y15
+      '......ggg',
+      '......ggg',
+      '.....ggggg',
+      '.ggggggggggggg',
+      '..ggggggggggg',
+      '...ggggggggg',
+      '....ggggggg',
+      '....ggggggg',
+      '...ggggggggg',
+      '...gggg.gggg',
+      '..ggg.....ggg',
+      '..gg.......gg', // y3
+    ];
+    const bevel = [
+      '.......g', // y13
+      '......ggg',
+      '...ggggggggg',
+      '....ggggggg',
+      '.....ggggg',
+      '.....ggggg',
+      '.....gg.gg',
+      '....gg...gg', // y6
+    ];
+    const streaks = [
+      '..............lll.......', // y11
+      '................lll.....',
+      '............lll...lll...',
+      '..............lll...lll.',
+      '................lll.....',
+      '............lll...lll...',
+      '..............lll...ll..',
+      '................lll.....',
+      '..................ll....', // y3
+    ];
+    carve(star, 15, 7, 10); carve(bevel, 13, 10, 11); carve(bevel, 13, 6, 7);
+    carve(streaks, 11, 7, 9);
+    add(11,1,8,13,3,10,p.shade);
+    return [7,9,11];
+  }
+  // A wide scallop fan: raised pale ribs alternate with recessed grooves across both domed faces, the rim
+  // is a row of small bumps, and the two square ears sit either side of the hinge.
+  const shell = [
+    '.......b.b.bbb.b.b......', // y15
+    '......bsllslllsllsb.....',
+    '.....blsllslllsllslb....',
+    '....bllsllslllsllsllb...',
+    '....blllslslllslslllb...',
+    '....blllslslllslslllb...',
+    '....blllslslllslslllb...',
+    '.....blllslslslslllb....',
+    '......bllslslslsllb.....',
+    '.......blllslslllb......',
+    '........blllllllb.......',
+    '.........blllllb........',
+    '......bbbbblllbbbbb.....',
+    '......bbbbbbbbbbbbb.....',
+    '...........sss..........', // y1
+  ];
+  const dome = shell.slice(2, 10).map(row => '.'.repeat(9) + row.slice(9, 16) + '.'.repeat(8)); // y13..y6
+  carve(shell, 15, 7, 11, c => c === '.' ? undefined : p.body);
+  carve(shell, 15, 10, 11, only('s', p.shade)); carve(shell, 15, 7, 8, only('s', p.shade));
+  carve(shell, 15, 11, 12, only('l', p.light)); carve(shell, 15, 6, 7, only('l', p.light));
+  carve(dome, 13, 12, 13, only('l', p.light)); carve(dome, 13, 5, 6, only('l', p.light));
+  return [12,9,12];
 }

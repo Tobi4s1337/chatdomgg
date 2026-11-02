@@ -1,19 +1,26 @@
 import { z } from 'zod';
 import { FORGE_JUDGE_MESSAGES, type JudgeVerdict } from '../providers';
-import { FORGE_DETAIL_MATCHES, FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, combineForgeDetailMatch,
-  decideForgeSafety, forgeJudgeQuestions, primaryForgeSafetyPass, scoreForgeQuality } from '../providers/policy';
+import { FORGE_DETAIL_MATCHES, FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, FORGE_SUBJECT_MOTIFS, FORGE_SUBJECT_SLOTS,
+  combineForgeWishSubject, decideForgeSafety, forgeJudgeQuestions, forgeMeasureDetailMatch, primaryForgeSafetyPass,
+  scoreForgeMeasure, type ForgeQualityMeasure } from '../providers/policy';
 import { ForgeRunRecoveryError } from './types';
 
+/** Key order differs between host-built values and schema-parsed ones; evidence compares content, never order. */
+const same = (a: unknown, b: unknown): boolean => canonical(a) === canonical(b);
+const canonical = (value: unknown): string => value && typeof value === 'object' && !Array.isArray(value)
+  ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(',')}}`
+  : Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : JSON.stringify(value) ?? 'undefined';
 const unit = z.number().finite().min(0).max(1);
-const dimensions = { recognisability: unit, completeness: unit, cleanMarks: unit };
-const quality = z.strictObject(dimensions);
-const score = z.strictObject({ ...dimensions, score: unit, policy: z.literal(FORGE_JUDGE_POLICY_VERSION) });
-const detail = z.enum(FORGE_DETAIL_MATCHES);
+const subject = z.strictObject({ motif: z.enum([...FORGE_SUBJECT_MOTIFS, 'none']), slot: z.enum([...FORGE_SUBJECT_SLOTS, 'none']) });
+const reading = z.strictObject({ motif: z.enum([...FORGE_SUBJECT_MOTIFS, 'none', 'unclear']), slot: z.enum([...FORGE_SUBJECT_SLOTS, 'none', 'unclear']) });
+const score = z.strictObject({ recognisability: unit, completeness: unit, cleanMarks: unit, score: unit, policy: z.literal(FORGE_JUDGE_POLICY_VERSION) });
+export const ForgeQualityMeasureSchema = z.strictObject({ words: reading, result: reading,
+  plan: z.strictObject({ motif: z.enum(FORGE_SUBJECT_MOTIFS), kind: z.enum(FORGE_SUBJECT_SLOTS) }),
+  certificate: z.enum(['reads', 'weak', 'unread', 'uncertified']), slotAvailable: z.boolean() });
 const metadata = {
   backend: z.literal('codex-cli'), policy: z.literal(FORGE_JUDGE_POLICY_VERSION),
   evidenceHash: z.string().regex(/^[a-f0-9]{64}$/), status: z.enum(['complete', 'invalid']),
-  quality: quality.optional(), qualityStatus: z.enum(['complete', 'invalid']).optional(),
-  detailMatch: detail.optional(), detailMatchStatus: z.enum(['complete', 'invalid']).optional(),
+  subject: subject.optional(), subjectStatus: z.enum(['complete', 'invalid']),
 };
 const primarySchema = z.strictObject({ ...metadata, judge: z.literal('gpt-6-luna'), model: z.literal('gpt-6-luna'),
   probabilitySource: z.literal('model-self-estimate'),
@@ -24,10 +31,15 @@ const secondarySchema = z.strictObject({ ...metadata, judge: z.literal('gpt-6.1-
   outcome: z.enum(['pass', 'hold', 'refuse']).optional(), concerns: z.array(z.string()).max(8).optional(),
 });
 const verdictSchema = z.strictObject({ outcome: z.enum(['pass', 'hold', 'refuse']), reason: z.string().max(240),
-  records: z.array(z.unknown()).min(1).max(2), quality: score.optional(), detailMatch: detail.optional() });
+  records: z.array(z.unknown()).min(1).max(2), subject: reading,
+  measure: ForgeQualityMeasureSchema.optional(), quality: score.optional(), detailMatch: z.enum(FORGE_DETAIL_MATCHES).optional() });
 
-/** Recompute both decisions from bounded actual read records. Original provider reasons are discarded. */
-export function recoverForgeVerdict(input: unknown, image: boolean, evidenceHash: string): JudgeVerdict {
+/**
+ * Recompute safety, the subject reading and (when the host has measured it) quality from bounded actual read
+ * records. Original provider reasons are discarded. A provider's raw result carries no measure; a stored one
+ * must carry exactly the measure the caller recomputed from this run's own evidence.
+ */
+export function recoverForgeVerdict(input: unknown, image: boolean, evidenceHash: string, expected?: ForgeQualityMeasure): JudgeVerdict {
   try {
     const verdict = verdictSchema.parse(input), primary = primarySchema.parse(verdict.records[0]);
     const secondary = verdict.records.length === 2 ? secondarySchema.parse(verdict.records[1]) : undefined;
@@ -54,20 +66,18 @@ export function recoverForgeVerdict(input: unknown, image: boolean, evidenceHash
         ...(secondary.concerns ? { concerns: secondary.concerns as NonNullable<Parameters<typeof decideForgeSafety>[1]['concerns']> } : {}) });
     if (verdict.outcome !== outcome) throw new Error();
     const reads = [primary, ...(secondary ? [secondary] : [])];
-    if (!image) {
-      for (const value of [verdict, ...reads]) for (const key of ['quality', 'qualityStatus', 'detailMatch', 'detailMatchStatus'])
-        if (Object.hasOwn(value, key)) throw new Error();
-      return { outcome, reason: FORGE_JUDGE_MESSAGES[outcome], records: reads };
+    for (const read of reads) if ((read.subjectStatus === 'complete') !== (read.subject !== undefined)
+      || read.status === 'invalid' && read.subject !== undefined) throw new Error();
+    const combined = combineForgeWishSubject(...reads.map(read => read.subject));
+    if (!same(combined, verdict.subject)) throw new Error();
+    const recovered: JudgeVerdict = { outcome, reason: FORGE_JUDGE_MESSAGES[outcome], records: reads, subject: combined };
+    if (!image || !expected) {
+      if (verdict.measure || verdict.quality || verdict.detailMatch) throw new Error();
+      return recovered;
     }
-    for (const read of reads) {
-      if (!read.quality || !read.qualityStatus || !read.detailMatch || !read.detailMatchStatus) throw new Error();
-      if (read.qualityStatus === 'invalid' && Object.values(read.quality).some(value => value !== 0)) throw new Error();
-      if (read.detailMatchStatus === 'invalid' && read.detailMatch !== 'unclear') throw new Error();
-    }
-    const computed = scoreForgeQuality(primary.quality!, secondary?.quality);
-    const details = combineForgeDetailMatch(primary.detailMatch!, secondary?.detailMatch);
-    if (!verdict.quality || Object.keys(computed).some(key =>
-      computed[key as keyof typeof computed] !== verdict.quality![key as keyof typeof computed]) || verdict.detailMatch !== details) throw new Error();
-    return { outcome, reason: FORGE_JUDGE_MESSAGES[outcome], records: reads, quality: computed, detailMatch: details };
+    if (!same(ForgeQualityMeasureSchema.parse(expected), verdict.measure) || !same(expected.result, combined)) throw new Error();
+    const quality = scoreForgeMeasure(expected), detailMatch = forgeMeasureDetailMatch(expected);
+    if (!same(quality, verdict.quality) || detailMatch !== verdict.detailMatch) throw new Error();
+    return { ...recovered, measure: expected, quality, detailMatch };
   } catch { throw new ForgeRunRecoveryError('corrupt'); }
 }

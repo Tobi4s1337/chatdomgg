@@ -13,6 +13,7 @@ import { BuildTools } from '../build';
 import type { KingdomBuildSession } from './build-scene';
 import './kingdom.css';
 import { ForgePanel } from '../forge';
+import { AnvilEntry } from '../forge/play/anvil-entry';
 import type { ForgeStatus } from '../forge/scene';
 import { parseKingdomPresentationParams } from '../stream/params';
 import { ProvenanceSeal, provenanceFromSource } from '@chatdom/ui';
@@ -142,13 +143,7 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
       <Show when={!error()} fallback={<button onClick={()=>location.reload()}>Try the gate again</button>}><div class="gate-progress"><i style={{width:`${Math.round(progress()*100)}%`}} /></div></Show>
     </div></Show>
     <Show when={!stream&&forgeStatus()?.open}><ForgePanel status={forgeStatus()!} submit={words=>engine!.forge.submit(words)} close={()=>engine?.forge.close()} refit={()=>{void engine?.forge.refit();}} family={value=>{location.href=`/?tier=${tier}&hour=${hour()}&forge=1&realm=${value}`;}} /></Show>
-    <Show when={!stream&&anvilVisit()}>{visit=><section class="forge-panel" role="dialog" aria-label="At the anvil">
-      <div class="forge-panel-top"><span class="forge-eyebrow">THE FORGE</span><button onClick={()=>visit().leave()} aria-label="Leave the anvil">×</button></div>
-      <h2>Give the smith a wish.</h2>
-      <p class="forge-message">Write <code>!forge a chimney shaped like a sleeping dragon</code> in Twitch chat. When the fire is awake and you have a coal, your words can become part of your home.</p>
-      <p class="forge-footnote">The anvil listens to chat. Escape returns you to the street.</p>
-      <button class="forge-submit" onClick={()=>visit().leave()}>Back to the street</button>
-    </section>}</Show>
+    <Show when={!stream&&anvilVisit()}>{visit=><AnvilEntry kingdomId={props.founded?.kingdomId} onLeave={()=>visit().leave()}/>}</Show>
     <Show when={!stream&&buildSession()}>{session=><BuildTools controller={session().controller} ownerName="Juniper" imports={session().imports}/>}</Show>
     <Show when={housewarming()}>{name=><div class="housewarming-name">{name()}’s home<small>Welcome to the street</small></div>}</Show>
     <Show when={ready()&&walking()&&!error()&&!stream}><button class="walk-overlook" onClick={()=>chooseView('hero')}>Above the streets</button></Show>

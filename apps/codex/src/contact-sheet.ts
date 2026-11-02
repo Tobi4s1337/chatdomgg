@@ -133,22 +133,23 @@ const FONT: Readonly<Record<string, string>> = {
   I: '111010010010111', M: '101111111101101', K: '101101110101101', L: '100100100100111', N: '101111111111101', O: '010101101101010',
   P: '110101110100100', R: '110101110101101', S: '011100010001110', T: '111010010010010',
   U: '101101101101111', W: '101101111111101', X: '101101010101101', '6': '011100111101111',
-  '4': '101101111001001',
+  '4': '101101111001001', '0': '111101101101111', '1': '010110010010111', '2': '111001111100111',
+  '3': '111001111001111', '5': '111100111001111', '7': '111001001001001', '8': '111101111101111', '9': '111101111001111',
 };
 
-function label(pixels: Uint8Array, text: string, x: number, y: number): void {
+function label(pixels: Uint8Array, text: string, x: number, y: number, stride = WIDTH, size = 2): void {
   for (const character of text) {
     const glyph = FONT[character];
     if (glyph) for (let row = 0; row < 5; row++) for (let column = 0; column < 3; column++) {
       if (glyph[row * 3 + column] !== '1') continue;
-      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) pixels.set(INK, ((x + column * 2 + dx) + (y + row * 2 + dy) * WIDTH) * 3);
+      for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) pixels.set(INK, ((x + column * size + dx) + (y + row * size + dy) * stride) * 3);
     }
-    x += 8;
+    x += size * 4;
   }
 }
 
-function paste(pixels: Uint8Array, tile: Uint8Array, width: number, height: number, x: number, y: number): void {
-  for (let row = 0; row < height; row++) pixels.set(tile.subarray(row * width * 3, (row + 1) * width * 3), ((y + row) * WIDTH + x) * 3);
+function paste(pixels: Uint8Array, tile: Uint8Array, width: number, height: number, x: number, y: number, stride = WIDTH): void {
+  for (let row = 0; row < height; row++) pixels.set(tile.subarray(row * width * 3, (row + 1) * width * 3), ((y + row) * stride + x) * 3);
 }
 
 function pngChunk(type: string, data: Uint8Array): Buffer {
@@ -259,11 +260,40 @@ export function renderForgeContactSheet(input: VoxelBlueprint, context?: ForgeCo
     label(pixels, HERO.name, 16, 520);
     paste(pixels, renderView(asset, min, max, HERO, 736, 256, true), 736, 256, 16, 540);
   }
+  return encodePng(pixels, WIDTH, height);
+}
+
+function encodePng(pixels: Uint8Array, width: number, height: number): string {
   const header = Buffer.alloc(13);
-  header.writeUInt32BE(WIDTH, 0); header.writeUInt32BE(height, 4);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4);
   header[8] = 8; header[9] = 2; // Eight-bit RGB; no interlace or palette indirection.
-  const rows = Buffer.alloc(height * (1 + WIDTH * 3));
-  for (let y = 0; y < height; y++) rows.set(pixels.subarray(y * WIDTH * 3, (y + 1) * WIDTH * 3), y * (1 + WIDTH * 3) + 1);
+  const rows = Buffer.alloc(height * (1 + width * 3));
+  for (let y = 0; y < height; y++) rows.set(pixels.subarray(y * width * 3, (y + 1) * width * 3), y * (1 + width * 3) + 1);
   const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(rows)), pngChunk('IEND', new Uint8Array())]);
   return `data:image/png;base64,${png.toString('base64')}`;
+}
+
+export const FORGE_CERTIFICATION_TILE = 200;
+/**
+ * A blind identification sheet: numbered tiles, each a lit front view and a lit three-quarter view of one whole
+ * piece, with no caption, title or plan anywhere in the image. The caller decides the order; the sheet itself
+ * carries only tile numbers.
+ */
+export function renderForgeCertificationSheet(pieces: readonly VoxelBlueprint[], columns = 4): string {
+  if (!pieces.length || pieces.length > 32 || !Number.isInteger(columns) || columns < 1 || columns > 8) throw new RangeError('Invalid Forge certification sheet.');
+  const tile = FORGE_CERTIFICATION_TILE, cellWidth = tile * 2 + 24, cellHeight = tile + 12, header = 26;
+  const width = columns * cellWidth + 12, height = Math.ceil(pieces.length / columns) * (cellHeight + header) + 12;
+  const pixels = canvas(width, height);
+  let writes = 0;
+  for (const [index, input] of pieces.entries()) {
+    const blueprint = VoxelBlueprintSchema.parse(input);
+    writes += checkWrites(blueprint);
+    if (writes > MAX_RASTER_WRITES) throw new RangeError('Forge certification sheet exceeds the raster work budget.');
+    const asset = rasterizeBlueprint(blueprint), [min, max] = solidBounds(asset);
+    const x = 12 + (index % columns) * cellWidth, y = 12 + Math.floor(index / columns) * (cellHeight + header);
+    label(pixels, String(index + 1), x + 4, y + 2, width, 3);
+    paste(pixels, renderView(asset, min, max, VIEWS[1]!, tile, tile, true), tile, tile, x, y + header, width);
+    paste(pixels, renderView(asset, min, max, HERO, tile, tile, true), tile, tile, x + tile, y + header, width);
+  }
+  return encodePng(pixels, width, height);
 }

@@ -41,7 +41,7 @@ export async function adoptProofLayout(boot: ProofBoot, kingdomId: KingdomId) {
 
 /** SIMULATED people settle through the actual signed-tenure allocator and native home furnisher. */
 export async function settleProofPeople(boot: ProofBoot, citizens: ProofCitizens, kingdomId: KingdomId,
-  personIds: readonly PersonId[]): Promise<ProofPerson[]> {
+  personIds: readonly PersonId[], requireEverySocket = true): Promise<ProofPerson[]> {
   requireSimulated(boot);
   if (new Set(personIds).size !== personIds.length || personIds.some(personId => String(personId) === String(kingdomId))) {
     throw new Error('The proof seed requires distinct citizen identities separate from the monarch.');
@@ -72,7 +72,8 @@ export async function settleProofPeople(boot: ProofBoot, citizens: ProofCitizens
         throw new Error('The proof home must retain the exact native blueprint standing on its allocated plot.');
       }
       const sockets = findForgeSockets(home.blueprint);
-      if (!(['lantern', 'chimney', 'weathervane'] as const).every(kind => sockets.some(socket => socket.kind === kind))) {
+      // The twenty-wish run keeps whatever slots each allocated native home really has.
+      if (!sockets.length || requireEverySocket && !(['lantern', 'chimney', 'weathervane'] as const).every(kind => sockets.some(socket => socket.kind === kind))) {
         throw new Error('The allocated native home lacks the lantern, chimney or weathervane socket required for this proof.');
       }
       const rights = { revision: 1, forge: true, build: true, blocked: false,

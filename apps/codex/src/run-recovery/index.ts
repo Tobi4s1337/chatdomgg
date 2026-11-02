@@ -8,6 +8,7 @@ import { ForgeCallBudgetError, ForgeDraftCandidateSchema, forgeResultEvidenceHas
 import { FORGE_JUDGE_POLICY_VERSION } from '../providers/policy';
 import { ForgeWishQueueError, type FileForgeWishQueue, type ForgeWishClaim, type ForgeWishJson } from '../wish-queue';
 import { recoverForgeVerdict } from './evidence';
+import { forgeResultMeasure } from '../quality';
 import { bestForgeCandidate, forgeRunSelection, initialForgeRunState } from './state';
 import { ForgeRunRecoveryError, type ForgeRecoveryStage, type ForgeRunRecovery, type ForgeRunRecoveryInput, type ForgeRunState } from './types';
 
@@ -19,7 +20,7 @@ const stateSchema = z.strictObject({
   phase: z.enum(['words', 'drafting', 'assembling', 'selecting', 'approved', 'stopped']),
   attempts: integer.max(2), verdicts: z.array(z.unknown()).max(3), candidates: z.array(candidateSchema).max(2),
   pending: ForgeDraftCandidateSchema.optional(), best: integer.max(1).optional(), softening: z.literal('fit').optional(),
-  feedback: z.enum(['fit', 'quality']).optional(),
+  feedback: z.enum(['fit', 'quality', 'subject']).optional(),
   stop: z.strictObject({ outcome: z.enum(['hold', 'refuse', 'cold']),
     code: z.enum(['safety-hold', 'safety-refuse', 'no-slot', 'fit', 'service', 'budget']) }).optional(),
 });
@@ -73,7 +74,15 @@ export function createQueuedForgeRunRecovery(queue: FileForgeWishQueue, claim: F
         if (candidate.verdict !== index + 1 || candidate.attempt <= previousAttempt || candidate.attempt > parsed.attempts
           || candidate.interpretation === 'as-wished' && candidate.shared !== 'subject') throw new Error();
         previousAttempt = candidate.attempt;
-        verdicts.push(recoverForgeVerdict(parsed.verdicts[index + 1], true, hashFor(candidate.draft)));
+        // Quality is recomputed from this run's own word reading, the candidate's plan and the kit certificate.
+        const stored = parsed.verdicts[index + 1];
+        const raw = Object.fromEntries(Object.entries((stored ?? {}) as Record<string, unknown>)
+          .filter(([key]) => key !== 'measure' && key !== 'quality' && key !== 'detailMatch'));
+        const sockets = findForgeSockets(context.request.home, context.request.hostProfile, context.styleKit.revision);
+        const resultReading = recoverForgeVerdict(raw, true, hashFor(candidate.draft)).subject;
+        const measure = forgeResultMeasure({ words: verdicts[0]?.subject, result: resultReading, draft: candidate.draft,
+          styleKit: context.styleKit, sockets });
+        verdicts.push(recoverForgeVerdict(stored, true, hashFor(candidate.draft), measure));
       }
       if (parsed.pending && (parsed.pending.interpretation === 'as-wished' && parsed.pending.shared !== 'subject'
         || previousAttempt >= parsed.attempts)) throw new Error();

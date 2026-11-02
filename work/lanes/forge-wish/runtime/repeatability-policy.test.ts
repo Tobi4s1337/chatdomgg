@@ -1,53 +1,145 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { FORGE_JUDGE_POLICY_VERSION, scoreForgeQuality, type ForgeQualityRead } from '../../../../apps/codex/src/providers/policy';
-import { contrastPass, repeatabilityPass, type RepeatabilityRead } from './repeatability-policy';
+import { FORGE_JUDGE_POLICY_VERSION, combineForgeWishSubject, forgeMeasureDetailMatch, scoreForgeMeasure,
+  type ForgeCertificateGrade, type ForgeQualityMeasure, type ForgeWishSubject } from '../../../../apps/codex/src/providers/policy';
+import { repeatabilityPass, type RepeatabilityRead } from './repeatability-policy';
+import { REPEATABILITY_FIXTURES } from './repeatability-fixtures';
 
-const ids = ['dragon', 'moon', 'owl', 'fox', 'sunflower'];
-const hash = 'a'.repeat(64);
-const quality = (value: number): ForgeQualityRead => ({ recognisability: value, completeness: value, cleanMarks: value });
-const record = (value = 0.7) => ({ status: 'complete', qualityStatus: 'complete', policy: FORGE_JUDGE_POLICY_VERSION,
-  evidenceHash: hash, quality: quality(value), detailMatch: 'met' as const, detailMatchStatus: 'complete' });
-const reads = (): RepeatabilityRead[] => ids.flatMap(fixture => [1, 2, 3].map(repeat => ({
-  fixture, repeat, outcome: 'pass' as const, quality: scoreForgeQuality(quality(0.7)), detailMatch: 'met' as const, records: [record()], calls: 1,
-})));
+const hex = (value: string) => createHash('sha256').update(value).digest('hex');
+/** What both gates read from each fixed wish: the fixture's own planned motif and part. */
+const asked = (id: string): ForgeWishSubject => {
+  const plan = REPEATABILITY_FIXTURES.find(fixture => fixture.id === id)!.draft.plan;
+  return { motif: plan.motif, slot: plan.kind };
+};
+const gateRecord = (hash: string, subject: ForgeWishSubject | undefined) => ({ backend: 'codex-cli', status: 'complete',
+  policy: FORGE_JUDGE_POLICY_VERSION, evidenceHash: hash, ...(subject ? { subject } : {}), subjectStatus: subject ? 'complete' : 'invalid' });
 
-function replaceQuality(read: RepeatabilityRead, value: number) {
-  read.records = [record(value)];
-  read.quality = scoreForgeQuality(quality(value));
+interface Shape { words?: (ForgeWishSubject | undefined)[]; result?: (ForgeWishSubject | undefined)[];
+  certificate?: ForgeCertificateGrade; slotAvailable?: boolean }
+/** One round as the runner stores it: both gates' actual reads, then the host's recomputable measure. */
+function round(fixture: string, repeat: number, shape: Shape = {}): RepeatabilityRead {
+  const plan = REPEATABILITY_FIXTURES.find(entry => entry.id === fixture)!.draft.plan;
+  const wordSubjects = shape.words ?? [asked(fixture)], resultSubjects = shape.result ?? [asked(fixture)];
+  const words = { outcome: 'pass' as const, subject: combineForgeWishSubject(...wordSubjects),
+    records: wordSubjects.map(subject => gateRecord(hex(`words:${fixture}`), subject)) };
+  const subject = combineForgeWishSubject(...resultSubjects);
+  const measure: ForgeQualityMeasure = { words: words.subject, result: subject, plan: { motif: plan.motif, kind: plan.kind },
+    certificate: shape.certificate ?? 'reads', slotAvailable: shape.slotAvailable ?? true };
+  return { fixture, repeat, words, outcome: 'pass', subject, records: resultSubjects.map(read => gateRecord(hex(`sheet:${fixture}`), read)),
+    measure, quality: scoreForgeMeasure(measure), detailMatch: forgeMeasureDetailMatch(measure), calls: wordSubjects.length + resultSubjects.length };
 }
+const reads = (shapes: Record<string, Shape | ((repeat: number) => Shape)> = {}): RepeatabilityRead[] =>
+  REPEATABILITY_FIXTURES.flatMap(({ id }) => [1, 2, 3].map(repeat => {
+    const shape = shapes[id];
+    return round(id, repeat, typeof shape === 'function' ? shape(repeat) : shape);
+  }));
+const of = (sample: RepeatabilityRead[], fixture: string) => sample.filter(read => read.fixture === fixture);
+const rescore = (read: RepeatabilityRead) => {
+  read.quality = scoreForgeMeasure(read.measure!); read.detailMatch = forgeMeasureDetailMatch(read.measure!);
+};
 
 describe('repeatability evidence', () => {
-  it('accepts all five fixed fixtures with three complete, independently scored reads', () => {
-    expect(repeatabilityPass(reads())).toBe(true);
+  it('accepts all five fixed fixtures with three complete, recomputable rounds', () => {
+    const sample = reads();
+    expect(sample).toHaveLength(15);
+    expect(sample.every(read => read.detailMatch === 'met' && read.quality!.score === 1)).toBe(true);
+    expect(repeatabilityPass(sample)).toBe(true);
+  });
+
+  it('accepts a stable adapted owl: the copper owl only has to pass both safety gates every round', () => {
+    const sample = reads({ owl: { certificate: 'unread' } });
+    expect(of(sample, 'owl').map(read => read.detailMatch)).toEqual(['adapted', 'adapted', 'adapted']);
+    expect(repeatabilityPass(sample)).toBe(true);
+  });
+
+  it.each(['owl', 'dragon'])('rejects a %s whose delivery decision changes between rounds', fixture => {
+    const sample = reads({ [fixture]: (repeat: number) => ({ certificate: repeat === 2 ? 'unread' : 'reads' }) });
+    expect(new Set(of(sample, fixture).map(read => read.detailMatch))).toEqual(new Set(['met', 'adapted']));
+    expect(repeatabilityPass(sample)).toBe(false);
   });
 
   it.each([
-    ['missing', undefined], ['partial', { recognisability: 0 }], ['non-number', quality('0' as unknown as number)],
-    ['infinite', quality(Infinity)], ['negative', quality(-0.01)], ['over one', quality(1.01)],
-  ])('rejects three stable zero scores backed by %s raw quality', (_label, raw) => {
-    const sample = reads();
-    for (const read of sample.filter(read => read.fixture === 'dragon')) {
-      read.records = [{ ...record(), quality: raw }];
-      read.quality = scoreForgeQuality(quality(0));
+    ...(['hold', 'refuse'] as const).flatMap(outcome => (['words', 'result'] as const).flatMap(gate =>
+      ['owl', 'fox'].map(fixture => [outcome, gate, fixture] as const))),
+  ])('rejects a safety %s at the %s gate for the %s', (outcome, gate, fixture) => {
+    const sample = reads(), read = of(sample, fixture)[1]!;
+    if (gate === 'words') read.words.outcome = outcome; else read.outcome = outcome;
+    expect(repeatabilityPass(sample)).toBe(false);
+  });
+
+  it('rejects quality or detail that does not recompute from the stored measure', () => {
+    const edits: ((read: RepeatabilityRead) => void)[] = [
+      read => { read.quality = { ...read.quality!, score: 0.99 }; },
+      read => { read.quality = { ...read.quality!, recognisability: 0.85 }; },
+      read => { read.detailMatch = 'adapted'; },
+      read => { delete read.detailMatch; },
+      read => { read.quality = undefined; },
+      read => { read.measure = undefined; },
+      // The certificate changed but the score was not recomputed.
+      read => { read.measure = { ...read.measure!, certificate: 'weak' }; },
+    ];
+    for (const edit of edits) {
+      const sample = reads(); edit(sample[0]!);
+      expect(repeatabilityPass(sample)).toBe(false);
     }
+  });
+
+  it('rejects a measure whose readings are not the gates’ own readings, even when rescored', () => {
+    const edits: ((read: RepeatabilityRead) => void)[] = [
+      read => { read.measure = { ...read.measure!, words: { motif: 'sleeping-fox', slot: 'chimney' } }; },
+      read => { read.measure = { ...read.measure!, result: { motif: 'unclear', slot: 'unclear' } }; },
+      read => { read.subject = { motif: 'sleeping-fox', slot: 'chimney' }; read.measure = { ...read.measure!, result: read.subject }; },
+      read => { read.words.subject = { motif: 'sleeping-fox', slot: 'chimney' }; read.measure = { ...read.measure!, words: read.words.subject }; },
+    ];
+    for (const edit of edits) {
+      const sample = reads(); edit(sample[0]!); rescore(sample[0]!);
+      expect(repeatabilityPass(sample)).toBe(false);
+    }
+  });
+
+  it.each(['words', 'result'] as const)('requires complete, versioned %s gate records with a readable subject', gate => {
+    const changes: Record<string, unknown>[] = [{ status: 'invalid' }, { subjectStatus: 'invalid' }, { policy: 'old' },
+      { evidenceHash: 'invalid' }, { subject: undefined }, { subject: { motif: 'griffin', slot: 'chimney' } },
+      { subject: { motif: 'sleeping-dragon', slot: 'chimney', detailMatch: 'met' } }];
+    for (const change of changes) {
+      const sample = reads(), read = sample[0]!, records = gate === 'words' ? read.words.records : read.records;
+      records[0] = { ...(records[0] as object), ...change };
+      expect(repeatabilityPass(sample)).toBe(false);
+    }
+    const empty = reads(); if (gate === 'words') empty[0]!.words.records = []; else empty[0]!.records = [];
+    empty[0]!.calls = 1;
+    expect(repeatabilityPass(empty)).toBe(false);
+  });
+
+  it('rejects an invalid subject read even when the stored combination follows it', () => {
+    const sample = reads({ dragon: { result: [undefined] } });
+    expect(of(sample, 'dragon')[0]!.subject).toEqual({ motif: 'unclear', slot: 'unclear' });
     expect(repeatabilityPass(sample)).toBe(false);
   });
 
-  it('rejects an aggregate that does not match its raw records', () => {
-    const sample = reads();
-    sample[0]!.quality = scoreForgeQuality(quality(0.8));
+  it.each(['words', 'result'] as const)('requires one identical %s evidence hash in every round of a fixture', gate => {
+    const sample = reads(), read = of(sample, 'moon')[2]!, records = gate === 'words' ? read.words.records : read.records;
+    records[0] = { ...(records[0] as object), evidenceHash: hex('other evidence') };
     expect(repeatabilityPass(sample)).toBe(false);
   });
 
-  it.each(['hold', 'refuse'] as const)('rejects a safety %s', outcome => {
-    const sample = reads();
-    sample[0]!.outcome = outcome;
+  it('accepts two independent reads per gate only when calls and evidence agree', () => {
+    const dragon = asked('dragon'), sample = reads({ dragon: { words: [dragon, dragon], result: [dragon, dragon] } });
+    expect(of(sample, 'dragon')[0]!.calls).toBe(4);
+    expect(repeatabilityPass(sample)).toBe(true);
+    of(sample, 'dragon')[0]!.calls = 3;
     expect(repeatabilityPass(sample)).toBe(false);
+    const split = reads({ dragon: { words: [dragon, dragon], result: [dragon, dragon] } }), read = of(split, 'dragon')[0]!;
+    read.records[1] = { ...(read.records[1] as object), evidenceHash: hex('other sheet') };
+    expect(repeatabilityPass(split)).toBe(false);
   });
 
-  it('rejects a changed image hash within a fixture', () => {
-    const sample = reads();
-    sample[1]!.records = [{ ...record(), evidenceHash: 'b'.repeat(64) }];
+  it('accepts a stable disputed reading as unclear, but never a summary that hides the dispute', () => {
+    const dragon = asked('dragon'), moon = { motif: 'crescent-moon', slot: 'chimney' } as const;
+    const sample = reads({ dragon: { result: [dragon, moon] } }), read = of(sample, 'dragon')[0]!;
+    expect(read).toMatchObject({ subject: { motif: 'unclear', slot: 'chimney' }, detailMatch: 'unclear' });
+    expect(repeatabilityPass(sample)).toBe(true);
+    read.subject = dragon; read.measure = { ...read.measure!, result: dragon }; rescore(read);
     expect(repeatabilityPass(sample)).toBe(false);
   });
 
@@ -58,70 +150,22 @@ describe('repeatability evidence', () => {
     const duplicate = reads();
     duplicate[2]!.repeat = 2;
     expect(repeatabilityPass(duplicate)).toBe(false);
+    const extra = reads(); extra.push(round('dragon', 4));
+    expect(repeatabilityPass(extra)).toBe(false);
   });
 
-  it('allows a score spread of exactly 0.15 and rejects a larger spread', () => {
-    const sample = reads();
-    replaceQuality(sample[0]!, 0.5);
-    replaceQuality(sample[2]!, 0.5);
-    replaceQuality(sample[1]!, 0.65);
-    expect(repeatabilityPass(sample)).toBe(true);
-    replaceQuality(sample[1]!, 0.6501);
-    expect(repeatabilityPass(sample)).toBe(false);
-  });
-
-  it('accepts two complete model records only when calls and image evidence agree', () => {
-    const sample = reads();
-    sample[0]!.records = [record(0.6), record(0.8)];
-    sample[0]!.calls = 2;
-    sample[0]!.quality = scoreForgeQuality(quality(0.6), quality(0.8));
-    expect(repeatabilityPass(sample)).toBe(true);
-    sample[0]!.calls = 1;
-    expect(repeatabilityPass(sample)).toBe(false);
-    sample[0]!.calls = 2;
-    sample[0]!.records = [record(0.6), { ...record(0.8), evidenceHash: 'b'.repeat(64) }];
-    expect(repeatabilityPass(sample)).toBe(false);
-  });
-
-  it('requires complete, versioned records with a valid evidence hash', () => {
-    for (const change of [{ status: 'pending' }, { qualityStatus: 'pending' }, { policy: 'old' }, { evidenceHash: 'invalid' },
-      { detailMatch: undefined }, { detailMatch: 'unknown' }, { detailMatchStatus: 'invalid' }]) {
-      const sample = reads();
-      sample[0]!.records = [{ ...record(), ...change }];
-      expect(repeatabilityPass(sample)).toBe(false);
-    }
-  });
-
-  it('does not report a met-detail aggregate over an adapted or uncertain actual read', () => {
-    for (const detailMatch of ['adapted', 'unclear'] as const) {
-      const sample = reads();
-      sample[0]!.records = [{ ...record(), detailMatch }];
-      expect(repeatabilityPass(sample)).toBe(false);
-      sample[0]!.detailMatch = detailMatch;
-      expect(repeatabilityPass(sample)).toBe(false); // Changed exact/softened decisions are not repeatable.
-      for (const read of sample.filter(read => read.fixture === sample[0]!.fixture)) {
-        read.records = [{ ...record(), detailMatch }]; read.detailMatch = detailMatch;
-      }
-      expect(repeatabilityPass(sample)).toBe(true); // Stable adaptation is not a claim of exact delivery.
-    }
-  });
-});
-
-describe('unrelated-image controls', () => {
-  const controls = (): RepeatabilityRead[] => ['owl-for-fox', 'fox-for-owl'].map(fixture => ({
-    fixture, repeat: 1, outcome: 'pass', quality: scoreForgeQuality(quality(0.2)), detailMatch: 'adapted',
-    records: [{ ...record(0.2), detailMatch: 'adapted' }], calls: 1,
-  }));
-  it('requires two safe complete low-identity reads that acknowledge the adaptation', () => {
-    expect(contrastPass(controls())).toBe(true);
-  });
-  it.each(['identity', 'details', 'malformed', 'safety', 'duplicate'] as const)('rejects a control with invalid %s evidence', failure => {
-    const sample = controls();
-    if (failure === 'identity') { sample[0]!.quality = scoreForgeQuality(quality(0.5)); sample[0]!.records = [{ ...record(0.5), detailMatch: 'adapted' }]; }
-    if (failure === 'details') { sample[0]!.detailMatch = 'met'; sample[0]!.records = [record(0.2)]; }
-    if (failure === 'malformed') sample[0]!.records = [{ ...record(0.2), detailMatch: 'adapted', qualityStatus: 'invalid' }];
-    if (failure === 'safety') sample[0]!.outcome = 'refuse';
-    if (failure === 'duplicate') sample[1]!.fixture = sample[0]!.fixture;
-    expect(contrastPass(sample)).toBe(false);
+  it('allows a score spread within 0.15 for one decision and rejects a larger spread', () => {
+    // Both adapted: an unread certificate (0.76) and an available slot missed (0.875) differ by 0.115.
+    const slotMissed = { words: [{ ...asked('dragon'), slot: 'lantern' as const }], result: [{ ...asked('dragon'), slot: 'lantern' as const }] };
+    const close = reads({ dragon: (repeat: number) => repeat === 2 ? slotMissed : { certificate: 'unread' } });
+    expect(of(close, 'dragon').map(read => read.detailMatch)).toEqual(['adapted', 'adapted', 'adapted']);
+    expect(repeatabilityPass(close)).toBe(true);
+    // Both adapted: another catalogue motif (0.4) and an unsupported subject (0.58) differ by 0.18.
+    const fox = { motif: 'sleeping-fox', slot: 'chimney' } as const, none = { motif: 'none', slot: 'chimney' } as const;
+    const wide = reads({ dragon: (repeat: number) => repeat === 2 ? { words: [none], result: [none] } : { words: [fox], result: [fox] } });
+    expect(of(wide, 'dragon').map(read => read.detailMatch)).toEqual(['adapted', 'adapted', 'adapted']);
+    const scores = of(wide, 'dragon').map(read => read.quality!.score);
+    expect(Math.max(...scores) - Math.min(...scores)).toBeCloseTo(0.18);
+    expect(repeatabilityPass(wide)).toBe(false);
   });
 });

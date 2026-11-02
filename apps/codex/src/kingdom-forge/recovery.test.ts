@@ -105,8 +105,9 @@ async function fixture(makers = 1) {
     if (!model) { stages.push('draft'); return JSON.stringify({ draft: { plan: { version: 2, kind: 'chimney', motif: 'sleeping-dragon', finish: 'native', accent: 'none' },
       title: 'Sleeping keeper', plaque: 'Warm dreams above the hearth.' }, interpretation: 'as-wished', shared: 'subject' }); }
     stages.push(image ? 'result' : 'words');
+    // Every gate read is safety plus a reading of the words; the host computes quality from the readings.
     return JSON.stringify({ answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })),
-      ...(image ? { quality: { recognisability: 0.95, completeness: 1, cleanMarks: 1 }, detailMatch: 'met' } : {}) });
+      subject: { motif: 'sleeping-dragon', slot: 'chimney' } });
   });
   const providers = createForgeProviders({ runCodex: runner });
   const published: unknown[] = [];

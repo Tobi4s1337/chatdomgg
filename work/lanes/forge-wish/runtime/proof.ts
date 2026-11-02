@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { createServer as reservePort } from 'node:net';
 import { join } from 'node:path';
-import { KingdomIdSchema, PersonIdSchema, type ForgeChatObservation } from '../../../../packages/shared/src';
+import { FORGE_CHAT_LIMITS, KingdomIdSchema, PersonIdSchema, type ForgeChatObservation } from '../../../../packages/shared/src';
 import { REALM_HERALD_ROUTE } from '../../../../packages/shared/src/realm';
 import { createDurableRealmBoot } from '../../../../apps/realm/src/bootstrap/durable';
 import { TenureEvidenceVerifier } from '../../../../apps/realm/src/allocation';
@@ -17,6 +17,9 @@ import type { KingdomForgeAudit } from '../../../../apps/codex/src/kingdom-forge
 import { runCodexDraft, type CodexDraftCompletion } from '../../../../apps/codex/src/providers/codex-cli';
 import { adoptProofLayout, settleProofPeople, qualifyProofPeople } from './seed';
 import { probeCliLaunch } from './cli-probe';
+import { FW10_WISHES } from '../../../../apps/codex/src/fixtures/fw10-wishes';
+import { renderForgeCertificationSheet } from '../../../../apps/codex/src/contact-sheet';
+import { assembleForge, findForgeSockets, forgeStyleKit } from '../../../../packages/forge/src';
 
 // Lane-authored pilot, outside the unchanged twenty-wish set. Never read live wish records here.
 const pilotWords = 'A crescent moon lantern beside my front door, please.';
@@ -29,7 +32,7 @@ async function until(test: () => boolean | Promise<boolean>, ms: number, label: 
 }
 const identity = () => (BigInt('0x' + randomBytes(12).toString('hex')) + 1n).toString();
 
-export async function runPrivateForgeProof(mode: 'prepare' | 'pilot', port: number): Promise<void> {
+export async function runPrivateForgeProof(mode: 'prepare' | 'pilot' | 'twenty', port: number): Promise<void> {
   check(process.env.DATABASE_URL && process.env.REALM_DATABASE_SCHEMA === 'realm_forge_wish', 'explicit private database/schema required.');
   check(Number.isInteger(port) && port >= 5170 && port <= 5189 && port !== 5187, 'port outside lane allowance.');
   const directory = join('/tmp/chatdom-forge-wish', `proof-${randomUUID()}`);
@@ -39,11 +42,14 @@ export async function runPrivateForgeProof(mode: 'prepare' | 'pilot', port: numb
   const metrics: CodexDraftCompletion[] = [], observations: ForgeChatObservation[] = [];
   const summary: Record<string, unknown> = { version: 1, mode, port, origin: 'simulated', stage: 'database', realWishes: 0, cliBefore };
   const evidenceKey = randomBytes(32), secret = randomBytes(32).toString('hex');
-  const kingdomId = KingdomIdSchema.parse(identity()), ids = [PersonIdSchema.parse(identity()), PersonIdSchema.parse(identity())];
+  const kingdomId = KingdomIdSchema.parse(identity());
+  const ids = Array.from({ length: mode === 'twenty' ? FW10_WISHES.length : 2 }, () => PersonIdSchema.parse(identity()));
+  const audits = new Map<string, KingdomForgeAudit>();
   const names = new Map([[kingdomId, 'Birchlight']]);
   class ProofApprovals extends FileForgeApprovals {
     override async record(audit: KingdomForgeAudit): Promise<void> {
       await super.record(audit);
+      audits.set(audit.key, audit);
       summary.audit = { judgment: audit.judgment, attempts: audit.attempts ?? 0, modelCalls: audit.modelCalls ?? 0,
         delivery: audit.selection?.delivery ?? null, quality: audit.verdicts[audit.selection?.verdict ?? 1]?.quality ?? null };
     }
@@ -96,7 +102,7 @@ export async function runPrivateForgeProof(mode: 'prepare' | 'pilot', port: numb
     });
     const citizens = createRealmCitizens({ db: pool, origin: 'simulated', kingdomNames: names, evidenceKey });
     const baseProviders = createForgeProviders({ runCodex: async input => {
-      check(mode === 'pilot' && !usageLimit, 'model calls are disabled or a usage limit stopped this run.');
+      check(mode !== 'prepare' && !usageLimit, 'model calls are disabled or a usage limit stopped this run.');
       const call = runCodexDraft({ ...input, onComplete: metric => {
         metrics.push(metric); if (metric.outcome === 'usage-limit') usageLimit = true;
       } });
@@ -127,12 +133,13 @@ export async function runPrivateForgeProof(mode: 'prepare' | 'pilot', port: numb
     await adoptProofLayout(boot, kingdomId);
     await boot.readiness.start();
     summary.stage = 'citizens';
-    const people = await settleProofPeople(boot, citizens, kingdomId, ids);
+    const people = await settleProofPeople(boot, citizens, kingdomId, ids, mode !== 'twenty');
     hold = await boot.services.retain(kingdomId);
     const kingdom = hold.kingdom;
     let publicCommits = 0, publicLeak = false;
     off = kingdom.subscribe(delivery => {
-      if (JSON.stringify(delivery).includes(pilotWords)) publicLeak = true;
+      const text = JSON.stringify(delivery);
+      if (text.includes(pilotWords) || FW10_WISHES.some(wish => text.includes(wish.words))) publicLeak = true;
       if (delivery.message.type === 'forge' && delivery.message.event.type === 'committed') publicCommits++;
     });
     runtime = boot.createServer({ mountIngress: app => mountEveningRoutes(app, evening!) });
@@ -218,6 +225,71 @@ export async function runPrivateForgeProof(mode: 'prepare' | 'pilot', port: numb
       }
       check(metrics.some(metric => metric.outcome === 'complete'), 'pilot could not complete a model call.');
       check(outcome.status === 'delivered', 'the real pilot did not produce an authoritative delivery.');
+    }
+    if (mode === 'twenty') {
+      check((summary.cliLaunch as { started: boolean }).started, 'the served process cannot launch the CLI executable.');
+      heartbeat = setInterval(() => {
+        if (beat || heartbeatFailed) return;
+        beat = sendHeartbeat().catch(() => { heartbeatFailed = true; }).finally(() => { beat = undefined; });
+      }, 20_000); heartbeat.unref?.();
+      summary.stage = 'twenty';
+      const rows: Record<string, unknown>[] = [], landed: { id: string; blueprint: Parameters<typeof renderForgeCertificationSheet>[0][number] }[] = [];
+      const wishes = FW10_WISHES.map((wish, index) => ({ wish, person: people[index]! }));
+      let next = 0;
+      // At most two wishes in flight, as the lane's test rules require.
+      const worker = async () => {
+        while (next < wishes.length && !usageLimit) {
+          const { wish, person } = wishes[next++]!;
+          const messageId = `proof-twenty-${wish.id}-${randomUUID()}`, at = Math.floor(kingdom.databaseNow()) - 25;
+          const row: Record<string, unknown> = { id: wish.id, category: wish.category, family: person.family, length: wish.words.length };
+          rows.push(row);
+          if (wish.words.length > FORGE_CHAT_LIMITS.words) {
+            // The frozen overlong wish exceeds the shared 240-character intake contract; nothing is posted.
+            row.outcome = 'not-admitted'; row.reason = 'exceeds the shared 240-character wish contract'; continue;
+          }
+          const observation = { version: 1, observation: { version: 1, id: `proof-chat-${randomUUID()}`, kingdomId,
+            origin: 'simulated', observedAt: at, kind: 'observe', source: 'chat', coverage: 'activity',
+            people: [{ personId: person.personId, disclosure: 'anonymous' }] } };
+          check((await post(INGRESS_ROUTE, observation)).status === 202, 'chat witness was not accepted.');
+          const command = { kingdomId, personId: person.personId, messageId, slot: person.slot, words: wish.words, observedAt: at };
+          const began = performance.now();
+          summary.realWishes = (summary.realWishes as number) + 1;
+          const response = await post(REALM_HERALD_ROUTE, { version: 1, forge: { type: 'wish', origin: 'simulated', command } });
+          if (response.status !== 202) { row.outcome = 'not-admitted'; row.reason = `herald route ${response.status}`; continue; }
+          try { await until(() => observations.some(o => o.messageId === messageId && o.status !== 'working'), 240_000, 'real Forge outcome'); }
+          catch { row.outcome = 'timeout'; continue; }
+          const outcome = observations.filter(o => o.messageId === messageId).at(-1)!;
+          const key = forgeMessageKey(kingdomId, messageId), audit = audits.get(key);
+          const made = Object.values(kingdom.privateState.attachments).filter(a => a.forgeKey === key);
+          const selected = audit?.verdicts[audit.selection?.verdict ?? 1];
+          Object.assign(row, { outcome: outcome.status, seconds: Math.round((performance.now() - began) / 100) / 10,
+            attempts: audit?.attempts ?? null, modelCalls: audit?.modelCalls ?? null, delivery: audit?.selection?.delivery ?? null,
+            reason: audit?.selection?.reason ?? null, shared: audit?.selection?.shared ?? null, quality: selected?.quality?.score ?? null,
+            recognisability: selected?.quality?.recognisability ?? null, detailMatch: selected?.detailMatch ?? null,
+            wordsReading: audit?.verdicts[0]?.subject ?? null, resultReading: selected?.subject ?? null,
+            plan: made[0] ? { motif: made[0].attachment.draft.plan.motif, kind: made[0].attachment.draft.plan.kind, finish: made[0].attachment.draft.plan.finish } : null,
+            certificate: selected?.measure?.certificate ?? null, attachments: made.length,
+            message: 'message' in outcome ? outcome.message : null });
+          if (made[0]) {
+            const home = Object.values(kingdom.privateState.homes).find(home => home.ownerId === person.personId)!;
+            const piece = made[0].attachment;
+            const socket = findForgeSockets(home.blueprint, 'street-home', piece.kitRevision).find(socket => socket.id === piece.socketId)!;
+            landed.push({ id: wish.id, blueprint: assembleForge(piece.draft.plan, forgeStyleKit(home.family, piece.kitRevision), socket).blueprint });
+          }
+          await writeFile(join(directory, 'twenty.json'), JSON.stringify(rows, null, 2), { mode: 0o600 });
+        }
+      };
+      await Promise.all([worker(), worker()]);
+      rows.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      landed.sort((a, b) => a.id.localeCompare(b.id));
+      summary.twenty = rows; summary.landedOrder = landed.map(piece => piece.id);
+      if (landed.length) await writeFile(join(directory, 'landed.png'),
+        Buffer.from(renderForgeCertificationSheet(landed.map(piece => piece.blueprint), 5).split(',')[1]!, 'base64'), { mode: 0o600 });
+      const ledger = await pool.query<{ person_id: string; delta: number }>('select person_id, delta from realm_coal_ledger where kingdom_id=$1 and delta=-1', [kingdomId]);
+      summary.spent = ledger.rows.length; summary.modelCalls = metrics.length; summary.usageLimit = usageLimit;
+      summary.publicCommits = publicCommits; summary.heartbeatFailed = heartbeatFailed;
+      check(!publicLeak, 'a wish reached a public delivery.');
+      if (usageLimit) { summary.stage = 'blocked'; summary.blocked = 'codex limit'; summary.ok = false; process.exitCode = 3; return; }
     }
     summary.stage = 'complete'; summary.ok = true;
   } catch (error) {

@@ -24,6 +24,11 @@ const AttributionSchema = z.strictObject({
 });
 const MAX_RESERVATION_MS = 600_000;
 const AUTHORITY_WAIT_MS = 5_000, AUDIT_WAIT_MS = 5_000, RELEASE_WAIT_MS = 5_000, RUN_WAIT_MS = 180_000;
+/**
+ * The commit is one durable transaction whose reply decides what the maker is told. A real database under load can take
+ * longer than the quick authority calls; giving up early leaves a landed piece reported as unchanged.
+ */
+const COMMIT_WAIT_MS = 30_000;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 /** Bound even an adapter that ignores cancellation; late authority work must still check the revoked lease. */
@@ -141,9 +146,11 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
             key: attempt.key, runId: entry.id, at: entry.at, judgment: entry.outcome,
             // Only the chosen candidate's full gate evidence can authorize the attachment. Other attempts
             // retain bounded quality/outcome summaries, never failed-draft text or arbitrary provider records.
-            verdicts: entry.verdicts.map(({ outcome, records, quality, detailMatch }, index) => ({ outcome,
-              records: index === 0 || index === entry.selection?.verdict ? records : [], ...(quality ? { quality } : {}),
-              ...(detailMatch ? { detailMatch } : {}) })),
+            verdicts: entry.verdicts.map(({ outcome, records, subject, measure, quality, detailMatch }, index) => {
+              const full = index === 0 || index === entry.selection?.verdict;
+              return { outcome, records: full ? records : [], ...(full && subject ? { subject } : {}), ...(full && measure ? { measure } : {}),
+                ...(quality ? { quality } : {}), ...(detailMatch ? { detailMatch } : {}) };
+            }),
             ...(entry.selection ? { selection: entry.selection } : {}), attempts: entry.attempts, modelCalls: entry.modelCalls,
             ...(entry.outcome === 'approved' && entry.draft ? { candidate: bindForgeCandidate(entry.draft, request.home, styleKit) } : {}),
           }), AUDIT_WAIT_MS, () => abort.abort(), signal);
@@ -186,7 +193,7 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
           checkCurrent();
         }
         const result = await bounded(() => authority.commit(commit, lease),
-          AUTHORITY_WAIT_MS, () => abort.abort(), signal);
+          COMMIT_WAIT_MS, () => abort.abort(), signal);
         if (result.kind !== 'committed') return privateAuthorityResult(result);
         // A cancellation after the transaction cannot undo a durable attachment. Its outbox/snapshot survives.
         committed = true;
