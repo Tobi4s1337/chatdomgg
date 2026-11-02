@@ -3,7 +3,7 @@ import { drawShield, shieldDesign, SHIELD_ASPECT } from '../heraldry';
 import type { Circle, Geography, GeoRealm, Settler, SettlerStore } from '../data/model';
 import type { Dab, LivePaint } from '../live/paint';
 import { pencilFlagImage, standardImage, type StandardImage } from './live-marks';
-import type { PreviewWorld } from '../data/preview';
+import { holdingRadii, type PreviewWorld } from '../data/preview';
 import { DISTANCE_SCALE, type Camera, type Viewport } from './camera';
 import { CollisionGrid, comparePriority, MARK_PX, underLettering, type Rect } from './collide';
 import type { Stamp } from './paint';
@@ -16,13 +16,25 @@ export const FACE_TEXT = '"IM Fell English", "Alegreya", "Noto Serif", Georgia, 
 export const FACE_CAPS = '"IM Fell English SC", "IM Fell English", "Alegreya", "Noto Serif", Georgia, serif';
 export const FACE_ITALIC = '"IM Fell English", "Alegreya", "Noto Serif", Georgia, serif';
 
-/** When a tier's holdings are drawn as pictorial stamps with names (Spec 01 R7); below that they are survey marks. */
-export const STAMP_SCALE = [0, DISTANCE_SCALE.continent, DISTANCE_SCALE.realm, DISTANCE_SCALE.kingdom] as const;
-/** Tiers that are at least marked on paper in each decor band; the survey keeps decor clear of exactly these. */
-export const MARKED_TIERS = [1, 2, 3, 4, 4] as const;
-const STAMP_PX: readonly (readonly [number, number])[] = [[30, 132], [18, 108], [16, 84], [14, 64]];
-const LABEL_PX = [15, 13, 12, 11.5] as const;
-const SHIELD_PX = [15, 13, 12, 11] as const;
+/**
+ * When a tier's holdings are drawn as pictorial stamps with names (Spec 01 R7); below that they are survey marks. A
+ * hamlet (an edition's tier 4) keeps a village's zoom band.
+ */
+export const STAMP_SCALE = [0, DISTANCE_SCALE.continent, DISTANCE_SCALE.realm, DISTANCE_SCALE.kingdom, DISTANCE_SCALE.kingdom] as const;
+/**
+ * How many tier ranks are at least marked on paper in each decor band (rank < count); the survey keeps decor clear
+ * of exactly these. Where villages are marked, hamlets are too.
+ */
+export const MARKED_TIERS = [1, 2, 3, 5, 5] as const;
+/** Stamp widths by tier; a hamlet draws a village's stamp one step smaller. */
+const STAMP_PX: readonly (readonly [number, number])[] = [[30, 132], [18, 108], [16, 84], [14, 64], [12, 48]];
+const LABEL_PX = [15, 13, 12, 11.5, 11] as const;
+const SHIELD_PX = [15, 13, 12, 11, 10] as const;
+/** Stamp groups of the sheet by tier: hamlets borrow the village drawings. */
+export const STAMP_GROUPS = ['capital', 'city', 'town', 'village', 'village'] as const;
+/** Ink strength of a tier's stamp and survey mark: villages a little quieter than towns, hamlets quieter still. */
+export const STAMP_ALPHA = [1, 1, 1, 1, 0.82] as const;
+export const MARK_ALPHA = [1, 1, 1, 0.75, 0.6] as const;
 export { SHIELD_LIMIT } from './placement';
 /** Standards (bare or flying a pennant) are raised from here, as the wash softens (R7: realm distance). */
 export const STANDARD_FROM = DISTANCE_SCALE.realm * 0.85;
@@ -152,7 +164,7 @@ function markTexture(tierRank: number, pixelRatio: number): Texture {
   ctx.fillStyle = LAND;
   ctx.strokeStyle = INK;
   ctx.lineWidth = tierRank < 2 ? 1.1 : 0.9;
-  if (tierRank === 3) {
+  if (tierRank >= 3) {
     ctx.fillStyle = INK;
     ctx.globalAlpha = 0.72;
     ctx.beginPath();
@@ -227,7 +239,7 @@ export class Overlay {
   constructor(private readonly world: PreviewWorld, private readonly geo: Geography, private readonly store: SettlerStore, sheet: TextureSource | null, stamps: Stamp[], private readonly pixelRatio: number) {
     this.container.addChild(this.marks, this.pencils, this.fills, this.inks, this.selection, this.regionLayer, this.standards, this.shields, this.labels);
     this.realmOrder = labelledRealms(geo.realms);
-    this.markTextures = [0, 1, 2, 3].map((tier) => markTexture(tier, pixelRatio));
+    this.markTextures = MARK_PX.map((_, tier) => markTexture(tier, pixelRatio));
     this.markPool = new Pool(this.marks, () => {
       const sprite = new Sprite();
       sprite.anchor.set(0.5);
@@ -238,8 +250,7 @@ export class Overlay {
     this.shieldPool = new Pool(this.shields, () => new Sprite());
     this.standardPool = new Pool(this.standards, () => new Sprite());
     this.pencilPool = new Pool(this.pencils, () => new Sprite());
-    const groups = ['capital', 'city', 'town', 'village'];
-    this.stampsByTier = groups.map((group) => {
+    this.stampsByTier = STAMP_GROUPS.map((group) => {
       if (!sheet) return [];
       return stamps.filter((stamp) => stamp.group === group).map((stamp) => ({
         ink: new Texture({ source: sheet, frame: new Rectangle(stamp.ink.x, stamp.ink.y, stamp.ink.w, stamp.ink.h) }),
@@ -353,8 +364,7 @@ export class Overlay {
     for (const entry of this.textCache.values()) entry.text.visible = false;
     const drawn: Drawn[] = [];
     this.lettering = [];
-    const radius = this.world.tiers.holdingRadius;
-    const radii = [radius.capital, radius.city, radius.town, radius.village];
+    const radii = holdingRadii(this.world);
     const kingdom = scale >= DISTANCE_SCALE.kingdom;
 
     // Each holding's name and shield go down right after its stamp, so a stronger holding's name is never pushed
@@ -399,7 +409,7 @@ export class Overlay {
       mark.texture = this.markTextures[settler.tierRank]!;
       mark.position.set(Math.round(x * this.pixelRatio) / this.pixelRatio, Math.round(y * this.pixelRatio) / this.pixelRatio);
       mark.scale.set(1);
-      mark.alpha = (settler.tierRank === 3 ? 0.75 : 1) * alpha;
+      mark.alpha = (MARK_ALPHA[settler.tierRank] ?? 1) * alpha;
     };
 
     // 1. Language regions: the largest type on the map, written across the land at world and continent distance.
@@ -444,7 +454,7 @@ export class Overlay {
           ink.position.set(s.x - w * choice.anchorX, s.y - h * choice.anchorY);
           ink.width = w;
           ink.height = h;
-          ink.alpha = placed.alpha;
+          ink.alpha = (STAMP_ALPHA[settler.tierRank] ?? 1) * placed.alpha;
           placeName(settler, s.x, s.y, w, h * choice.anchorY);
           drawn.push({ settler, x: s.x, y: s.y - h * choice.anchorY * 0.45, r: Math.max(w, h) * 0.45 });
           continue;

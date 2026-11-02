@@ -1,10 +1,11 @@
 import type { Geography, GeoRealm, Settler, SettlerStore } from '../data/model';
-import type { PreviewWorld } from '../data/preview';
+import { holdingRadii, TIER_CODES, type PreviewWorld } from '../data/preview';
 import { SHIELD_ASPECT } from '../heraldry/geometry';
 import { Camera, DISTANCE_SCALE, distanceFor, NO_INSETS, type Box, type Distance, type Insets, type Viewport } from '../map/camera';
 import { CollisionGrid, comparePriority, MARK_PX, underLettering, type Rect } from '../map/collide';
 import type { Stamp } from '../map/paint';
 import { decorBand, levelFor, parentOf, pyramidFor, tileBox, tilesFor, type Pyramid, type TileKey } from '../map/pyramid';
+import { stillTitle, type EditionFacts } from '../ui/edition';
 import { formatMoment, formatTime, TIER_NAMES } from '../ui/format';
 
 /**
@@ -23,18 +24,23 @@ export const FACE_TEXT = '"IM Fell English", "Alegreya", "Noto Serif", Georgia, 
 export const FACE_CAPS = '"IM Fell English SC", "IM Fell English", "Alegreya", "Noto Serif", Georgia, serif';
 export const FACE_ITALIC = '"IM Fell English", "Alegreya", "Noto Serif", Georgia, serif';
 
-export const STAMP_SCALE = [0, DISTANCE_SCALE.continent, DISTANCE_SCALE.realm, DISTANCE_SCALE.kingdom] as const;
-export const MARKED_TIERS = [1, 2, 3, 4, 4] as const;
-const STAMP_PX: readonly (readonly [number, number])[] = [[30, 132], [18, 108], [16, 84], [14, 64]];
-export const LABEL_PX = [15, 13, 12, 11.5] as const;
-export const SHIELD_PX = [15, 13, 12, 11] as const;
+export const STAMP_SCALE = [0, DISTANCE_SCALE.continent, DISTANCE_SCALE.realm, DISTANCE_SCALE.kingdom, DISTANCE_SCALE.kingdom] as const;
+export const MARKED_TIERS = [1, 2, 3, 5, 5] as const;
+const STAMP_PX: readonly (readonly [number, number])[] = [[30, 132], [18, 108], [16, 84], [14, 64], [12, 48]];
+export const LABEL_PX = [15, 13, 12, 11.5, 11] as const;
+export const SHIELD_PX = [15, 13, 12, 11, 10] as const;
 export const SHIELD_LIMIT = 300;
 /** Survey-mark diameters in CSS px by tier, as the overlay's mark textures draw them. */
 export { MARK_PX };
 export const REALM_LABEL_FROM = DISTANCE_SCALE.continent * 0.4;
-/** The world file carries capitals and cities; towns and villages arrive per region and are never marked on a still. */
+/**
+ * The world file carries capitals and cities; towns, villages and hamlets arrive per region and are never marked on a
+ * still (a selected one is drawn all the same).
+ */
 const HEAD_TIERS = 2;
-const STAMP_GROUPS = ['capital', 'city', 'town', 'village'] as const;
+/** Stamp groups by tier: hamlets borrow the village drawings, one step smaller. */
+export const STAMP_GROUPS = ['capital', 'city', 'town', 'village', 'village'] as const;
+export const STAMP_ALPHA = [1, 1, 1, 1, 0.82] as const;
 
 const ramp = (value: number, from: number, to: number) => Math.min(1, Math.max(0, (value - from) / (to - from)));
 
@@ -231,7 +237,8 @@ export interface StillMark {
   settler: Settler;
   /** The button itself: the stamp as drawn, or a touch-sized square around a survey mark. */
   box: Rect;
-  stamp: { group: string; index: number; x: number; y: number; w: number; h: number } | null;
+  /** The stamp as drawn; `alpha` below 1 is a quieter tier's ink (a hamlet's). */
+  stamp: { group: string; index: number; x: number; y: number; w: number; h: number; alpha: number } | null;
   mark: { size: number } | null;
   /** Top-left of the shield's canvas (the shield is `width` wide inside a 3 px paper halo). */
   shield: { x: number; y: number; width: number } | null;
@@ -292,7 +299,7 @@ export function layoutStillSelection(base: StillLayout, input: LayoutInput): Sti
   if (selected.x < near.minX || selected.x > near.maxX || selected.y < near.minY || selected.y > near.maxY) return base;
   const point = input.camera.worldToScreen(selected.x, selected.y, input.view);
   const group = STAMP_GROUPS[selected.tierRank]!;
-  const radius = input.world.tiers.holdingRadius[group];
+  const radius = holdingRadii(input.world)[selected.tierRank]!;
   const placement = stampPlacement(selected, point, radius, input.camera.scale, input.stamps.filter(stamp => stamp.group === group));
   const box = placement?.drawn ?? { x: point.x - 12, y: point.y - 12, w: 24, h: 24 };
   if (!onScreen(box, input.view)) return base;
@@ -300,10 +307,10 @@ export function layoutStillSelection(base: StillLayout, input: LayoutInput): Sti
 }
 
 /** The accessible name of a holding's button. Withheld holdings never reach this. */
-export function markLabel(settler: Settler, geo: Geography): string {
+export function markLabel(settler: Settler, geo: Geography, map = 'the survey'): string {
   const tier = TIER_NAMES[settler.tierRank]!.toLowerCase();
   const region = geo.regions[settler.region];
-  const where = region && region.kind === 'continent' && region.name !== settler.realmName ? `${settler.realmName}, ${region.name}` : settler.realmName || region?.name || 'the survey';
+  const where = region && region.kind === 'continent' && region.name !== settler.realmName ? `${settler.realmName}, ${region.name}` : settler.realmName || region?.name || map;
   return settler.name === null ? `Unnamed ${tier} in ${where}` : `${settler.name}, ${tier} in ${where}`;
 }
 
@@ -341,8 +348,8 @@ export function layoutStill(input: LayoutInput): StillLayout {
   const texts: StillText[] = [];
   placeRegions(geo, camera, view, measure, take, texts);
 
-  const radius = world.tiers.holdingRadius;
-  const radii = [radius.capital, radius.city, radius.town, radius.village];
+  const radii = holdingRadii(world);
+  const mapName = world.status === 'edition' ? world.label : 'the survey';
   const choicesByTier = STAMP_GROUPS.map((group) => input.stamps.filter((stamp) => stamp.group === group));
   const marks: StillMark[] = [];
   let shields = 0;
@@ -389,7 +396,7 @@ export function layoutStill(input: LayoutInput): StillLayout {
     const s = camera.worldToScreen(settler.x, settler.y, view);
     const r = radii[settler.tierRank]!;
     const choices = choicesByTier[settler.tierRank] ?? [];
-    const label = markLabel(settler, geo);
+    const label = markLabel(settler, geo, mapName);
     if ((forced || stampVisible(settler.tierRank, scale)) && choices.length) {
       const { index, choice, drawn, occupied } = stampPlacement(settler, s, r, scale, choices)!;
       const { w, h } = drawn;
@@ -398,7 +405,7 @@ export function layoutStill(input: LayoutInput): StillLayout {
         const plate = placeName(settler, s.x, s.y, w, h * choice.anchor.y, forced);
         marks.push({
           id: settler.id, settler, box: drawn, label,
-          stamp: { group: STAMP_GROUPS[settler.tierRank]!, index, ...drawn },
+          stamp: { group: STAMP_GROUPS[settler.tierRank]!, index, ...drawn, alpha: STAMP_ALPHA[settler.tierRank] ?? 1 },
           mark: null,
           ...plate,
           ring: { x: s.x, y: s.y - h * choice.anchor.y * 0.45, r: Math.max(w, h) * 0.45 + 7 },
@@ -546,7 +553,7 @@ export function washStains(store: SettlerStore, live: LiveSource, camera: Camera
     }
   };
   if (live.frame) {
-    const holdings = store.query(box.minX, box.minY, box.maxX, box.maxY, 3)
+    const holdings = store.query(box.minX, box.minY, box.maxX, box.maxY, TIER_CODES.length - 1)
       .map((settler) => ({ settler, liveClass: live.liveClass(settler) }))
       .filter((item) => item.liveClass > 0)
       .sort((a, b) => a.liveClass - b.liveClass || a.settler.ordinal - b.settler.ordinal);
@@ -570,9 +577,9 @@ export function washStains(store: SettlerStore, live: LiveSource, camera: Camera
 // ── The ribbon ───────────────────────────────────────────────────────────────────────────────────
 
 /** What the still says about itself: what it is, when it was observed and drawn, and why it is not moving. */
-export function stillRibbon(input: { asOf: number; drawnAt: number; liveAsOf: number | null; now: number; landMissing: boolean }): { title: string; facts: string[]; live: string | null; why: string } {
+export function stillRibbon(input: { asOf: number; drawnAt: number; liveAsOf: number | null; now: number; landMissing: boolean; edition?: EditionFacts | null }): { title: string; facts: string[]; live: string | null; why: string } {
   return {
-    title: 'A still of the survey',
+    title: stillTitle(input.edition),
     facts: [`observed to ${formatMoment(input.asOf)}`, `drawn ${formatTime(input.drawnAt, input.now)}`],
     live: input.liveAsOf === null ? null : `Live as of ${formatTime(input.liveAsOf, input.now)}`,
     why: input.landMissing

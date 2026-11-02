@@ -5,11 +5,11 @@ import {
   ATLAS_SPECTACLE, AtlasManifestSchema, createAtlasAlignment, encodeDabsV1, encodeLiveV2,
   type AtlasAlignment, type AtlasDab, type AtlasLiveSlot, type AtlasManifest, type KingdomId,
 } from '@chatdom/shared';
-import { BASE, CHUNK_ROWS, FakeService, makeChunk, makeNames, makeWorld, publish, sha } from '../data/fixtures.test-support';
+import { BASE, CHUNK_ROWS, FakeService, LATER_HAMLET, makeChunk, makeEdition, makeNames, makeWorld, publish, sha } from '../data/fixtures.test-support';
 import { decodeRings, SettlerStore } from '../data/model';
 import { PREVIEW_LABEL, TIER_CODES, type PreviewWorld } from '../data/preview';
 import { LiveFeed, type LiveFrame } from './feed';
-import { BLOOM_MS, chooseSpectacle, DRY_MS, LivePaint, SPECTACLE_PRIORITY } from './paint';
+import { BLOOM_MS, chooseSpectacle, DRY_MS, LivePaint, pencilBase, SPECTACLE_PRIORITY } from './paint';
 import { HAMLET_RADIUS, HOLDING_GAP, LandIndex, LATTICE, type RealmCircle } from './pencil';
 
 const T = 1_793_325_387_307;
@@ -303,6 +303,61 @@ describe('chooseSpectacle', () => {
   it('is null when nothing qualifies', () => {
     expect(chooseSpectacle([])).toBeNull();
     expect(chooseSpectacle([{ ordinal: 0, founded: false, spectacle: S.dragon }, { ordinal: 1, founded: true, spectacle: S.none }])).toBeNull();
+  });
+});
+
+describe('pencil places in an edition', () => {
+  /** The square land as one night of Edition I, its chunk of region 0 holding `extra` after its own rows. */
+  function editionSetup(extra: { x: number; y: number; founding: boolean } | null) {
+    const world = makeEdition();
+    world.coasts = squareWorld().coasts;
+    publish(world);
+    const store = new SettlerStore(world, () => T);
+    for (const region of world.regions) {
+      const chunk = makeChunk(world, region.index);
+      if (region.index === 0 && extra) {
+        const s = chunk.settlers;
+        const at = extra.founding ? s.founded! : s.ids.length;
+        const insert = <K extends 'ids' | 'tier' | 'x' | 'y' | 'average' | 'game' | 'region' | 'realm'>(key: K, value: (typeof s)[K][number]) =>
+          (s[key] as (typeof s)[K][number][]).splice(at, 0, value);
+        insert('ids', '923456789'); insert('tier', 4); insert('x', Math.round(extra.x * 20)); insert('y', Math.round(extra.y * 20));
+        insert('average', 7); insert('game', 0); insert('region', 0); insert('realm', 1);
+        if (extra.founding) s.founded = s.founded! + 1;
+      }
+      store.addChunk(chunk);
+    }
+    const paint = new LivePaint(world, store, decodeRings(world), () => T);
+    return { world, store, paint };
+  }
+  const place = ({ store, paint }: { store: SettlerStore; paint: LivePaint }, dabs: AtlasDab[]) => {
+    paint.apply(frameOf(store, { dabs }));
+    while (paint.work(1_000));
+    return paint.dabs.map(({ hash, x, y, placed }) => ({ hash, x, y, placed }));
+  };
+
+  it('keeps clear of founding holdings only: a holding granted later never moves a dab', () => {
+    const dabs = dabsIn(1, 12);
+    const base = place(editionSetup(null), dabs);
+    expect(base.every(dab => dab.placed)).toBe(true);
+    // The later grant already in the fixture (LittleLantern) is not in the base either.
+    const { store } = editionSetup(null);
+    const radii = [6, 3.4, 1.8, 1.25, 0.5];
+    expect(pencilBase(store.all, 0, radii).some(h => h.x === LATER_HAMLET.x / 20 && h.y === LATER_HAMLET.y / 20)).toBe(false);
+    // A hamlet granted on a later night, right on the first dab's place: every dab stays where it was.
+    const target = base[0]!;
+    expect(place(editionSetup({ x: target.x, y: target.y, founding: false }), dabs)).toEqual(base);
+    // Had the same hamlet been founded with the edition, that place would have been taken.
+    const founded = place(editionSetup({ x: target.x, y: target.y, founding: true }), dabs);
+    expect(founded[0]).not.toEqual(target);
+  });
+
+  it('keeps a survey preview’s base whole: every holding of the region, withheld ones included', () => {
+    const world = squareWorld();
+    const { store } = setup({ world });
+    store.applyNames(makeNames(world, { withheld: [CHUNK_ROWS[0]![0]!.id] }));
+    const radii = [6, 3.4, 1.8, 1.25, 0.5];
+    expect(pencilBase(store.all, 0, radii)).toHaveLength(store.all.filter(settler => settler.region === 0).length);
+    expect(pencilBase(store.all, 0, radii).map(h => h.r).sort()).toEqual(store.all.filter(s => s.region === 0).map(s => radii[s.tierRank]!).sort());
   });
 });
 

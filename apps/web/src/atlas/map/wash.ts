@@ -1,5 +1,5 @@
 import { CanvasSource, Container, RenderTexture, Sprite, Texture, type Renderer } from 'pixi.js';
-import type { SettlerStore } from '../data/model';
+import type { Settler, SettlerStore } from '../data/model';
 import type { LivePaint } from '../live/paint';
 import { DISTANCE_SCALE, type Camera, type Viewport } from './camera';
 import { BLOT_SIZE, BLOT_VARIANTS, paintBlot, paintDensity } from './live-marks';
@@ -54,6 +54,65 @@ function blotTexture(variant: number): Texture {
   return new Texture({ source: new CanvasSource({ resource: canvas, resolution: 1, autoGenerateMipmaps: true, scaleMode: 'linear' }) });
 }
 
+/** CSS px of wash laid beyond each edge of the view, so a pan moves the picture instead of laying it again. */
+export const WASH_MARGIN = 128;
+/** How far the zoom may breathe (relative) before the washes are laid again at their true size. */
+export const WASH_SCALE_TOLERANCE = 0.012;
+/**
+ * While dabs are being placed or chunks arrive, the live frame and store change every frame. Those changes are
+ * gathered and laid at most this often (ms); a camera that leaves the picture is always laid at once.
+ */
+export const WASH_GATHER_MS = 200;
+
+/** A laid wash picture: the live frame and store it shows, where its top-left lies in the world, at what zoom. */
+export interface LaidWash {
+  live: number;
+  store: number;
+  originX: number;
+  originY: number;
+  scale: number;
+  width: number;
+  height: number;
+  /** The live clock time by which a bloom or drying wash has changed enough to lay again (Infinity when still). */
+  until: number;
+}
+
+/** Where the laid picture sits on screen for a camera, and how much it is stretched. */
+export function washPlacement(laid: LaidWash, camera: { x: number; y: number; scale: number }, view: Viewport): { x: number; y: number; ratio: number } {
+  return {
+    x: (laid.originX - camera.x) * camera.scale + view.width / 2,
+    y: (laid.originY - camera.y) * camera.scale + view.height / 2,
+    ratio: camera.scale / laid.scale,
+  };
+}
+
+/** True while the laid picture still shows exactly this camera's wash and covers its whole view. */
+export function washReusable(laid: LaidWash, key: { live: number; store: number }, camera: { x: number; y: number; scale: number }, view: Viewport, now: number): boolean {
+  if (laid.live !== key.live || laid.store !== key.store || now >= laid.until) return false;
+  return washCovers(laid, camera, view);
+}
+
+/** True while the laid picture covers the camera's whole view at a zoom it can stand in for. */
+export function washCovers(laid: LaidWash, camera: { x: number; y: number; scale: number }, view: Viewport): boolean {
+  if (laid.width !== view.width || laid.height !== view.height) return false;
+  const at = washPlacement(laid, camera, view);
+  if (Math.abs(at.ratio - 1) > WASH_SCALE_TOLERANCE) return false;
+  const w = (view.width + 2 * WASH_MARGIN) * at.ratio;
+  const h = (view.height + 2 * WASH_MARGIN) * at.ratio;
+  return at.x <= 0 && at.y <= 0 && at.x + w >= view.width && at.y + h >= view.height;
+}
+
+/** Holdings on air (class above 0), biggest class first and then by ordinal: the order a wash cap drops from the end. */
+export function onAirOrder(settlers: readonly Settler[], liveClass: (settler: Settler) => number): Settler[] {
+  const holdings: { settler: Settler; liveClass: number }[] = [];
+  for (const settler of settlers) {
+    const value = liveClass(settler);
+    if (value > 0) holdings.push({ settler, liveClass: value });
+  }
+  holdings.sort((a, b) => a.liveClass - b.liveClass || a.settler.ordinal - b.settler.ordinal);
+  return holdings.map((item) => item.settler);
+}
+
 export class WashLayer {
   /** The composited wash, placed between the land tiles and the overlay. */
   readonly sprite: Sprite;
@@ -63,6 +122,12 @@ export class WashLayer {
   private readonly pool: Sprite[] = [];
   private target: RenderTexture;
   private used = 0;
+  /** What the picture in the target was laid for; null until the first paint and after a resize. */
+  private laid: LaidWash | null = null;
+  private laidAt = -Infinity;
+  private onAir: { frame: LivePaint['frame']; store: number; holdings: Settler[] } | null = null;
+  /** A newer live frame or store is waiting to be laid; the view keeps drawing until it is. */
+  pending = false;
   private readonly tint = parseInt(VERMILION.slice(1), 16);
   /** Washes laid in the last paint, for evidence and the director's budget. */
   drawn = 0;
@@ -77,7 +142,7 @@ export class WashLayer {
   }
 
   private createTarget(view: Viewport): RenderTexture {
-    return RenderTexture.create({ width: view.width, height: view.height, resolution: Math.min(1.5, this.pixelRatio) });
+    return RenderTexture.create({ width: view.width + 2 * WASH_MARGIN, height: view.height + 2 * WASH_MARGIN, resolution: Math.min(1.5, this.pixelRatio) });
   }
 
   /** A new target at the new size: resizing one in place leaves the sprite stretched over its old frame. */
@@ -85,13 +150,12 @@ export class WashLayer {
     const old = this.target;
     this.target = this.createTarget(view);
     this.sprite.texture = this.target;
-    this.sprite.width = view.width;
-    this.sprite.height = view.height;
+    this.laid = null;
     old.destroy(true);
   }
 
   /** Lays one item in the modes the distance calls for: density from afar, a watercolour blot close up, both between. */
-  private lay(x: number, y: number, liveClass: number, scale: number, strength: number, variant: number, detail: number, soften: number): void {
+  private layOne(x: number, y: number, liveClass: number, scale: number, strength: number, variant: number, detail: number, soften: number): void {
     if (detail < 1) {
       // A stain a little wider than the bloom it stands for, so neighbours run together into one layer.
       const radius = washPx(liveClass, scale) * 1.2;
@@ -122,47 +186,76 @@ export class WashLayer {
     this.used++;
   }
 
-  /** Repaints the wash for the current camera and frame. Withheld holdings and loaded-but-gated slots paint nothing. */
+  /**
+   * Shows the wash for the current camera and frame. Withheld holdings and loaded-but-gated slots paint nothing.
+   *
+   * The washes are laid into a picture a margin wider than the view, and the picture is then only moved while
+   * nothing in it can have changed: the same live frame and store, no bloom or drying due, a zoom within a breath of
+   * the one it was laid at, and the view still inside it. A pan or the hero's drift costs one sprite move, not
+   * thousands of blots.
+   */
   paint(renderer: Renderer, camera: Camera, view: Viewport, store: SettlerStore, live: LivePaint, now: number): void {
+    const state = { x: camera.x, y: camera.y, scale: camera.scale };
+    const key = { live: live.version, store: store.version };
+    const laid = this.laid;
+    const fresh = laid !== null && washReusable(laid, key, state, view, now);
+    // A newer frame or store only: gathered for a moment while the picture still covers the view and nothing is due.
+    const gathering = !fresh && laid !== null && now < laid.until && performance.now() - this.laidAt < WASH_GATHER_MS && washCovers(laid, state, view);
+    this.pending = gathering;
+    if (!fresh && !gathering) this.lay(renderer, camera, view, store, live, now, key);
+    const at = washPlacement(this.laid!, state, view);
+    this.sprite.position.set(at.x, at.y);
+    this.sprite.width = (view.width + 2 * WASH_MARGIN) * at.ratio;
+    this.sprite.height = (view.height + 2 * WASH_MARGIN) * at.ratio;
+  }
+
+  private lay(renderer: Renderer, camera: Camera, view: Viewport, store: SettlerStore, live: LivePaint, now: number, key: { live: number; store: number }): void {
     this.used = 0;
     const scale = camera.scale;
     const soften = washSoftening(scale);
     const detail = washDetail(scale);
     const close = scale >= DISTANCE_SCALE.realm * 0.6;
-    const limit = close ? (this.phone ? CLOSE_WASH_LIMIT.phone : CLOSE_WASH_LIMIT.laptop) : Infinity;
-    const box = camera.visibleBox(view, 140 / scale);
+    // The close-up budget is per area of the view; the margin carries its own share.
+    const area = (view.width + 2 * WASH_MARGIN) * (view.height + 2 * WASH_MARGIN) / Math.max(1, view.width * view.height);
+    const limit = close ? Math.round((this.phone ? CLOSE_WASH_LIMIT.phone : CLOSE_WASH_LIMIT.laptop) * area) : Infinity;
+    const box = camera.visibleBox(view, (140 + WASH_MARGIN) / scale);
     const inBox = (x: number, y: number) => x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY;
+    const screen = (x: number, y: number) => {
+      const s = camera.worldToScreen(x, y, view);
+      s.x += WASH_MARGIN;
+      s.y += WASH_MARGIN;
+      return s;
+    };
     if (live.frame) {
       // Holdings: biggest classes first, so a cap drops the smallest washes, never a capital's.
-      const holdings = store.query(box.minX, box.minY, box.maxX, box.maxY, 3)
-        .map((settler) => ({ settler, liveClass: live.liveClass(settler) }))
-        .filter((item) => item.liveClass > 0)
-        .sort((a, b) => a.liveClass - b.liveClass || a.settler.ordinal - b.settler.ordinal);
-      for (const { settler, liveClass } of holdings) {
+      for (const settler of this.liveHoldings(store, live)) {
         if (this.used >= limit) break;
+        if (!inBox(settler.x, settler.y)) continue;
+        const liveClass = live.liveClass(settler);
+        if (liveClass <= 0) continue;
         const bloom = live.bloom(live.startedAt(settler), now);
         if (bloom <= 0.01) continue;
-        const s = camera.worldToScreen(settler.x, settler.y, view);
-        this.lay(s.x, s.y, liveClass, scale, bloom, settler.ordinal, detail, soften);
+        const s = screen(settler.x, settler.y);
+        this.layOne(s.x, s.y, liveClass, scale, bloom, settler.ordinal, detail, soften);
       }
       for (const dab of live.dabs) {
         if (this.used >= limit) break;
         if (!dab.placed || !inBox(dab.x, dab.y)) continue;
         const bloom = live.bloom(dab.startedAt, now);
         if (bloom <= 0.01) continue;
-        const s = camera.worldToScreen(dab.x, dab.y, view);
-        this.lay(s.x, s.y, 5, scale, bloom, parseInt(dab.hash.slice(0, 4), 16), detail, soften);
+        const s = screen(dab.x, dab.y);
+        this.layOne(s.x, s.y, 5, scale, bloom, parseInt(dab.hash.slice(0, 4), 16), detail, soften);
       }
     }
     for (const dry of live.dryingWashes(now)) {
       if (!inBox(dry.x, dry.y)) continue;
-      const s = camera.worldToScreen(dry.x, dry.y, view);
-      this.lay(s.x, s.y, dry.liveClass, scale, dry.left, dry.ordinal, detail, soften);
+      const s = screen(dry.x, dry.y);
+      this.layOne(s.x, s.y, dry.liveClass, scale, dry.left, dry.ordinal, detail, soften);
     }
     for (const { dab, left } of live.dryingDabWashes(now)) {
       if (!dab.placed || !inBox(dab.x, dab.y)) continue;
-      const s = camera.worldToScreen(dab.x, dab.y, view);
-      this.lay(s.x, s.y, 5, scale, left, parseInt(dab.hash.slice(0, 4), 16), detail, soften);
+      const s = screen(dab.x, dab.y);
+      this.layOne(s.x, s.y, 5, scale, left, parseInt(dab.hash.slice(0, 4), 16), detail, soften);
     }
     for (let i = this.used; i < this.pool.length; i++) this.pool[i]!.visible = false;
     this.drawn = this.used;
@@ -170,6 +263,21 @@ export class WashLayer {
     this.sprite.visible = this.used > 0;
     // The density layer can only deepen so far: a crowded continent reads as rich pigment, never as a red plate.
     this.sprite.alpha = DENSITY_CAP + (1 - DENSITY_CAP) * detail;
+    const origin = camera.screenToWorld(-WASH_MARGIN, -WASH_MARGIN, view);
+    this.laidAt = performance.now();
+    this.laid = { ...key, originX: origin.x, originY: origin.y, scale, width: view.width, height: view.height, until: now + live.nextChange(now) };
+  }
+
+  /**
+   * The loaded live holdings of the current frame, biggest class first then by ordinal: built once per live frame and
+   * store change, so laying the wash walks the few thousand holdings on air rather than every holding in view.
+   */
+  private liveHoldings(store: SettlerStore, live: LivePaint): readonly Settler[] {
+    const cached = this.onAir;
+    if (cached && cached.frame === live.frame && cached.store === store.version) return cached.holdings;
+    const holdings = onAirOrder(store.all, (settler) => live.liveClass(settler));
+    this.onAir = { frame: live.frame, store: store.version, holdings };
+    return holdings;
   }
 
   dispose(): void {

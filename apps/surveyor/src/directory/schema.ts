@@ -32,9 +32,9 @@ export const ChannelFaceSchema = z.strictObject({
   name: DisplayNameSchema.nullable(),
   freshUntil: EpochMsSchema.nullable(),
   place: PlaceSchema,
-  /** Settler ordinal and holding tier rank (0 capital … 3 village) for mapped land. */
+  /** Settler ordinal and holding tier rank (0 capital … 3 village, 4 an edition's hamlet) for mapped land. */
   ordinal: UIntSchema.nullable(),
-  tier: z.number().int().min(0).max(3).nullable(),
+  tier: z.number().int().min(0).max(4).nullable(),
   /** The land it holds, or the realm it is pencilled into while it waits; null when unseen. */
   region: Int.nullable(),
   realm: Int.nullable(),

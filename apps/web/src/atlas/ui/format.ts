@@ -49,7 +49,19 @@ export function sweepCadence(hours: number, sweeps: number): string | null {
   return minutes === 1 ? 'every minute' : `every ${minutes} minutes`;
 }
 
-export const TIER_NAMES = ['Capital', 'City', 'Town', 'Village'] as const;
+export const TIER_NAMES = ['Capital', 'City', 'Town', 'Village', 'Hamlet'] as const;
+
+/**
+ * A tier's band of average viewers, as the card writes it beside the tier: "500+ average viewers" for a surveyed
+ * tier, "under 25 average viewers" for a hamlet (land granted below the survey's threshold).
+ */
+export function tierBand(minAverage: { capital: number; city: number; town: number; village: number }, tierRank: number): string {
+  const floor = [minAverage.capital, minAverage.city, minAverage.town, minAverage.village][tierRank];
+  return floor === undefined ? `under ${formatCount(minAverage.village)} average viewers` : `${formatCount(floor)}+ average viewers`;
+}
+
+/** The search field's prompt (part of the default view's word budget). */
+export const SEARCH_PLACEHOLDER = 'Find a channel by name';
 
 /** Twitch logins are lower-case ASCII letters, digits and underscores; anything else gets no link. */
 export function watchUrl(login: string): string | null {

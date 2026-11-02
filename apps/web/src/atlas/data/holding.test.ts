@@ -17,7 +17,7 @@ const world = {
 
 const settler = (over: Partial<Settler> = {}): Settler => ({
   index: 0, ordinal: 0, id: '71092938', login: 'example', name: 'Example', freshUntil: 1_793_540_000_000, withheld: false,
-  tier: 'town', tierRank: 2, x: 12, y: -4, average: 312.4, game: 'VALORANT', region: 0, realm: 0, realmName: 'Shooters', ...over,
+  tier: 'town', tierRank: 2, foundingHolding: true, x: 12, y: -4, average: 312.4, game: 'VALORANT', region: 0, realm: 0, realmName: 'Shooters', ...over,
 });
 
 const memory = (): StorageLike & { items: Map<string, string> } => {

@@ -1,11 +1,19 @@
 import { batch, createEffect, createMemo, createSignal, createUniqueId, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import './atlas.css';
 import { render } from 'solid-js/web';
-import type { AtlasMountOptions, AtlasReadyState, AtlasScene as SceneHandle, AtlasTarget, AtlasView } from './embed';
+import type { AtlasGateEmit, AtlasMountOptions, AtlasReadyState, AtlasScene as SceneHandle, AtlasSceneGate, AtlasTarget, AtlasView } from './embed';
+import { AtlasChannelSchema, type AtlasChannel } from '@chatdom/shared';
+import type { AtlasTravelStage } from '../raid-gate/ports';
+import { fetchBusiest, fetchChannelRoads, fetchFinder, fetchRoadStory, type BusyRoad, type CaravanRaid, type ChannelRoads, type FinderEntry, type FinderReply, type MapPoint, type RoadStory } from './data/roads';
+import type { AtlasRaid, KingdomId } from '../../../api/src/raid-gate/contracts';
+import { AtlasRoadsLayer, type InkRoad, type JourneyStage } from './road/atlas-roads';
+import { FinderBoard, type FinderState } from './gate/FinderBoard';
+import { selectable } from './gate/select';
+import { LedgerRoads, RoadStoryCard } from './ui/Roads';
 import { LatestRequest, savedView } from './saved-view';
 import type { HistoryLike } from './ui/history';
 import { adoptPreview, loadPreview, type LoadedPreview } from './data/load';
-import { dabHashOf, DirectoryError, fetchCard, fetchRoad, type CardReply, type CardRoad, type ChannelFace, type Lookup, type PencilPosition, type RoadReply, type SearchResult } from './data/directory';
+import { dabHashOf, DirectoryError, fetchCard, type CardReply, type CardRoad, type ChannelFace, type Lookup, type PencilPosition, type SearchResult } from './data/directory';
 import { decodeRings, geographyOf, labelWorld, SettlerStore, type Geography, type Ring, type Settler } from './data/model';
 import { fetchChunk, fetchNames, type PreviewSource } from './data/preview';
 import { atlasFailureState, mountAtlasWithRetry } from './recovery';
@@ -20,14 +28,15 @@ import { Card, type NamesState } from './ui/Card';
 import { DoorCartouche } from './ui/Door';
 import { handOffHolding, holdingPlace, type DoorHolding } from './data/holding';
 import { Cartouche, Compass, Controls, Notice, ScaleBar } from './ui/chrome';
-import { formatMoment, watchUrl } from './ui/format';
+import { newerNotice } from './ui/edition';
+import { watchUrl } from './ui/format';
 import { CardHistory } from './ui/history';
 import { LegendBody } from './ui/Legend';
 import { SurveySeal } from './ui/SurveySeal';
 import { FooterSlot } from './ui/FooterSlot';
 import { AtlasMaterialSound } from './ui/material-sound';
 import { DabCard, type LiveSummary } from './ui/Live';
-import { RoadCard, WaitingCard, type RegisterState } from './ui/Register';
+import { faceName, WaitingCard, type RegisterState } from './ui/Register';
 import { formatRoute, parseRoute, type AtlasRoute } from './ui/route';
 import { Search } from './ui/Search';
 
@@ -44,6 +53,11 @@ declare global {
 interface NoticeState { text: string; action?: { label: string; run: () => void } }
 
 
+/** The busiest roads are read again this often: the ledger grows with every witnessed raid. */
+const NETWORK_REFRESH_MS = 10 * 60_000;
+/** A gate follows a raid's caravan for this long at most while waiting for the public stream to announce it. */
+const FOLLOW_WAIT_MS = 120_000;
+
 /** Open maps re-read the names projection this often, so withholding and refreshed names reach them. */
 const NAMES_REFRESH_MS = 5 * 60_000;
 /** The first view waits this long at most for the live paint; the land never waits on it longer. */
@@ -52,7 +66,7 @@ const FACES = ['16px "IM Fell English"', 'italic 16px "IM Fell English"', '16px 
 /** Narrower than this the Atlas is laid out for a phone: the card is a bottom sheet, search sits at the top. */
 const PHONE_WIDTH = 720;
 /** The distance a found holding is shown at, by tier: where its mark and name are drawn (R7), never further out. */
-const TIER_STOP = [DISTANCE_STOP.continent, DISTANCE_STOP.continent, DISTANCE_STOP.realm, DISTANCE_STOP.kingdom] as const;
+const TIER_STOP = [DISTANCE_STOP.continent, DISTANCE_STOP.continent, DISTANCE_STOP.realm, DISTANCE_STOP.kingdom, DISTANCE_STOP.kingdom] as const;
 
 /** A road being opened: its two ends as the reader asked for them (IDs from a card, logins from a route). */
 type RoadAsk = { a: { id: string } | { login: string }; b: { id: string } | { login: string } };
@@ -89,20 +103,21 @@ function webglAvailable(): boolean {
  * The Atlas of Kingdoms: a survey preview of real Twitch channels drawn as draft land. One root element carries
  * `data-chatdom-atlas` and the state; the owning embed is notified when the first coherent frame is drawn. Without WebGL the same survey is drawn as a still.
  */
-export function mountScene(element: HTMLElement, options: AtlasMountOptions, ready: (state: AtlasReadyState) => void): SceneHandle {
+export function mountScene(element: HTMLElement, options: AtlasMountOptions, ready: (state: AtlasReadyState) => void, gateEmit: AtlasGateEmit = () => undefined): SceneHandle {
   let api!: Omit<SceneHandle, 'dispose'>;
-  const dispose = render(() => <AtlasScene options={options} ready={ready} attach={value => { api = value; }} />, element);
+  const dispose = render(() => <AtlasScene options={options} ready={ready} gateEmit={gateEmit} attach={value => { api = value; }} />, element);
   return { ...api, dispose };
 }
 
-function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReadyState): void; attach(api: Omit<SceneHandle, 'dispose'>): void }) {
+function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReadyState): void; gateEmit: AtlasGateEmit; attach(api: Omit<SceneHandle, 'dispose'>): void }) {
   // Bloom reads this for every live stain. Keep the query, while its matches value follows preference changes.
   const motionPreference = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
   const reduceMotion = () => motionPreference?.matches ?? false;
   const SOURCE: PreviewSource = { base: props.options.base ?? '/map-data', fetch: (input, init) => fetch(input, init) };
   const [mode, setMode] = createSignal(props.options.mode);
   const ownsUrl = props.options.routing === 'url' && props.options.mode === 'explore';
-  const [activated, setActivated] = createSignal(ownsUrl);
+  // The gate is the Raid Gate's own full surface: its map takes the wheel at once.
+  const [activated, setActivated] = createSignal(ownsUrl || props.options.mode === 'gate');
   const materialSound = new AtlasMaterialSound();
   const [muted, setMuted] = createSignal(false);
   const mute = () => { const next = !muted(); setMuted(next); materialSound.setMuted(next); if (!next) materialSound.play('press'); };
@@ -137,6 +152,10 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   let root: HTMLDivElement | undefined;
   let host: HTMLDivElement | undefined;
   let view: MapView | null = null;
+  /** Every remembered road, the chosen kingdom's roads, caravans and the gate's journey, on the map's own camera. */
+  let roadsLayer: AtlasRoadsLayer | null = null;
+  let networkTimer: ReturnType<typeof setTimeout> | undefined;
+  let networkRoads: InkRoad[] = [];
   let controller: AbortController | null = null;
   let store: SettlerStore | null = null;
   let namesTimer: ReturnType<typeof setTimeout> | undefined;
@@ -177,9 +196,11 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   const [waiting, setWaiting] = createSignal<ChannelFace | null>(null);
   const [waitingPosition, setWaitingPosition] = createSignal<PencilPosition | null>(null);
   const [waitingScreen, setWaitingScreen] = createSignal<PencilPosition | null>(null);
+  /** The gate's source when it has no holding to mark: its pencil place, flagged and named. */
+  const [gateSource, setGateSource] = createSignal<{ x: number; y: number; name: string } | null>(null);
   createEffect(() => {
-    const point = waitingPosition();
-    if (!point || !waiting() || !visible()) { setWaitingScreen(null); return; }
+    const point = waiting() ? waitingPosition() : gateSource();
+    if (!point || !visible()) { setWaitingScreen(null); return; }
     let frame: number;
     let projection: ReturnType<typeof stillView> | null = null;
     const update = () => {
@@ -195,7 +216,18 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     onCleanup(() => cancelAnimationFrame(frame));
   });
   /** The open road card and the ends it was asked for. */
-  const [road, setRoad] = createSignal<{ ask: RoadAsk; state: RegisterState<RoadReply> } | null>(null);
+  const [road, setRoad] = createSignal<{ ask: RoadAsk; state: RegisterState<RoadStory> } | null>(null);
+  /** The open card's roads from the road ledger, all drawn on the map while the card is open. */
+  const [channelRoads, setChannelRoads] = createSignal<{ id: string; state: RegisterState<ChannelRoads> } | null>(null);
+  let roadsController: AbortController | null = null;
+  /** Caravans riding now and roads drawn, for the page's evidence attributes. */
+  const [roadStats, setRoadStats] = createSignal<AtlasRoadsLayer['stats'] | null>(null);
+  // Gate mode: the source, its finder, a name search inside it, and the monarch's pick.
+  const [gateFrom, setGateFrom] = createSignal<string | null>(null);
+  const [finder, setFinder] = createSignal<FinderState>({ status: 'idle' });
+  const [finderSearch, setFinderSearch] = createSignal<FinderState>({ status: 'idle' });
+  const [picked, setPicked] = createSignal<string | null>(null);
+  const [gateRoads, setGateRoads] = createSignal<{ total: number; since: number } | null>(null);
   /** The open channel card's register entry (stream and roads). */
   const [register, setRegister] = createSignal<RegisterState<CardReply>>({ status: 'loading' });
   let registerController: AbortController | null = null;
@@ -214,6 +246,14 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   /** Space the page's own chrome takes from the map: the cartouche and key on a laptop, title and buttons on a phone. */
   const chromeInsets = (size: Viewport): Insets => {
     if (mode() === 'hero') return { left: 0, right: 0, top: 0, bottom: 0 };
+    if (mode() === 'gate') {
+      // The finder board stands on the right (a bottom sheet on a phone); the source and the pick stay clear of it.
+      if (!gateFrom()) return { left: 0, right: 0, top: 0, bottom: 0 };
+      const board = root?.querySelector('.atlas-finder')?.getBoundingClientRect();
+      const origin = root?.getBoundingClientRect();
+      if (size.width < PHONE_WIDTH) return { left: 0, right: 0, top: 0, bottom: board ? Math.max(0, Math.round(size.height - board.top + (origin?.top ?? 0))) : Math.round(size.height * 0.62) };
+      return { left: 0, right: board ? Math.max(0, Math.round(size.width - board.left + (origin?.left ?? 0))) : Math.round(Math.min(500, Math.max(330, size.width * 0.25)) + 32), top: 0, bottom: 0 };
+    }
     if (size.width < PHONE_WIDTH) {
       const cartouche = root?.querySelector('.atlas-cartouche')?.getBoundingClientRect();
       return { left: 0, right: 0, top: cartouche ? Math.round(cartouche.bottom - (root?.getBoundingClientRect().top ?? 0)) + 4 : 76, bottom: 60 };
@@ -258,10 +298,104 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       setWaiting(null);
       setWaitingPosition(null);
       setRoad(null);
+      setChannelRoads(null);
     });
+    roadsController?.abort();
+    roadsController = null;
     view?.select(null);
     view?.setRoad(null);
+    roadsLayer?.setFocus(null);
+    roadsLayer?.setChosen(null);
   };
+
+  /** How far the land spans, so a caravan's ride time follows its distance across the whole map. */
+  const worldSpan = () => {
+    const bounds = geo()?.bounds;
+    return bounds ? Math.hypot(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) : 1;
+  };
+
+  /** A new map gets its own roads layer, with the network, the open card's roads and the gate's journey drawn again. */
+  const attachRoads = (target: MapView) => {
+    dropRoads(target);
+    const layer = new AtlasRoadsLayer(target.resolution, Date.now, reduceMotion, worldSpan());
+    layer.setNetwork(networkRoads);
+    target.attachLayer(layer);
+    roadsLayer = layer;
+    const open = channelRoads();
+    if (open?.state.status === 'ready') focusRoads(open.state.reply);
+    const story = road();
+    if (story?.state.status === 'ready') chooseRoad(story.state.reply, false);
+    const journey = gateJourney;
+    if (journey) {
+      layer.setJourney(journey.way);
+      layer.journeyStage(journey.stage);
+    }
+    setRoadStats({ ...layer.stats });
+  };
+  /** Take the roads layer off a map before the map goes, so each is destroyed once. */
+  const dropRoads = (target: MapView | null) => {
+    target?.attachLayer(null);
+    roadsLayer?.dispose();
+    roadsLayer = null;
+  };
+
+  const inkOf = (road: BusyRoad): InkRoad => ({ a: road.a, b: road.b, pa: road.pa, pb: road.pb, ra: road.ra, rb: road.rb, raids: road.raids, travellers: road.travellers, lastAt: road.lastAt });
+
+  /** The busiest roads of the ledger, read with the map and again every few minutes; a failed read keeps what is drawn. */
+  const readNetwork = (worldId: string, signal: AbortSignal) => {
+    clearTimeout(networkTimer);
+    fetchBusiest(SOURCE, worldId, signal).then((reply) => {
+      if (signal.aborted) return;
+      networkRoads = reply.roads.map(inkOf);
+      roadsLayer?.setNetwork(networkRoads);
+    }, (error: unknown) => {
+      if (!signal.aborted && (error as Error).name !== 'AbortError') console.warn('Atlas roads could not be read', error);
+    }).finally(() => {
+      if (!signal.aborted) networkTimer = setTimeout(() => readNetwork(worldId, signal), NETWORK_REFRESH_MS);
+    });
+  };
+
+  /** Draw every road of the open card's channel over the network, from its place on the map. */
+  const focusRoads = (reply: ChannelRoads) => {
+    const here = reply.position;
+    if (!here) { roadsLayer?.setFocus(null); return; }
+    roadsLayer?.setFocus({
+      id: reply.channel.id,
+      roads: reply.roads.flatMap(entry => (entry.position ? [{
+        a: reply.channel.id, b: entry.other.id, pa: here, pb: entry.position, ra: reply.channel.region, rb: entry.other.region,
+        raids: entry.sent + entry.received, travellers: entry.travellers, lastAt: entry.lastAt,
+      }] : [])),
+    });
+  };
+
+  /** Read the road ledger's roads of the channel whose card is open. A late reply for another card is dropped. */
+  const readChannelRoads = (id: string) => {
+    if (channelRoads()?.id === id) return;
+    roadsController?.abort();
+    const controller = new AbortController();
+    roadsController = controller;
+    const generation = cardGeneration;
+    setChannelRoads({ id, state: { status: 'loading' } });
+    fetchChannelRoads(SOURCE, loaded()!.world.id, id, controller.signal).then((reply) => {
+      if (generation !== cardGeneration || controller.signal.aborted) return;
+      setChannelRoads({ id, state: { status: 'ready', reply } });
+      focusRoads(reply);
+    }, (error: unknown) => {
+      if (generation !== cardGeneration || (error as Error).name === 'AbortError') return;
+      // The register's own roads stay on the card; the map draws only the network.
+      setChannelRoads({ id, state: error instanceof DirectoryError && error.reason === 'not-found' ? { status: 'missing' } : { status: 'failed', reason: error instanceof DirectoryError ? error.reason : 'unavailable' } });
+    });
+  };
+
+  /** The open card's roads, from the ledger, once read; until then (or if it cannot be read) the register's own. */
+  const ledgerView = createMemo(() => {
+    const open = channelRoads();
+    const flag = selectedDab() ? register() : null;
+    const shown = selected()?.id ?? waiting()?.id ?? (flag?.status === 'ready' ? flag.reply.channel.id : null);
+    if (!open || open.state.status !== 'ready' || open.id !== shown) return null;
+    const reply = open.state.reply;
+    return <LedgerRoads reply={reply} onRoad={(entry) => openRoad({ a: { id: reply.channel.id }, b: { id: entry.other.id } })} />;
+  });
 
   const restoreFocus = () => {
     const target = opener && opener.isConnected ? opener : host;
@@ -309,9 +443,11 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     registerController = controller;
     const generation = cardGeneration;
     setRegister({ status: 'loading' });
+    if ('id' in lookup) readChannelRoads(lookup.id);
     fetchCard(SOURCE, loaded()!.world.id, lookup, controller.signal).then((reply) => {
       if (generation !== cardGeneration) return;
       setRegister({ status: 'ready', reply });
+      readChannelRoads(reply.channel.id);
       if (waiting()?.id === reply.channel.id && reply.position) {
         setWaitingPosition(reply.position);
         // A restored card keeps the saved camera; the flag is only kept clear of the card.
@@ -328,6 +464,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
 
   /** Choose a holding. `fly` (search, roads, routes) flies to the distance its mark is drawn at; a tap keeps the scale. */
   const choose = (settler: Settler | null, fly = false) => {
+    if (mode() === 'gate') { if (settler) gateTap(settler.id); return; }
     if (!settler) {
       // A tap on bare paper closes an open card, as its button does.
       if (anyOpen()) closeCard();
@@ -365,6 +502,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
 
   /** Choose a pencil flag and read its public register entry. */
   const chooseDab = (dab: Dab, fly = false, face?: ChannelFace) => {
+    if (mode() === 'gate') { gateTapDab(dab.hash); return; }
     clearCards();
     setSelectedDab(dab);
     setKeyOpen(false);
@@ -439,7 +577,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     return paint.dabs.some((dab) => dab.hash === hash);
   };
 
-  const roadUrl = (reply: RoadReply | null, ask: RoadAsk) => {
+  const roadUrl = (reply: { a: { login: string | null }; b: { login: string | null } } | null, ask: RoadAsk) => {
     const a = reply?.a.login ?? ('login' in ask.a ? ask.a.login : null);
     const b = reply?.b.login ?? ('login' in ask.b ? ask.b.login : null);
     return a && b ? formatRoute({ kind: 'road', a, b }) : '/map';
@@ -455,22 +593,36 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     const controller = new AbortController();
     registerController = controller;
     const generation = cardGeneration;
-    fetchRoad(SOURCE, loaded()!.world.id, ask.a, ask.b, controller.signal).then(async (reply) => {
+    fetchRoadStory(SOURCE, loaded()!.world.id, ask.a, ask.b, controller.signal).then((reply) => {
       if (generation !== cardGeneration) return;
       setRoad({ ask, state: { status: 'ready', reply } });
       if (history.isOpen) history.opened(id, view?.cameraState() ?? { x: 0, y: 0, scale: 1 }, roadUrl(reply, ask));
-      const [a, b] = await Promise.all([locate(reply.a), locate(reply.b)]);
-      if (generation !== cardGeneration) return;
-      const point = (place: Awaited<ReturnType<typeof locate>>) => (place ? ('settler' in place ? place.settler : place.dab) : null);
-      const pa = point(a);
-      const pb = point(b);
-      if (pa && pb) view?.setRoad({ ax: pa.x, ay: pa.y, bx: pb.x, by: pb.y }, true);
-      else if (pa ?? pb) view?.flyTo((pa ?? pb)!.x, (pa ?? pb)!.y, Math.max(view.cameraState().scale, DISTANCE_STOP.realm));
+      chooseRoad(reply, true);
     }, (error: unknown) => {
       if (generation !== cardGeneration || (error as Error).name === 'AbortError') return;
       setRoad({ ask, state: error instanceof DirectoryError && error.reason === 'not-found' ? { status: 'missing' } : { status: 'failed', reason: error instanceof DirectoryError ? error.reason : 'unavailable' } });
     });
   };
+
+  /**
+   * Ink a road card's road over the others and frame both ends. A road with no witnessed raid is only framed: the
+   * Atlas never draws a road it has not seen. An end without land stands at that channel's pencil place.
+   */
+  function chooseRoad(reply: RoadStory, frame: boolean): void {
+    const { pa, pb } = reply;
+    const raids = (reply.aToB?.raids ?? 0) + (reply.bToA?.raids ?? 0);
+    if (pa && pb && reply.basis !== 'none' && raids > 0 && reply.lastAt !== null && roadsLayer) {
+      roadsLayer.setChosen({
+        a: reply.a.id, b: reply.b.id, pa, pb, ra: reply.a.region, rb: reply.b.region, raids,
+        travellers: (reply.aToB?.travellers ?? 0) + (reply.bToA?.travellers ?? 0), lastAt: reply.lastAt,
+      });
+    } else {
+      roadsLayer?.setChosen(null);
+    }
+    if (!frame || !view) return;
+    if (pa && pb) view.frameRoad({ ax: pa.x, ay: pa.y, bx: pb.x, by: pb.y });
+    else if (pa ?? pb) view.flyTo((pa ?? pb)!.x, (pa ?? pb)!.y, Math.max(view.cameraState().scale, DISTANCE_STOP.realm));
+  }
 
   const openCardRoad = (from: ChannelFace | Settler, road: CardRoad) => openRoad({ a: { id: from.id }, b: { id: road.other.id } });
 
@@ -508,7 +660,10 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     }
     if (route.kind === 'road') return openRoad({ a: { login: route.a }, b: { login: route.b } });
     if (route.kind === 'line') return drop('Train lines are drawn once raid trains are surveyed; until then the map opens at its usual view.');
-    if (route.kind === 'season') return drop('Seasons begin with the first founded edition; until then the map opens at its usual view.');
+    if (route.kind === 'season') {
+      const shown = loaded()?.world;
+      return drop(shown?.status === 'edition' ? 'Seasons are not drawn on the map yet, so it opens at its usual view.' : 'Seasons begin with the first founded edition; until then the map opens at its usual view.');
+    }
     drop('That address is not a place on this map, so it opens at its usual view.');
   };
 
@@ -618,7 +773,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       }
       setLive({ status, holdings: livePaint.liveCount, dabs: livePaint.dabs.length });
       if (frame || status.refused || status.source) settled();
-    });
+    }, { onRaid: (raid) => { if (feed === liveFeed) rideCaravan(raid); } });
     feed = liveFeed;
     paint = livePaint;
     view?.setLive(livePaint);
@@ -630,7 +785,49 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       held = liveFeed.current() && status.freshness !== 'fresh' ? liveFeed.current()!.asOf : null;
       setLive({ status, holdings: livePaint.liveCount, dabs: livePaint.dabs.length });
       if (view) setDrawnLive(view.liveDrawn());
+      if (roadsLayer) setRoadStats({ ...roadsLayer.stats });
     }, 5_000);
+  };
+
+  /** Raids that have ridden on this page: a caravan rides once, through a redrawn map and whatever the stream repeats. */
+  const riddenRaids = new Set<string>();
+  /** A gate waiting for the caravan of the raid its party set out on. */
+  let pendingFollow: { raid: AtlasRaid; until: number; signal: AbortSignal } | null = null;
+
+  /** Where a channel stands on this map now: the event's own place, its holding, or its pencil flag while live. */
+  const placeOf = (face: ChannelFace, given: MapPoint | null): MapPoint | null => {
+    if (given) return given;
+    const settler = store?.byId.get(face.id);
+    if (settler && !settler.withheld) return { x: settler.x, y: settler.y };
+    const hash = dabHashOf(face.id);
+    const dab = paint?.dabs.find((candidate) => candidate.hash === hash && candidate.placed);
+    return dab ? { x: dab.x, y: dab.y } : null;
+  };
+
+  /**
+   * A fresh raid from the public stream rides once as the caravan, with its source's banner and its travellers. The
+   * stream never repeats an old raid to a new page, so nothing is replayed after a reload.
+   */
+  const rideCaravan = (raid: CaravanRaid) => {
+    if (riddenRaids.has(raid.id) || !roadsLayer) return;
+    const pa = placeOf(raid.a, raid.pa);
+    const pb = placeOf(raid.b, raid.pb);
+    if (!pa || !pb) return;
+    riddenRaids.add(raid.id);
+    roadsLayer.ride({ id: raid.id, from: raid.from, to: raid.to, viewers: raid.viewers, at: raid.at, pa, pb, ra: raid.ra, rb: raid.rb });
+    setRoadStats({ ...roadsLayer.stats });
+    if (pendingFollow && !pendingFollow.signal.aborted && Date.now() <= pendingFollow.until) {
+      if (followCaravan(pendingFollow.raid)) pendingFollow = null;
+    }
+  };
+
+  /** Keep a witnessed raid's caravan in front and frame its road. False while the stream has not announced it. */
+  const followCaravan = (raid: AtlasRaid): boolean => {
+    const caravan = roadsLayer?.caravanFor({ id: raid.id, from: raid.fromKingdomId, to: raid.toKingdomId, at: raid.observedAt });
+    if (!caravan || !roadsLayer) return false;
+    roadsLayer.follow(caravan.id);
+    view?.frameRoad({ ax: caravan.pa.x, ay: caravan.pa.y, bx: caravan.pb.x, by: caravan.pb.y }, DISTANCE_STOP.realm);
+    return true;
   };
 
   async function start(): Promise<void> {
@@ -678,8 +875,8 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         // the still still covers it.
         if (resumed) view?.setCamera(resumed.camera);
         if (route) void applyRoute(route.route, route.adopted);
-        else if (resumed?.selected && mode() !== 'hero') void openSaved(resumed.selected, signal);
-        else if (!resumed && props.options.focus) void flyTo(props.options.focus, { openCard: mode() !== 'hero' });
+        else if (resumed?.selected && mode() === 'explore') void openSaved(resumed.selected, signal);
+        else if (!resumed && props.options.focus) void flyTo(props.options.focus, { openCard: mode() === 'explore' });
       };
       void readNames(holdings, world.id, signal).then(() => {
         namesSettled = true;
@@ -690,8 +887,11 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         liveSettled = true;
         reveal();
       };
+      dropRoads(view);
       view?.dispose();
       view = null;
+      networkRoads = [];
+      readNetwork(world.id, signal);
       loadChunk = async (region) => {
         holdings.addChunk(await fetchChunk(SOURCE, world, region, signal));
         paint?.regionLoaded(region);
@@ -743,6 +943,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       const mounted = await mountAtlasWithRetry(() => mount(resumed?.camera ?? null), error => console.error('Atlas renderer could not mount', error));
       if (signal.aborted) { mounted?.dispose(); return; }
       view = mounted;
+      if (view) attachRoads(view);
       view?.setPaused(!inViewport || document.hidden);
       if (!view) {
         if (signal.aborted) return;
@@ -764,6 +965,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       rebuild = async (camera) => {
         const old = view;
         view = null;
+        dropRoads(old);
         old?.dispose();
         let next: MapView;
         try {
@@ -780,14 +982,13 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         }
         if (signal.aborted) return next.dispose();
         view = next;
+        attachRoads(next);
         next.setPaused(!inViewport || document.hidden);
         if (paint) next.setLive(paint);
         // Read after the wait: Back may have closed the card meanwhile.
         const chosen = selected();
         next.select(chosen);
         if (anyOpen()) next.setCardInsets(cardInsets(root?.querySelector('.atlas-card') ?? null));
-        const inked = road();
-        if (inked?.state.status === 'ready') void openRoad(inked.ask);
         setContext('ok');
       };
       liveWait = setTimeout(liveIn, LIVE_WAIT_MS);
@@ -805,7 +1006,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
 
   const noticeNewer = (preview: LoadedPreview) => {
     if (!preview.newer) return;
-    setNotice({ text: `A newer survey is ready (observed to ${formatMoment(preview.newer.asOf)}).`, action: { label: 'Open it', run: adoptNewer } });
+    setNotice({ text: newerNotice(preview.world, preview.newer), action: { label: 'Open it', run: adoptNewer } });
   };
 
   const pause = () => {
@@ -840,7 +1041,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     if (!saved) return false;
     const signal = hostRequests.begin(controller.signal, options?.signal);
     view?.setCamera(saved.camera);
-    if (mode() === 'hero') return true;
+    if (mode() !== 'explore') return true;
     if (!saved.selected) {
       if (anyOpen()) closeCard();
       return true;
@@ -855,7 +1056,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     try {
       const reply = await fetchCard(SOURCE, loaded()!.world.id, 'login' in target ? { login: target.login } : { id: target.channelId }, signal);
       if (signal.aborted || disposed) return false;
-      if (options?.openCard !== false && mode() !== 'hero') {
+      if (options?.openCard !== false && mode() === 'explore') {
         // A card the person opened or closed while the register answered stays as they left it.
         if (cards !== cardGeneration) return false;
         if (!await openFace(reply.channel, reply.position, true, signal)) return false;
@@ -881,7 +1082,213 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       });
     } catch { return false; }
   };
-  props.attach({ view: currentView, flyTo, restore, setMode: next => {
+
+  // ---- Gate mode (Raid Gate SEAMS §2): the finder, the pick, the journey and the witnessed caravan. Presentation only.
+  let gateController: AbortController | null = null;
+  let searchController: AbortController | null = null;
+  let followTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The way the gate is presenting: drawn again on a rebuilt map at the stage it had reached. */
+  let gateJourney: { way: { from: string; to: string; pa: MapPoint; pb: MapPoint; ra: number | null; rb: number | null }; stage: JourneyStage } | null = null;
+
+  const finderEntries = (): FinderEntry[] => {
+    const all: FinderEntry[] = [];
+    for (const state of [finder(), finderSearch()]) if (state.status === 'ready') for (const group of state.reply.groups) all.push(...group.entries);
+    return all;
+  };
+  const finderFrom = (): FinderReply['from'] | null => {
+    const state = finder();
+    return state.status === 'ready' ? state.reply.from : null;
+  };
+
+  /** The channel as raid-show's contract carries it. The Atlas knows no founded kingdom or classification yet. */
+  const gateChannel = (face: ChannelFace, language: string | null): AtlasChannel | null => {
+    const parsed = AtlasChannelSchema.safeParse({
+      kingdomId: face.id, login: face.login, displayName: face.name, language: language && language.length > 0 ? language.slice(0, 16) : 'other',
+      founded: false, kingdomName: null, contentClassification: 'unknown',
+    });
+    return parsed.success ? parsed.data : null;
+  };
+
+  const setWay = (way: NonNullable<typeof gateJourney>['way'] | null, stage: JourneyStage = 'pencil') => {
+    gateJourney = way ? { way, stage } : null;
+    roadsLayer?.setJourney(way);
+    if (way) roadsLayer?.journeyStage(stage);
+  };
+  const wayTo = (entry: FinderEntry): NonNullable<typeof gateJourney>['way'] | null => {
+    const from = finderFrom();
+    const pa = from ? placeOf(from.channel, from.position) : null;
+    const pb = placeOf(entry.channel, entry.position);
+    return from && pa && pb ? { from: from.channel.id, to: entry.channel.id, pa, pb, ra: from.channel.region, rb: entry.channel.region } : null;
+  };
+
+  /** The monarch chose a live channel on the board or the map: tell the Raid Gate, pencil the way and frame it. */
+  const gatePick = (entry: FinderEntry) => {
+    if (!selectable(entry) || !gateFrom()) return;
+    const channel = gateChannel(entry.channel, entry.language);
+    if (!channel) return;
+    if (visible()) materialSound.play('wax');
+    setPicked(entry.channel.id);
+    const way = wayTo(entry);
+    setWay(way);
+    if (way && view) view.frameRoad({ ax: way.pa.x, ay: way.pa.y, bx: way.pb.x, by: way.pb.y }, DISTANCE_STOP.realm);
+    const settler = store?.byId.get(entry.channel.id);
+    view?.select(settler && !settler.withheld ? settler : null);
+    props.gateEmit({ kind: 'target', channel, land: entry.land });
+  };
+  /** Hovering a row pencils the way to it until something is picked. */
+  const gatePreview = (entry: FinderEntry | null) => {
+    if (picked()) return;
+    setWay(entry ? wayTo(entry) : null);
+  };
+  /** A tap on the map picks a live channel the board proposes or found; anything else on the map is only land. */
+  const gateTap = (id: string) => {
+    const entry = finderEntries().find(candidate => candidate.channel.id === id);
+    if (entry && selectable(entry)) gatePick(entry);
+  };
+  const gateTapDab = (hash: string) => {
+    const entry = finderEntries().find(candidate => dabHashOf(candidate.channel.id) === hash);
+    if (entry && selectable(entry)) gatePick(entry);
+  };
+
+  const readFinder = (from: string, signal: AbortSignal) => {
+    setFinder({ status: 'loading' });
+    fetchFinder(SOURCE, loaded()!.world.id, from, null, signal).then((reply) => {
+      if (signal.aborted) return;
+      setFinder({ status: 'ready', reply });
+      const source = placeOf(reply.from.channel, reply.from.position);
+      const settler = store?.byId.get(from);
+      const held = settler && !settler.withheld ? settler : null;
+      view?.select(held);
+      setGateSource(!held && source ? { ...source, name: faceName(reply.from.channel) } : null);
+      if (source && view && !picked()) view.flyTo(source.x, source.y, Math.max(view.cameraState().scale, DISTANCE_STOP.continent));
+    }, (error: unknown) => {
+      if (signal.aborted || (error as Error).name === 'AbortError') return;
+      setFinder({ status: 'failed', reason: error instanceof DirectoryError ? error.reason : 'unavailable' });
+    });
+    // The source's own roads are drawn while the board is open: the first proposals run along them.
+    fetchChannelRoads(SOURCE, loaded()!.world.id, from, signal).then((reply) => {
+      if (signal.aborted) return;
+      setGateRoads({ total: reply.total, since: reply.since });
+      focusRoads(reply);
+    }, () => undefined);
+  };
+
+  const gateSearch = (query: string) => {
+    searchController?.abort();
+    const from = gateFrom();
+    if (!query || !from || !gateController) { setFinderSearch({ status: 'idle' }); return; }
+    const controller = new AbortController();
+    searchController = controller;
+    const signal = AbortSignal.any([controller.signal, gateController.signal]);
+    setFinderSearch({ status: 'loading' });
+    fetchFinder(SOURCE, loaded()!.world.id, from, query, signal).then((reply) => {
+      if (!signal.aborted) setFinderSearch({ status: 'ready', reply });
+    }, (error: unknown) => {
+      if (signal.aborted || (error as Error).name === 'AbortError') return;
+      setFinderSearch({ status: 'failed', reason: error instanceof DirectoryError ? error.reason : 'unavailable' });
+    });
+  };
+
+  /** Fold the board away: the map keeps standing where it is, with only the network drawn. */
+  const closeGateBoard = () => {
+    gateController?.abort();
+    gateController = null;
+    searchController?.abort();
+    searchController = null;
+    clearTimeout(followTimer);
+    pendingFollow = null;
+    batch(() => {
+      setGateFrom(null);
+      setFinder({ status: 'idle' });
+      setFinderSearch({ status: 'idle' });
+      setPicked(null);
+      setGateRoads(null);
+      setGateSource(null);
+    });
+    setWay(null);
+    roadsLayer?.setFocus(null);
+    roadsLayer?.follow(null);
+    view?.select(null);
+  };
+
+  /** Find a channel's place for a journey the gate names by ID (a reload mid-journey has no board to read it from). */
+  const placeById = async (id: string, signal: AbortSignal): Promise<{ face: ChannelFace; point: MapPoint } | null> => {
+    const known = finderEntries().find(entry => entry.channel.id === id) ?? null;
+    const from = finderFrom();
+    if (known) { const point = placeOf(known.channel, known.position); if (point) return { face: known.channel, point }; }
+    if (from?.channel.id === id) { const point = placeOf(from.channel, from.position); if (point) return { face: from.channel, point }; }
+    try {
+      const reply = await fetchCard(SOURCE, loaded()!.world.id, { id }, signal);
+      const point = placeOf(reply.channel, reply.position ?? null);
+      return point ? { face: reply.channel, point } : null;
+    } catch { return null; }
+  };
+
+  const STAGE: Record<AtlasTravelStage['kind'], JourneyStage> = { rise: 'rise', road: 'road', drawing: 'drawing', arrived: 'arrived', back: 'back' };
+  let travelTurn = 0;
+  const travel = async (stage: AtlasTravelStage, signal: AbortSignal) => {
+    const turn = ++travelTurn;
+    const [a, b] = stage.kind === 'back' ? [stage.to, stage.from] : [stage.from, stage.to];
+    let way = gateJourney?.way ?? null;
+    if (!way || !((way.from === a && way.to === b) || (way.from === b && way.to === a))) {
+      const [pa, pb] = await Promise.all([placeById(a, signal), placeById(b, signal)]);
+      if (signal.aborted || disposed || turn !== travelTurn || !pa || !pb) return;
+      way = { from: a, to: b, pa: pa.point, pb: pb.point, ra: pa.face.region, rb: pb.face.region };
+      setWay(way);
+    }
+    gateJourney = { way, stage: STAGE[stage.kind] };
+    roadsLayer?.journeyStage(STAGE[stage.kind]);
+    if (!view) return;
+    const source = way.from === stage.from ? way.pa : way.pb;
+    const destination = way.from === stage.from ? way.pb : way.pa;
+    const ends = { ax: way.pa.x, ay: way.pa.y, bx: way.pb.x, by: way.pb.y };
+    // The camera rises from the source, opens out over the road while it is drawn, then comes down at the gate.
+    if (stage.kind === 'rise') view.flyTo(source.x, source.y, DISTANCE_STOP.continent);
+    else if (stage.kind === 'road' || stage.kind === 'back') view.frameRoad(ends, DISTANCE_STOP.realm);
+    else view.flyTo(destination.x, destination.y, Math.max(DISTANCE_STOP.realm, Math.min(view.cameraState().scale * 2.2, DISTANCE_STOP.kingdom)));
+  };
+
+  const gate: AtlasSceneGate = {
+    open: (from: KingdomId, signal: AbortSignal) => {
+      if (disposed || signal.aborted || !loaded()) return;
+      closeGateBoard();
+      const controller = new AbortController();
+      gateController = controller;
+      // The host's signal ends this opening only: the host asked, so the board folds without saying it closed.
+      signal.addEventListener('abort', () => { if (gateController === controller) closeGateBoard(); }, { once: true });
+      setGateFrom(from);
+      readFinder(from, controller.signal);
+    },
+    close: () => closeGateBoard(),
+    resolve: async (kingdomId: KingdomId, signal: AbortSignal) => {
+      if (disposed || !loaded()) return null;
+      const known = finderEntries().find(entry => entry.channel.id === kingdomId);
+      if (known) { const channel = gateChannel(known.channel, known.language); return channel ? { channel, land: known.land } : null; }
+      try {
+        const reply = await fetchCard(SOURCE, loaded()!.world.id, { id: kingdomId }, signal);
+        const channel = gateChannel(reply.channel, reply.language);
+        if (!channel) return null;
+        return { channel, land: reply.channel.place === 'unseen' || !placeOf(reply.channel, reply.position ?? null) ? 'edge' as const : 'waiting' as const };
+      } catch { return null; }
+    },
+    follow: (raid: AtlasRaid, signal: AbortSignal) => {
+      if (disposed || signal.aborted) return;
+      clearTimeout(followTimer);
+      pendingFollow = null;
+      const release = () => { clearTimeout(followTimer); pendingFollow = null; roadsLayer?.follow(null); };
+      signal.addEventListener('abort', release, { once: true });
+      if (followCaravan(raid)) return;
+      // The stream may announce the raid a moment after the authority saw it: wait for its caravan a while.
+      pendingFollow = { raid, until: Date.now() + FOLLOW_WAIT_MS, signal };
+      followTimer = setTimeout(() => { if (pendingFollow?.raid === raid) pendingFollow = null; }, FOLLOW_WAIT_MS);
+    },
+    travel: (stage: AtlasTravelStage, signal: AbortSignal) => {
+      if (disposed || signal.aborted || !loaded()) return;
+      void travel(stage, signal);
+    },
+  };
+
+  props.attach({ view: currentView, flyTo, restore, gate, setMode: next => {
     if (disposed) return;
     if (next === 'hero') { clearCards(); setKeyOpen(false); setActivated(false); }
     setMode(next);
@@ -940,6 +1347,10 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     rebuild = null;
     controller?.abort();
     for (const finish of pendingFlights) finish();
+    clearTimeout(networkTimer);
+    roadsController?.abort();
+    gateController?.abort();
+    dropRoads(view);
     view?.dispose();
     view = null;
   });
@@ -980,6 +1391,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       data-state={state()}
       data-preview={world()?.id}
       data-revision={world()?.revision}
+      data-edition={world()?.status === 'edition' ? world()!.label : undefined}
       data-as-of={asOf()}
       data-distance={distance()}
       data-layout={phone() ? 'phone' : 'laptop'}
@@ -991,6 +1403,12 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       data-live-holdings={live()?.holdings}
       data-live-dabs={live()?.dabs}
       data-live-drawn={drawnLive() ? `${drawnLive()!.washes}:${drawnLive()!.pennants.join(',')}` : undefined}
+      data-roads={roadStats() ? `${roadStats()!.network}:${roadStats()!.dotted}:${roadStats()!.sea}` : undefined}
+      data-roads-focus={roadStats()?.focus}
+      data-caravans={roadStats()?.caravans}
+      data-gate-from={gateFrom() ?? undefined}
+      data-gate-picked={picked() ?? undefined}
+      data-gate-finder={mode() === 'gate' ? finder().status : undefined}
     >
       <div
         ref={element => (host = element)}
@@ -1032,17 +1450,23 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
           <ellipse cx="12" cy="48" rx="5" ry="2" fill="none" stroke="currentColor" stroke-width="1" opacity=".5" />
         </svg>
       )}</Show>
+      <Show when={!waiting() && waitingScreen() && gateSource() ? waitingScreen() : null}>{(point) => (
+        <span class="atlas-gate-source" dir="auto" style={{ left: `${point().x + 12}px`, top: `${point().y - 30}px` }}>{gateSource()!.name}</span>
+      )}</Show>
 
       <Show when={mode() !== 'hero' && world() ? world() : null}>
         {(w) => (
           <>
-            <Cartouche world={w()} seal={<SurveySeal world={w()} summary={live()} still={state() === 'still'} />}>
-              <Show when={drawn()}>
-                <Search keyboardRoot={root!} source={SOURCE} world={w()} onAir={onAirResult} onChoose={openSearchResult} />
-              </Show>
-            </Cartouche>
+            <Show when={mode() === 'explore'}>
+              <Cartouche world={w()} seal={<SurveySeal world={w()} summary={live()} still={state() === 'still'} />}>
+                <Show when={drawn()}>
+                  <Search keyboardRoot={root!} source={SOURCE} world={w()} onAir={onAirResult} onChoose={openSearchResult} />
+                </Show>
+              </Cartouche>
+            </Show>
             <Show when={!phone()}><Compass size={92} /></Show>
             <Show when={phone()}><Compass size={46} /></Show>
+            <Show when={mode() === 'explore'}>
             <aside class="atlas-key" data-atlas-chrome="key" data-open={keyOpen() ? 'true' : 'false'} aria-label="Key">
               <button type="button" class="atlas-key-toggle" aria-expanded={!phone() || keyOpen()} aria-controls={keyBodyId} on:click={() => setKeyOpen(!keyOpen())}>
                 Key
@@ -1050,6 +1474,21 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
               </button>
               <div class="atlas-key-body" id={keyBodyId}><LegendBody world={w()} /></div>
             </aside>
+            </Show>
+            <Show when={mode() === 'gate' && gateFrom()}>
+              <FinderBoard
+                state={finder()}
+                search={finderSearch()}
+                picked={picked()}
+                onSearch={gateSearch}
+                onPick={gatePick}
+                onPreview={gatePreview}
+                onClose={() => { closeGateBoard(); props.gateEmit({ kind: 'closed' }); }}
+                onRetry={() => { const from = gateFrom(); if (from && gateController) readFinder(from, gateController.signal); }}
+                sourceRoads={gateRoads()}
+              />
+            </Show>
+            <Show when={mode() === 'explore'}>
             <div class="atlas-bottom" data-atlas-chrome="navigation">
               <ScaleBar scale={scale()} distance={distance()} />
               <Show when={state() !== 'still'}>
@@ -1067,6 +1506,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /><Show when={muted()} fallback={<path d="M16 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14" />}><path d="m17 9 5 6m0-6-5 6" /></Show></svg>
               </button>
             </div>
+            </Show>
             <Show when={mode() === 'explore' ? props.options.slots?.footer : null} keyed>{mount => <FooterSlot mount={mount} />}</Show>
             <Show when={context() === 'lost'}>
               <p class="atlas-redraw" role="status">Redrawing the map…</p>
@@ -1083,6 +1523,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                   register={register()}
                   onClose={closeCard}
                   onRoad={(next) => openCardRoad(settler, next)}
+                  ledger={ledgerView}
                   onRetry={() => readRegister({ id: settler.id }, settler.id)}
                   onEnter={enter}
                 />
@@ -1108,6 +1549,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                       onClose={closeCard}
                       onEnter={enter}
                       onRoad={(next) => openCardRoad(known.reply.channel, next)}
+                      ledger={ledgerView}
                       onRetry={() => readRegister({ dab: dab.hash }, `dab:${dab.hash}`)}
                     />
                   )}
@@ -1125,17 +1567,18 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                   onClose={closeCard}
                   onEnter={enter}
                   onRoad={(next) => openCardRoad(face, next)}
+                  ledger={ledgerView}
                   onRetry={() => readRegister({ id: face.id }, `waiting:${face.id}`)}
                 />
               )}
             </Show>
             <Show when={road()}>
               {(current) => (
-                <RoadCard
+                <RoadStoryCard
                   state={current().state}
                   world={w()}
                   onClose={closeCard}
-                  onOpen={(face) => void openFace(face)}
+                  onFollow={(face) => void openFace(face)}
                   onRetry={() => openRoad(current().ask)}
                 />
               )}
@@ -1179,7 +1622,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                 </Match>
                 <Match when={state() === 'invalid'}>
                   <h1 class="atlas-veil-title">This copy failed its seal</h1>
-                  <p class="atlas-veil-text">The survey files did not match the hashes they were published with, so nothing was drawn from them.</p>
+                  <p class="atlas-veil-text">The map files did not match the hashes they were published with, so nothing was drawn from them.</p>
                 </Match>
                 <Match when={state() === 'unsupported'}>
                   <h1 class="atlas-veil-title">This browser cannot draw the map</h1>

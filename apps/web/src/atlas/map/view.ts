@@ -7,7 +7,7 @@ import stampSheetUrl from '../assets/stamps.webp?url';
 import stampSheet from '../assets/stamps.json';
 import { Camera, DISTANCE_STOP, distanceFor, NO_INSETS, type Distance, type Insets, type Viewport } from './camera';
 import { Gestures } from './gestures';
-import { centreForFocus, easeOut, focusOf, freeWidth, insideFree, planAnchoredZoom, planFlight, type CameraState, type Flight } from './motion';
+import { centreForFocus, easeOut, focusOf, freeWidth, HERO_DRIFT_STEP_PX, heroDrift, insideFree, planAnchoredZoom, planFlight, screenShift, type CameraState, type Flight } from './motion';
 import { markedTiers, Overlay } from './overlay';
 import type { Stamp } from './paint';
 import { pyramidFor } from './pyramid';
@@ -63,7 +63,12 @@ export interface MapStats {
 }
 
 const stamps = (stampSheet as { stamps: Stamp[] }).stamps;
-const reduceMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** One live query for the page, read every frame; its `matches` follows the preference without a listener. */
+let motionQuery: MediaQueryList | null | undefined;
+const reduceMotion = (): boolean => {
+  if (motionQuery === undefined) motionQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+  return motionQuery?.matches ?? false;
+};
 /** How long a lost context may take to come back before the map is rebuilt from its saved view. */
 const CONTEXT_GRACE_MS = 2_500;
 /** A selected mark keeps this much paper between it and the card, the sheet or the screen's edge. */
@@ -154,6 +159,9 @@ export class MapView {
   private heroElapsed = 0;
   private heroComposedLive = false;
   private heroLastFrame = 0;
+  /** The drift camera last placed, and the base it drifted from. */
+  private heroDrawn: { base: CameraState; at: CameraState } | null = null;
+  private livePlacing: boolean | null = null;
   private paused = false;
   private pausedAt: number | null = null;
   private readonly captured = new Set<number>();
@@ -358,13 +366,12 @@ export class MapView {
     }
     if (this.heroLastFrame) this.heroElapsed += Math.min(64, Math.max(0, now - this.heroLastFrame));
     this.heroLastFrame = now;
-    const t = this.heroElapsed / 1_000;
-    const base = this.heroBase;
-    this.place({
-      x: base.x + Math.sin(t / 120) * 36 / base.scale,
-      y: base.y + Math.sin(t / 170) * 22 / base.scale,
-      scale: base.scale * (1 + Math.sin(t / 210) * 0.018),
-    });
+    const next = heroDrift(this.heroBase, this.heroElapsed / 1_000);
+    // A new base (composed, flown or resized) is drawn at once; after that only a step someone could see.
+    const drawn = this.heroDrawn;
+    if (drawn && drawn.base === this.heroBase && screenShift(drawn.at, next, this.view, this.pixelRatio) < HERO_DRIFT_STEP_PX) return false;
+    this.heroDrawn = { base: this.heroBase, at: next };
+    this.place(next);
     return true;
   }
 
@@ -452,16 +459,28 @@ export class MapView {
     this.road = road;
     this.dirty = true;
     if (!road || !frame) return;
+    this.frameRoad(road);
+  }
+
+  /**
+   * Fly so both ends of a road sit in the free area with room around them, no closer than kingdom distance (`limit`
+   * caps it nearer still); a road whose ends are far apart opens out to show them both. Draws nothing itself.
+   */
+  frameRoad(road: { ax: number; ay: number; bx: number; by: number }, limit: number = DISTANCE_STOP.kingdom): void {
     const insets = this.insets();
     const width = Math.max(120, this.view.width - insets.left - insets.right);
     const height = Math.max(120, this.view.height - insets.top - insets.bottom);
     const dx = Math.abs(road.bx - road.ax);
     const dy = Math.abs(road.by - road.ay);
     const fit = Math.min(width / Math.max(1e-6, dx * 1.6), height / Math.max(1e-6, dy * 1.6));
-    this.flyTo((road.ax + road.bx) / 2, (road.ay + road.by) / 2, Math.min(DISTANCE_STOP.kingdom, fit));
+    this.flyTo((road.ax + road.bx) / 2, (road.ay + road.by) / 2, Math.min(limit, fit));
   }
 
-  /** Lay the live layer over the land (or take it away). Its frames redraw the map through its version. */
+  /** The canvas resolution the map draws at, for layers that letter their own text. */
+  get resolution(): number {
+    return this.pixelRatio;
+  }
+
   /**
    * Draw a presentation with the map's own camera: its `under` part between the land and the holdings' marks, its
    * `over` part above every mark and name. One layer at a time; null removes it.
@@ -618,14 +637,21 @@ export class MapView {
     const live = this.live;
     if (live) {
       // Pencil places are found a few milliseconds per frame, the regions in view first, and never while moving.
-      if ((!moving || this.hero) && !this.gestures.touching) live.work(6, this.visibleRegions());
+      if ((!moving || this.hero) && !this.gestures.touching) {
+        // Checks wait for this before they measure the settled map; it is written only when it changes.
+        const placing = live.work(6, this.visibleRegions());
+        if (placing !== this.livePlacing) {
+          this.livePlacing = placing;
+          this.host.dataset.atlasLiveWork = placing ? 'placing' : 'done';
+        }
+      }
       if (live.version !== this.liveVersion) {
         this.liveVersion = live.version;
         this.dirty = true;
       }
       if (now >= this.liveDue) this.dirty = true;
     }
-    if (this.layer?.animating) this.dirty = true;
+    if (this.layer?.animating || this.wash.pending) this.dirty = true;
     if (!moving && !this.dirty && this.tiles.complete && !this.overlay.animating) return;
     this.dirty = false;
     this.draw(now);
@@ -652,6 +678,7 @@ export class MapView {
       this.liveDue = Number.isFinite(next) ? now + next : Infinity;
     } else {
       this.wash.sprite.visible = false;
+      this.wash.pending = false;
       this.liveDue = Infinity;
     }
     this.requestChunks();
@@ -994,6 +1021,7 @@ export class MapView {
     this.backgroundCancel = null;
     this.resetInput();
     this.observer.disconnect();
+    delete this.host.dataset.atlasLiveWork;
     for (const undo of this.cleanup) undo();
     this.farm.dispose();
     this.tiles.dispose();

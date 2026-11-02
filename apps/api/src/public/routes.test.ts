@@ -83,6 +83,16 @@ describe('the public origin route table', () => {
     expect(classify('/map/road/tobi4s_/mashad4', '')).toEqual({ kind: 'page' });
   });
 
+  it('publishes the road ledger and the gate finder, and nothing beside them', () => {
+    const preview = 'pv-20261101T120000Z-aaaaaaaaaaaa';
+    for (const path of [`roads/${preview}/channel/123`, `roads/${preview}/road/123/456`, `roads/${preview}/road/login/tobi4s_/mashad4`,
+      `roads/${preview}/busiest`, `gate/${preview}/finder`]) expect(classify(`/map-data/v1/${path}`, '?from=123&q=willow')).toEqual({ kind: 'optional', service: 'map' });
+    for (const path of [`roads/${preview}/channel/0`, `roads/${preview}/channel/123/private`, `roads/${preview}/road/123`, `roads/${preview}`,
+      `roads/pv-x/busiest`, `gate/${preview}`, `gate/${preview}/finder/private`, 'roads/observe', `roads/${preview}/observe`])
+      expect(classify(`/map-data/v1/${path}`, '')).toEqual({ kind: 'not-found', api: true });
+    expect(classify('/v1/roads/observe', '')).not.toEqual({ kind: 'optional', service: 'map' });
+  });
+
   it('refuses nested service doors and any encoded path before it can reach an upstream decoder', () => {
     for (const prefix of ['/live-realm-data', '/presence-data', '/forge-data', '/map-data']) {
       for (const suffix of ['', '/', '/internal', '/internal/realm/ingress', '/internal/realm/herald',

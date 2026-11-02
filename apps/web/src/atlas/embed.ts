@@ -1,4 +1,6 @@
-import type { AtlasGateHost } from '../raid-gate/ports';
+import type { AtlasGateEvent, AtlasGateHost, AtlasTravelStage, GateLand } from '../raid-gate/ports';
+import type { AtlasChannel } from '@chatdom/shared';
+import type { AtlasRaid, KingdomId } from '../../../api/src/raid-gate/contracts';
 
 export type AtlasMode = 'hero' | 'explore' | 'gate';
 export type AtlasTarget = { login: string } | { channelId: string };
@@ -36,18 +38,99 @@ export interface AtlasHandle {
   dispose(): void;
 }
 
+/** The scene's half of gate mode. The embed's bridge owns listeners and queues calls until the map is up. */
+export interface AtlasSceneGate {
+  open(from: KingdomId, signal: AbortSignal): void;
+  close(): void;
+  resolve(kingdomId: KingdomId, signal: AbortSignal): Promise<Readonly<{ channel: AtlasChannel; land: GateLand }> | null>;
+  follow(raid: AtlasRaid, signal: AbortSignal): void;
+  travel(stage: AtlasTravelStage, signal: AbortSignal): void;
+}
+
 /** Internal scene boundary. This module deliberately has no runtime imports. */
 export interface AtlasScene {
   view(): AtlasView;
   flyTo: AtlasHandle['flyTo'];
   restore: AtlasHandle['restore'];
   setMode(mode: 'hero' | 'explore'): void;
+  /** gate mode only. */
+  gate?: AtlasSceneGate;
   dispose(): void;
 }
 
+/** What the scene tells the bridge: the monarch's pick, or the board closed by its own hand. */
+export type AtlasGateEmit = (event: AtlasGateEvent) => void;
+
+/**
+ * `handle.gate`: raid-show's `AtlasGateHost`, usable the moment `mountAtlas` returns. Calls made before the map is
+ * drawn wait for it (the latest `open` wins, `follow` and `travel` keep their order); listeners live here, so a
+ * subscription survives the map loading. Presentation only: nothing here decides or performs a raid.
+ */
+export function gateBridge(scene: () => AtlasScene | null, loaded: Promise<unknown>, ready: Promise<AtlasReadyState>, disposed: () => boolean): { host: AtlasGateHost; emit: AtlasGateEmit } {
+  const listeners = new Set<(event: AtlasGateEvent) => void>();
+  let queue: ((gate: AtlasSceneGate) => void)[] = [];
+  let pendingOpen: { from: KingdomId; signal: AbortSignal } | null = null;
+  let flushed = false;
+  void loaded.then(() => ready).then(() => {
+    flushed = true;
+    const gate = scene()?.gate;
+    if (!gate || disposed()) return;
+    if (pendingOpen && !pendingOpen.signal.aborted) gate.open(pendingOpen.from, pendingOpen.signal);
+    pendingOpen = null;
+    for (const call of queue) call(gate);
+    queue = [];
+  });
+  const later = (call: (gate: AtlasSceneGate) => void) => {
+    if (disposed()) return;
+    const gate = flushed ? scene()?.gate : null;
+    if (gate) call(gate);
+    else if (!flushed) queue.push(call);
+  };
+  const host: AtlasGateHost = {
+    // A product host is always fed by the Surveyor and the Atlas service; there is no bench origin on this surface.
+    origin: 'live',
+    open(from, signal) {
+      if (signal.aborted || disposed()) return;
+      const gate = flushed ? scene()?.gate : null;
+      if (gate) gate.open(from, signal);
+      else if (!flushed) pendingOpen = { from, signal };
+    },
+    close() {
+      pendingOpen = null;
+      queue = [];
+      if (flushed) scene()?.gate?.close();
+    },
+    async resolve(kingdomId, signal) {
+      await loaded;
+      await ready;
+      const gate = scene()?.gate;
+      if (!gate || disposed() || signal.aborted) return null;
+      return gate.resolve(kingdomId, signal);
+    },
+    subscribe(listener, signal) {
+      if (signal.aborted) return;
+      listeners.add(listener);
+      signal.addEventListener('abort', () => listeners.delete(listener), { once: true });
+    },
+    follow(raid, signal) {
+      if (!signal.aborted) later(gate => { if (!signal.aborted) gate.follow(raid, signal); });
+    },
+    travel(stage, signal) {
+      if (!signal.aborted) later(gate => { if (!signal.aborted) gate.travel(stage, signal); });
+    },
+  };
+  return {
+    host,
+    emit: event => {
+      if (disposed()) return;
+      for (const listener of [...listeners]) {
+        try { listener(event); } catch (error) { console.error('A gate listener failed', error); }
+      }
+    },
+  };
+}
+
 export function mountAtlas(el: HTMLElement, options: AtlasMountOptions): AtlasHandle {
-  // Gate is introduced with its authority-driven finder in AM11; don't pretend it is an explore map.
-  if (options.mode === 'gate') throw new Error('Atlas gate mode is not available yet');
   let mode = options.mode;
   let scene: AtlasScene | null = null;
   let disposed = false;
@@ -72,13 +155,14 @@ export function mountAtlas(el: HTMLElement, options: AtlasMountOptions): AtlasHa
   };
   if (options.signal?.aborted) dispose();
   else options.signal?.addEventListener('abort', dispose, { once: true });
+  let emitGate: AtlasGateEmit = () => undefined;
   const loading = disposed ? Promise.resolve() : import('./scene').then(module => {
     if (disposed) return;
     scene = module.mountScene(root, { ...options, mode, signal: controller.signal }, state => {
       if (disposed) return;
       root.dataset.atlasReady = state;
       resolveReady(state);
-    });
+    }, event => emitGate(event));
   }).catch(() => {
     if (disposed) return;
     root.dataset.atlasReady = 'failed';
@@ -86,8 +170,14 @@ export function mountAtlas(el: HTMLElement, options: AtlasMountOptions): AtlasHa
     root.style.cssText += ';display:grid;place-items:center;padding:24px;color:#3b2f25;font:20px Georgia,serif;text-align:center';
     resolveReady('failed');
   });
+  let gate: AtlasGateHost | null = null;
+  if (options.mode === 'gate') {
+    const bridge = gateBridge(() => scene, loading, ready, () => disposed);
+    gate = bridge.host;
+    emitGate = bridge.emit;
+  }
   return {
-    get mode() { return mode; }, ready, gate: null,
+    get mode() { return mode; }, ready, gate,
     view: () => scene?.view() ?? { x: 0, y: 0, scale: 1, selected: null, mapId: '' },
     async flyTo(target, flyOptions) {
       await loading;
@@ -102,7 +192,8 @@ export function mountAtlas(el: HTMLElement, options: AtlasMountOptions): AtlasHa
       return !disposed && !restoreOptions?.signal?.aborted && scene ? scene.restore(view, restoreOptions) : false;
     },
     setMode(next) {
-      if (disposed) return;
+      // A gate map is the Raid Gate's own surface; it never turns into the front page's map.
+      if (disposed || mode === 'gate') return;
       mode = next;
       root.dataset.atlasMode = next;
       scene?.setMode(next);

@@ -9,6 +9,7 @@ import { WITHHELD_FILE } from '../policy/visibility';
 import { createAtlasService } from '../serve';
 import { FixtureSource, RECENT, clock, configFor, fakeSurveyor, sweepAt, tempDataDir } from '../test/fixture-source';
 import { allowRealImports } from '../test/timeouts';
+import { loadLiveTarget } from '../live/target';
 import { loadDirectory } from './directory';
 import { matchRank, queryKey, searchKey } from './normalize';
 import { CardReplySchema, RoadReplySchema, SearchReplySchema } from './schema';
@@ -252,5 +253,36 @@ describe('register routes', () => {
     expect(await get(port, `${base}/card/login/fixture_town`)).toMatchObject({ status: 404 });
     writeFileSync(join(dataDir, WITHHELD_FILE), '{"version":1,"kingdomIds":[');
     expect(await get(port, `${base}/search?q=fixture`)).toMatchObject({ status: 503, text: '{"error":"names-unavailable"}' });
+  });
+});
+
+describe('register places and facts', () => {
+  it('places holdings at their holding point and waiting channels at their pencil place, and gates faces', async () => {
+    const { dataDir, preview } = await imported();
+    const register = await loadDirectory(dataDir, preview);
+    const target = await loadLiveTarget(dataDir, preview);
+    const capital = target.ordinalOf.get(CAPITAL)!;
+    const holding = target.holdingGeometry![capital]!;
+    expect(register.position(CAPITAL)).toEqual({ x: holding.x, y: holding.y });
+    expect(register.facts(CAPITAL)).toEqual({ average: 6_000, region: holding.region, realm: target.realmOf[capital], ordinal: capital, language: 'en' });
+    // A waiting channel stands where search and its card already put it.
+    const waiting = ok(register.search('fixture_small', NONE, NOW, false, true)).results[0]!;
+    expect(register.position(SMALL)).toEqual(waiting.position);
+    expect(register.facts(SMALL)).toMatchObject({ average: 8, ordinal: null, language: 'en' });
+    expect(register.position(UNSEEN)).toBeNull();
+    expect(register.facts(UNSEEN)).toEqual({ average: null, region: null, realm: null, ordinal: null, language: null });
+    expect(register.face(UNSEEN, NONE, NOW)).toMatchObject({ id: UNSEEN, place: 'unseen', name: null });
+    expect(register.face(CAPITAL, new Set([CAPITAL]), NOW)).toBeNull();
+    expect(register.face(SLOTS, NONE, NOW)).toBeNull();
+    expect(register.face(GONE, NONE, NOW)).toBeNull();
+    expect(register.resolve({ login: 'fixture_town' })).toBe(TOWN);
+    expect(register.stream(CAPITAL, NOW)).toMatchObject({ live: true, game: 'Just Chatting' });
+    expect(register.stream(CAPITAL, NOW + 2 * DAY)).toBeNull();
+    // The live frame's slots and dabs name only public channels.
+    const slots = new Uint8Array(target.ids.length * 2);
+    slots[capital * 2] = 1;
+    const slotsOrdinal = target.ordinalOf.get(SLOTS);
+    if (slotsOrdinal !== undefined) slots[slotsOrdinal * 2] = 2;
+    expect([...register.liveIds({ slots, dabs: [{ channelHash: dabHash(SMALL) }, { channelHash: dabHash(UNSEEN) }] })].sort()).toEqual([CAPITAL, SMALL]);
   });
 });

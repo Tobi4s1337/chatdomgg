@@ -1,11 +1,31 @@
 /**
- * The survey preview as the browser receives it from the Atlas service (`/map-data/v1/preview…`). Draft land from
- * one real observation revision: never an edition, never founded, never SIMULATED. Every file is checked against
- * the hash it was pinned with before a single mark is drawn, and its shape is validated strictly.
+ * The map as the browser receives it from the Atlas service (`/map-data/v1/preview…`), in one of two shapes served
+ * through the same files and routes:
+ *
+ * - a **survey preview**: draft land redrawn from one real observation revision, never founded;
+ * - an **edition publication**: one night of a founded edition (Edition 0 or Edition I), whose land never moves.
+ *   It adds the founding record, hamlets (tier 4, in region chunks only) and, per settler file, how many of its
+ *   holdings are the edition's founding holdings.
+ *
+ * Neither is ever SIMULATED. Every file is checked against the hash it was pinned with before a single mark is
+ * drawn, and its shape is validated strictly for the shape it says it is.
  */
 export const PREVIEW_LABEL = 'Survey preview · land awaiting founding';
-export const TIER_CODES = ['capital', 'city', 'town', 'village'] as const;
+export const EDITION_LABELS = ['Edition 0', 'Edition I'] as const;
+export type EditionLabel = typeof EDITION_LABELS[number];
+export const EDITION_IDS = ['ed-0', 'ed-1'] as const;
+export type EditionId = typeof EDITION_IDS[number];
+/** Each edition's own label, by ID. */
+export const EDITION_LABEL_OF: Readonly<Record<EditionId, EditionLabel>> = { 'ed-0': 'Edition 0', 'ed-1': 'Edition I' };
+/**
+ * Holding tiers by code. A hamlet (4) is a holding below 25 average viewers, granted land by a raid or by its
+ * streamer's claim: it exists only in an edition, and only in region chunks. A survey preview never draws one.
+ */
+export const TIER_CODES = ['capital', 'city', 'town', 'village', 'hamlet'] as const;
 export type Tier = typeof TIER_CODES[number];
+/** The tiers a survey assigns from observed averages; each has a minimum average and a holding radius in the world file. */
+export type SurveyTier = Exclude<Tier, 'hamlet'>;
+export const HAMLET_RANK = 4;
 export const DECOR_KINDS = ['mountain', 'hill', 'forest', 'marsh', 'monster', 'ship'] as const;
 export type DecorKind = typeof DECOR_KINDS[number];
 export const REGION_KINDS = ['continent', 'isle', 'outer'] as const;
@@ -18,12 +38,16 @@ const REALMS_OF: Record<RegionKind, readonly RealmKind[]> = { continent: ['cross
 
 export interface FileRef { path: string; sha256: string; bytes: number; records: number }
 
+export interface PointerEdition { id: EditionId; label: EditionLabel; foundedAt: number; worldHash: string; address: string }
+
 export interface PreviewPointer {
   version: 1;
   id: string;
   revision: string;
   asOf: number;
   world: { url: string; sha256: string; bytes: number };
+  /** Present when the current publication is a night of a founded edition. */
+  edition?: PointerEdition;
 }
 
 /** Geometry only: the immutable files carry no logins or names (those come from the names projection). */
@@ -36,6 +60,11 @@ export interface SettlerColumns {
   game: number[];
   region: number[];
   realm: number[];
+  /**
+   * Editions only: the first `founded` entries of this file are the edition's founding holdings, the rest were
+   * granted on later nights. Absent on a survey preview, where every holding counts as founding.
+   */
+  founded?: number;
 }
 
 export interface PreviewRegion {
@@ -67,26 +96,47 @@ export interface PreviewRealm {
   slots: number;
 }
 
-export interface PreviewWorld {
+export interface NotFounded { status: 'not-founded'; edition0EligibleAt: number; editionIEligibleAt: number }
+
+/** What an edition publication says of its edition: which one, when it was founded, and which night this is. */
+export interface Founding {
+  status: 'founded';
+  edition: EditionId;
+  label: EditionLabel;
+  foundedAt: number;
+  /** The frozen world's hash, and the content address of the founded files. */
+  worldHash: string;
+  address: string;
+  /** True only for a rehearsal staged with a rehearsal key: nothing is founded. */
+  rehearsal: boolean;
+  ledger: { lines: number; settlers: number; head: string };
+  /** The survey night this publication draws. */
+  night: { revision: string; asOf: number };
+}
+
+interface WorldFields {
   version: 1;
   kind: 'chatdom-atlas-survey-preview';
   id: string;
   algorithm: string;
-  label: typeof PREVIEW_LABEL;
-  status: 'preview';
   revision: string;
   asOf: number;
   window: { firstObservationAt: number; lastObservationAt: number; hours: number; sweeps: number; gapCount: number };
   coverage: { sweepFloorViewers: number; candidateMinAverage: number; contentLabels: 'not-collected'; missing: string[] };
-  founding: { status: 'not-founded'; edition0EligibleAt: number; editionIEligibleAt: number };
   policy: { gambling: string; excludedGambling: number };
-  counts: { channelsObserved: number; mapped: number; languages: number; capital: number; city: number; town: number; village: number; hamletSlots: number };
+  counts: {
+    channelsObserved: number; mapped: number; languages: number; capital: number; city: number; town: number; village: number;
+    /** Editions only: holdings below 25 average viewers, granted by raid or claim. */
+    hamlet?: number;
+    hamletSlots: number;
+  };
   /** The family taxonomy the realms were drawn with. A proposal is never founder approval. */
   taxonomy: { id: string; status: 'proposed' | 'reviewed'; sha256: string; variety: string; realmThreshold: string };
   lattice: { id: string; hamletRadius: number; shore: number; gap: number };
   coordScale: number;
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
-  tiers: { minAverage: Record<Tier, number>; holdingRadius: Record<Tier, number> };
+  /** A hamlet's holding radius is `lattice.hamletRadius`; it has no minimum average (it is granted, not surveyed). */
+  tiers: { minAverage: Record<SurveyTier, number>; holdingRadius: Record<SurveyTier, number> };
   regions: PreviewRegion[];
   isles: { name: string; x: number; y: number; r: number } | null;
   outer: { name: string; x: number; y: number; r: number };
@@ -97,6 +147,35 @@ export interface PreviewWorld {
   coasts: { region: number; points: number[] }[];
   decor: number[];
   head: SettlerColumns;
+}
+
+/** Draft land from one observation revision. */
+export interface SurveyWorld extends WorldFields {
+  label: typeof PREVIEW_LABEL;
+  status: 'preview';
+  founding: NotFounded;
+}
+
+/**
+ * One night of a founded edition. Holdings are drawn at the tier they were granted, which never changes: the
+ * average shown may sit above or below that tier's band.
+ */
+export interface EditionWorld extends WorldFields {
+  label: EditionLabel;
+  status: 'edition';
+  founding: Founding;
+}
+
+export type PreviewWorld = SurveyWorld | EditionWorld;
+
+export function isEdition(world: Pick<PreviewWorld, 'status'>): world is EditionWorld {
+  return world.status === 'edition';
+}
+
+/** Holding radii in world units by tier rank: the four surveyed tiers, then the hamlet's lattice radius. */
+export function holdingRadii(world: Pick<PreviewWorld, 'tiers' | 'lattice'>): readonly number[] {
+  const r = world.tiers.holdingRadius;
+  return [r.capital, r.city, r.town, r.village, world.lattice.hamletRadius];
 }
 
 export interface PreviewChunk {
@@ -187,22 +266,39 @@ const MAX = 1_000_000;
 const fileRef = shape({ path: text(64, /^[a-z0-9-]+\.json$/), sha256: text(64, SHA), bytes: int(0), records: int(0) });
 
 export const CHANNEL_ID = /^[1-9][0-9]{0,31}$/;
-const settlerColumns: Check = (value, path) => {
+/** Optional: absent is fine, anything present must pass. */
+export const optional = (check: Check): Check => (value, path) => {
+  if (value !== undefined) check(value, path);
+};
+/** Settler columns; only an edition's files may say how many of their holdings are founding holdings. */
+const settlerColumns = (edition: boolean): Check => (value, path) => {
   const columns = strict(value, path, {
     ids: array(text(32, CHANNEL_ID), MAX),
-    tier: ints(MAX, 0, 3),
+    tier: ints(MAX, 0, TIER_CODES.length - 1),
     x: ints(MAX),
     y: ints(MAX),
     average: ints(MAX, 0, Number.MAX_SAFE_INTEGER),
     game: ints(MAX, -1, 20_000),
     region: ints(MAX, 0, 65_535),
     realm: ints(MAX, 0, 65_535),
+    ...(edition ? { founded: optional(int(0, MAX)) } : {}),
   });
   const n = (columns.ids as unknown[]).length;
   for (const key of ['tier', 'x', 'y', 'average', 'game', 'region', 'realm']) {
     if ((columns[key] as unknown[]).length !== n) fail(`${path}.${key}`, `${n} entries`);
   }
+  if (columns.founded !== undefined && (columns.founded as number) > n) fail(`${path}.founded`, `at most ${n} founding holdings`);
 };
+
+const editionId = oneOf(EDITION_IDS);
+const editionLabel = oneOf(EDITION_LABELS);
+const bool: Check = (value, path) => {
+  if (typeof value !== 'boolean') fail(path, 'a boolean');
+};
+/** An edition's ID and label name the same edition. */
+function sameEdition(id: EditionId, label: EditionLabel, path: string): void {
+  if (EDITION_LABEL_OF[id] !== label) fail(path, `${EDITION_LABEL_OF[id]} for ${id}`);
+}
 
 export function validatePointer(value: unknown): PreviewPointer {
   strict(value, 'pointer', {
@@ -211,25 +307,43 @@ export function validatePointer(value: unknown): PreviewPointer {
     revision: text(64, REVISION),
     asOf: epoch,
     world: shape({ url: text(256, /^\/(?!\/)[A-Za-z0-9_./-]+$/), sha256: text(64, SHA), bytes: int(1, 64_000_000) }),
+    edition: optional(shape({ id: editionId, label: editionLabel, foundedAt: epoch, worldHash: text(64, SHA), address: text(64, SHA) })),
   });
-  return value as PreviewPointer;
+  const pointer = value as PreviewPointer;
+  if (pointer.edition) sameEdition(pointer.edition.id, pointer.edition.label, 'pointer.edition.label');
+  return pointer;
 }
 
+/**
+ * A world in either shape. The shape is chosen by `status` alone, and everything an edition adds (its founding
+ * record, hamlets, the hamlet count, founding-holding counts) is refused on a survey preview.
+ */
 export function validateWorld(value: unknown): PreviewWorld {
+  const edition = isObject(value) && value.status === 'edition';
   strict(value, 'world', {
     version: literal(1),
     kind: literal('chatdom-atlas-survey-preview'),
     id: text(64, PREVIEW_ID),
     algorithm: text(64),
-    label: literal(PREVIEW_LABEL),
-    status: literal('preview'),
+    label: edition ? editionLabel : literal(PREVIEW_LABEL),
+    status: oneOf(['preview', 'edition']),
     revision: text(64, REVISION),
     asOf: epoch,
     window: shape({ firstObservationAt: epoch, lastObservationAt: epoch, hours: num, sweeps: int(0), gapCount: int(0) }),
     coverage: shape({ sweepFloorViewers: int(0), candidateMinAverage: int(0), contentLabels: literal('not-collected'), missing: array(text(300), 20) }),
-    founding: shape({ status: literal('not-founded'), edition0EligibleAt: epoch, editionIEligibleAt: epoch }),
+    founding: edition
+      ? shape({
+        status: literal('founded'), edition: editionId, label: editionLabel, foundedAt: epoch, worldHash: text(64, SHA), address: text(64, SHA),
+        rehearsal: bool, ledger: shape({ lines: int(0, Number.MAX_SAFE_INTEGER), settlers: int(0, Number.MAX_SAFE_INTEGER), head: text(64, SHA) }),
+        night: shape({ revision: text(64, REVISION), asOf: epoch }),
+      })
+      : shape({ status: literal('not-founded'), edition0EligibleAt: epoch, editionIEligibleAt: epoch }),
     policy: shape({ gambling: text(64), excludedGambling: int(0) }),
-    counts: shape({ channelsObserved: int(0), mapped: int(0), languages: int(0), capital: int(0), city: int(0), town: int(0), village: int(0), hamletSlots: int(0) }),
+    counts: shape({
+      channelsObserved: int(0), mapped: int(0), languages: int(0), capital: int(0), city: int(0), town: int(0), village: int(0),
+      ...(edition ? { hamlet: optional(int(0)) } : {}),
+      hamletSlots: int(0),
+    }),
     // Rule versions are matched by form, like the algorithm: a newer rule is still drawn, and the key names it.
     taxonomy: shape({
       id: text(32, /^families-[0-9]{1,4}$/), status: oneOf(['proposed', 'reviewed']), sha256: text(64, SHA),
@@ -257,9 +371,13 @@ export function validateWorld(value: unknown): PreviewWorld {
     clusters: array(shape({ region: int(0), realm: int(0), game: int(-1), x: int(), y: int(), r: int(0), members: int(0) }), 20_000),
     coasts: array(shape({ region: int(0), points: ints(400_000) }), 50_000),
     decor: ints(600_000),
-    head: settlerColumns,
+    head: settlerColumns(edition),
   });
   const world = value as PreviewWorld;
+  if (isEdition(world)) {
+    if (world.founding.label !== world.label) fail('world.label', `the founding's label, ${world.founding.label}`);
+    sameEdition(world.founding.edition, world.founding.label, 'world.founding.label');
+  }
   if (world.bounds.maxX <= world.bounds.minX || world.bounds.maxY <= world.bounds.minY) fail('world.bounds', 'a non-empty box');
   if (world.decor.length % 3 !== 0) fail('world.decor', 'triples');
   world.regions.forEach((region, i) => {
@@ -298,10 +416,11 @@ export function validateChunk(value: unknown, world: PreviewWorld, region: numbe
     kind: literal('chatdom-atlas-survey-preview-region'),
     preview: literal(world.id),
     region: literal(region),
-    settlers: settlerColumns,
+    settlers: settlerColumns(isEdition(world)),
   });
   const chunk = value as PreviewChunk;
-  checkColumns(chunk.settlers, world, 'chunk.settlers', [2, 3], region);
+  // Towns and villages; an edition's chunks also hold its hamlets.
+  checkColumns(chunk.settlers, world, 'chunk.settlers', isEdition(world) ? [2, 3, HAMLET_RANK] : [2, 3], region);
   return chunk;
 }
 

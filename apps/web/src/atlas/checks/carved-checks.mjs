@@ -60,6 +60,14 @@ try {
     check(`${width}: at most 25 visible chrome words including search placeholder`, actual.count <= 25, actual);
     check(`${width}: no simulated or raw error text in the default chrome`, !/\bsimulated\b|\b(?:error|exception|stack trace)\b/i.test(actual.text), actual.text);
     check(`${width}: a real preview date is retained`, await page.locator('.atlas').getAttribute('data-as-of') !== null);
+    // An edition night is served through the same routes; its default chrome names the edition and no draft land.
+    const edition = await page.locator('.atlas').getAttribute('data-edition');
+    if (edition !== null) {
+      check(`${width}: the seal names ${edition}`, actual.text.includes(edition), actual.text);
+      check(`${width}: no draft wording in an edition's default chrome`, !/survey|awaiting|founding|draft|preview/i.test(actual.text), actual.text);
+    } else {
+      check(`${width}: the survey seal is dated`, /\b(?:Survey|Still) \d{1,2} \w{3} \d{4}\b/.test(actual.text), actual.text);
+    }
     await shot(page, 'default', width);
 
     const search = page.getByRole('combobox', { name: 'Find a channel' });

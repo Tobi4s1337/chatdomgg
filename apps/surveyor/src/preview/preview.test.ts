@@ -250,7 +250,7 @@ interface Holding { id: string; login: string; name: string; tier: Tier; x: numb
 function holdings(columns: SettlerColumns, file: string, scale: number, names: PreviewNames): Holding[] {
   const index = new Map(names.ids.map((id, i) => [id as string, i]));
   return columns.ids.map((id, i) => ({
-    id, login: names.logins[index.get(id)!]!, name: names.names[index.get(id)!]!, tier: TIER_CODES[columns.tier[i]!]!,
+    id, login: names.logins[index.get(id)!]!, name: names.names[index.get(id)!]!, tier: TIER_CODES[columns.tier[i]!]! as Tier,
     x: columns.x[i]! / scale, y: columns.y[i]! / scale, average: columns.average[i]!, game: columns.game[i]!, region: columns.region[i]!, file,
   }));
 }
@@ -478,11 +478,13 @@ describe('survey preview build', () => {
       expect(inChunk.every((h) => (h.tier === 'town' || h.tier === 'village') && h.region === chunk.region)).toBe(true);
       expect(inChunk.length).toBe(all.filter((h) => h.region === chunk.region && (h.tier === 'town' || h.tier === 'village')).length);
     }
-    for (const tier of TIER_CODES) {
+    // A survey preview draws no hamlets: those are granted land, and only an edition grants land.
+    for (const tier of TIER_CODES.filter((code) => code !== 'hamlet')) {
       const count = all.filter((h) => h.tier === tier).length;
       expect(world.counts[tier], tier).toBe(count);
       expect(count, tier).toBeGreaterThan(0);
     }
+    expect(world.counts.hamlet).toBeUndefined();
   });
 
   it('R4: languages with at least 600 candidates are continents, smaller ones isles in the Isles of Many Tongues', () => {

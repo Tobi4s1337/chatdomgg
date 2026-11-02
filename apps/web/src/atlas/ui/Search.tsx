@@ -1,7 +1,8 @@
 import { createEffect, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { DirectoryError, fetchSearch, type SearchReply, type SearchResult } from '../data/directory';
 import type { PreviewSource, PreviewWorld } from '../data/preview';
-import { formatCount, TIER_NAMES } from './format';
+import { mapNoun } from './edition';
+import { formatCount, SEARCH_PLACEHOLDER, TIER_NAMES } from './format';
 import { ChannelFaceSeal } from './Face';
 
 type Phase =
@@ -200,7 +201,7 @@ export function Search(props: {
           autocapitalize="off"
           spellcheck={false}
           maxLength={120}
-          placeholder="Find a channel by name"
+          placeholder={SEARCH_PLACEHOLDER}
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={open()}
@@ -278,7 +279,7 @@ export function Search(props: {
               <div class="atlas-search-state" role="status">
                 <Switch>
                   <Match when={(phase() as { reason: string }).reason === 'warming'}>
-                    <p>The register of this survey is still being opened; asking again in a moment…</p>
+                    <p>The register of this {mapNoun(props.world)} is still being opened; asking again in a moment…</p>
                   </Match>
                   <Match when={(phase() as { reason: string }).reason === 'refused'}>
                     <p>Channel names are held back just now while the map’s moderation list is checked. The map itself is unchanged.</p>

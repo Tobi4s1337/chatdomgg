@@ -7,4 +7,8 @@
 .atlas-embed-bench > footer button:focus-visible, .atlas-embed-bench a:focus-visible { outline: 3px solid #2f5d73; outline-offset: 4px; }
 @media (max-width: 720px) { .atlas-embed-bench > header, .atlas-embed-bench > footer { flex-direction: column; align-items: start; min-height: 120px; padding: 28px 20px; } .atlas-embed-bench-map { height: 620px; } }
 
+.atlas-embed-bench[data-bench='gate'] { min-height: 0; height: 100dvh; overflow: hidden; }
+.atlas-embed-bench-gate { position: absolute; inset: 0; }
+.atlas-embed-bench-said { position: absolute; left: 12px; top: 12px; margin: 0; padding: 6px 10px; color: #f5e8c9; background: #3b2a1dd9; font: italic 15px Georgia, serif; pointer-events: none; }
+
 html:has(.atlas-embed-bench) { scrollbar-color: #8d7656 #eee3c8; scrollbar-width: thin; }

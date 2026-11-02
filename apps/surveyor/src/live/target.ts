@@ -20,8 +20,13 @@ export interface LiveTarget {
   worldSha256: string;
   edition: AtlasEdition;
   alignment: AtlasAlignment;
-  /** Complete immutable holding geometry, including ground whose name is withheld. */
+  /**
+   * The pencil base: complete immutable holding geometry, including ground whose name is withheld. In an edition it
+   * is the founding holdings alone, so a small channel's pencil place never changes inside the edition.
+   */
   holdingGeometry?: readonly { region: number; x: number; y: number; r: number }[];
+  /** Every holding's point in world units, by ordinal (founding or not). */
+  holdingPoints?: readonly { x: number; y: number }[];
   /** Channel ID per ordinal. */
   ids: readonly string[];
   /** Holding tier rank per ordinal: 0 capital … 3 village. */
@@ -33,16 +38,25 @@ export interface LiveTarget {
   realmFor(channel: { id: string; language: string; categories: readonly { gameId: string; minutes: number }[] }): number;
 }
 
-function concatColumns(world: PreviewWorld, chunks: readonly SettlerColumns[]): { ids: string[]; tier: number[]; x: number[]; y: number[]; realm: number[] } {
-  const out = { ids: [] as string[], tier: [] as number[], x: [] as number[], y: [] as number[], realm: [] as number[] };
+function concatColumns(world: PreviewWorld, chunks: readonly SettlerColumns[]): { ids: string[]; tier: number[]; x: number[]; y: number[]; realm: number[]; founding: boolean[] } {
+  const out = { ids: [] as string[], tier: [] as number[], x: [] as number[], y: [] as number[], realm: [] as number[], founding: [] as boolean[] };
   for (const columns of [world.head, ...chunks]) {
     out.ids.push(...columns.ids);
     out.tier.push(...columns.tier);
     out.x.push(...columns.x);
     out.y.push(...columns.y);
     out.realm.push(...columns.realm);
+    // A survey preview has no founding: every holding is part of the pencil base.
+    const founded = columns.founded ?? columns.ids.length;
+    out.founding.push(...columns.ids.map((_, i) => i < founded));
   }
   return out;
+}
+
+/** A holding's radius in world units: its tier's, or the hamlet lattice's for a hamlet. */
+export function tierRadius(world: Pick<PreviewWorld, 'tiers' | 'lattice'>, tier: number): number {
+  const r = world.tiers.holdingRadius;
+  return [r.capital, r.city, r.town, r.village, world.lattice.hamletRadius][tier]!;
 }
 
 /** FNV-1a over a decimal ID: a stable pick among equal choices (the Outer Isles), never a person hash. */
@@ -52,8 +66,10 @@ function stablePick(id: string, n: number): number {
   return (h >>> 0) % n;
 }
 
-export function realmResolver(world: PreviewWorld): LiveTarget['realmFor'] {
-  const taxonomy = currentTaxonomy();
+export function realmResolver(
+  world: { regions: readonly Pick<PreviewWorld['regions'][number], 'index' | 'language'>[]; realms: PreviewWorld['realms']; taxonomy: Pick<PreviewWorld['taxonomy'], 'sha256'> },
+  taxonomy = currentTaxonomy(),
+): LiveTarget['realmFor'] {
   // The families of a world are indices into the taxonomy it was drawn with; another taxonomy's indices mean nothing.
   const familyOf = taxonomy.ref.sha256 === world.taxonomy.sha256 ? taxonomy.familyOf : new Map<string, number>();
   const regionOf = new Map<string, number>();
@@ -114,7 +130,10 @@ export async function loadLiveTarget(dataDir: string, previewId: string): Promis
   const alignment = await createAtlasAlignment(edition, settlers);
   return {
     previewId: id, world, worldSha256, edition, alignment, ids: all.ids,
-    holdingGeometry: all.ids.map((_, i) => ({ region: world.realms[all.realm[i]!]!.region, x: all.x[i]! / world.coordScale, y: all.y[i]! / world.coordScale, r: [world.tiers.holdingRadius.capital, world.tiers.holdingRadius.city, world.tiers.holdingRadius.town, world.tiers.holdingRadius.village][all.tier[i]!]! })),
+    holdingGeometry: all.ids.flatMap((_, i) => all.founding[i]
+      ? [{ region: world.realms[all.realm[i]!]!.region, x: all.x[i]! / world.coordScale, y: all.y[i]! / world.coordScale, r: tierRadius(world, all.tier[i]!) }]
+      : []),
+    holdingPoints: all.ids.map((_, i) => ({ x: all.x[i]! / world.coordScale, y: all.y[i]! / world.coordScale })),
     tierRank: Uint8Array.from(all.tier),
     realmOf: Uint16Array.from(all.realm),
     ordinalOf: new Map(all.ids.map((kingdomId, ordinal) => [kingdomId, ordinal])),

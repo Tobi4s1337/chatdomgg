@@ -40,7 +40,7 @@ export function faceName(face: ChannelFace): string {
   if (face.name) return face.name;
   if (face.place === 'mapped') return `Unnamed ${TIER_NAMES[face.tier ?? 3]!.toLowerCase()}`;
   if (face.place === 'waiting') return 'An unnamed small channel';
-  return 'A channel below the survey’s floor';
+  return 'A channel below the sweep’s floor';
 }
 
 /** Realm and land of a face as the map names them ("Shooters · English", "Polski"). */
@@ -65,8 +65,11 @@ export function RegisterFacts(props: {
   onAirNow: boolean | null;
   onRoad: (road: CardRoad) => void;
   onRetry: () => void;
+  /** The road ledger's view of this channel's roads, when the service has one; null falls back to the register's. */
+  ledger?: (() => JSX.Element | null) | undefined;
 }) {
   const card = () => (props.state.status === 'ready' ? props.state.reply : null);
+  const ledger = () => props.ledger?.() ?? null;
   return (
     <Switch>
       <Match when={props.state.status === 'loading'}>
@@ -105,6 +108,7 @@ export function RegisterFacts(props: {
                 </Show>
               </div>
             </dl>
+            <Show when={!ledger()} fallback={ledger()}>
             <Show when={c().roads} fallback={<p class="atlas-roads-empty">No raid history recorded yet.</p>}>{(roads) => (
             <section class="atlas-roads" aria-labelledby="atlas-roads-title">
               <h3 id="atlas-roads-title">
@@ -139,6 +143,7 @@ export function RegisterFacts(props: {
               </p>
             </section>
             )}</Show>
+            </Show>
           </>
         )}
       </Match>
@@ -237,6 +242,7 @@ export function WaitingCard(props: {
   onClose: () => void;
   onRoad: (road: CardRoad) => void;
   onRetry: () => void;
+  ledger?: (() => JSX.Element | null) | undefined;
 }) {
   const close = useCardKeys(() => props.face.id, props.onClose);
   const card = () => (props.state.status === 'ready' ? props.state.reply : null);
@@ -280,7 +286,7 @@ export function WaitingCard(props: {
           )}
         </Show>
       </dl>
-      <RegisterFacts state={props.state} world={props.world} onAirNow={props.live ? props.onAir : null} onRoad={props.onRoad} onRetry={props.onRetry} />
+      <RegisterFacts state={props.state} world={props.world} onAirNow={props.live ? props.onAir : null} onRoad={props.onRoad} onRetry={props.onRetry} ledger={props.ledger} />
       <p class="atlas-card-note">
         Pencilled into the realm of its language and game. This place stays the same until the channel claims land.
       </p>
@@ -390,7 +396,7 @@ export function RoadCard(props: {
           <p class="atlas-card-status">Road</p>
           <h2 id="atlas-card-title">This road is not on the map</h2>
           <p class="atlas-card-note">
-            One of its channels is not in the survey of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} under that name. Names are shown only for
+            One of its channels is not in the {props.world.status === 'edition' ? 'sweeps' : 'survey'} of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} under that name. Names are shown only for
             channels seen live within a day.
           </p>
         </Match>

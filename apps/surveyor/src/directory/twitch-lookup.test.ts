@@ -55,6 +55,22 @@ describe('public Twitch channel lookup', () => {
     await f.lookup.lookup('id:123');
     expect(f.calls).toHaveLength(7); // ID alias was cached when the login was resolved.
   });
+  it('answers a batch of IDs in two public reads, naming the IDs Twitch does not know as absent, without live state or caching', async () => {
+    const f = fixture();
+    const answer = await f.lookup.channels!(['123', '999', '123', 'not-an-id']);
+    expect(answer.absent).toEqual(['999']);
+    expect(answer.found).toMatchObject([{ id: '123', login: 'simulated_channel', language: 'en', gameId: '456', live: false, viewers: null }]);
+    expect(f.calls.map(url => url.pathname)).toEqual(['/helix/users', '/helix/channels']);
+    expect(f.calls[0]!.searchParams.getAll('id')).toEqual(['123', '999']);
+    // A batch answer never stands in for a search answer, which carries live state.
+    await f.lookup.lookup('id:123');
+    expect(f.calls).toHaveLength(5);
+    f.missing(true);
+    expect(await f.lookup.channels!(['555'])).toEqual({ found: [], absent: ['555'] });
+    f.remaining(150);
+    await f.lookup.channels!(['555']);
+    await expect(f.lookup.channels!(['555'])).rejects.toMatchObject({ reason: 'limited' });
+  });
   it('caches absent logins for one hour and deduplicates concurrent misses', async () => {
     const f = fixture(); f.missing(true);
     const [one, two] = await Promise.all([f.lookup.lookup('simulated_missing'), f.lookup.lookup('simulated_missing')]);

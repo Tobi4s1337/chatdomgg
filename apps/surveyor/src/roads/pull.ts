@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { AtlasRaidSchema } from '@chatdom/shared';
+import { AtlasRaidSchema, type AtlasRaid } from '@chatdom/shared';
 import type { RoadLedger } from './ledger';
 
 export const ROAD_PAGE_LIMIT = 200;
@@ -56,9 +56,18 @@ export interface RoadPullResult { items: number; stored: number; duplicates: num
 /**
  * One bounded page. Validate the entire page before touching memory. Prefix appends may survive an interruption;
  * only the last item's durable record advances the cursor, so retrying that page is safe after a crash.
- * No callback here can start a caravan: recovered history is memory, never a new show.
+ * No callback here starts a caravan by itself: `onStored` only reports what was stored, and the runtime keeps
+ * recovered history (its first pass after start) out of the show.
  */
-export async function pullRoadPage(ledger: RoadLedger, endpoint: URL, signal: AbortSignal, fetchImpl: typeof fetch = fetch): Promise<RoadPullResult> {
+export interface RoadPullOptions {
+  /**
+   * Called once with the raids this page newly stored (never duplicates), after the page's durable commit. The
+   * caller decides whether any of them is fresh enough to be shown; this function never starts a caravan.
+   */
+  onStored?: (raids: readonly AtlasRaid[]) => void;
+}
+
+export async function pullRoadPage(ledger: RoadLedger, endpoint: URL, signal: AbortSignal, fetchImpl: typeof fetch = fetch, options: RoadPullOptions = {}): Promise<RoadPullResult> {
   signal.throwIfAborted();
   const source = roadFeedSource(endpoint);
   const after = ledger.checkpoint(source);
@@ -79,7 +88,9 @@ export async function pullRoadPage(ledger: RoadLedger, endpoint: URL, signal: Ab
   if (page.next === null || page.next === after) throw new Error('Nonempty road feed page did not advance its cursor.');
   signal.throwIfAborted();
   const receipts = ledger.observeBatch(page.items, { recovered: true, checkpoint: { source, after, cursor: page.next } });
-  const stored = receipts.filter(receipt => receipt.kind === 'stored').length;
+  const fresh = page.items.filter((_, index) => receipts[index]!.kind === 'stored');
+  const stored = fresh.length;
   const duplicates = receipts.length - stored;
+  if (fresh.length) options.onStored?.(fresh);
   return { items: page.items.length, stored, duplicates, cursor: page.next };
 }

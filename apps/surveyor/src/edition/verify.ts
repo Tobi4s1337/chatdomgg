@@ -15,6 +15,13 @@ export interface EditionFiles {
   ledgerText: string;
   heads: readonly LedgerHead[];
   founding: Founding | null;
+  /** founding.json exactly as stored: part of the edition's content address. */
+  foundingBytes?: Uint8Array;
+}
+
+export interface VerifyOptions {
+  /** A bench started with ATLAS_REHEARSAL=1 may serve and settle a rehearsal; nothing else may. */
+  allowRehearsal?: boolean;
 }
 
 export interface EditionReport {
@@ -33,7 +40,7 @@ const MAX = 20;
  * overlap, slot holdings exactly on the hamlet lattice, every acknowledged head still a prefix (no earlier address
  * changed), no founded record without its producer, and the founding gates and signature.
  */
-export function verifyEdition(files: EditionFiles, founderKey: { key: KeyObject; fingerprint: string } | null): EditionReport {
+export function verifyEdition(files: EditionFiles, founderKey: { key: KeyObject; fingerprint: string } | null, options: VerifyOptions = {}): EditionReport {
   const problems: string[] = [];
   const add = (problem: string) => {
     if (problems.length < MAX) problems.push(problem);
@@ -89,8 +96,9 @@ export function verifyEdition(files: EditionFiles, founderKey: { key: KeyObject;
     if (line.kind !== 'settle') continue;
     stats.byReason[line.reason] = (stats.byReason[line.reason] ?? 0) + 1;
     if (line.path === 'outer') stats.outer++;
-    if (line.reason === 'founded') add(`${line.settler.kingdomId} was settled as founded, but no founded-record producer exists yet.`);
-    if (line.reason === 'raid' && !EDITIONS[editionNumber(edition.id)].landByRaid) add(`${line.settler.kingdomId} was granted land by raid before Edition I.`);
+    if ((line.reason === 'raid' || line.reason === 'founded' || line.reason === 'signed-in') && !EDITIONS[editionNumber(edition.id)].landByRaid) {
+      add(`${line.settler.kingdomId} was granted land by ${line.reason === 'raid' ? 'raid' : 'claim'} before Edition I.`);
+    }
     if (line.reason === 'founding' && line.settler.holdingId !== `f:${line.settler.ordinal}`) add(`founding holding ${line.settler.holdingId} is not named by its ordinal.`);
     if (line.reason !== 'founding' && !parseSlotHoldingId(line.settler.holdingId)) add(`settled holding ${line.settler.holdingId} is not a hamlet-lattice slot.`);
   }
@@ -127,8 +135,16 @@ export function verifyEdition(files: EditionFiles, founderKey: { key: KeyObject;
     const founding = files.founding;
     const rules = EDITIONS[founding.number];
     if (founding.edition !== edition.id || founding.revision !== world.revision) add('founding.json describes a different edition or revision.');
-    if (founding.window.observedMs < rules.minObservedMs) add(`${rules.label} was founded on ${(founding.window.observedMs / 3_600_000).toFixed(1)} h of observations, below its minimum.`);
-    if (rules.requiresReviewedTaxonomy && founding.taxonomy.status !== 'reviewed') add(`${rules.label} was founded on an unreviewed taxonomy.`);
+    // A rehearsal waived its gates on a bench; it is never valid anywhere else.
+    const rehearsal = founding.rehearsal !== undefined;
+    if (rehearsal && !options.allowRehearsal) add(`${rules.label} here is a rehearsal; it is served and settled only on a bench (ATLAS_REHEARSAL=1).`);
+    if (!rehearsal) {
+      if (founding.window.observedMs < rules.minObservedMs) add(`${rules.label} was founded on ${(founding.window.observedMs / 3_600_000).toFixed(1)} h of observations, below its minimum.`);
+      if (rules.requiresReviewedTaxonomy && founding.taxonomy.status !== 'reviewed') add(`${rules.label} was founded on an unreviewed taxonomy.`);
+      if (rules.requiresReviewedNames && founding.names?.status !== 'reviewed') add(`${rules.label} was founded without a reviewed continent name table.`);
+    }
+    // Foundings that record their name table also date the edition by the founder's signature (content addressing).
+    if (founding.names !== undefined && edition.foundedAt !== founding.authorization.payload.issuedAt) add('the edition is not dated by its founder authorization.');
     if (founding.taxonomy.sha256 !== world.taxonomy.sha256) add('founding.json names different taxonomy bytes.');
     const payload = founding.authorization.payload;
     if (payload.edition !== founding.number || payload.revision !== founding.revision || payload.taxonomySha256 !== founding.taxonomy.sha256) add('the founding authorization names different land.');

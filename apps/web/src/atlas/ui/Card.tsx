@@ -1,9 +1,10 @@
-import { createEffect, onCleanup, Show } from 'solid-js';
+import { createEffect, onCleanup, Show, type JSX } from 'solid-js';
 import { blazon, shieldDesign } from '../heraldry';
 import type { CardReply, CardRoad } from '../data/directory';
 import type { Settler } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
-import { formatCount, formatDayRange, formatTime, TIER_NAMES, watchUrl } from './format';
+import { holdingNote, holdingStatus, mapNoun } from './edition';
+import { formatCount, formatTime, tierBand, TIER_NAMES, watchUrl } from './format';
 import { LIVE_CLASS_NAMES } from './live-line';
 import { ChannelFaceSeal } from './Face';
 import { doorHolding, type DoorHolding } from '../data/holding';
@@ -13,7 +14,8 @@ export type NamesState = 'loading' | 'ready' | 'failed';
 
 /**
  * A mapped channel's public card. Everything on it is observed survey data: the holding's tier, its realm and
- * land, the observed average audience and main category over the survey window. It is mapped, not founded. Its
+ * land, the observed average audience and main category over the survey window. It is mapped, not founded; in an
+ * edition its tier is the one its land was granted at, whatever the audience since. Its
  * name and Watch link come from the names projection and are shown only while fresh; without them the card still
  * reads as the holding it is, and says why the name is missing.
  */
@@ -32,10 +34,11 @@ export function Card(props: {
   onRoad: (road: CardRoad) => void;
   onRetry: () => void;
   onEnter?: (holding: DoorHolding) => void;
+  /** The road ledger's view of its roads (see RegisterFacts). */
+  ledger?: (() => JSX.Element | null) | undefined;
 }) {
   let closeButton: HTMLButtonElement | undefined;
   const region = () => props.world.regions[props.settler.region];
-  const minimum = () => props.world.tiers.minAverage[props.settler.tier];
   const arms = () => blazon(shieldDesign(props.settler.id));
   const url = () => (props.login ? watchUrl(props.login) : null);
   const showLogin = () => props.name !== null && props.login !== null && props.name.toLowerCase() !== props.login;
@@ -49,8 +52,8 @@ export function Card(props: {
   };
   const missing = () => {
     if (props.name !== null) return null;
-    if (props.names === 'loading') return 'Reading the names of this survey…';
-    if (props.names === 'failed') return 'The names of this survey could not be read just now, so this holding shows its arms alone. Its name and Watch link return when the Atlas service answers.';
+    if (props.names === 'loading') return `Reading the names of this ${mapNoun(props.world)}…`;
+    if (props.names === 'failed') return `The names of this ${mapNoun(props.world)} could not be read just now, so this holding shows its arms alone. Its name and Watch link return when the Atlas service answers.`;
     return 'This holding is not named in the current public projection.';
   };
 
@@ -74,14 +77,14 @@ export function Card(props: {
       <header class="atlas-card-head">
         <ChannelFaceSeal channelId={props.settler.id} name={props.name} portrait={props.name && props.register.status === 'ready' && props.register.reply.channel.id === props.settler.id ? props.register.reply.portrait : null} />
         <div class="atlas-card-names">
-          <p class="atlas-card-status">Mapped holding · not yet founded</p>
+          <p class="atlas-card-status">{holdingStatus(props.world)}</p>
           <h2 id="atlas-card-title" dir="auto" classList={{ 'atlas-card-unnamed': props.name === null }}>{title()}</h2>
           <Show when={showLogin()}><p class="atlas-card-login">{props.settler.login}</p></Show>
         </div>
       </header>
       <div class="atlas-card-scroll" tabindex="0" aria-label="Holding details">
       <dl class="atlas-card-facts">
-        <div><dt>Holding</dt><dd>{TIER_NAMES[props.settler.tierRank]} <span class="atlas-quiet">· {formatCount(minimum())}+ average viewers</span></dd></div>
+        <div><dt>Holding</dt><dd>{TIER_NAMES[props.settler.tierRank]} <span class="atlas-quiet">· {tierBand(props.world.tiers.minAverage, props.settler.tierRank)}</span></dd></div>
         <Show when={region()}>
           {(r) => (
             <div>
@@ -122,10 +125,9 @@ export function Card(props: {
         onAirNow={props.live ? props.live.liveClass > 0 : null}
         onRoad={props.onRoad}
         onRetry={props.onRetry}
+        ledger={props.ledger}
       />
-      <p class="atlas-card-note">
-        Survey of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} (UTC). Draft land: this holding may still move before the first edition.
-      </p>
+      <p class="atlas-card-note">{holdingNote(props.world)}</p>
       <Show when={missing()}>{(text) => <p class="atlas-card-missing">{text()}</p>}</Show>
       </div>
       <footer class="atlas-card-footer">

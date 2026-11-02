@@ -150,9 +150,9 @@ Body: one AtlasRaid (packages/shared/src/atlas-raids.ts), version 1
 | front-door | The carved kit and type scale in `packages/ui` (cartouche frame, wax seal, buttons, focus ring, icon family) | Build it in `apps/web/src/atlas/ui`, then `needs:` to move it into the kit |
 | front-door | The official Twitch mark in its painted frame, as a component in `packages/ui` | The Watch button shows its words only |
 | front-door | "How it works" panels to hang from the Atlas's bottom slot (`slots.footer` in explore mode) | The survey seal's one line, nothing more |
-| front-door | New public `/map-data` routes in the gateway allowlist (`apps/api/src/public/routes.ts`): roads, the gate finder, the edition pointer and files. Exact regexes go in a `needs:` line when each route settles | The routes work on the lane's own service and the dev proxy only |
-| front-door (sign-in) and main | A session authority that calls the Atlas service's private endpoints for hide and unhide (`POST /v1/channels/<id>/hide`, `/unhide`) and for a sign-in claim, with the verified broadcaster ID | The card shows no hide button; AM13 waits on it |
-| main | The founded-record producer, so a founding claims its land | Claims by raid only |
+| front-door | New public `/map-data` routes in the gateway allowlist (`apps/api/src/public/routes.ts`): roads and the gate finder. The edition needs none: it is served through the existing preview routes (see "Edition I and claims" below) | The routes work on the lane's own service and the dev proxy only |
+| front-door (sign-in) and main | A session authority that calls the Atlas service's private endpoints for hide and unhide (`POST /v1/channels/<id>/hide`, `/unhide`) and for a sign-in claim (`POST /v1/claims`, cause `signed-in`), with the verified broadcaster ID | The card shows no hide button; AM13 waits on it. Sign-in claims: land by raid only |
+| main (Genesis) | A founding claim (`POST /v1/claims`, cause `founded`) when a kingdom is founded in Chatdom | Land by raid and sign-in only |
 | operator | After the merge: rebuild and restart the live Atlas service with the Twitch env file and the ingest listener, re-import for the new names, adopt the founded edition. Runbook in this folder | The live map keeps the old code |
 
 ## Atlas footer slot clarification — 2 Nov, AM10 carved UI
@@ -212,10 +212,41 @@ cursor with its final observation in its own durable ledger; empty/short pages
 never reset history. Unconfigured or failed reads make no “no raids” assertion.
 This is adoption of the frozen pull contract, with no new route or shared type.
 
-The separate private POST and `createAtlasRoadIngress` client described above
-remain optional and are not implemented by this checkpoint. Public ledger routes
-and the gate finder are also not yet exposed. Operator adoption and remaining work
-are recorded in `AM11-durable-roads.md`.
+Operator adoption and recovery are recorded in `AM11-durable-roads.md`.
+
+## Roads, caravans and the gate settled — 2 Nov, AM11
+
+Nothing in §2 or §3 is renamed; this fills in what AM11 left open. Details and evidence: `AM11-roads-and-gate.md`.
+
+- **Gate mode works.** `mountAtlas(el, { mode: 'gate' }).gate` is the `AtlasGateHost` of
+  `apps/web/src/raid-gate/ports.ts`, unchanged (a type test fails if either side drifts). Calls made before the map is
+  drawn wait for it: the latest `open` wins, `follow` and `travel` keep their order, `close` clears what is held.
+  `closed` is emitted only when the board closes itself; `close()` from the host is silent. A pick emits
+  `{kind:'target', channel, land}` with `founded: false`, `kingdomName: null`, `contentClassification: 'unknown'` (the
+  Atlas has no founded-kingdom or classification record yet) and `land` `waiting` (placed) or `edge` (no place).
+  `follow` waits up to 120 s for the raid's caravan to appear on the public stream, matched by raid ID or by the same
+  pair within 30 s. Bench: `/-/atlas-embed?mode=gate&from=<channelId>` (default tobi4s_, 129634568).
+- **Public reads** (GET/HEAD, ids are Twitch IDs, `pv-…` is the map ID):
+  - `/map-data/v1/roads/<pv>/channel/<id>`: every road of one channel, strongest first (64 at most, `total` counts all).
+  - `/map-data/v1/roads/<pv>/road/<idA>/<idB>` and `/road/login/<loginA>/<loginB>`: one road's story. When a road
+    exists both ways are objects (an unridden way reads zero); `null` both ways with `basis: 'none'` means no raid
+    between them has been seen since `since`.
+  - `/map-data/v1/roads/<pv>/busiest`: the 400 strongest roads with both ends placed, no names.
+  - `/map-data/v1/gate/<pv>/finder?from=<id>[&q=<text>][&portraits=1]`: groups `roads`, `realm`, `neighbours`, then
+    `search` when `q` is given. Proposals are live only and each channel appears once; search keeps offline matches
+    (shown, not selectable).
+- **Caravans** ride as `event: raid` on the existing `/map-data/v1/live/<pv>/events` stream, only to streams open at
+  that moment, never buffered or replayed. A raid from raid-show (ingest or pull) rides only within 60 s of its event.
+- **Private ingest** is built: `POST /v1/roads/observe` on its own listener (`ATLAS_INGEST_PORT`, `ATLAS_INGEST_HOST`
+  default 127.0.0.1, optional `ATLAS_INGEST_TOKEN`), as in §3; the public server answers 405 to it. Further replies:
+  413 `too-large`, 422 reasons `content-type | json | schema | simulation | source | conflict`.
+  `createAtlasRoadIngress({ url, token?, fetch?, timeoutMs? })` in `apps/surveyor/src/roads/client.ts` implements
+  `AtlasRoadIngress`; it rejects with `AtlasRoadIngressError` and checks the echoed `raidId`.
+- **Gateway allowlist, applied here.** No round lane owns `apps/api/src/public/routes.ts`, so this lane made the
+  smallest additive change itself, as its own change for the reviewer: one `MAP_ROADS` pattern routes
+  `/map-data/v1/roads/<pv>/channel/<id>`, `/roads/<pv>/road/<idA>/<idB>`, `/roads/<pv>/road/login/<a>/<b>`,
+  `/roads/<pv>/busiest` and `/map-data/v1/gate/<pv>/finder` to the optional map service. Every existing route is
+  unchanged, and `routes.test.ts` checks the new paths and their near misses. The private ingest is never routed.
 
 ## Return to the same view — 2 Nov, AM10 (asked by front-door for FD12)
 
@@ -233,3 +264,26 @@ this branch through main; the embed half is ready for the front page now.
 Newest request wins (2 Nov, AM10 follow-up): each `restore` or `flyTo` cancels the one before it. A superseded call
 resolves `false` and never opens its card or finishes its flight later, and a card the person opens or closes while a
 call is still fetching stays as they left it. The front page needs no guard of its own.
+
+## Edition I and claims — 2 Nov, AM12
+
+**The edition is served through the existing preview routes.** `GET /map-data/v1/preview` keeps its shape. Once an
+edition is published, it points at the edition's night (an edition publication, `status: 'edition'`) and adds
+`edition: { id: 'ed-1', label: 'Edition I', foundedAt, worldHash, address }`. World, region, names, search, card,
+road and live routes are unchanged, and the gateway needs no new pattern. The browser validates both shapes strictly.
+An embed host that wants to say "Edition I" can read `edition.label` from the pointer; the map's own seal already says
+it. Wire details are in `AM12-edition.md`.
+
+**Claims (private, on the ingest listener).** `POST http://127.0.0.1:$ATLAS_INGEST_PORT/v1/claims` takes
+`Authorization: Bearer $ATLAS_INGEST_TOKEN` and
+`{"version":1,"kingdomId":"<twitch user id>","cause":"signed-in"|"founded","claimedAt":<ms>}`. The reply is
+`202 recorded` or `200 duplicate` (safe to retry; concurrent posts record once). Refusals are `401`, or `422` with
+`json`, `schema` or `unknown-channel`. `503 facts-unavailable` comes with `retry-after: 300`. The claim is durable
+before the reply, and land follows at the next survey night, at the channel's own pencil place (where the map already
+shows it). A producer sends only the verified ID and the cause, never a place, tier or realm.
+
+- front-door's session authority posts `signed-in` after a verified Twitch sign-in of the broadcaster, once per
+  sign-in or once per channel. Duplicates are free.
+- main's Genesis posts `founded` when a kingdom is founded.
+
+Neither producer exists yet; `needs:` lines are in progress.
