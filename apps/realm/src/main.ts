@@ -6,6 +6,7 @@ import { assertRealmSchema, createRealmPool, describeStorageFailure,
 import { INGRESS_ROUTE, ingressCredentials } from './ingress';
 import { RealmPanelGifts, RealmPanelService, mountRealmPanelRoutes } from './ingress/panel';
 import { ForgetGuard, RealmChatPrivacy, createQuietDisclosure, disclosedServices, mountChatPrivacyRoute } from './ingress/panel';
+import { createMonarchRoomChannel, createPostgresMonarchTitles, withMonarchArrival } from './monarch';
 import { RealmPanelSettings } from './ingress/panel/settings';
 import { HEALTH_ROUTE, READY_ROUTE } from './diagnostics';
 import { TenureEvidenceVerifier, tenureEvidenceKey } from './allocation';
@@ -48,6 +49,7 @@ import { createRealmRoomDoor } from './raid-gate/room-door';
 import { createRealmPier } from './fishing/pier';
 import { mountPierRoutes } from './fishing/routes';
 import { Campfires, installCampfires, createPostgresFireStore, campfireChatCommands } from './campfire';
+import { createRealmLooks } from './look';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -117,19 +119,23 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const campfires = new Campfires({ store: createPostgresFireStore(pool) });
   // Chat's `!sus` reaches the burning fire through the herald's chat-command registry.
   const unregisterCampfireChat = realmChatCommands.register(campfireChatCommands(campfires));
+  // Saved looks: GET/PUT /api/realm/looks/…, checked against verified records, worn live by walkers already in a room.
+  const looks = createRealmLooks({ pool, origin, verifier, names, scene: kingdomId => boot.loader.current(kingdomId)?.scene,
+    publicOrigin: process.env.REALM_PUBLIC_ORIGIN, log: line => console.info(line) });
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
     ...(land ? { beforeFoundedPublication: land.beforePublication } : {}),
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
     repositoryOptions: gate.install({ origin, guards: [castle.guard] }), furnish: citizens.furnish,
     attach: kingdom => {
+      const detachLooks = looks.attach(kingdom);
       const detachGuests = raidGuests.attach(kingdom), detachDoor = roomDoor.attach(kingdom);
       const clearRaidChat = () => raidChat.clear(kingdom.kingdomId), detachRaidChat = kingdom.onClosed(clearRaidChat);
       const detachEvening = evening.attach(kingdom);
       const fire = campfires.fire(kingdom.kingdomId), detachLive = fire.bindLive(() => kingdom.current && kingdom.privateState.stream.liveUntil > Date.now());
       const detachInteractions = attachEveningInteractions(kingdom, { auth: boot.services.auth,
         scene: () => boot.loader.current(kingdom.kingdomId)?.scene, campfire: fire.seats });
-      return () => { clearRaidChat(); detachRaidChat(); detachDoor(); detachGuests(); detachInteractions(); detachLive(); detachEvening(); };
+      return () => { clearRaidChat(); detachRaidChat(); detachDoor(); detachGuests(); detachInteractions(); detachLive(); detachEvening(); detachLooks(); };
     },
   });
   Object.assign(boot.services, { channels: [...(boot.services.channels ?? []), createItemRoomChannel(itemFoundation.items, createPostgresItemAdmission({ pool, origin, readiness: boot.readiness }))] });
@@ -144,6 +150,12 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
       const kingdom = boot.services.kingdoms.get(id), plan = boot.loader.current(id)?.scene.plan;
       return kingdom && plan ? shelfHomes(plan, kingdom.privateState.homes, kingdom.layoutRevision) : [];
     } })] });
+  // The monarch: the verified broadcaster steps out at the castle gate, crowned with the title they chose (monarch/).
+  const monarchTitles = createPostgresMonarchTitles(pool, origin);
+  Object.assign(boot.services, { monarch: monarchTitles, channels: [...boot.services.channels!, createMonarchRoomChannel(monarchTitles)], prepareSpawn: withMonarchArrival(boot.services.prepareSpawn, kingdomId => {
+    const held = boot.services.kingdoms.get(kingdomId), founded = boot.loader.current(kingdomId);
+    return held?.current && founded ? { world: held.world, layoutRevision: held.layoutRevision, writerEpoch: held.writerEpoch, plan: founded.scene.plan } : undefined;
+  }) });
   // Fishing opens only where its pier layer is drawn: REALM_PIER_FISHING=1 once the kingdom view mounts it.
   const pierVisible = process.env.REALM_PIER_FISHING === '1';
   const pierWhere = (id: string) => names.has(id) ? `${names.get(id)} pier` : 'the pier';
@@ -191,6 +203,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   mountForgeQueueRoutes(transport.app, evening.line, { pool, origin, secureCookies: new URL(process.env.REALM_PUBLIC_ORIGIN ?? 'http://localhost:5190').protocol === 'https:' });
   mountPierRoutes(transport.app, pier);
   mountForgeLedgerRoutes(transport.app, forgeLedgerSource(boot.services));
+  looks.mount(transport.app);
   ownRealmShutdown(server, transport, async () => {
     pier.dispose();
     itemFoundation.dispose();

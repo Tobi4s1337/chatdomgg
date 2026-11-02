@@ -1,0 +1,54 @@
+@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 400 900; font-display: swap; src: url('../../../atlas/assets/fonts/alegreya-italic-latin.woff2') format('woff2'); }
+@font-face { font-family: 'IM Fell English SC'; font-style: normal; font-weight: 400; font-display: swap; src: url('../../../atlas/assets/fonts/im-fell-english-sc.woff2') format('woff2'); }
+
+/* The arrival line: lettering in the world, no box. It rises, holds and fades. */
+.monarch-arrival {
+  position: absolute; left: 50%; top: 19%; z-index: 3; width: min(88vw, 760px);
+  transform: translate(-50%, 6px); text-align: center; pointer-events: none;
+  opacity: 0; visibility: hidden; color: #f6e7c8;
+  text-shadow: 0 1px 2px #1b1622d9, 0 2px 14px #141a2cb3, 0 0 40px #141a2c66;
+  transition: opacity .9s cubic-bezier(.2,.7,.2,1), transform .9s cubic-bezier(.2,.7,.2,1), visibility 0s linear .9s;
+}
+.monarch-arrival.shown { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition-delay: 0s; }
+.monarch-arrival.leaving { opacity: 0; transform: translate(-50%, -4px); transition-duration: 1.4s; }
+.monarch-arrival p { margin: 0; }
+.monarch-arrival-place {
+  font: italic 500 clamp(24px, 3.1vw, 38px)/1.15 var(--cd-face-name, Alegreya), Alegreya, Georgia, serif;
+  letter-spacing: .005em; text-wrap: balance;
+}
+.monarch-arrival-rule {
+  display: block; position: relative; width: 132px; height: 1px; margin: 13px auto 11px;
+  background: linear-gradient(90deg, transparent, #e7c38acc 22%, #e7c38acc 78%, transparent);
+}
+.monarch-arrival-rule::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px;
+  transform: translate(-50%, -50%) rotate(45deg); background: #efc177; box-shadow: 0 0 10px #f1b45a;
+}
+.monarch-arrival-standing {
+  font: 400 clamp(15px, 1.45vw, 19px)/1.3 'IM Fell English SC', var(--cd-face-label, Georgia), Georgia, serif;
+  letter-spacing: .08em; color: #f0d6a8;
+}
+.monarch-arrival[data-standing='monarch'] .monarch-arrival-standing { color: #f6d38f; }
+.monarch-arrival-titles {
+  display: flex; justify-content: center; align-items: baseline; gap: 4px; margin-top: 14px !important;
+  font: italic 14px/1 var(--cd-face-body, Alegreya), Alegreya, Georgia, serif; color: #dcc5a3;
+}
+.monarch-arrival-titles span { margin-right: 6px; }
+.monarch-arrival-titles button {
+  pointer-events: auto; appearance: none; cursor: pointer; padding: 6px 9px; border: 0; border-radius: 2px;
+  background: transparent; color: #e9d3ae; text-shadow: inherit;
+  font: 400 14px/1 'IM Fell English SC', var(--cd-face-label, Georgia), Georgia, serif; letter-spacing: .07em;
+  transition: color .16s, background .16s, transform .12s;
+}
+.monarch-arrival-titles button:hover { color: #fff3d8; background: #f1d1a014; }
+.monarch-arrival-titles button:active { transform: translateY(1px); }
+.monarch-arrival-titles button:focus-visible { outline: 1px solid #efc58b; outline-offset: 2px; }
+.monarch-arrival-titles button[aria-pressed='true'] { color: #ffd98f; box-shadow: inset 0 -1px 0 #efc177; }
+@media (max-width: 700px) {
+  /* Below the HUD's top row (place name, stream state, the Chronicle), above your own head. */
+  .monarch-arrival { top: 23%; width: calc(100vw - 36px); }
+  .monarch-arrival-place { font-size: 23px; }
+  .monarch-arrival-standing { font-size: 14px; }
+  .monarch-arrival-rule { margin: 10px auto 9px; }
+}
+@media (prefers-reduced-motion: reduce) { .monarch-arrival, .monarch-arrival.shown, .monarch-arrival.leaving { transform: translate(-50%, 0); } }

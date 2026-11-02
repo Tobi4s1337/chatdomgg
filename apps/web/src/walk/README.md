@@ -142,8 +142,11 @@ for it.
 - **The re-centre echo (Firefox only).** Firefox on X11 does not really re-centre the hidden cursor and reports its
   offset from the centre as movement after every real move. `createEchoFilter` predicts each echo (the last one
   plus the real movement since) and drops only events that match it; the first echo is learnt by holding an event
-  over 200 counts for at most 12 ms (one 60 Hz frame) until its twin proves it. Real flicks are never lost, only a
-  large event's arrival may wait that one frame. Chromium has no filter at all. Six echoes in one capture set
+  over 200 counts for at most 12 ms (one 60 Hz frame) until its twin proves it. A smaller echo (the lock began with
+  the cursor near the centre) is the size of a hand's move, so it is learnt from its arithmetic instead: three events
+  in a row, each the last plus the small real movement between, to the count; the links that already turned the
+  world are then taken back. Real flicks are never lost, only a large event's arrival may wait that one frame.
+  Chromium has no filter at all. Six echoes in one capture set
   `drifting`; the first lock lost after that is `onLetGo('drift')`, which keeps the street (no ledger) with one calm
   line about the right-button look.
 - **Right-button look.** Holding the right button on the world turns the view 1:1 by movementX/Y without any capture
@@ -365,6 +368,18 @@ REALM_SIMULATED=1 REALM_STORAGE=memory REALM_PORT=5191 pnpm --filter @chatdom/re
 
 Do not start a second process on an occupied port. The actual kingdom entry above consumes its founded collision
 world through realm wiring; the separate reference court remains a labelled diagnostic.
+
+### PL13 mouse look replay (`replay/`)
+
+```sh
+node apps/web/src/walk/replay/replay.mjs --target local --port <free 5170-5186>   # headless Chrome and Firefox, capture lock
+chatdom-pc-lease -- node apps/web/src/walk/replay/replay.mjs --bundle <dir>       # real GPU Chrome, web 5192 (build with --build-only first)
+```
+
+The real walk controller, look.ts and the shoulder rig in a real browser at its own refresh rate, fed Tobias's recorded
+Firefox X11 stream, synthetic echo streams (lock begun far from and near the centre), a steady 1000 Hz turn and a fast
+flick, every event at its own time and drawn on the next animation frame. The table gives the turn per count and any
+turn after the hand stops. The lock is a stand-in, so the run never takes the cursor of the machine it runs on.
 
 ### PL10 stills (`stills/`)
 

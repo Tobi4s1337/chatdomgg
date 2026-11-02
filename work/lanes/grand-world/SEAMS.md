@@ -1032,7 +1032,9 @@ Run in the deployed checkout (lane/integrator with this checkpoint merged). Noth
    - `REALM_LAND_DIRECTORY=/var/lib/chatdom/land` (required; without it nothing changes and clients keep today's land).
    - `REALM_LAND_BAKE_SCRIPT` (optional; the default is `land-bake.mjs` beside `dist/realm.mjs`). Without the bundle
      the realm still serves and rebinds, and logs that a new plan waits for the offline bake command.
-   - No `GRAND_*` variable is used in production (those are private test inputs). No migration.
+   - No `GRAND_*` variable is used in production (those are private test inputs). GW16 adds one additive
+     migration, `0015_realm_monarch` (the monarch's chosen title, one small table); the realm applies it the way it
+     applies the others (`migrateRealmSchema` before start). Nothing else in the environment changes.
 4. **Gateway:** nothing to add. The public allowlist already admits exactly `/api/realm/land/<kingdom>/<scene>` and
    `/api/realm/land/<kingdom>/<scene>/<blob>` (`apps/api/src/public/routes.ts`), forwarded to the realm.
 5. **Restart the realm.** Expect `land: serving and baking /var/lib/chatdom/land (bake command …/land-bake.mjs)`.
@@ -1084,6 +1086,34 @@ No round lane owns these, so they were made here as the smallest backward-compat
   and shown again as soon as one point has alpha. It never shows a pool its owner hid. If forge adopts the same rule
   in `forge/emitters`, the host sweep simply finds nothing to hide; nothing needs removing.
 
+## GW16 the monarch walks in — 2026-11-02
+
+Contracts (additive, `packages/shared/src/realm/monarch.ts`, exported from `@chatdom/shared/realm`):
+`isVerifiedMonarch(principal)` (live origin and person id = kingdom id; nothing else ever crowns), the titles
+`Monarch | King | Queen` (default `Monarch`; anything else reads as the default), `monarchNameTag`, `arrivalLine`,
+and the room channel `monarch` (`{type:'who'}` from anyone, `{type:'title', title}` from the verified monarch only;
+reply `{type:'monarch', name, title, you}` to the asker). Wire fields: `WalkerSchema.crown` (append-only string,
+the title or empty) and `RealmObservedWalker.crown` (optional).
+
+Realm (`apps/realm/src/monarch/**`, the room and main.ts additively): the room sets `crown` on join only for the
+verified broadcaster, re-crowns their seat when the title changes, publishes it in the walker frame, and turns any
+arriving walker toward `RealmSpawnPreparation.faceToward` when a preparation names one (raid-show's §11 arrival
+facing is now honoured too). `withMonarchArrival` wraps `prepareSpawn`: the monarch steps out at the castle gate
+facing the town; everyone else keeps the inner preparation. Titles live in `realm_monarch_titles` (migration 0015);
+the broadcaster's public name is read from their own sign-in, else the name Twitch ingress observed.
+
+Scene (`apps/web/src/kingdom/grand-land/monarch/**`, mounted in `scene.ts`): crown on the monarch's head, title on
+their tag, heads turning (`walkerGaze`, play SEAMS), the kingdom's bell once and the beacon catching as they walk
+in, the arrival line once per standing for guests and citizens (every arrival for the monarch, with their title
+choice), and a faint thread of light from the reader's own door.
+
+Asks:
+- **raid-show (dock/throne):** a title choice belongs in the throne too. Send `{version:1,type:'title',title}` on
+  the room channel `monarch` from the broadcaster's session, or call `RealmMonarchTitles.choose` from a dock route
+  that has already verified the broadcaster; the room re-crowns at once.
+- **front-door / Chronicle:** a monarch-arrival page or beat can read the same `crown` mark; nothing is published
+  to the Chronicle by this lane.
+
 ## GW13 every channel its own world — the asks (2026-11-02, checkpoint)
 
 - **done (realm side): a kingdom founded on its own world** — the realm keeps one world per channel, pinned the first
@@ -1130,3 +1160,20 @@ No round lane owns these, so they were made here as the smallest backward-compat
   when the build has no adopted recipe for that kingdom (`readServedLandRecipe`, `kingdom/grand-land/recipes.ts`,
   4 s, any failure keeps today's land) and then probe the receipt's binding as before. Gateway: one additive line in
   `apps/api/src/public/routes.ts` carries `/api/realm/land/<id>/recipe` as a realm read; front-door, please keep it.
+
+
+## from launch
+
+- 2 Nov (LA10): `/stream` without a kingdom showed "Choose a kingdom" calmly but logged
+  `console.error('The stream kingdom could not open', …)` on every load. The refusal is now a `StreamRefusal`
+  (`apps/web/src/stream/mount.ts`), which the mount still turns into the failed phase but does not log; every other
+  failure still logs. Test in `mount.test.ts`.
+- 2 Nov (LA10, review): the stream shows only calm words when it fails. `fail()` in `apps/web/src/stream/mount.ts`
+  now takes the cause: a `StreamRefusal` speaks its own message; any other cause (a realm 500, a TypeError, a scene
+  `onError`, the five-minute replacement timeout, a rejected final handoff) shows "The kingdom could not be opened
+  just now." (or "…could not refresh just now." for a replacement), is logged, and keeps its raw message in
+  `stats.lastCause` for diagnostics. A rejected final handoff is now logged too. Tests in `mount.test.ts`.
+- 2 Nov (LA10, session 4, realm): `GET /api/realm/entry/<id>` for a kingdom with no approved entry name answers **404**
+  "No kingdom with this address is open to visitors." instead of 503 "…no approved entry name configured." (the walk-in
+  gate turns the 404 into its `nowhere` state). Every client of the route already treats any non-OK answer alike
+  (`apps/realm/src/bootstrap/entry.ts`, new `entry.test.ts`).

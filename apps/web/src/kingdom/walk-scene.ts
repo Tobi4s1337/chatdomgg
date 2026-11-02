@@ -29,6 +29,7 @@ import { createWalkerGround } from '../walk/ground';
 import { sampleFoundedTerrain } from '@chatdom/world/founded-collision';
 import type { PlaySettings } from '../play/slots';
 import '../play/providers';
+import { walkerGaze } from './grand-land/monarch/gaze';
 
 /** Other walkers' steps are heard within this many metres. */
 
@@ -345,7 +346,8 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         ...(pose.posture ? { posture: pose.posture } : {}),
         // The gait reads the drawn ground and floors, so no sole cuts a slope or a stair while standing or walking.
         ...gaitGround(pose.id),
-        opacity: detail * (pose.self ? play.selfHidden ? 0 : cameraHolds.size || controller.owner !== 'walking' ? 1 : controller.selfOpacity : 1), time: now / 1000 })), camera);
+        opacity: detail * (pose.self ? play.selfHidden ? 0 : cameraHolds.size || controller.owner !== 'walking' ? 1 : controller.selfOpacity : 1), time: now / 1000, ...walkerGaze(pose) })), camera);
+
       ground.retain(drawnHeights);
       const self = walkingPoses.find(pose => pose.self), state = client.room.state;
       const interaction = connection.session.snapshot().self;
