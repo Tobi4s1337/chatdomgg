@@ -1,3 +1,4 @@
+import { languageName } from '../../../../surveyor/src/cartography/language-labels';
 import { fetchCard, type CardReply } from './directory';
 import { loadPreview, type StorageLike } from './load';
 import { SettlerStore, type Settler } from './model';
@@ -43,7 +44,7 @@ export function doorHolding(settler: Settler, world: PreviewWorld): DoorHolding 
     version: 1, id: settler.id, login: settler.login, name: settler.name, freshUntil: settler.freshUntil, tier: settler.tier, average: settler.average,
     game: settler.game === null ? null : { id: game?.gameId ?? null, name: settler.game },
     realm: { kind: realm?.kind ?? 'crossroads', family: realm && realm.family >= 0 ? world.families[realm.family]?.id ?? null : null, name: settler.realmName },
-    region: { language: region?.language ?? null, name: region?.englishName ?? region?.name ?? '' },
+    region: { language: region?.language ?? null, name: region?.language ? languageName(region.language).label : region?.englishName ?? region?.name ?? '' },
     x: settler.x, y: settler.y,
     survey: { preview: world.id, revision: world.revision, asOf: world.asOf, windowHours: world.window.hours },
   };
@@ -53,7 +54,7 @@ export function doorHolding(settler: Settler, world: PreviewWorld): DoorHolding 
  * dominant game, so its last live category is deliberately not used as survey evidence. */
 export function waitingDoorHolding(card: CardReply, world: PreviewWorld): DoorHolding | null {
   const face = card.channel;
-  if (card.preview !== world.id || card.revision !== world.revision || face.place !== 'waiting'
+  if (card.average === null || card.preview !== world.id || card.revision !== world.revision || face.place !== 'waiting'
     || !face.name || !face.login || face.freshUntil === null || face.freshUntil <= Date.now()
     || face.region === null || face.realm === null) return null;
   const realm = world.realms[face.realm];
@@ -62,8 +63,8 @@ export function waitingDoorHolding(card: CardReply, world: PreviewWorld): DoorHo
   return {
     version: 1, id: face.id, login: face.login, name: face.name, freshUntil: face.freshUntil,
     tier: null, average: card.average, game: null,
-    realm: { kind: realm.kind, family: realm.family >= 0 ? world.families[realm.family]?.id ?? null : null, name: realm.name },
-    region: { language: region.language, name: region.englishName ?? region.name }, x: null, y: null,
+    realm: { kind: realm.kind, family: realm.family >= 0 ? world.families[realm.family]?.id ?? null : null, name: realm.kind === 'isle' && region.language ? languageName(region.language).label : realm.name },
+    region: { language: region.language, name: region.language ? languageName(region.language).label : region.englishName ?? region.name }, x: null, y: null,
     survey: { preview: world.id, revision: world.revision, asOf: world.asOf, windowHours: world.window.hours },
   };
 }

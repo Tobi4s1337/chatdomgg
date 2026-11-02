@@ -33,21 +33,7 @@ const q = (value: number) => Math.round(value * COORD_SCALE);
 const encoder = new TextEncoder();
 const json = (value: unknown) => encoder.encode(`${JSON.stringify(value)}\n`);
 
-/** The language's own name, capitalised as a map title; Twitch's "other" stays honest rather than invented. */
-export function languageNames(code: string): { name: string; englishName: string } {
-  if (code === 'other') return { name: 'Other tongues', englishName: 'Other languages' };
-  const lookup = (locale: string) => {
-    try {
-      return new Intl.DisplayNames([locale], { type: 'language', fallback: 'none' }).of(code) ?? null;
-    } catch {
-      return null;
-    }
-  };
-  const english = lookup('en') ?? code.toUpperCase();
-  const own = lookup(code) ?? english;
-  const title = (text: string) => text.charAt(0).toLocaleUpperCase(code === 'other' ? 'en' : code) + text.slice(1);
-  return { name: title(own), englishName: title(english) };
-}
+export { languageNames } from '../cartography/language-labels';
 
 function mainGame(channel: ChannelObservation): string | null {
   let best: { gameId: string; minutes: number } | null = null;
@@ -131,7 +117,7 @@ export function realmName(realm: Pick<Realm, 'kind' | 'family'>, taxonomy: Loade
 
 /** The geometry in the stored fixed point, with the hamlet lattice's free slots counted per realm. */
 export function regionTitle(region: Layout['regions'][number]): { name: string; englishName: string } {
-  return region.language === null ? { name: OUTER_NAME, englishName: OUTER_NAME } : languageNames(region.language);
+  return region.language === null ? { name: OUTER_NAME, englishName: OUTER_NAME } : { name: region.language, englishName: region.language };
 }
 
 /**

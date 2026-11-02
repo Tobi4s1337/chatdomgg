@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BASE, clone, FakeService, ID_A, ID_B, makeChunk, makeNames, makeWorld, publish, sha } from './fixtures.test-support';
 import {

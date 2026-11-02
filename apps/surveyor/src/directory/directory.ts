@@ -2,15 +2,17 @@ import { createHash } from 'node:crypto';
 import { createReadStream, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sha256 } from '../export/project';
-import type { ChannelObservation, SnapshotManifest } from '../export/schema';
+import { AvatarUrlSchema, RAW_CONTENT_MAX_AGE_MS, type ChannelObservation, type SnapshotManifest } from '../export/schema';
 import { dabHash } from '../live/frame';
+import { PencilPlaces, type PencilRegionPlaces } from '../cartography/pencil-place';
+import type { TwitchChannelFacts } from './twitch-lookup';
 import { loadLiveTarget } from '../live/target';
-import { nameFreshUntil, publicVisibility } from '../policy/visibility';
+import { isGamblingCategory, nameFreshUntil, publicVisibility } from '../policy/visibility';
 import { readManifest, revisionDir } from '../store/revisions';
 import { matchRank, queryKey, searchKey } from './normalize';
 import {
   CARD_ROADS, CardReplySchema, DIRECTORY_KIND, MAX_RESULTS, RoadReplySchema, SearchReplySchema,
-  type CardReply, type CardRoad, type ChannelFace, type RoadReply, type SearchReply,
+  type CardReply, type CardRoad, type ChannelFace, type ChannelPortrait, type RoadReply, type SearchReply,
 } from './schema';
 
 /**
@@ -25,6 +27,8 @@ interface Entry {
   nameKey: string;
   /** When the source last confirmed login and display name. Names remain served between imports. */
   factsAt: number;
+  avatarUrl: string | null;
+  avatarFactsAt: number | null;
   firstSeenAt: number;
   lastLiveAt: number;
   average: number;
@@ -66,6 +70,8 @@ export class Directory {
     private readonly blocked: ReadonlySet<string>,
     pairs: readonly { from: string; to: string; tally: Tally }[],
     realmRegions: readonly number[],
+    private readonly placement?: { realmFor: (facts: TwitchChannelFacts) => number; regions: Map<number, PencilRegionPlaces> },
+    private readonly blockedLogins: ReadonlySet<string> = new Set(),
   ) {
     this.regionOfRealm = [...realmRegions];
     for (const entry of entries) {
@@ -78,6 +84,44 @@ export class Directory {
       this.side(from, to).sent = tally;
       this.side(to, from).received = tally;
     }
+  }
+
+  /** Known channels stay under the survey gate, even when their public card is absent. */
+  has(lookup: Lookup): boolean {
+    if ('id' in lookup) return this.byId.has(lookup.id) || this.blocked.has(lookup.id);
+    if ('login' in lookup) return this.byLogin.has(lookup.login) || this.blockedLogins.has(lookup.login);
+    return this.find(lookup) !== null;
+  }
+
+  allowed(id: string, withheld: ReadonlySet<string>): boolean {
+    return !withheld.has(id) && !this.blocked.has(id);
+  }
+
+  /** Project public lookup facts through the same gate. This never writes an entry or a holding. */
+  external(facts: TwitchChannelFacts, withheld: ReadonlySet<string>, now: number, portraits = true): CardReply | null {
+    if (!this.allowed(facts.id, withheld) || isGamblingCategory(facts.gameId)) return null;
+    const known = this.card({ id: facts.id }, withheld, now, portraits, true);
+    if (typeof known !== 'string') return known;
+    if (!this.placement) return null;
+    const realm = this.placement.realmFor(facts);
+    const region = this.regionOfRealm[realm];
+    if (region === undefined) return null;
+    const position = this.placement.regions.get(region)?.place(dabHash(facts.id), realm);
+    if (!position) return null;
+    const fresh = facts.fetchedAt + RAW_CONTENT_MAX_AGE_MS > now;
+    return CardReplySchema.parse({
+      ...this.reply(now), asOf: facts.fetchedAt, kind: `${DIRECTORY_KIND}-card`,
+      channel: { id: facts.id, login: facts.login, name: facts.name, freshUntil: facts.fetchedAt + RAW_CONTENT_MAX_AGE_MS, place: 'waiting', ordinal: null, tier: null, region, realm },
+      ...(portraits ? { portrait: fresh && facts.avatarUrl && AvatarUrlSchema.safeParse(facts.avatarUrl).success ? { url: facts.avatarUrl, freshUntil: facts.fetchedAt + RAW_CONTENT_MAX_AGE_MS } : null } : {}),
+      position, average: null, language: facts.language, firstSeenAt: null, lastLiveAt: null,
+      stream: fresh ? { live: facts.live, game: facts.game, title: facts.title, viewers: facts.viewers, startedAt: facts.startedAt } : null,
+      roads: null, coverage: this.coverage(),
+    });
+  }
+
+  private position(entry: Entry): { x: number; y: number } | undefined {
+    if (entry.ordinal >= 0) return undefined;
+    return this.placement?.regions.get(entry.region)?.place(dabHash(entry.id), entry.realm) ?? undefined;
   }
 
   private side(a: string, b: string): { sent: Tally | null; received: Tally | null } {
@@ -125,6 +169,13 @@ export class Directory {
     return { version: 1 as const, preview: this.preview, revision: this.manifest.revision, servedAt: now, asOf: this.manifest.asOf };
   }
 
+  private portrait(entry: Entry, now: number): ChannelPortrait | null {
+    // Older exports merged the login and live clocks. They cannot establish an avatar's age.
+    const at = entry.avatarFactsAt;
+    if (at === null || at > now + 60_000 || at + RAW_CONTENT_MAX_AGE_MS <= now || !AvatarUrlSchema.safeParse(entry.avatarUrl).success) return null;
+    return { url: entry.avatarUrl!, freshUntil: at + RAW_CONTENT_MAX_AGE_MS };
+  }
+
   private window() {
     return { from: this.manifest.window.firstObservationAt, to: Math.max(this.manifest.window.firstObservationAt, this.manifest.source.database.openedAt) };
   }
@@ -139,7 +190,7 @@ export class Directory {
    * a word beginning with it, then names containing it; within each, the larger observed audience, then channel ID.
    * Names stay searchable between survey imports; withholding is applied to every response.
    */
-  search(raw: string, withheld: ReadonlySet<string>, now: number): SearchReply | DirectoryRefusal {
+  search(raw: string, withheld: ReadonlySet<string>, now: number, portraits = true, positions = false): SearchReply | DirectoryRefusal {
     const query = queryKey(raw);
     if (!query.ok) return query.reason;
     const ranks: Entry[][] = [[], [], [], []];
@@ -159,7 +210,7 @@ export class Directory {
       ...this.reply(now),
       kind: `${DIRECTORY_KIND}-search`,
       key: query.key,
-      results: chosen.map((entry) => ({ channel: this.face(entry.id, withheld, now)!, average: entry.average, language: entry.language })),
+      results: chosen.map((entry) => ({ channel: this.face(entry.id, withheld, now)!, ...(portraits ? { portrait: this.portrait(entry, now) } : {}), average: entry.average, language: entry.language, ...(positions ? { position: this.position(entry) } : {}) })),
       more: matched > chosen.length,
     });
   }
@@ -177,7 +228,7 @@ export class Directory {
   }
 
   /** A channel's public card, or not-found when it is unknown, withheld, gone or gambling (all alike to a reader). */
-  card(lookup: Lookup, withheld: ReadonlySet<string>, now: number): CardReply | DirectoryRefusal {
+  card(lookup: Lookup, withheld: ReadonlySet<string>, now: number, portraits = true, positions = false): CardReply | DirectoryRefusal {
     const entry = this.find(lookup);
     const channel = entry && this.face(entry.id, withheld, now);
     if (!entry || !channel) return 'not-found';
@@ -201,6 +252,8 @@ export class Directory {
       ...this.reply(now),
       kind: `${DIRECTORY_KIND}-card`,
       channel,
+      ...(portraits ? { portrait: this.portrait(entry, now) } : {}),
+      ...(positions ? { position: this.position(entry) } : {}),
       average: entry.average,
       language: entry.language,
       firstSeenAt: entry.firstSeenAt,
@@ -277,10 +330,12 @@ export async function loadDirectory(dataDir: string, previewId: string): Promise
   const realmRegions = target.world.realms.map((realm) => realm.region);
   const entries: Entry[] = [];
   const blocked = new Set<string>();
+  const blockedLogins = new Set<string>();
   await readNdjson(join(dir, manifest.files.channels.path), manifest.files.channels.sha256, (record) => {
     const channel = record as ChannelObservation;
     if (publicVisibility(channel) !== 'public') {
       blocked.add(channel.kingdomId);
+      blockedLogins.add(channel.login);
       return;
     }
     const ordinal = target.ordinalOf.get(channel.kingdomId) ?? -1;
@@ -293,6 +348,8 @@ export async function loadDirectory(dataDir: string, previewId: string): Promise
       loginKey: searchKey(channel.login),
       nameKey: searchKey(channel.displayName),
       factsAt: channel.factsAt,
+      avatarUrl: channel.avatarUrl,
+      avatarFactsAt: channel.avatarFactsAt ?? null,
       firstSeenAt: channel.firstSeenAt,
       lastLiveAt: channel.lastLiveAt,
       average: Math.round(channel.averageViewers),
@@ -312,5 +369,11 @@ export async function loadDirectory(dataDir: string, previewId: string): Promise
     return { from: pair.fromKingdomId, to: pair.toKingdomId, tally: { raids: pair.raids, travellers: pair.viewersTotal, lastAt: pair.lastAt } };
   });
   entries.sort((a, b) => b.average - a.average || compareId(a.id, b.id));
-  return new Directory(target.previewId, manifest, entries, blocked, pairs, realmRegions);
+  const pencil = new PencilPlaces(target.world);
+  const regions = new Map<number, PencilRegionPlaces>();
+  const holdings = target.holdingGeometry ?? [];
+  for (const region of target.world.regions) regions.set(region.index, pencil.forRegion(region.index, holdings.filter(holding => holding.region === region.index)));
+  return new Directory(target.previewId, manifest, entries, blocked, pairs, realmRegions, {
+    regions, realmFor: facts => target.realmFor({ id: facts.id, language: facts.language, categories: facts.gameId ? [{ gameId: facts.gameId, minutes: 1 }] : [] }),
+  }, blockedLogins);
 }

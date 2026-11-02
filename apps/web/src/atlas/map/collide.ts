@@ -61,6 +61,24 @@ export function overlaps(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
+/** Survey marks by tier in CSS px: the small ink symbol for a holding too small to draw at this distance. */
+export const MARK_PX = [9, 7, 5, 3.6] as const;
+/** Paper kept between a lettered name and a survey mark, so no dot sits in a word or between its spaced letters. */
+export const LETTER_CLEARANCE = 3;
+
+/**
+ * Whether a survey mark at (x, y) would sit inside a language, archipelago or realm name. Names knock out the small
+ * marks under them, as a cartographer lifts a dot out of the lettering; a stamp, a selection or a found holding is
+ * never knocked out, and the holding stays findable by search and appears again closer in.
+ */
+export function underLettering(x: number, y: number, tierRank: number, lettering: readonly Rect[]): boolean {
+  if (!lettering.length) return false;
+  const half = (MARK_PX[tierRank] ?? MARK_PX[3]) / 2 + LETTER_CLEARANCE;
+  const dot: Rect = { x: x - half, y: y - half, w: half * 2, h: half * 2 };
+  for (const rect of lettering) if (overlaps(dot, rect)) return true;
+  return false;
+}
+
 /** Stable priority: bigger tier first, then the larger observed average, then the smaller channel ID. */
 export function comparePriority(a: { tierRank: number; average: number; id: string }, b: { tierRank: number; average: number; id: string }): number {
   if (a.tierRank !== b.tierRank) return a.tierRank - b.tierRank;

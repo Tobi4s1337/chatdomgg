@@ -12,6 +12,7 @@ import { runImport } from './import';
 import { checkLive } from './live/check';
 import { runLive } from './live/run';
 import type { LiveTarget } from './live/target';
+import { rebuildPreview } from './preview/rebuild';
 import { createAtlasService } from './serve';
 import { acquireLock, revisionDir } from './store/revisions';
 
@@ -88,6 +89,11 @@ async function main(argv: string[]): Promise<number> {
     for (const line of summary(result.manifest)) console.log(line);
     console.log(`  survey preview ${result.preview.id} ${result.preview.outcome} (draft land, not an edition)`);
     console.log(`  wrote ${(revisionBytes(config.dataDir, result.manifest) / 1_048_576).toFixed(1)} MB · pruned ${result.pruned.length ? result.pruned.join(', ') : 'none'}`);
+    return 0;
+  }
+  if (command === 'preview') {
+    const result = rebuildPreview(dataDirFrom(process.env));
+    console.log(`atlas:preview ${result.id} ${result.outcome} (verified local revision; collector untouched; nothing founded)`);
     return 0;
   }
   if (command === 'check') {
@@ -210,7 +216,7 @@ async function main(argv: string[]): Promise<number> {
     process.once('SIGTERM', stop);
     return await new Promise<number>(() => {});
   }
-  console.error('usage: atlas.mjs import | check [--revision <id>] | serve | live [--once] | found --edition 0|I --authorization <file> | settle | rehearse [--edition 0|I] | authorize --edition 0|I --key <pem> --by <login>');
+  console.error('usage: atlas.mjs import | preview | check [--revision <id>] | serve | live [--once] | found --edition 0|I --authorization <file> | settle | rehearse [--edition 0|I] | authorize --edition 0|I --key <pem> --by <login>');
   return 2;
 }
 

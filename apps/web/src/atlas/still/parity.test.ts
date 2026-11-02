@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { makeWorld } from '../data/fixtures.test-support';
 import { geographyOf } from '../data/model';

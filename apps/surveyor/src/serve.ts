@@ -10,7 +10,10 @@ import { PREVIEW_KIND, PreviewIdSchema, PreviewWorldSchema, ServedNamesSchema, t
 import { previewDir, readPreviewManifest, readPreviewNames } from './preview/store';
 import { layout, readCurrent, readManifest } from './store/revisions';
 import { LIVE_FILES, liveRoot, liveTargetDir, readLiveManifest, readLiveState } from './live/store';
+import { DirectoryFallback } from './directory/fallback';
+import { LookupUnavailable, twitchLookupFromEnv, type TwitchLookup } from './directory/twitch-lookup';
 import { loadDirectory, type Directory, type DirectoryRefusal, type Lookup } from './directory/directory';
+import { createRoadRuntime, type RoadRuntimeOptions } from './roads/runtime';
 
 /**
  * The Atlas data service. It serves a fixed set of routes below /map-data from the current revision and nothing
@@ -76,6 +79,12 @@ interface NamesBody {
 }
 
 export interface AtlasServiceOptions {
+  /** Optional durable raid-show feed; recorder backfill uses this service's own verified imports. */
+  roads?: RoadRuntimeOptions;
+  /** Optional public-read Twitch adapter; null disables lookup. */
+  twitchLookup?: TwitchLookup | null;
+  /** Trust only a loopback reverse proxy which overwrites X-Forwarded-For. */
+  trustLoopbackProxy?: boolean;
   /** Injected clock for name freshness. */
   now?: () => number;
   /** How often the live watcher looks for a new frame (tests shorten it). */
@@ -118,6 +127,17 @@ export interface AtlasService {
 export function createAtlasService(dataDir: string, log: (line: string) => void = () => {}, options: AtlasServiceOptions = {}): AtlasService {
   const paths = layout(dataDir);
   const now = options.now ?? Date.now;
+  const twitch = options.twitchLookup === undefined ? twitchLookupFromEnv() : options.twitchLookup;
+  const fallback = twitch ? new DirectoryFallback(twitch, { now }) : null;
+  const trustProxy = options.trustLoopbackProxy ?? process.env.ATLAS_TRUST_LOOPBACK_PROXY === '1';
+  function clientIp(req: IncomingMessage): string {
+    const remote = req.socket.remoteAddress ?? 'unknown';
+    if (trustProxy && /^(?:::ffff:)?127\.|^::1$/.test(remote)) {
+      const forwarded = req.headers['x-forwarded-for'];
+      if (typeof forwarded === 'string' && /^[a-fA-F0-9:.]{3,64}$/.test(forwarded)) return forwarded;
+    }
+    return remote;
+  }
   const withheld = withheldReader(dataDir);
   const namesCache = new Map<string, NamesBody>();
   let loaded: Loaded | null = null;
@@ -334,19 +354,30 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
     const waited = new Promise<'warming'>((resolve) => {
       timer = setTimeout(() => resolve('warming'), DIRECTORY_WAIT_MS);
     });
-    void Promise.race([pending, waited]).then((register) => {
+    void Promise.race([pending, waited]).then(async (register) => {
       clearTimeout(timer);
       if (res.writableEnded) return;
       if (register === 'warming') return send(res, 503, JSON.stringify({ error: 'warming' }), { 'retry-after': '5' }, head);
       const list = withheld.current();
       if (list.error) return send(res, 503, JSON.stringify({ error: 'names-unavailable' }), { 'retry-after': '60' }, head);
-      const answer = ask(register, list.ids, now());
+      const answer = await ask(register, list.ids, now());
+      if (res.writableEnded || res.destroyed) return;
+      // Network lookups can outlive a moderation change. Re-project before any name leaves the service.
+      const latest = withheld.current();
+      if (latest.error || latest.key !== list.key) return send(res, 503, JSON.stringify({ error: 'names-unavailable' }), { 'retry-after': '1' }, head);
+      if (answer && typeof answer === 'object') {
+        const reply = answer as { channel?: { id: string }; results?: { channel: { id: string } }[] };
+        if (reply.channel && !register.allowed(reply.channel.id, latest.ids)) return send(res, 404, JSON.stringify({ error: 'not-found' }), {}, head);
+        if (reply.results) reply.results = reply.results.filter(result => register.allowed(result.channel.id, latest.ids));
+      }
       if (answer === 'not-found') return send(res, 404, JSON.stringify({ error: 'not-found' }), {}, head);
       if (answer === 'empty' || answer === 'too-long') return send(res, 400, JSON.stringify({ error: `query-${answer}` }), {}, head);
       return send(res, 200, JSON.stringify(answer), { vary: 'accept-encoding' }, head);
-    }, () => {
+    }).catch((error: unknown) => {
       clearTimeout(timer);
-      if (!res.writableEnded) send(res, 503, JSON.stringify({ error: 'register-unavailable' }), { 'retry-after': '30' }, head);
+      if (!res.writableEnded && !res.destroyed) send(res, error instanceof LookupUnavailable && error.reason === 'limited' ? 429 : 503,
+        JSON.stringify({ error: error instanceof LookupUnavailable ? `lookup-${error.reason}` : 'register-unavailable' }),
+        { 'retry-after': String(error instanceof LookupUnavailable ? error.retryAfter ?? 30 : 30) }, head);
     });
   }
 
@@ -467,12 +498,19 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
     if (searchMatch) {
       const params = new URLSearchParams(query >= 0 ? url.slice(query + 1) : '');
       const q = params.get('q') ?? '';
-      return answerDirectory(res, searchMatch[1]!, head, (register, ids, at) => register.search(q, ids, at));
+      return answerDirectory(res, searchMatch[1]!, head, (register, ids, at) => params.get('lookup') === '1' && fallback
+        ? fallback.search(register, q, ids, clientIp(req), params.get('portraits') === '1')
+        : register.search(q, ids, at, params.get('portraits') === '1'));
     }
     const cardMatch = DIRECTORY_CARD.exec(path);
     if (cardMatch) {
       const lookup: Lookup = cardMatch[2] ? { id: cardMatch[2] } : cardMatch[3] ? { login: cardMatch[3] } : { dab: cardMatch[4]! };
-      return answerDirectory(res, cardMatch[1]!, head, (register, ids, at) => register.card(lookup, ids, at));
+      // Opt-in keeps older clients' strict v1 decoders usable during a rolling web/service adoption.
+      const params = new URLSearchParams(query >= 0 ? url.slice(query + 1) : '');
+      const portraits = params.get('portraits') === '1';
+      return answerDirectory(res, cardMatch[1]!, head, (register, ids, at) => params.get('lookup') === '1' && fallback
+        ? fallback.card(register, lookup, ids, clientIp(req), portraits)
+        : register.card(lookup, ids, at, portraits));
     }
     const roadMatch = DIRECTORY_ROAD.exec(path);
     if (roadMatch) {
@@ -546,14 +584,25 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
   server.requestTimeout = 10_000;
   server.headersTimeout = 5_000;
   current();
+  let roads: ReturnType<typeof createRoadRuntime>;
+  try {
+    roads = createRoadRuntime(dataDir, options.roads, log);
+  } catch (error) {
+    clearInterval(watcher);
+    twitch?.close();
+    throw error;
+  }
+  let closed: Promise<void> | undefined;
   return {
     server,
     revision: () => current()?.survey.revision ?? null,
-    close: () => new Promise((done) => {
+    close: () => closed ??= (async () => {
       clearInterval(watcher);
+      twitch?.close();
       for (const clients of streams.values()) for (const res of clients.keys()) res.end();
-      server.close(() => done());
+      const stopped = new Promise<void>((done) => server.close(() => done()));
       server.closeAllConnections();
-    }),
+      await Promise.all([stopped, roads.close()]);
+    })(),
   };
 }

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { columns, decorCode, makeChunk, makeNames, makeWorld } from './fixtures.test-support';
 import { decodeDecor, decodeRings, geographyOf, SettlerStore, tierOf, type Settler } from './model';
@@ -71,7 +72,7 @@ describe('geographyOf', () => {
   it('converts every geometric field to world units and names clusters by their game', () => {
     const geo = geographyOf(makeWorld());
     expect(geo.bounds).toEqual({ minX: -100, minY: -60, maxX: 120, maxY: 50 });
-    expect(geo.regions[1]).toEqual({ index: 1, name: 'Deutsch', englishName: 'German', kind: 'isle', x: 80, y: 20, r: 15, members: 2 });
+    expect(geo.regions[1]).toEqual({ index: 1, name: 'German', englishName: 'German', kind: 'isle', x: 80, y: 20, r: 15, members: 2 });
     expect(geo.regions[2]).toMatchObject({ name: 'The Outer Isles', kind: 'outer', members: 0 });
     expect(geo.clusters).toEqual([
       { region: 0, realm: 1, name: 'Just Chatting', x: 0, y: 0, r: 20, members: 3 },
@@ -87,7 +88,7 @@ describe('geographyOf', () => {
   it('keeps each realm with its region, kind, family, name and circle in world units', () => {
     const geo = geographyOf(makeWorld());
     expect(geo.realms.map((realm) => `${realm.region}:${realm.kind}:${realm.name}`)).toEqual([
-      '0:crossroads:The Crossroads', '0:family:Just Chatting & IRL', '0:family:Arenas & MOBAs', '0:wilds:The Wilds', '1:isle:Deutsch', '2:outer:The Outer Isles',
+      '0:crossroads:The Crossroads', '0:family:Just Chatting & IRL', '0:family:Arenas & MOBAs', '0:wilds:The Wilds', '1:isle:German', '2:outer:The Outer Isles',
     ]);
     expect(geo.realms[2]).toEqual({ index: 2, region: 0, kind: 'family', family: 1, name: 'Arenas & MOBAs', x: -35, y: -20, r: 10, members: 1 });
   });
@@ -127,7 +128,7 @@ describe('SettlerStore', () => {
       tier: 'capital', tierRank: 0, x: 6, y: -6, average: 33_015, game: 'Just Chatting', region: 0, realm: 1, realmName: 'Just Chatting & IRL', ordinal: 0,
     });
     // An isle is one realm, named for its language.
-    expect(store.byId.get('36926489')).toMatchObject({ name: 'GRONKH', tier: 'city', game: null, region: 1, realm: 4, realmName: 'Deutsch' });
+    expect(store.byId.get('36926489')).toMatchObject({ name: 'GRONKH', tier: 'city', game: null, region: 1, realm: 4, realmName: 'German' });
     expect(store.hasRegion(0)).toBe(false);
   });
 
@@ -268,6 +269,35 @@ describe('SettlerStore', () => {
     store.applyNames({ ...makeNames(world), preview: 'pv-20261030T055627Z-0123456789ab' });
     expect(store.named).toBe(false);
     expect(store.all.every((s) => s.name === null)).toBe(true);
+  });
+
+  it('keeps fixed lettering on chunk arrival but invalidates names, withholding and expiry including lower tiers', () => {
+    const world = makeWorld();
+    const clock = { now: world.asOf + 3_600_000 };
+    const store = namedStore(world, clock);
+    const labels = store.labelsVersion;
+    const version = store.version;
+    store.addChunk(makeChunk(world, 0));
+    store.addChunk(makeChunk(world, 1));
+    expect(store.version).toBeGreaterThan(version);
+    expect(store.labelsVersion).toBe(labels);
+    const selected = store.byId.get('108586685')!;
+    expect(selected.name).toBe('TenzinNiznet');
+    store.applyNames(makeNames(world, { omit: ['108586685'], withheld: ['207813352'] }));
+    expect(store.labelsVersion).toBe(labels + 1);
+    expect(selected.name).toBeNull();
+    expect(store.byId.get('207813352')!.withheld).toBe(true);
+    store.applyNames(makeNames(world));
+    expect(store.labelsVersion).toBe(labels + 2);
+    expect(selected.name).toBe('TenzinNiznet');
+    expect(store.byId.get('207813352')!.withheld).toBe(false);
+    clock.now = world.asOf + DAY;
+    store.expireNames();
+    expect(store.labelsVersion).toBe(labels + 3);
+    expect(selected.name).toBeNull();
+    expect(store.all.every(settler => settler.name === null)).toBe(true);
+    store.expireNames();
+    expect(store.labelsVersion).toBe(labels + 3);
   });
 });
 

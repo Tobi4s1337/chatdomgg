@@ -28,7 +28,7 @@
   --serif: 'Alegreya', 'Noto Serif', Georgia, serif;
   --display: 'IM Fell English', 'Alegreya', 'Noto Serif', Georgia, serif;
   --caps: 'IM Fell English SC', 'IM Fell English', 'Alegreya', Georgia, serif;
-  position: fixed;
+  position: absolute;
   inset: 0;
   overflow: hidden;
   background: var(--paper-deep);
@@ -320,3 +320,18 @@
 .atlas-road-open { margin-top: 10px; padding-top: 4px; border-top: 1px solid var(--ink-faint); }
 .atlas-road-open .atlas-road + .atlas-road { border-top: 1px solid rgba(59, 47, 37, 0.1); }
 .atlas[data-layout='phone'] .atlas-road-head h2 { font-size: 21px; }
+
+/* Embedded maps own their rectangle, never their host page. Hero gestures remain native page gestures. */
+.atlas[data-atlas-mode='hero'] .atlas-map,
+.atlas[data-atlas-mode='hero'] .atlas-still { pointer-events: none; touch-action: pan-y pinch-zoom; }
+.atlas-hero-open { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; cursor: pointer; touch-action: pan-y pinch-zoom; }
+.atlas .atlas-hero-open:focus-visible { outline: 3px solid var(--focus); outline-offset: -8px; box-shadow: inset 0 0 0 6px var(--paper-light); }
+.atlas[data-atlas-mode='hero'] .atlas-still-ribbon,
+.atlas[data-atlas-mode='hero'] .atlas-still-mark { display: none; }
+.atlas[data-atlas-mode='hero'] .atlas-veil { pointer-events: none; }
+.atlas[data-atlas-mode='explore'][data-activated='false'] .atlas-map { touch-action: pan-y pinch-zoom; }
+
+.atlas[data-state='loading'] .atlas-map { opacity: 0; }
+.atlas[data-state='ready'] .atlas-map { z-index: 1; }
+.atlas[data-state='ready'] .atlas-still { pointer-events: none; }
+.atlas[data-state='ready'] > :not(.atlas-map):not(.atlas-still) { z-index: 2; }

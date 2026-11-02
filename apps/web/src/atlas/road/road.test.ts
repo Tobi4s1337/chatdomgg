@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { DISTANCE_SCALE } from '../map/camera';
 import { caravanCount, caravanLayout, columnTail, MARCHER_SPACING_PX } from './caravan';

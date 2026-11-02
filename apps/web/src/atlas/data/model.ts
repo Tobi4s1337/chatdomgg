@@ -1,3 +1,4 @@
+import { languageName, languageMapLabel, type LanguageNameTable, LANGUAGE_NAMES } from '../../../../surveyor/src/cartography/language-labels';
 import { DECOR_KINDS, TIER_CODES, type DecorKind, type PreviewChunk, type PreviewWorld, type RealmKind, type RegionKind, type ServedNames, type SettlerColumns, type Tier } from './preview';
 
 /**
@@ -52,16 +53,16 @@ export interface Geography {
   outer: Circle;
 }
 
-export function geographyOf(world: PreviewWorld): Geography {
+export function geographyOf(world: PreviewWorld, table: LanguageNameTable = LANGUAGE_NAMES): Geography {
   const s = world.coordScale;
   return {
     bounds: { minX: world.bounds.minX / s, minY: world.bounds.minY / s, maxX: world.bounds.maxX / s, maxY: world.bounds.maxY / s },
     regions: world.regions.map((region) => ({
-      index: region.index, name: region.name, englishName: region.englishName, kind: region.kind,
+      index: region.index, name: region.language ? languageMapLabel(region.language, table) : region.name, englishName: region.language ? languageMapLabel(region.language, table) : region.englishName, kind: region.kind,
       x: region.x / s, y: region.y / s, r: region.r / s, members: region.members,
     })),
     realms: world.realms.map((realm) => ({
-      index: realm.index, region: realm.region, kind: realm.kind, family: realm.family, name: realm.name,
+      index: realm.index, region: realm.region, kind: realm.kind, family: realm.family, name: realm.kind === 'isle' && world.regions[realm.region]?.language ? languageName(world.regions[realm.region]!.language!, table).label : realm.name,
       x: realm.x / s, y: realm.y / s, r: realm.r / s, members: realm.members,
     })),
     clusters: world.clusters.map((cluster) => ({
@@ -71,6 +72,21 @@ export function geographyOf(world: PreviewWorld): Geography {
     isles: world.isles ? { name: world.isles.name, x: world.isles.x / s, y: world.isles.y / s, r: world.isles.r / s } : null,
     outer: { name: world.outer.name, x: world.outer.x / s, y: world.outer.y / s, r: world.outer.r / s },
   };
+}
+
+/** Project old and current immutable artifacts alike, ignoring their historical display strings. */
+export function labelWorld(world: PreviewWorld, table: LanguageNameTable = LANGUAGE_NAMES): PreviewWorld {
+  return {
+    ...world,
+    regions: world.regions.map(region => region.language ? { ...region, name: languageName(region.language, table).label, englishName: languageName(region.language, table).label } : region),
+    realms: world.realms.map(realm => realm.kind === 'isle' && world.regions[realm.region]?.language ? { ...realm, name: languageName(world.regions[realm.region]!.language!, table).label } : realm),
+  };
+}
+
+function realmLabel(world: PreviewWorld, index: number): string {
+  const realm = world.realms[index];
+  const code = realm && world.regions[realm.region]?.language;
+  return realm?.kind === 'isle' && code ? languageName(code).label : realm?.name ?? '';
 }
 
 export function decodeRings(world: PreviewWorld): Ring[] {
@@ -129,6 +145,8 @@ export class SettlerStore {
   /** Whether a names projection has ever been applied. */
   named = false;
   version = 0;
+  /** Names/visibility changed on existing holdings. Background chunk arrivals do not re-letter the fixed still. */
+  labelsVersion = 0;
 
   constructor(private readonly world: PreviewWorld, private readonly now: () => number = Date.now, private readonly cell = 24) {
     this.cols = Math.ceil((world.bounds.maxX - world.bounds.minX) / world.coordScale / cell) + 1;
@@ -151,6 +169,7 @@ export class SettlerStore {
     this.byLogin.clear();
     for (const settler of this.all) this.label(settler);
     this.version++;
+    this.labelsVersion++;
   }
 
   /**
@@ -172,7 +191,7 @@ export class SettlerStore {
         next = settler.freshUntil;
       }
     }
-    if (changed) this.version++;
+    if (changed) { this.version++; this.labelsVersion++; }
     return next;
   }
 
@@ -231,7 +250,7 @@ export class SettlerStore {
         game: gameIndex >= 0 ? this.world.games[gameIndex]?.name ?? null : null,
         region: columns.region[i]!,
         realm,
-        realmName: this.world.realms[realm]?.name ?? '',
+        realmName: realmLabel(this.world, realm),
       };
       this.label(settler);
       this.all.push(settler);

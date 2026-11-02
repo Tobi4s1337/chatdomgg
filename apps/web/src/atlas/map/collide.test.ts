@@ -1,5 +1,6 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { CollisionGrid, comparePriority, overlaps, type Rect } from './collide';
+import { CollisionGrid, comparePriority, LETTER_CLEARANCE, MARK_PX, overlaps, underLettering, type Rect } from './collide';
 
 function seeded(seed: number): () => number {
   let s = seed >>> 0;
@@ -165,5 +166,20 @@ describe('comparePriority', () => {
     // Sorted output is consistent with pairwise comparison (transitivity over the chain).
     const chain = [...items].sort(comparePriority);
     for (let i = 1; i < chain.length; i++) expect(comparePriority(chain[i - 1]!, chain[i]!)).toBeLessThanOrEqual(0);
+  });
+});
+
+describe('underLettering', () => {
+  const name: Rect = { x: 100, y: 100, w: 200, h: 30 };
+  it('lifts a survey mark inside a name or within its clearance, by the mark’s own size', () => {
+    expect(underLettering(200, 115, 0, [name])).toBe(true);
+    // Just outside the right edge, but the capital's mark plus clearance still reaches in.
+    expect(underLettering(300 + MARK_PX[0] / 2 + LETTER_CLEARANCE - 0.5, 115, 0, [name])).toBe(true);
+    // A village's smaller mark at the same spot clears it.
+    expect(underLettering(300 + MARK_PX[0] / 2 + LETTER_CLEARANCE - 0.5, 115, 3, [name])).toBe(false);
+    expect(underLettering(200, 160, 0, [name])).toBe(false);
+  });
+  it('never lifts anything when nothing is lettered', () => {
+    expect(underLettering(200, 115, 0, [])).toBe(false);
   });
 });

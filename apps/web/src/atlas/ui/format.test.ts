@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { formatCount, formatDay, formatDayRange, formatSpan, scaleBar, sweepCadence, TIER_NAMES, watchUrl } from './format';
 

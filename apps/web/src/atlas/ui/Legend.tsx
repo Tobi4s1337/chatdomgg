@@ -1,89 +1,80 @@
-import { For, Show } from 'solid-js';
+import { createSignal, createUniqueId, For, Show } from 'solid-js';
 import type { PreviewWorld } from '../data/preview';
-import { formatCount, formatDay, formatDayRange, formatSpan, sweepCadence, TIER_NAMES } from './format';
-import { ShieldIcon, StampIcon } from './marks';
 
-const GROUPS = ['capital', 'city', 'town', 'village'] as const;
+const ITEMS = [
+  { id: 'live', name: 'Live', description: 'Vermilion marks streams on air.' },
+  { id: 'founded', name: 'Founded', description: 'A founded kingdom drawn from life.' },
+  { id: 'waiting', name: 'Waiting land', description: 'Pencil marks waiting land.' },
+  { id: 'road', name: 'Road', description: 'Ink roads remember witnessed raids.' },
+  { id: 'home', name: 'Your home', description: 'A key marks your own home.' },
+] as const;
+type KeyItem = (typeof ITEMS)[number];
 
-/** The key: what each mark means and exactly what was observed, so nobody mistakes the draft for an edition. */
-export function LegendBody(props: { world: PreviewWorld }) {
-  const w = () => props.world;
-  const cadence = () => sweepCadence(w().window.hours, w().window.sweeps);
-  const continents = () => w().regions.filter((region) => region.kind === 'continent').length;
-  const isles = () => w().regions.filter((region) => region.kind === 'isle').length;
-  const proposed = () => w().taxonomy.status === 'proposed';
-  const sample = () => w().head.ids[0];
+/** Each hand-inked device belongs to the same engraved family, with pigment reserved for live. */
+function KeyGlyph(props: { kind: KeyItem['id'] }) {
   return (
-    <>
-      <ul class="atlas-key-tiers">
-        <For each={GROUPS}>
-          {(group, i) => (
-            <li>
-              <span class="atlas-key-mark"><StampIcon group={group} width={[32, 28, 25, 22][i()]!} /></span>
-              <span class="atlas-key-name">{TIER_NAMES[i()]} <span class="atlas-key-count">{formatCount(w().counts[group])}</span></span>
-              <span class="atlas-key-rule">{formatCount(w().tiers.minAverage[group])}+ avg. viewers</span>
-            </li>
-          )}
-        </For>
-      </ul>
-      <ul class="atlas-key-notes">
-        <Show when={sample()}>
-          {(id) => (
-            <li>
-              <span class="atlas-key-mark"><ShieldIcon channelId={id()} width={16} /></span>
-              <span>Every channel bears arms drawn from its channel ID.</span>
-            </li>
-          )}
-        </Show>
-        <li>
-          <span class="atlas-key-mark"><span class="atlas-key-swatch" aria-hidden="true" /></span>
-          <span>
-            {continents()} continents for languages with 600+ channels
-            <Show when={isles() > 0}>; {isles()} smaller {isles() === 1 ? 'tongue forms' : 'tongues form'} {w().isles?.name ?? 'the isles'}</Show>.
-          </span>
-        </li>
-        <li>
-          <span class="atlas-key-mark"><span class="atlas-key-swatch" data-kind="realms" aria-hidden="true" /></span>
-          <span>
-            A continent is parted into realms by family of games, with the Crossroads of variety channels at its heart and
-            the Wilds of smaller families at its edge. Within a realm, channels gather by the game they stream most.
-            {' '}{proposed() ? 'The families are a proposal still awaiting review.' : 'The families have been reviewed.'}
-          </span>
-        </li>
-        <li>
-          <span class="atlas-key-mark">
-            <svg class="atlas-key-live" viewBox="0 0 34 24" width="34" height="24" aria-hidden="true">
-              <ellipse cx="13" cy="15" rx="11" ry="7.5" />
-              <path class="staff" d="M13 22V3" />
-              <path class="pennant" d="M13.5 3.5h15l-4 3 4 3h-15z" />
-            </svg>
-          </span>
-          <span>
-            Vermilion is on air now, blooming from each stream's real start. Pennants grade by average audience, double
-            long at 5,000+ down to short at 25+; pencil flags are small streams of 5–24 with no land yet.
-          </span>
-        </li>
-        <li>
-          <span class="atlas-key-mark"><span class="atlas-key-swatch" data-kind="outer" aria-hidden="true" /></span>
-          <span>
-            {w().outer.name} are kept empty for when a realm's land runs out. The drawn land has room for
-            {' '}{formatCount(w().counts.hamletSlots)} more hamlets without moving a border.
-          </span>
-        </li>
-      </ul>
-      <p class="atlas-key-survey">
-        Observed {formatDayRange(w().window.firstObservationAt, w().window.lastObservationAt)} (UTC) for {formatSpan(w().window.hours)}:
-        {' '}{formatCount(w().window.sweeps)} sweeps of every live channel with {w().coverage.sweepFloorViewers}+ viewers{cadence() ? `, ${cadence()}` : ''}.
-        {' '}{formatCount(w().counts.mapped)} of {formatCount(w().counts.channelsObserved)} observed channels averaged {w().coverage.candidateMinAverage}+ and hold land.
-        <Show when={w().policy.excludedGambling > 0}>
-          {' '}{formatCount(w().policy.excludedGambling)} gambling {w().policy.excludedGambling === 1 ? 'channel is' : 'channels are'} left off the map.
-        </Show>
-      </p>
-      <p class="atlas-key-survey">
-        Draft land, not an edition: nothing here is founded yet and holdings may still move. The first edition can be
-        drawn from {formatDay(w().founding.edition0EligibleAt)}. Content labels were not collected. Names show only
-        while the survey has seen them within a day.
-      </p>
-    </>
+    <svg class="atlas-key-glyph" viewBox="0 0 40 40" aria-hidden="true">
+      <Show when={props.kind === 'live'}>
+        <ellipse class="atlas-key-pigment" cx="19" cy="29" rx="14" ry="7" />
+        <path d="M17 32V7m0 2c6 2 10-2 17 1l-4 4 4 4c-6-2-11 2-17 0" />
+        <path class="atlas-key-pennant" d="M17 9c6 2 10-2 17 1l-4 4 4 4c-6-2-11 2-17 0z" />
+      </Show>
+      <Show when={props.kind === 'founded'}>
+        <path d="M7 31V17l4-4 4 4v14M15 31V13l5-6 5 6v18M25 31V17l4-4 4 4v14M4 32h32M8 17h6M26 17h6M18 15h4M19 31v-7h3v7" />
+        <path class="atlas-key-brass" d="M20 3v4m0-4h6l-2 2 2 2h-6" />
+      </Show>
+      <Show when={props.kind === 'waiting'}>
+        <path class="atlas-key-pencil" d="M5 29c3-6 7-3 10-8s6-4 10 0 5 1 9 7M6 33h28M10 34h4m3 0h4m3 0h5" />
+        <path d="m24 8 4-4 4 4-4 4-4-4zm0 0-11 11-2 6 6-2 11-11" />
+      </Show>
+      <Show when={props.kind === 'road'}>
+        <path d="M5 29c7 0 7-9 14-9s6 8 15 0" />
+        <circle cx="6" cy="29" r="2.4" /><circle cx="34" cy="20" r="2.4" />
+        <path class="atlas-key-pencil" d="M7 33c8 0 8-9 14-9s6 8 13 1" />
+      </Show>
+      <Show when={props.kind === 'home'}>
+        <circle cx="13" cy="13" r="5.5" /><circle class="atlas-key-brass" cx="13" cy="13" r="2.3" />
+        <path d="m17 17 14 14m-4-4 3-3m0 6 3-3M7 31h14m-9-3h8" />
+      </Show>
+    </svg>
+  );
+}
+
+/** A compact legend that keeps its explanation close to the device being inspected. */
+export function LegendBody(props: { world: PreviewWorld }) {
+  void props.world;
+  const [hovered, setHovered] = createSignal<KeyItem['id'] | null>(null);
+  const [focused, setFocused] = createSignal<KeyItem['id'] | null>(null);
+  const [chosen, setChosen] = createSignal<KeyItem['id'] | null>(null);
+  const id = createUniqueId();
+  const current = () => ITEMS.find(item => item.id === (hovered() ?? focused() ?? chosen()));
+  return (
+    <div class="atlas-key-legend" on:keydown={(event) => {
+      if (event.key === 'Escape' && (hovered() || focused() || chosen())) {
+        event.stopPropagation();
+        setHovered(null); setFocused(null); setChosen(null);
+      }
+    }}>
+      <div class="atlas-key-glyphs" role="group" aria-label="Map symbols">
+        <For each={ITEMS}>{(item) => (
+          <button
+            type="button"
+            class="atlas-key-glyph-button cd-focus"
+            data-atlas-key-glyph={item.id}
+            aria-label={item.name}
+            aria-describedby={current()?.id === item.id ? `atlas-key-note-${id}` : undefined}
+            aria-pressed={chosen() === item.id}
+            on:pointerenter={(event) => { if (event.pointerType !== 'touch') setHovered(item.id); }}
+            on:pointerleave={() => setHovered(null)}
+            on:focus={() => setFocused(item.id)}
+            on:blur={() => setFocused(null)}
+            on:click={() => setChosen(chosen() === item.id ? null : item.id)}
+          ><KeyGlyph kind={item.id} /></button>
+        )}</For>
+      </div>
+      <Show when={current()}>{item => (
+        <p id={`atlas-key-note-${id}`} class="atlas-key-hint" data-atlas-key-detail="true" role="status">{item().description}</p>
+      )}</Show>
+    </div>
   );
 }

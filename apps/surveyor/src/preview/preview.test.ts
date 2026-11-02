@@ -123,7 +123,8 @@ function synthesize(plans: readonly LanguagePlan[], seed: number, revision = 'ob
       live: false,
       stream: opts.stream ?? null,
       categories: categories.sort((a, b) => compareIds(a.gameId, b.gameId)),
-      avatarUrl: null,
+      avatarUrl: 'https://static-cdn.jtvnw.net/jtv_user_pictures/preview-fresh-70x70.png',
+      avatarFactsAt: asOf - HOUR,
       factsAt: asOf - HOUR,
       goneAt: opts.gone ? asOf - 2 * HOUR : null,
       contentClassification: 'unknown',
@@ -447,6 +448,7 @@ describe('survey preview build', () => {
   it('R16: the immutable files hold geometry by channel ID and no raw name; names.json alone carries them, dated', () => {
     const { world, chunks, names, all } = decoded;
     const immutable = ['world.json', ...world.regions.map((r) => r.chunk.path)].map((name) => new TextDecoder().decode(preview.files.get(name)!)).join('\n');
+    for (const bytes of preview.files.values()) expect(new TextDecoder().decode(bytes)).not.toMatch(/jtvnw\.net|avatarUrl|avatarFactsAt|portrait/);
     for (const holding of all) {
       expect(immutable.includes(`"${holding.login}"`), holding.login).toBe(false);
       expect(immutable.includes(`"${holding.name}"`), holding.name).toBe(false);
@@ -533,14 +535,20 @@ describe('survey preview build', () => {
     }
   });
 
-  it('R4: names are real: language endonyms and English names from Intl, category names only from the games input', () => {
+  it('keeps retained v4 geometry readable while v5 moves labels out of immutable bytes', () => {
+    const retained = { ...preview.world, algorithm: 'survey-preview-4' };
+    expect(PreviewWorldSchema.parse(retained).algorithm).toBe('survey-preview-4');
+    expect(PreviewWorldSchema.parse(preview.world).algorithm).toBe('survey-preview-5');
+  });
+
+  it('R4: immutable regions store codes, with display names resolved separately', () => {
     const { world } = decoded;
     const names = Object.fromEntries(spoken(world).map((r) => [r.language, [r.name, r.englishName]]));
     expect(names).toEqual({
-      en: ['English', 'English'], es: ['Español', 'Spanish'], pt: ['Português', 'Portuguese'], de: ['Deutsch', 'German'],
-      ja: ['日本語', 'Japanese'], fr: ['Français', 'French'], other: ['Other tongues', 'Other languages'],
+      en: ['en', 'en'], es: ['es', 'es'], pt: ['pt', 'pt'], de: ['de', 'de'],
+      ja: ['ja', 'ja'], fr: ['fr', 'fr'], other: ['other', 'other'],
     });
-    expect(languageNames('ko')).toEqual({ name: '한국어', englishName: 'Korean' });
+    expect(languageNames('ko')).toEqual({ name: 'Korean', englishName: 'Korean' });
 
     const inputNames = new Map(input.games.map((g) => [g.gameId, g.name]));
     const { mapped } = previewChannels(input.channels, currentTaxonomy());

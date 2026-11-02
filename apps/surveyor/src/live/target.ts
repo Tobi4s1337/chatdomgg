@@ -20,6 +20,8 @@ export interface LiveTarget {
   worldSha256: string;
   edition: AtlasEdition;
   alignment: AtlasAlignment;
+  /** Complete immutable holding geometry, including ground whose name is withheld. */
+  holdingGeometry?: readonly { region: number; x: number; y: number; r: number }[];
   /** Channel ID per ordinal. */
   ids: readonly string[];
   /** Holding tier rank per ordinal: 0 capital … 3 village. */
@@ -112,6 +114,7 @@ export async function loadLiveTarget(dataDir: string, previewId: string): Promis
   const alignment = await createAtlasAlignment(edition, settlers);
   return {
     previewId: id, world, worldSha256, edition, alignment, ids: all.ids,
+    holdingGeometry: all.ids.map((_, i) => ({ region: world.realms[all.realm[i]!]!.region, x: all.x[i]! / world.coordScale, y: all.y[i]! / world.coordScale, r: [world.tiers.holdingRadius.capital, world.tiers.holdingRadius.city, world.tiers.holdingRadius.town, world.tiers.holdingRadius.village][all.tier[i]!]! })),
     tierRank: Uint8Array.from(all.tier),
     realmOf: Uint16Array.from(all.realm),
     ordinalOf: new Map(all.ids.map((kingdomId, ordinal) => [kingdomId, ordinal])),

@@ -147,7 +147,7 @@ export class WashLayer {
       }
       for (const dab of live.dabs) {
         if (this.used >= limit) break;
-        if (!inBox(dab.x, dab.y)) continue;
+        if (!dab.placed || !inBox(dab.x, dab.y)) continue;
         const bloom = live.bloom(dab.startedAt, now);
         if (bloom <= 0.01) continue;
         const s = camera.worldToScreen(dab.x, dab.y, view);
@@ -160,7 +160,7 @@ export class WashLayer {
       this.lay(s.x, s.y, dry.liveClass, scale, dry.left, dry.ordinal, detail, soften);
     }
     for (const { dab, left } of live.dryingDabWashes(now)) {
-      if (!inBox(dab.x, dab.y)) continue;
+      if (!dab.placed || !inBox(dab.x, dab.y)) continue;
       const s = camera.worldToScreen(dab.x, dab.y, view);
       this.lay(s.x, s.y, 5, scale, left, parseInt(dab.hash.slice(0, 4), 16), detail, soften);
     }

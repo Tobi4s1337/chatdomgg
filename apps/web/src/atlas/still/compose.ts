@@ -2,7 +2,7 @@ import type { Geography, GeoRealm, Settler, SettlerStore } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
 import { SHIELD_ASPECT } from '../heraldry/geometry';
 import { Camera, DISTANCE_SCALE, distanceFor, NO_INSETS, type Box, type Distance, type Insets, type Viewport } from '../map/camera';
-import { CollisionGrid, comparePriority, type Rect } from '../map/collide';
+import { CollisionGrid, comparePriority, MARK_PX, underLettering, type Rect } from '../map/collide';
 import type { Stamp } from '../map/paint';
 import { decorBand, levelFor, parentOf, pyramidFor, tileBox, tilesFor, type Pyramid, type TileKey } from '../map/pyramid';
 import { formatMoment, formatTime, TIER_NAMES } from '../ui/format';
@@ -30,7 +30,7 @@ export const LABEL_PX = [15, 13, 12, 11.5] as const;
 export const SHIELD_PX = [15, 13, 12, 11] as const;
 export const SHIELD_LIMIT = 300;
 /** Survey-mark diameters in CSS px by tier, as the overlay's mark textures draw them. */
-export const MARK_PX = [9, 7, 5, 3.6] as const;
+export { MARK_PX };
 export const REALM_LABEL_FROM = DISTANCE_SCALE.continent * 0.4;
 /** The world file carries capitals and cities; towns and villages arrive per region and are never marked on a still. */
 const HEAD_TIERS = 2;
@@ -121,8 +121,7 @@ export function stillPixelRatio(devicePixelRatio: number): number {
 
 /** Screen kept clear for the Atlas's panels, exactly as the moving map's opening view keeps it (index.tsx). */
 export function stillInsets(view: Viewport): Insets {
-  if (view.width < 720) return { left: 0, right: 0, top: 76, bottom: 60 };
-  if (view.width >= 1100) return { left: 370, right: 0, top: 0, bottom: 0 };
+  if (view.width < 720) return { left: 0, right: 0, top: 124, bottom: 60 };
   return NO_INSETS;
 }
 
@@ -266,6 +265,40 @@ export interface LayoutInput {
   selected?: Settler | null;
 }
 
+const onScreen = (rect: Rect, view: Viewport) => rect.x < view.width && rect.y < view.height && rect.x + rect.w > 0 && rect.y + rect.h > 0;
+
+/** One projection shared by normal placement and the cheap selection relevance check. */
+function stampPlacement(settler: Settler, point: { x: number; y: number }, radius: number, scale: number, choices: readonly Stamp[]) {
+  if (!choices.length) return null;
+  const w = stampPx(settler.tierRank, radius, scale);
+  const index = hashId(settler.id) % choices.length;
+  const choice = choices[index]!;
+  const aspect = choice.ink.h / choice.ink.w;
+  const h = w * aspect;
+  const drawn = { x: point.x - w * choice.anchor.x, y: point.y - h * choice.anchor.y, w, h };
+  const occupied = { x: drawn.x + w * 0.12, y: drawn.y + h * 0.18, w: w * 0.76, h: h * 0.76 };
+  return { index, choice, drawn, occupied };
+}
+
+/**
+ * A card for land outside this fixed still must not relayout its visible neighbours. Only an actually drawable,
+ * suppressed selection needs the full selected-first collision pass. Reuse also avoids touching the store or
+ * measuring lettering when an already drawn holding is selected.
+ */
+export function layoutStillSelection(base: StillLayout, input: LayoutInput): StillLayout {
+  const selected = input.selected;
+  if (!selected || selected.withheld || input.store.byId.get(selected.id) !== selected || base.marks.some(mark => mark.settler === selected)) return base;
+  const near = input.camera.visibleBox(input.view, 160);
+  if (selected.x < near.minX || selected.x > near.maxX || selected.y < near.minY || selected.y > near.maxY) return base;
+  const point = input.camera.worldToScreen(selected.x, selected.y, input.view);
+  const group = STAMP_GROUPS[selected.tierRank]!;
+  const radius = input.world.tiers.holdingRadius[group];
+  const placement = stampPlacement(selected, point, radius, input.camera.scale, input.stamps.filter(stamp => stamp.group === group));
+  const box = placement?.drawn ?? { x: point.x - 12, y: point.y - 12, w: 24, h: 24 };
+  if (!onScreen(box, input.view)) return base;
+  return layoutStill(input);
+}
+
 /** The accessible name of a holding's button. Withheld holdings never reach this. */
 export function markLabel(settler: Settler, geo: Geography): string {
   const tier = TIER_NAMES[settler.tierRank]!.toLowerCase();
@@ -358,15 +391,10 @@ export function layoutStill(input: LayoutInput): StillLayout {
     const choices = choicesByTier[settler.tierRank] ?? [];
     const label = markLabel(settler, geo);
     if ((forced || stampVisible(settler.tierRank, scale)) && choices.length) {
-      const w = stampPx(settler.tierRank, r, scale);
-      const index = hashId(settler.id) % choices.length;
-      const choice = choices[index]!;
-      const aspect = choice.ink.h / choice.ink.w;
-      const h = w * aspect;
-      const rect: Rect = { x: s.x - w * choice.anchor.x + w * 0.12, y: s.y - h * choice.anchor.y + h * 0.18, w: w * 0.76, h: h * 0.76 };
-      if (forced || grid.free(rect)) {
-        claim(rect);
-        const drawn = { x: s.x - w * choice.anchor.x, y: s.y - h * choice.anchor.y, w, h };
+      const { index, choice, drawn, occupied } = stampPlacement(settler, s, r, scale, choices)!;
+      const { w, h } = drawn;
+      if (forced || grid.free(occupied)) {
+        claim(occupied);
         const plate = placeName(settler, s.x, s.y, w, h * choice.anchor.y, forced);
         marks.push({
           id: settler.id, settler, box: drawn, label,
@@ -391,10 +419,12 @@ export function layoutStill(input: LayoutInput): StillLayout {
     });
   }
   if (!realmsPlaced) placeRealms(geo, camera, view, measure, take, texts);
+  // Names knock out the survey marks under them (map/collide underLettering, as the moving map does).
+  const lettering = texts.map((text): Rect => ({ x: text.x, y: text.y, w: text.w, h: text.h }));
+  const legible = marks.filter(mark => !mark.mark || mark.settler === selected || !underLettering(mark.box.x + mark.box.w / 2, mark.box.y + mark.box.h / 2, mark.settler.tierRank, lettering));
   // Holdings in the margin are placed (so the screen's own give way to them as the map's do) but are not drawn here:
   // a button for one would sit off screen, reachable by Tab and a screen reader, and scroll the still to it.
-  const onScreen = marks.filter((mark) => mark.box.x < view.width && mark.box.y < view.height && mark.box.x + mark.box.w > 0 && mark.box.y + mark.box.h > 0);
-  return { marks: onScreen, texts, shields, names, tiers, claims };
+  return { marks: legible.filter(mark => onScreen(mark.box, view)), texts, shields, names, tiers, claims };
 }
 
 type Take = (rect: Rect) => boolean;
@@ -481,9 +511,9 @@ export interface LiveSource {
   liveClass(settler: Settler): number;
   startedAt(settler: Settler): number | null;
   bloom(startedAt: number | null, at?: number): number;
-  readonly dabs: readonly { x: number; y: number; hash: string; startedAt: number }[];
+  readonly dabs: readonly { x: number; y: number; hash: string; startedAt: number; placed: boolean }[];
   dryingWashes(at?: number): Iterable<{ ordinal: number; liveClass: number; x: number; y: number; left: number }>;
-  dryingDabWashes(at?: number): Iterable<{ dab: { x: number; y: number; hash: string }; left: number }>;
+  dryingDabWashes(at?: number): Iterable<{ dab: { x: number; y: number; hash: string; placed: boolean }; left: number }>;
 }
 
 /** One deposit of pigment in screen CSS px: a rimless density stain (variant −1) or a seeded watercolour blot. */
@@ -527,13 +557,13 @@ export function washStains(store: SettlerStore, live: LiveSource, camera: Camera
     }
     for (const dab of live.dabs) {
       if (stains.length >= limit) break;
-      if (!inBox(dab.x, dab.y)) continue;
+      if (!dab.placed || !inBox(dab.x, dab.y)) continue;
       const bloom = live.bloom(dab.startedAt, now);
       if (bloom > 0.01) lay(dab.x, dab.y, 5, bloom, parseInt(dab.hash.slice(0, 4), 16));
     }
   }
   for (const dry of live.dryingWashes(now)) if (inBox(dry.x, dry.y)) lay(dry.x, dry.y, dry.liveClass, dry.left, dry.ordinal);
-  for (const { dab, left } of live.dryingDabWashes(now)) if (inBox(dab.x, dab.y)) lay(dab.x, dab.y, 5, left, parseInt(dab.hash.slice(0, 4), 16));
+  for (const { dab, left } of live.dryingDabWashes(now)) if (dab.placed && inBox(dab.x, dab.y)) lay(dab.x, dab.y, 5, left, parseInt(dab.hash.slice(0, 4), 16));
   return { stains, opacity: DENSITY_CAP + (1 - DENSITY_CAP) * detail };
 }
 

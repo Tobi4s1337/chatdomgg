@@ -4,6 +4,7 @@ import { waitingDoorHolding, type DoorHolding } from '../data/holding';
 import type { PreviewWorld } from '../data/preview';
 import { formatCount, formatDayRange, formatMoment, formatTime, TIER_NAMES, watchUrl } from './format';
 import { ShieldIcon } from './marks';
+import { ChannelFaceSeal } from './Face';
 
 /** What the page knows of the open card's register entry. */
 export type RegisterState<T> =
@@ -78,7 +79,7 @@ export function RegisterFacts(props: {
         <div class="atlas-card-missing atlas-register-failed" role="status">
           <Show
             when={props.state.status === 'failed' && props.state.reason === 'refused'}
-            fallback={<>Its last stream and roads could not be read from the register just now. <button type="button" class="atlas-link-button" onClick={() => props.onRetry()}>Read again</button></>}
+            fallback={<>Its last stream and roads could not be read from the register just now. <button type="button" class="atlas-link-button" on:click={() => props.onRetry()}>Read again</button></>}
           >
             Its last stream and roads are held back just now while the map’s moderation list is checked.
           </Show>
@@ -89,14 +90,14 @@ export function RegisterFacts(props: {
           <>
             <dl class="atlas-card-facts atlas-register-stream">
               <div>
-                <dt>{props.onAirNow ? 'Streaming' : 'Last stream'}</dt>
-                <Show when={c().stream} fallback={<dd class="atlas-quiet">Not live within the last day; titles are kept only that long.</dd>}>
+                <dt>{props.onAirNow ? 'Streaming' : c().stream?.live ? 'Stream observed' : 'Last stream'}</dt>
+                <Show when={c().stream} fallback={<dd class="atlas-quiet">No recent stream details.</dd>}>
                   {(stream) => (
                     <dd>
                       <span>{stream().game ?? 'No category given'}</span>
                       <Show when={stream().viewers !== null}><span class="atlas-quiet"> · {formatCount(stream().viewers!)} viewers</span></Show>
                       <span class="atlas-quiet">
-                        {stream().live ? ` at the survey of ${formatTime(c().asOf)}` : ` · last live ${formatTime(c().lastLiveAt)}`}
+                        {stream().live ? ` · checked ${formatTime(c().asOf)}` : c().lastLiveAt !== null ? ` · last live ${formatTime(c().lastLiveAt!)}` : ' · offline'}
                       </span>
                       <Show when={stream().title}><span class="atlas-register-title" dir="auto">{stream().title}</span></Show>
                     </dd>
@@ -104,22 +105,23 @@ export function RegisterFacts(props: {
                 </Show>
               </div>
             </dl>
+            <Show when={c().roads} fallback={<p class="atlas-roads-empty">No raid history recorded yet.</p>}>{(roads) => (
             <section class="atlas-roads" aria-labelledby="atlas-roads-title">
               <h3 id="atlas-roads-title">
                 Roads
-                <Show when={c().roads.total > c().roads.strongest.length}>
-                  <span class="atlas-quiet"> · strongest {c().roads.strongest.length} of {formatCount(c().roads.total)}</span>
+                <Show when={roads().total > roads().strongest.length}>
+                  <span class="atlas-quiet"> · strongest {roads().strongest.length} of {formatCount(roads().total)}</span>
                 </Show>
               </h3>
               <Show
-                when={c().roads.strongest.length > 0}
-                fallback={<p class="atlas-roads-empty">No raid to or from this channel was seen between {formatMoment(c().roads.window.from)} and {formatMoment(c().roads.window.to)}.</p>}
+                when={roads().strongest.length > 0}
+                fallback={<p class="atlas-roads-empty">No raid to or from this channel was seen between {formatMoment(roads().window.from)} and {formatMoment(roads().window.to)}.</p>}
               >
                 <ul class="atlas-road-list">
-                  <For each={c().roads.strongest}>
+                  <For each={roads().strongest}>
                     {(road) => (
                       <li>
-                        <button type="button" class="atlas-road" onClick={() => props.onRoad(road)} aria-label={`Road with ${faceName(road.other)}: ${roadSummary(road)}`}>
+                        <button type="button" class="atlas-road" on:click={() => props.onRoad(road)} aria-label={`Road with ${faceName(road.other)}: ${roadSummary(road)}`}>
                           <PlaceMark face={road.other} size={24} />
                           <span class="atlas-road-text">
                             <span class="atlas-road-name" classList={{ 'atlas-card-unnamed': !road.other.name }} dir="auto">{faceName(road.other)}</span>
@@ -133,9 +135,10 @@ export function RegisterFacts(props: {
                 </ul>
               </Show>
               <p class="atlas-roads-source">
-                Raids the raid watch saw, {formatDayRange(c().roads.window.from, c().roads.window.to)}, following up to {formatCount(c().coverage.raidWatch.watching)} live channels at a time. A raid it did not watch is missing here, not denied.
+                Raids the raid watch saw, {formatDayRange(roads().window.from, roads().window.to)}, following up to {formatCount(c().coverage.raidWatch.watching)} live channels at a time. A raid it did not watch is missing here, not denied.
               </p>
             </section>
+            )}</Show>
           </>
         )}
       </Match>
@@ -182,7 +185,7 @@ export function ShareButton(props: { path: string; title: string }) {
   };
   return (
     <div class="atlas-share">
-      <button type="button" class="atlas-button atlas-button-quiet" onClick={() => void share()}>
+      <button type="button" class="atlas-button atlas-button-quiet" on:click={() => void share()}>
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M5.2 7.8L3.6 9.4a2.3 2.3 0 003.2 3.2l1.6-1.6M10.8 8.2l1.6-1.6a2.3 2.3 0 00-3.2-3.2L7.6 5" /></svg>
         <Show when={said() === 'copied'} fallback={said() === 'shared' ? 'Shared' : 'Share this place'}>Link copied</Show>
       </button>
@@ -196,7 +199,7 @@ export function ShareButton(props: { path: string; title: string }) {
 
 function CloseButton(props: { onClose: () => void; ref: (element: HTMLButtonElement) => void }) {
   return (
-    <button ref={props.ref} class="atlas-card-close" type="button" onClick={() => props.onClose()} aria-label="Close card">
+    <button ref={props.ref} class="atlas-card-close" type="button" on:click={() => props.onClose()} aria-label="Close card">
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" /></svg>
     </button>
   );
@@ -210,6 +213,8 @@ function useCardKeys(key: () => unknown, onClose: () => void): (element: HTMLBut
     queueMicrotask(() => close?.focus({ preventScroll: true }));
   });
   const onKey = (event: KeyboardEvent) => {
+    const map = close?.closest('[data-chatdom-atlas]');
+    if (map && event.target instanceof Node && !map.contains(event.target)) return;
     if (event.key === 'Escape') onClose();
   };
   window.addEventListener('keydown', onKey);
@@ -218,9 +223,8 @@ function useCardKeys(key: () => unknown, onClose: () => void): (element: HTMLBut
 }
 
 /**
- * A named channel without land: seen by the survey, but below the village line, or not mapped in this preview. It
- * keeps its name, its last stream and its roads; while it is live it is pencilled in near its realm (the flag on the
- * map), otherwise the map flies to that realm and marks nothing, because no place is its own yet.
+ * A named channel without a holding, pencilled into its language and game realm. A public lookup never grants land;
+ * missing audience and raid history remain unknown.
  */
 export function WaitingCard(props: {
   face: ChannelFace;
@@ -245,10 +249,10 @@ export function WaitingCard(props: {
     props.onEnter(holding);
   };
   return (
-    <section class="atlas-card" aria-labelledby="atlas-card-title" data-kind="waiting">
+    <section class="atlas-card atlas-card-with-actions" aria-labelledby="atlas-card-title" data-kind="waiting">
       <CloseButton ref={close} onClose={props.onClose} />
       <header class="atlas-card-head">
-        <PlaceMark face={props.face} onAir={props.onAir} size={48} />
+        <ChannelFaceSeal channelId={props.face.id} name={props.face.name} portrait={card()?.channel.id === props.face.id ? card()?.portrait : null} />
         <div class="atlas-card-names">
           <p class="atlas-card-status">{props.onAir ? 'On air · no land of its own' : 'Waiting · no land of its own'}</p>
           <h2 id="atlas-card-title" dir="auto" classList={{ 'atlas-card-unnamed': !props.face.name }}>{faceName(props.face)}</h2>
@@ -257,12 +261,13 @@ export function WaitingCard(props: {
           </Show>
         </div>
       </header>
+      <div class="atlas-card-scroll" tabindex="0" aria-label="Holding details">
       <dl class="atlas-card-facts">
         <Show when={land()}>
           {(name) => <div><dt>{props.onAir ? 'Pencilled in' : 'Realm'}</dt><dd>{name()}</dd></div>}
         </Show>
-        <Show when={card()}>
-          {(c) => <div><dt>Observed</dt><dd>{formatCount(c().average)} average viewers <span class="atlas-quiet">· land begins at {formatCount(props.world.tiers.minAverage.village)}</span></dd></div>}
+        <Show when={card()?.average !== null && card()}>
+          {(c) => <div><dt>Observed</dt><dd>{formatCount(c().average!)} average viewers <span class="atlas-quiet">· land begins at {formatCount(props.world.tiers.minAverage.village)}</span></dd></div>}
         </Show>
         <Show when={props.live}>
           {(live) => (
@@ -277,11 +282,12 @@ export function WaitingCard(props: {
       </dl>
       <RegisterFacts state={props.state} world={props.world} onAirNow={props.live ? props.onAir : null} onRoad={props.onRoad} onRetry={props.onRetry} />
       <p class="atlas-card-note">
-        A channel below {formatCount(props.world.tiers.minAverage.village)} average viewers holds no land in a survey preview. While it is
-        live it is pencilled in near the realm of its language and game, at a place drawn from its channel ID.
+        Pencilled into the realm of its language and game. This place stays the same until the channel claims land.
       </p>
+      </div>
+      <footer class="atlas-card-footer">
       <Show when={door()}>{(holding) => (
-        <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} onClick={(event) => enter(event, holding())}>
+        <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} on:click={(event) => enter(event, holding())}>
           Enter the land <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 14V7a5 5 0 0 1 10 0v7M3 14h10M8 9v2" /></svg>
         </a>
       )}</Show>
@@ -291,6 +297,7 @@ export function WaitingCard(props: {
         </Show>
         <Show when={props.face.login}>{(login) => <ShareButton path={`/map/${login()}`} title={`${props.face.name} on the Atlas of Kingdoms`} />}</Show>
       </div>
+      </footer>
     </section>
   );
 }
@@ -360,7 +367,7 @@ export function RoadCard(props: {
               <div class="atlas-road-open">
                 <For each={[r().a, r().b].filter((face) => face.place !== 'unseen')}>
                   {(face) => (
-                    <button type="button" class="atlas-road" onClick={() => props.onOpen(face)}>
+                    <button type="button" class="atlas-road" on:click={() => props.onOpen(face)}>
                       <PlaceMark face={face} size={22} />
                       <span class="atlas-road-text"><span class="atlas-road-name" dir="auto">{faceName(face)}</span><span class="atlas-road-tally">Open its card</span></span>
                       <svg class="atlas-road-go" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5" /></svg>
@@ -391,7 +398,7 @@ export function RoadCard(props: {
           <p class="atlas-card-status">Road</p>
           <h2 id="atlas-card-title">The road could not be read</h2>
           <p class="atlas-card-note">The register did not answer just now. The map is unchanged.</p>
-          <button type="button" class="atlas-button" onClick={() => props.onRetry()}>Read again</button>
+          <button type="button" class="atlas-button" on:click={() => props.onRetry()}>Read again</button>
         </Match>
       </Switch>
     </section>

@@ -5,7 +5,7 @@ import type { Settler } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
 import { formatCount, formatDayRange, formatTime, TIER_NAMES, watchUrl } from './format';
 import { LIVE_CLASS_NAMES } from './live-line';
-import { ShieldIcon } from './marks';
+import { ChannelFaceSeal } from './Face';
 import { doorHolding, type DoorHolding } from '../data/holding';
 import { RegisterFacts, ShareButton, WatchLink, type RegisterState } from './Register';
 
@@ -59,27 +59,27 @@ export function Card(props: {
     queueMicrotask(() => closeButton?.focus({ preventScroll: true }));
   });
   const onKey = (event: KeyboardEvent) => {
+    const map = closeButton?.closest('[data-chatdom-atlas]');
+    if (map && event.target instanceof Node && !map.contains(event.target)) return;
     if (event.key === 'Escape') props.onClose();
   };
   window.addEventListener('keydown', onKey);
   onCleanup(() => window.removeEventListener('keydown', onKey));
 
   return (
-    <section class="atlas-card" aria-labelledby="atlas-card-title" data-tier={props.settler.tier}>
-      <button ref={(element) => (closeButton = element)} class="atlas-card-close" type="button" onClick={() => props.onClose()} aria-label="Close card">
+    <section class="atlas-card atlas-card-with-actions" aria-labelledby="atlas-card-title" data-tier={props.settler.tier}>
+      <button ref={(element) => (closeButton = element)} class="atlas-card-close" type="button" on:click={() => props.onClose()} aria-label="Close card">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" /></svg>
       </button>
       <header class="atlas-card-head">
-        {/* Keyed so the canvas redraws when another holding is chosen. */}
-        <Show when={props.settler.id} keyed>
-          {(id) => <ShieldIcon channelId={id} width={52} label={`Arms: ${arms()}`} />}
-        </Show>
+        <ChannelFaceSeal channelId={props.settler.id} name={props.name} portrait={props.name && props.register.status === 'ready' && props.register.reply.channel.id === props.settler.id ? props.register.reply.portrait : null} />
         <div class="atlas-card-names">
           <p class="atlas-card-status">Mapped holding · not yet founded</p>
           <h2 id="atlas-card-title" dir="auto" classList={{ 'atlas-card-unnamed': props.name === null }}>{title()}</h2>
           <Show when={showLogin()}><p class="atlas-card-login">{props.settler.login}</p></Show>
         </div>
       </header>
+      <div class="atlas-card-scroll" tabindex="0" aria-label="Holding details">
       <dl class="atlas-card-facts">
         <div><dt>Holding</dt><dd>{TIER_NAMES[props.settler.tierRank]} <span class="atlas-quiet">· {formatCount(minimum())}+ average viewers</span></dd></div>
         <Show when={region()}>
@@ -89,7 +89,7 @@ export function Card(props: {
               <dd>
                 {/* An isle is one realm and the Outer Isles one archipelago: their realm is the land itself. */}
                 <Show when={r().kind === 'continent' && props.settler.realmName}>{props.settler.realmName} · </Show>
-                <span lang={r().language ?? undefined}>{r().name}</span>
+                <span lang="en">{r().name}</span>
                 <Show when={r().englishName !== r().name}><span class="atlas-quiet"> · {r().englishName}</span></Show>
                 <Show when={r().kind === 'isle'}><span class="atlas-quiet"> · isle</span></Show>
               </dd>
@@ -127,9 +127,11 @@ export function Card(props: {
         Survey of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} (UTC). Draft land: this holding may still move before the first edition.
       </p>
       <Show when={missing()}>{(text) => <p class="atlas-card-missing">{text()}</p>}</Show>
+      </div>
+      <footer class="atlas-card-footer">
       <Show when={door()}>
         {(holding) => (
-          <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} onClick={(event) => enter(event, holding())}>
+          <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} on:click={(event) => enter(event, holding())}>
             Enter the land
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 14V7a5 5 0 0 1 10 0v7M3 14h10M8 9v2" /></svg>
           </a>
@@ -139,6 +141,7 @@ export function Card(props: {
         <Show when={url()}>{(href) => <WatchLink href={href()} />}</Show>
         <Show when={props.login}>{(login) => <ShareButton path={`/map/${login()}`} title={`${props.name} on the Atlas of Kingdoms`} />}</Show>
       </div>
+      </footer>
     </section>
   );
 }

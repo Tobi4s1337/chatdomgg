@@ -40,6 +40,14 @@ export interface MapData {
   loadChunk(region: number): Promise<void>;
 }
 
+/** Embed controls; omitted options retain the full-page Atlas's controls. */
+export interface MapViewOptions {
+  interactive?: boolean;
+  wheel?: boolean;
+  hero?: boolean;
+  signal?: AbortSignal;
+}
+
 /** Evidence of the last drawn frame, for the page's test hook and budgets. */
 export interface MapStats {
   camera: CameraState;
@@ -61,12 +69,19 @@ const CONTEXT_GRACE_MS = 2_500;
 /** A selected mark keeps this much paper between it and the card, the sheet or the screen's edge. */
 const REVEAL_MARGIN = 56;
 
-async function loadImage(url: string): Promise<ImageBitmap | null> {
+async function loadImage(url: string, signal?: AbortSignal): Promise<ImageBitmap | null> {
   try {
-    const response = await fetch(url);
+    signal?.throwIfAborted();
+    const response = await fetch(url, { signal: signal ?? null });
     if (!response.ok) return null;
-    return await createImageBitmap(await response.blob());
+    const image = await createImageBitmap(await response.blob());
+    if (signal?.aborted) {
+      image.close();
+      signal.throwIfAborted();
+    }
+    return image;
   } catch {
+    signal?.throwIfAborted();
     return null;
   }
 }
@@ -113,6 +128,8 @@ export class MapView {
   private dirty = true;
   private raf = 0;
   private readyFired = false;
+  private readyFrames = 0;
+  private readyNotified = false;
   private selected: Settler | null = null;
   private hovered: Settler | null = null;
   private motion: Motion | null = null;
@@ -130,8 +147,21 @@ export class MapView {
   private lastPointer = 'mouse';
   private frames = 0;
   private disposed = false;
+  private interactive = true;
+  private wheel = true;
+  private hero = false;
+  private heroBase: CameraState | null = null;
+  private heroElapsed = 0;
+  private heroComposedLive = false;
+  private heroLastFrame = 0;
+  private paused = false;
+  private pausedAt: number | null = null;
+  private readonly captured = new Set<number>();
+  private backgroundCancel: (() => void) | null = null;
 
-  private constructor(private readonly app: Application, private readonly host: HTMLElement, private readonly data: MapData, sheet: ImageBitmap | null, private readonly events: MapEvents, private readonly pixelRatio: number, private readonly chromeInsets: (view: Viewport) => Insets, initial: CameraState | null) {
+  private constructor(private readonly app: Application, private readonly host: HTMLElement, private readonly data: MapData, private readonly sheet: ImageBitmap | null, private readonly events: MapEvents, private readonly pixelRatio: number, private readonly chromeInsets: (view: Viewport) => Insets, initial: CameraState | null, options: MapViewOptions) {
+    this.interactive = options.interactive ?? true;
+    this.wheel = options.wheel ?? true;
     this.view = { width: host.clientWidth || 1, height: host.clientHeight || 1 };
     this.camera = new Camera(data.geo.bounds);
     this.camera.home(this.view, this.chromeInsets(this.view));
@@ -164,12 +194,22 @@ export class MapView {
     this.observer.observe(host);
     this.bindInput();
     this.bindContext();
-    this.loop();
+    this.setHero(options.hero ?? false);
+    if (initial && this.hero) {
+      this.place(initial);
+      this.heroBase = this.camera.snapshot();
+      this.heroComposedLive = true;
+    }
+    if (document.visibilityState === 'hidden') this.syncPaused();
+    else this.loop();
   }
 
-  static async create(host: HTMLElement, data: MapData, events: MapEvents, chromeInsets?: (view: Viewport) => Insets, initial?: CameraState | null): Promise<MapView> {
+  static async create(host: HTMLElement, data: MapData, events: MapEvents, chromeInsets?: (view: Viewport) => Insets, initial?: CameraState | null, options: MapViewOptions = {}): Promise<MapView> {
+    options.signal?.throwIfAborted();
     const pixelRatio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
     const app = new Application();
+    let sheet: ImageBitmap | null = null;
+    let mounted: MapView | null = null;
     try {
     await app.init({
       width: host.clientWidth || 1,
@@ -182,16 +222,23 @@ export class MapView {
       autoStart: false,
       sharedTicker: false,
     });
-    const sheet = await loadImage(stampSheetUrl);
-    const mounted = new MapView(app, host, data, sheet, events, pixelRatio, chromeInsets ?? (() => NO_INSETS), initial ?? null);
+    options.signal?.throwIfAborted();
+    sheet = await loadImage(stampSheetUrl, options.signal);
+    options.signal?.throwIfAborted();
+    mounted = new MapView(app, host, data, sheet, events, pixelRatio, chromeInsets ?? (() => NO_INSETS), initial ?? null, options);
+    if (options.signal) mounted.listen(options.signal, 'abort', () => mounted?.dispose(), { once: true });
+    options.signal?.throwIfAborted();
     if ((app.renderer as { gl?: WebGLRenderingContext }).gl?.isContextLost()) {
-      mounted.dispose();
       throw new Error('The WebGL context was lost while mounting the Atlas');
     }
     return mounted;
     } catch (error) {
       // A retry must release the failed renderer and create its own fresh canvas.
-      try { app.destroy(true, { children: true }); } catch { /* init may have failed before a renderer existed */ }
+      if (mounted) mounted.dispose();
+      else {
+        sheet?.close();
+        try { app.destroy(true, { children: true }); } catch { /* init may have failed before a renderer existed */ }
+      }
       throw error;
     }
   }
@@ -206,6 +253,119 @@ export class MapView {
     this.camera.scale = state.scale;
     this.camera.clamp(this.view);
     this.dirty = true;
+  }
+
+  /** Enable direct controls independently of wheel zoom (an embed activates wheel zoom after a click). */
+  setInteraction(interactive: boolean, wheel: boolean): void {
+    if (this.disposed) return;
+    this.interactive = interactive;
+    this.wheel = wheel;
+    if (!interactive || !wheel) this.resetInput();
+  }
+
+  /** A quiet view of live land; leaving hero mode keeps the current camera for exploring in place. */
+  setHero(hero: boolean): void {
+    if (this.disposed || this.hero === hero) return;
+    this.hero = hero;
+    this.resetInput();
+    this.motion = null;
+    this.heroElapsed = 0;
+    this.heroLastFrame = 0;
+    this.heroComposedLive = false;
+    if (hero) this.composeHero();
+    else this.heroBase = null;
+    this.dirty = true;
+  }
+
+  /** Suspend all animation frames while the host is offscreen; document visibility is also observed. */
+  setPaused(paused: boolean): void {
+    if (this.disposed) return;
+    this.paused = paused;
+    this.syncPaused();
+  }
+
+  private syncPaused(): void {
+    if (this.disposed) return;
+    const paused = this.paused || document.visibilityState === 'hidden';
+    if (paused === (this.pausedAt !== null)) return;
+    const now = performance.now();
+    if (paused) {
+      this.pausedAt = now;
+      cancelAnimationFrame(this.raf);
+      this.raf = 0;
+      this.resetInput();
+      this.backgroundCancel?.();
+      this.backgroundCancel = null;
+      this.backgroundLoading = false;
+    } else {
+      if (this.motion) this.motion.start += now - Math.max(this.pausedAt!, this.motion.start);
+      this.pausedAt = null;
+      this.heroLastFrame = 0;
+      this.dirty = true;
+      this.loop();
+    }
+  }
+
+  private resetInput(): void {
+    this.gestures.reset();
+    for (const pointer of this.captured) {
+      try { this.host.releasePointerCapture(pointer); } catch { /* The pointer may already have ended. */ }
+    }
+    this.captured.clear();
+    this.hovered = null;
+    delete this.host.dataset.dragging;
+    delete this.host.dataset.hover;
+    this.dirty = true;
+  }
+
+  private acceptsInput(): boolean {
+    return !this.disposed && this.pausedAt === null && this.interactive && !this.hero;
+  }
+
+  private composeHero(transition = false): void {
+    const from = transition ? this.camera.snapshot() : null;
+    const weights = new Map<number, number>();
+    if (this.live?.frame) {
+      for (const settler of this.data.store.all) {
+        if (this.live.liveClass(settler)) weights.set(settler.region, (weights.get(settler.region) ?? 0) + 1);
+      }
+      for (const dab of this.live.dabs) weights.set(dab.region, (weights.get(dab.region) ?? 0) + 1);
+      this.heroComposedLive = true;
+    }
+    const region = [...this.data.geo.regions].sort((a, b) =>
+      (weights.get(b.index) ?? 0) - (weights.get(a.index) ?? 0) || b.r - a.r || a.index - b.index,
+    )[0];
+    if (region) {
+      // A continent and its neighbouring coasts, with room for the page's invitation over the paper.
+      const scale = Math.min(this.view.width, this.view.height) / Math.max(1, region.r * 2.7);
+      this.place({ x: region.x, y: region.y, scale: Math.max(this.camera.minScale, scale) });
+    }
+    this.heroBase = this.camera.snapshot();
+    this.heroElapsed = 0;
+    this.heroLastFrame = 0;
+    if (from) {
+      const target = focusOf(this.heroBase, this.view, this.insets());
+      this.place(from);
+      this.fly(target);
+    }
+  }
+
+  private driftHero(now: number): boolean {
+    if (!this.hero || !this.heroBase || this.motion) return false;
+    if (reduceMotion()) {
+      this.heroLastFrame = 0;
+      return false;
+    }
+    if (this.heroLastFrame) this.heroElapsed += Math.min(64, Math.max(0, now - this.heroLastFrame));
+    this.heroLastFrame = now;
+    const t = this.heroElapsed / 1_000;
+    const base = this.heroBase;
+    this.place({
+      x: base.x + Math.sin(t / 120) * 36 / base.scale,
+      y: base.y + Math.sin(t / 170) * 22 / base.scale,
+      scale: base.scale * (1 + Math.sin(t / 210) * 0.018),
+    });
+    return true;
   }
 
   // ── Camera commands ────────────────────────────────────────────────────────────────────────────
@@ -324,6 +484,12 @@ export class MapView {
   setCamera(state: CameraState): void {
     this.motion = null;
     this.place(state);
+    if (this.hero) {
+      this.heroBase = this.camera.snapshot();
+      this.heroElapsed = 0;
+      this.heroLastFrame = 0;
+      this.heroComposedLive = true;
+    }
   }
 
   /** Where a world point is on screen in CSS px, with the camera as it is now. */
@@ -340,6 +506,7 @@ export class MapView {
     this.live = live;
     this.liveVersion = -1;
     this.overlay.setLive(live);
+    if (this.hero && !this.heroComposedLive && live?.frame && !this.readyNotified) this.composeHero();
     this.dirty = true;
   }
 
@@ -413,18 +580,37 @@ export class MapView {
   // ── Frame loop ─────────────────────────────────────────────────────────────────────────────────
 
   private loop = (): void => {
-    if (this.disposed) return;
+    if (this.disposed || this.pausedAt !== null) return;
     this.raf = requestAnimationFrame(this.loop);
     if (this.lost) return;
+    if (this.readyFired && !this.readyNotified && this.readyFrames > 0 && --this.readyFrames === 0) {
+      this.readyNotified = true;
+      this.events.ready();
+      if (this.disposed || this.pausedAt !== null) return;
+    }
     const now = performance.now();
+    // The live frame can arrive after the first drawing. Settle into its live land once, without a camera cut.
+    if (this.hero && !this.heroComposedLive && this.live?.frame) {
+      if (this.readyNotified && reduceMotion()) this.heroComposedLive = true;
+      else this.composeHero(this.readyNotified);
+    }
     let moving = this.gestures.step(now);
     if (this.motion) {
       const { plan, start, space } = this.motion;
       const state = plan.at(now - start);
       this.place(space === 'focus' ? centreForFocus(state, this.view, this.insets()) : state);
-      if (now - start >= plan.duration) this.motion = null;
+      if (now - start >= plan.duration) {
+        this.motion = null;
+        if (this.hero) {
+          this.heroBase = this.camera.snapshot();
+          this.heroElapsed = 0;
+          this.heroLastFrame = 0;
+          this.heroComposedLive = true;
+        }
+      }
       moving = true;
     }
+    if (this.driftHero(now)) moving = true;
     if (this.data.store.version !== this.storeVersion) {
       this.storeVersion = this.data.store.version;
       this.dirty = true;
@@ -432,7 +618,7 @@ export class MapView {
     const live = this.live;
     if (live) {
       // Pencil places are found a few milliseconds per frame, the regions in view first, and never while moving.
-      if (!moving && !this.gestures.touching) live.work(6, this.visibleRegions());
+      if ((!moving || this.hero) && !this.gestures.touching) live.work(6, this.visibleRegions());
       if (live.version !== this.liveVersion) {
         this.liveVersion = live.version;
         this.dirty = true;
@@ -476,9 +662,7 @@ export class MapView {
     if (!this.readyFired && this.tiles.complete && ![...this.chunks.values()].includes('loading')) {
       this.readyFired = true;
       // One more frame so the last fade has reached the canvas before anyone looks.
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (!this.disposed) this.events.ready();
-      }));
+      this.readyFrames = 2;
     }
   }
 
@@ -569,11 +753,13 @@ export class MapView {
     this.chunks.set(region, 'loading');
     return this.data.loadChunk(region).then(
       () => {
+        if (this.disposed) return;
         this.chunks.delete(region);
         this.live?.regionLoaded(region);
         this.dirty = true;
       },
       (error: unknown) => {
+        if (this.disposed) return;
         this.chunks.set(region, 'failed');
         this.events.chunkFailed(region);
         this.dirty = true;
@@ -595,14 +781,24 @@ export class MapView {
       .sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - a.r - (Math.hypot(b.x - c.x, b.y - c.y) - b.r) || a.index - b.index)[0];
     if (!next) return;
     this.backgroundLoading = true;
-    const idle = (run: () => void) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(run, { timeout: 1500 }) : setTimeout(run, 200));
-    idle(() => {
-      if (this.disposed) return;
+    const run = () => {
+      this.backgroundCancel = null;
+      if (this.disposed || this.pausedAt !== null) {
+        this.backgroundLoading = false;
+        return;
+      }
       void this.loadRegion(next.index).catch(() => undefined).finally(() => {
         this.backgroundLoading = false;
-        this.dirty = true;
+        if (!this.disposed) this.dirty = true;
       });
-    });
+    };
+    if (typeof requestIdleCallback === 'function') {
+      const handle = requestIdleCallback(run, { timeout: 1500 });
+      this.backgroundCancel = () => cancelIdleCallback(handle);
+    } else {
+      const handle = window.setTimeout(run, 200);
+      this.backgroundCancel = () => window.clearTimeout(handle);
+    }
   }
 
   /** Towns and villages arrive per language region once the camera is close enough to mark them. */
@@ -621,6 +817,7 @@ export class MapView {
    * dragged), ends any held gesture, and lets a flight in progress land with the new size.
    */
   private resize(): void {
+    if (this.disposed) return;
     const width = this.host.clientWidth;
     const height = this.host.clientHeight;
     if (!width || !height || (width === this.view.width && height === this.view.height)) return;
@@ -632,6 +829,11 @@ export class MapView {
     this.camera.resize(this.view);
     this.tiles.setHome(this.homeCamera().snapshot(), this.view);
     this.place(centreForFocus({ ...focus, scale: this.camera.scale }, this.view, this.insets()));
+    if (this.hero) {
+      this.heroBase = this.camera.snapshot();
+      this.heroElapsed = 0;
+      this.heroLastFrame = 0;
+    }
   }
 
   // ── Context loss ───────────────────────────────────────────────────────────────────────────────
@@ -644,9 +846,10 @@ export class MapView {
   private bindContext(): void {
     const canvas = this.app.canvas;
     this.listen(canvas, 'webglcontextlost', () => {
+      if (this.disposed) return;
       this.lost = true;
       this.contextLosses++;
-      this.gestures.reset();
+      this.resetInput();
       this.events.context('lost');
       window.clearTimeout(this.lostTimer);
       this.lostTimer = window.setTimeout(() => {
@@ -654,9 +857,11 @@ export class MapView {
       }, CONTEXT_GRACE_MS);
     });
     this.listen(canvas, 'webglcontextrestored', () => {
+      if (this.disposed) return;
       window.clearTimeout(this.lostTimer);
       if (!this.lost) return;
       this.lost = false;
+      this.heroLastFrame = 0;
       this.dirty = true;
       this.events.context('restored');
     });
@@ -675,6 +880,7 @@ export class MapView {
   }
 
   private tap(x: number, y: number, type: string): void {
+    if (!this.acceptsInput()) return;
     const slop = type === 'mouse' ? 4 : 14;
     const settler = this.overlay.pick(x, y, slop);
     const dab = settler ? null : this.overlay.pickDab(x, y, slop);
@@ -689,58 +895,66 @@ export class MapView {
       else delete host.dataset.dragging;
     };
     this.listen(host, 'pointerdown', (event: PointerEvent) => {
+      if (!this.acceptsInput()) return;
       this.lastPointer = event.pointerType;
       const p = this.local(event);
       if (!this.gestures.down(event.pointerId, p.x, p.y, event.pointerType, event.button)) return;
       try {
         host.setPointerCapture(event.pointerId);
+        this.captured.add(event.pointerId);
       } catch {
         // A pointer that is already gone cannot be captured; its up or cancel still arrives.
       }
       dragging();
     });
     this.listen(host, 'pointermove', (event: PointerEvent) => {
+      if (!this.acceptsInput()) return;
       const p = this.local(event);
       if (this.gestures.touching) this.gestures.move(event.pointerId, p.x, p.y);
       else if (event.pointerType === 'mouse') this.hover(p.x, p.y);
     });
     this.listen(host, 'pointerup', (event: PointerEvent) => {
+      this.captured.delete(event.pointerId);
+      if (!this.acceptsInput()) return;
       this.gestures.up(event.pointerId);
       dragging();
     });
     const cancel = (event: PointerEvent) => {
+      this.captured.delete(event.pointerId);
+      if (!this.acceptsInput()) return;
       this.gestures.cancel(event.pointerId);
       dragging();
     };
     this.listen(host, 'pointercancel', cancel);
     this.listen(host, 'lostpointercapture', cancel);
     this.listen(host, 'pointerleave', () => {
+      if (!this.acceptsInput()) return;
       if (this.hovered) {
         this.hovered = null;
         delete host.dataset.hover;
         this.dirty = true;
       }
     });
-    const end = () => {
-      this.gestures.reset();
-      dragging();
-    };
+    const end = () => this.resetInput();
     this.listen(window, 'blur', end);
     this.listen(document, 'visibilitychange', () => {
-      if (document.visibilityState === 'hidden') end();
+      this.syncPaused();
     });
     this.listen(host, 'wheel', (event: WheelEvent) => {
+      if (!this.acceptsInput() || !this.wheel) return;
       event.preventDefault();
       const p = this.local(event);
       this.gestures.wheel(event.deltaY, event.deltaMode, event.ctrlKey, p.x, p.y);
     }, { passive: false });
     this.listen(host, 'dblclick', (event: MouseEvent) => {
+      if (!this.acceptsInput()) return;
       // Mobile browsers also send dblclick for a double tap on an unzoomable page; the tap already zoomed once.
       if (this.lastPointer !== 'mouse') return;
       const p = this.local(event);
       this.zoomBy(event.shiftKey ? 0.5 : 2, p.x, p.y);
     });
     this.listen(host, 'keydown', (event: KeyboardEvent) => {
+      if (!this.acceptsInput()) return;
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       const step = Math.round(Math.min(this.view.width, this.view.height) * 0.18);
       switch (event.key) {
@@ -772,10 +986,13 @@ export class MapView {
   }
 
   dispose(): void {
+    if (this.disposed) return;
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     window.clearTimeout(this.lostTimer);
-    this.gestures.reset();
+    this.backgroundCancel?.();
+    this.backgroundCancel = null;
+    this.resetInput();
     this.observer.disconnect();
     for (const undo of this.cleanup) undo();
     this.farm.dispose();
@@ -783,5 +1000,6 @@ export class MapView {
     this.overlay.dispose();
     this.wash.dispose();
     this.app.destroy(true, { children: true });
+    this.sheet?.close();
   }
 }

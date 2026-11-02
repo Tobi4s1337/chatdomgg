@@ -14,6 +14,6 @@ export default defineConfig(({ mode }) => {
     '/api/realm/founded': realmTarget, '/api/realm/entry': realmTarget, '/api/realm/watch': realmTarget,
     '/api/realm/chronicle': realmTarget, '/api/realm/clock': realmTarget,
     '/api': setting('CHATDOM_API_TARGET', 'http://127.0.0.1:5192'), '/forge-data': 'http://127.0.0.1:5195',
-    '/map-data': 'http://127.0.0.1:5193', '/presence-data': 'http://127.0.0.1:5194' };
+    '/map-data': setting('CHATDOM_ATLAS_TARGET', 'http://127.0.0.1:5193'), '/presence-data': 'http://127.0.0.1:5194' };
   return { plugins: [solid()], server: { proxy: proxies }, preview: { proxy: proxies }, build: { target: 'es2022' } };
 });

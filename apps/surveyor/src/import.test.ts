@@ -160,7 +160,9 @@ describe('atlas:import', () => {
     expect(byId.get('900000000000000001')?.stream?.title).toBe('A fixture stream');
     expect(byId.get('900000000000000002')?.stream).toBeNull();
     expect(byId.get('900000000000000002')?.avatarUrl).toBeNull();
+    expect(byId.get('900000000000000002')?.avatarFactsAt).toBeNull();
     expect(byId.get('900000000000000005')?.avatarUrl).toBeNull();
+    expect(byId.get('900000000000000005')?.avatarFactsAt).toBeNull();
     expect(result.manifest.counts.streamsExpired).toBe(3);
     expect(result.manifest.counts.avatarsDropped).toBeGreaterThanOrEqual(3);
     expect(checkDataDir(dataDir).ok).toBe(true);
