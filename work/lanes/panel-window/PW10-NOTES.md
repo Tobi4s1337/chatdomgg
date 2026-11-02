@@ -1,3 +1,35 @@
+# PW10 checkpoint — 2 November 2026, the window on the You tab
+
+PW10 is still unticked. Main has not moved since this lane branched (`0e92df4`), so the shared Passport patches have not landed and the zip still fails on their strings alone. The GPU tunnel was down again at the start of this session (`chatdom-pc status` exit 3). This session looked again at the You tab, the view a newcomer lands on after the tap, and found three things below the bar.
+
+## What was below the bar
+
+- **The You tab never showed the viewer their own window.** After the tap it drew an icon of a lit window. The real lit window, which the painting already marks, was only on the Kingdom tab.
+- **The portrait slot was missing.** The PRD asks for the plate to read "Your window is lit" with the name, the street and a portrait slot that stays empty until a real portrait exists. Only the name and street were there.
+- **The phone layout was not thumb-first.** At 390×844 the window icon, the line and the button sat as one small group in the middle of 700 px of parchment.
+
+## Implemented
+
+- **The arch looks into the painting** (`apps/panel/src/window-view.ts`, `Panel.tsx`, `window.css`). While the light is lit and the current painting's reply marks this viewer's slot (the same rule as the Kingdom tab's "Yours" mark), the arch on the You tab shows a crop of that painting. The crop is drawn at 4.2 times the arch's width, which is about the painting's own pixel size, and centred on the window. Near the painting's edge the crop stops at the edge and the ring moves off-centre toward the window, so the arch never shows past the painting. A brass ring with the same slow glow sits on the pane. The arch is a 112 px button (150 px on a phone) whose name is "Your lit window in the painting from <time>. Show the kingdom". Tapping it opens the Kingdom tab. Before the next painting shows the window, or if the picture fails, the drawn lit window stays. The visible words do not change.
+- **The portrait slot** is a 30 px brass locket before the name and street. It stays empty parchment until the card carries a real portrait, which then fills it (its own load failure falls back to the empty locket).
+- **Thumb-first on tall views** (`min-height: 640px`). The window stands centred in the upper plate and is larger (96×134 drawn, 150 px arch), while the line, the 52 px "Take your place" button and the links sit in a group 44 px above the tab bar. At 318×496 the composition is unchanged and centred.
+- `pw10-capture.mjs` takes one more still, `lit-you-painted`, on the You tab after painting 02.
+
+## Verified
+
+- Vitest `apps/panel/src/window-view.test.ts` (4: centred, the corner clamp with the ring still on the window, the newcomer's real mark at 0.1328/0.8242, refusals) plus `apps/panel/src/adapters` (36): 40 passed. Repository `tsc --noEmit` shows no errors under `apps/panel`. ESLint on the three touched files is clean.
+- `node scripts/public/extension.mjs` builds; it still fails only on the two shared simulation strings (viewer and window chunks), with nothing new.
+- Lane-stack capture `--only tap`, rendered with SwiftShader because the GPU tunnel was down (exit 3). It waited about 10 minutes for two free capture ports, then ran with the realm on 5170 and the stack on 5171, both stopped afterwards.
+  - Painting 01 was stored at 0 lights. Tap to lit took 891 ms at 318×496 and 235 ms at 390×844, both confirmed by the realm. Painting 02 was stored at 1 light, with the mark `11:1328:8242` (the +25° turn, as before).
+  - I looked at `lit-you-painted` at both sizes. The arch shows the newcomer's own cottage, with its neighbours and the lane behind, and the ring sits on its lit side pane. `lit-you` (before painting 02 reached the panel) shows the drawn lit window and the locket. On the phone, the arch stands in the upper plate and the line, locket and links sit under the thumb. `sharing-you@390x844` puts "Waiting for Twitch…" where the button was.
+  - Words: lit You is 11 (head 1, main 10), unchanged, and sharing is 4. None of the 15 stills from this run scrolls, clips or has text under 12 px.
+
+## Doubts
+
+- In SwiftShader the window's own glow is faint, so the ring is doing the work. On a real GPU the crop should show the pane glowing. That still needs judging.
+- The empty locket is honest, but it is one more round shape near the arch. If it reads as a missing image to someone new, it could shrink to 24 px.
+- The phone layout (`min-height: 640px`) is keyed to the viewport height. A panel iframe taller than 640 px on desktop would also take the thumb-first layout. Twitch panels are at most 500 px tall, so this only reaches the mobile view.
+
 # PW10 checkpoint — 2 November 2026, occlusion and framing
 
 PW10 is still unticked. This session took the reviewer's follow-up, "check occlusion and framing changes in dense kingdoms". The check found two real faults in the last checkpoint, and both are fixed.

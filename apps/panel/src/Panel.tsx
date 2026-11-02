@@ -5,6 +5,7 @@ import { CardSheet, PassportCorner } from './card/CardSheet';
 import { PanelPassport } from './passport/PanelPassport';
 import { createPanelSound } from './sound';
 import { GiftShelf } from './gifts/GiftShelf';
+import { windowViewCrop } from './window-view';
 import type { Home, PanelAdapter, PanelSnapshot, PassportSource, Privacy } from './model';
 import './panel.css';
 import './places.css';
@@ -82,6 +83,16 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   const source = createMemo<Extract<PassportSource, { kind: 'readable' }> | null>(() => { const value = card()?.passport; return value?.kind === 'readable' ? value : null; });
   const picture = () => { const value = snap().picture; return value.kind === 'still' && !failed() ? value : null; };
   const gate = () => { const value = snap().entry; return value.kind === 'gate' ? value : null; };
+  // The arch on the You tab looks into the painting only while that painting shows the viewer's own window lit.
+  const windowView = createMemo(() => {
+    const value = picture();
+    if (snap().light.kind !== 'lit' || !value?.mark) return null;
+    const crop = windowViewCrop(value.mark, value);
+    return crop ? { url: value.url, crop, time: value.provenance.caption } : null;
+  });
+  const [portraitFailed, setPortraitFailed] = createSignal(false);
+  const portrait = () => { const value = card()?.card.portrait; return value && !portraitFailed() ? value : null; };
+  createEffect(() => { void card()?.card.portrait?.url; setPortraitFailed(false); });
   const reading = createMemo(() => {
     const value = source();
     return value && value.kind === 'readable' ? createPassportReading(value.transport, value.disclosure ? { disclosure: () => value.disclosure ?? undefined } : {}) : null;
@@ -180,13 +191,21 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
           </Match>
           <Match when={tab() === 'you'}>
             <section class="cw-you">
-              <div class="cw-window" classList={{ lit: snap().light.kind === 'lit' }} aria-hidden="true"><span /><span /><span /><span /></div>
+              <div class="cw-you-view">
+              <Show when={windowView()} fallback={<div class="cw-window" classList={{ lit: snap().light.kind === 'lit' }} aria-hidden="true"><span /><span /><span /><span /></div>}>{view =>
+                <button type="button" class="cw-window-view" aria-label={`Your lit window in the painting from ${view().time}. Show the kingdom`} onClick={() => openTab('kingdom')}>
+                  <img src={view().url} alt="" draggable={false} style={{ width: `${view().crop.zoom * 100}%`, transform: `translate(${-view().crop.centre.x * 100}%, ${-view().crop.centre.y * 100}%)` }} onError={() => setFailed(true)} />
+                  <span class="cw-window-view-ring" style={{ left: `${view().crop.ring.x * 100}%`, top: `${view().crop.ring.y * 100}%` }} />
+                </button>}</Show>
+              </div>
+              <div class="cw-you-act">
               <Show when={canPlace()} fallback={<p class="cw-status" role="status">{lightWords() ?? 'Your place is waiting'}</p>}><button class="cw-primary" onClick={place}>Take your place</button></Show>
-              <Show when={homeLine()}><p class="cw-home">{homeLine()}</p></Show>
+              <Show when={homeLine()}><p class="cw-home"><span class="cw-portrait-slot" aria-hidden="true"><Show when={portrait()}>{found => <img src={found().url} alt="" onError={() => setPortraitFailed(true)} />}</Show></span><span>{homeLine()}</span></p></Show>
               <Show when={snap().light.kind === 'unfounded'}><p class="cw-home">Tell {snap().streamer ?? 'the streamer'} their kingdom is waiting</p></Show>
               <div class="cw-personal-links">
               <Show when={snap().privacy && snap().privacy?.kind !== 'forgotten'}><button class="cw-card-link cw-settings-link" onClick={() => setPage('privacy')} aria-label="Your privacy">Privacy <span>›</span></button></Show>
               <Show when={card()}><button ref={element => { cardButton = element; }} class="cw-card-link" onClick={() => { sound.gesture(); sound.play('page'); setPage('card'); }} aria-label="Your citizen card">Your card <span>›</span></button></Show>
+              </div>
               </div>
             </section>
           </Match>

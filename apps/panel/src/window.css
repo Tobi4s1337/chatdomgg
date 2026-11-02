@@ -73,3 +73,34 @@
 .cw-privacy-note { padding: 8px 0; color: #654c37; }
 .cw-privacy-unavailable { border-top: 1px solid #b39a72; padding: 10px 4px; font-size: 15px; }
 .cw-privacy-unavailable p { margin: 4px 0 0; }
+
+/* The You tab: the window above, the action under the thumb. */
+.cw-you-view { flex: none; display: grid; place-items: center; margin-bottom: 22px; }
+.cw-you-view .cw-window { margin-bottom: 0; }
+.cw-you-act { flex: none; display: flex; flex-direction: column; align-items: center; }
+/* Once the painting shows the viewer's window lit, the arch looks into that painting at it. */
+.cw-window-view { position: relative; width: 112px; aspect-ratio: 100 / 132; padding: 0; overflow: hidden; cursor: pointer;
+  border: 3px solid #775334; border-radius: 56px 56px 3px 3px; background: #251c17;
+  box-shadow: 0 1px #f9edcf, 0 0 0 1px #4a3220, inset 0 0 0 1px #dfbc84; }
+.cw-window-view img { position: absolute; left: 50%; top: 50%; max-width: none; height: auto; display: block; pointer-events: none; user-select: none; }
+.cw-window-view::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: inset 0 0 0 4px #62452e, inset 0 0 0 5px #dfbc8488, inset 0 0 18px 6px #1a110d99; }
+.cw-window-view-ring { position: absolute; width: 22px; height: 22px; transform: translate(-50%, -50%); box-sizing: border-box; border-radius: 50%; pointer-events: none;
+  border: 2px solid #f0cf8e; box-shadow: 0 0 0 1px #2a170cb0, inset 0 0 0 1px #2a170c80, 0 0 12px 3px #ffb95a70; animation: cw-yours-glow 3.2s ease-in-out infinite; }
+.cw-window-view:focus-visible { outline: 2px solid #803f2b; outline-offset: 3px; }
+/* The portrait slot beside the name stays an empty brass locket until a real portrait exists. */
+.cw-home { display: inline-flex; align-items: center; gap: 8px; }
+.cw-portrait-slot { flex: none; width: 30px; height: 30px; border-radius: 50%; overflow: hidden;
+  background: radial-gradient(circle at 50% 38%, #e2cea7, #bfa074 72%);
+  box-shadow: 0 0 0 1px #3b2614, 0 0 0 2.5px #c69a5c, 0 0 0 3.5px #4a3220, inset 0 2px 4px #4a322088, 0 1px 3px #0005; }
+.cw-portrait-slot img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+/* A phone held upright: the window stands tall in the upper plate and the action waits under the thumb. */
+@media (min-height: 640px) {
+  .cw-you { justify-content: stretch; padding-bottom: 44px; }
+  .cw-you-view { flex: 1; min-height: 0; margin-bottom: 18px; }
+  .cw-you-view .cw-window { width: 96px; height: 134px; border-radius: 50px 50px 3px 3px; }
+  .cw-window-view { width: 150px; border-radius: 75px 75px 3px 3px; }
+  .cw-window-view-ring { width: 26px; height: 26px; }
+  .cw-you .cw-primary { min-height: 52px; min-width: 220px; }
+}
+@media (prefers-reduced-motion: reduce) { .cw-window-view-ring { animation: none; } }

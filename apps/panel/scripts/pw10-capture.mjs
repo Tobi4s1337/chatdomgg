@@ -282,6 +282,9 @@ try {
       await tap.page.getByRole('button', { name: 'Walk in ↗' }).click();
       await shot(tap.page, 'lit-walk-in', 'one tap deeper: the links that leave Twitch');
       await tab(tap.page, 'You');
+      // Once the painting shows the window lit, the You tab's arch looks into it at that window.
+      await tap.page.locator('.cw-window-view img').waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
+      await delay(400); await shot(tap.page, 'lit-you-painted', 'the arch looks into the latest painting at the lit window');
       const card = tap.page.getByRole('button', { name: /Your citizen card/ });
       if (await card.count()) { await card.click(); await delay(600); await shot(tap.page, 'lit-card'); await tap.page.getByRole('button', { name: /Back to You/ }).first().click(); }
       await tab(tap.page, 'Gifts'); await shot(tap.page, 'lit-gifts');
