@@ -500,3 +500,63 @@ Gather's corrected seam remains the exterior tavern door on both lands, with the
 unchanged. The tavern room is never mounted as a kingdom interior. Campfire clearing and its typed scene
 mount remain separate; the real clearing still needs an accepted persisted site. The authored pier proposal
 and its existing old/grand validation are unchanged.
+
+## GW10 receipt publication and exact-plan reuse — 2026-11-02
+
+Implemented in `apps/realm/src/land/publication.ts`:
+
+```ts
+publishFoundedLand({ sceneBytes, receipt, recipeHash, store, sourceSceneHash?, signal? })
+// Promise<{ binding, disposition: 'existing' | 'rebound', reused: { regions, meshes, blobs } }>
+createLandPublicationGuard({ store, recipeFor })
+// (bytes: Uint8Array, receipt: RealmFoundedManifest, signal?: AbortSignal) => Promise<result | null>
+```
+
+The publisher owns its input bytes and parsed receipt, verifies the actual scene, requires live origin and
+the originally pinned recipe, and hashes the full decoded plan. Matching the layout label alone is insufficient.
+The source must be the existing exact receipt binding, an explicitly named published binding of the same plan,
+or a verified immutable catalogue entry at `plans/<kingdom>/<recipeHash>/<sourcePlanHash>.json`. Every referenced
+blob is reopened and verified before target publication. Different plans return `LandNeedsBakeError` with
+`code: 'land.needs-bake'` and the exact kingdom/recipe/plan/layout identity; a GET never invokes generation.
+
+New bakes seed this catalogue after full verification. Legacy stores can be indexed by publishing their original
+already-bound scene, or by explicitly selecting that binding as the source for a new same-plan receipt. The
+catalogue commits before the target binding, so a competing artifact for the same key cannot acquire a target
+binding. Neither file is mutable. Cancellation before the atomic link leaves no target; cancellation racing a
+completed link may leave a complete verified artifact, but cannot adopt a partial world. No current pointer,
+directory scan, timestamp inference or root-receipt extension was added.
+
+The generator-free CLI is `apps/realm/src/land/publish-cli.ts`, built by
+`work/lanes/grand-world/build-publication.mjs`. Exact usage is in the realm land README. Both public scene assets
+and collision revisions may change without rebaking identical plan terrain; this grants no collision authority.
+Historical receipts remain separate immutable bindings and may be prepared with their exact recorded bytes.
+
+`withLandPublication(store, beforePublish, signal?)` in `land/publication-store.ts` implements the typed
+`FoundedWorldStore` boundary. It snapshots bytes and receipt once, awaits the guard, checks cancellation and
+only then invokes the original `put`. `native` and `revision` retain their original store receivers.
+
+**needs: integrator bootstrap composition (not edited by this lane).** In `bootstrap/durable.ts`, add an
+optional `beforeFoundedPublication?: BeforeFoundedPublication` to `DurableRealmBootOptions`, import that type
+and `withLandPublication` from `../land/publication-store`, and replace only the loader composition with:
+
+```ts
+const store = new FileFoundedStore(options.foundedDirectory);
+const loader = createFoundedWorldLoader(allocation, options.beforeFoundedPublication
+  ? withLandPublication(store, options.beforeFoundedPublication) : store);
+```
+
+The host supplies `createLandPublicationGuard` with the explicit adopted kingdom-to-pinned-recipe mapping and
+the same durable land store used by the read routes. Only the recorded Willowmere recipe is adopted currently.
+Do not infer adoption from an incoming receipt or substitute a newer recipe. The loader already waits for
+`store.put` before staging; the existing writer/adoption checks still decide whether it becomes current.
+
+**needs: integrator historical preparation.** `chronicle/read.ts` assembles scenes and inserts them directly
+into its `worlds` map without calling founded `store.put`; wrapping the loader does not cover this path. Pass
+the same optional callback into its input and await it on `build.bytes, build.manifest` before adding an adopted
+world to the response, or prepare those exact bindings in an offline history publication step. Every distinct
+historical plan needs its own complete catalogue entry. No historical coverage is claimed by the current proof.
+
+Full artifact verification is not free: the isolated real CLI pass cost 2.44 CPU seconds / 8.93 wall seconds
+under contention and peaked at 213.4 MiB. Preparation needs scheduling outside the held writer's time-sensitive
+adoption window; do not treat this result as an instant Forge/reconnect latency proof. The root land identity,
+producer scheduling and live/historical integration remain open. Evidence: `work/evidence/grand-world/GW10-publication.md`.

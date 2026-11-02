@@ -1,6 +1,6 @@
 import { setImmediate } from 'node:timers/promises';
-import type { RealmFoundedManifest } from '@chatdom/shared/realm';
-import { decodeFoundedScene } from '../../../../packages/world/src/founded-world/validate';
+import { RealmFoundedManifestSchema, type RealmFoundedManifest } from '@chatdom/shared/realm';
+import { decodeFoundedScene, FOUNDED_SCENE_LIMITS } from '../../../../packages/world/src/founded-world/validate';
 import { freezeGrandLandRecipe, type GrandLandRecipe } from '../../../../packages/world/src/grand/recipe';
 import { GRAND_LEVELS, GRAND_REGION } from '../../../../packages/world/src/grand/types';
 import { planGrandLand } from '../../../../packages/world/src/grand/plan';
@@ -8,10 +8,11 @@ import { assertDimensions } from '../../../../packages/world/src/grand/baked/val
 import { prepareInstalledLand, regionTouchesPhysical } from '../../../../packages/world/src/grand/baked/prepare';
 import { createInstalledRegionMesher } from '../../../../packages/world/src/grand/baked/mesher';
 import { createBakedMetadata, identityForBakedLand } from '../../../../packages/world/src/grand/baked/metadata';
-import { encodeBakedMetadata, encodeBakedRegion, encodeBakedSurface, decodeBakedMetadata, decodeBakedRegion, decodeBakedSurface } from '../../../../packages/world/src/grand/baked/codec';
+import { encodeBakedMetadata, encodeBakedRegion, encodeBakedSurface } from '../../../../packages/world/src/grand/baked/codec';
 import { BAKED_COMPILERS, type BakedRegionRef } from '../../../../packages/world/src/grand/baked/types';
-import { unpackQuad } from '../../../../packages/voxel/src/grand/quad-mesher';
 import { LandArtifactStore, type StoredLandBinding } from './store';
+import { verifyLandArtifact } from './verify';
+export { verifyLandArtifact } from './verify';
 
 export interface LandBakeProgress { readonly stage: 'preparing' | 'surface' | 'meshes' | 'verifying' | 'published'; readonly completed: number; readonly total: number }
 export interface LandBakeOptions {
@@ -28,7 +29,9 @@ export async function bakeFoundedLand(options: LandBakeOptions) {
   const wall = performance.now(), cpu = process.cpuUsage();
   const check = () => options.signal?.throwIfAborted();
   check();
-  const scene = await decodeFoundedScene(options.sceneBytes, options.receipt);
+  const receipt = RealmFoundedManifestSchema.parse(options.receipt);
+  if (options.sceneBytes.byteLength > FOUNDED_SCENE_LIMITS.bytes) throw new Error('The founded scene exceeds its byte budget');
+  const scene = await decodeFoundedScene(new Uint8Array(options.sceneBytes), receipt);
   if (scene.origin !== 'live') throw new Error('A public land bake requires a live founded receipt');
   const recipe = freezeGrandLandRecipe(options.recipe);
   if (recipe.version !== 1 || recipe.seed.kingdomId !== scene.kingdomId
@@ -66,15 +69,20 @@ export async function bakeFoundedLand(options: LandBakeOptions) {
   }
   const metadata = createBakedMetadata(prepared, identity, surface, refs);
   const manifest = await options.store.put(encodeBakedMetadata(metadata));
-  const binding: StoredLandBinding = { version: 1, kingdomId: scene.kingdomId, sceneHash: options.receipt.sceneHash,
+  const binding: StoredLandBinding = { version: 1, kingdomId: scene.kingdomId, sceneHash: receipt.sceneHash,
     layoutRevision: scene.layoutRevision, collisionRevision: scene.collisionRevision,
     sourcePlanHash: identity.sourcePlanHash, recipeHash: identity.recipeHash, manifest };
   options.onProgress?.({ stage: 'verifying', completed: 0, total: refs.length + 2 });
   await verifyLandArtifact(options.store, binding, check);
   check();
-  // The recipe pin and receipt binding are the only publication points. Incomplete bakes remain unreferenced blobs.
-  await options.store.pinRecipe(scene.kingdomId, recipe);
-  await options.store.bind(binding);
+  // Complete verified exact plans can be reused by later receipts. Nothing scans for a newest bake.
+  await options.store.pinRecipe(scene.kingdomId, recipe, options.signal);
+  check();
+  await options.store.cataloguePlan({ version: 1, kingdomId: binding.kingdomId, recipeHash: binding.recipeHash,
+    sourcePlanHash: binding.sourcePlanHash, layoutRevision: binding.layoutRevision, manifest }, options.signal);
+  check();
+  await options.store.bind(binding, options.signal);
+  check();
   options.onProgress?.({ stage: 'published', completed: total, total });
   const used = process.cpuUsage(cpu);
   return { binding, regions: metadata.regions.length, meshes: refs.length,
@@ -84,30 +92,4 @@ export async function bakeFoundedLand(options: LandBakeOptions) {
     manifestBytes: manifest.rawBytes, manifestGzipBytes: manifest.gzipBytes, surfaceGzipBytes: surface.gzipBytes,
     wallSeconds: (performance.now() - wall) / 1000, cpuSeconds: (used.user + used.system) / 1e6,
     peakMemoryKiB: process.resourceUsage().maxRSS, workers: 0 };
-}
-
-/** Reopen every immutable byte before publishing, and on isolated acceptance runs. Does not invoke generation. */
-export async function verifyLandArtifact(store: LandArtifactStore, binding: StoredLandBinding, check = () => {}) {
-  const metadata = decodeBakedMetadata(await store.read(binding.manifest));
-  if (metadata.kingdomId !== binding.kingdomId || metadata.recipeHash !== binding.recipeHash
-    || metadata.sourcePlanHash !== binding.sourcePlanHash || metadata.sourcePlanRevision !== binding.layoutRevision)
-    throw new Error('Baked land does not match the founded receipt binding');
-  const surface = decodeBakedSurface(await store.read(metadata.surface));
-  if (surface.size !== metadata.size || surface.height !== metadata.height || surface.seaLevel !== metadata.seaLevel)
-    throw new Error('Baked surface does not match the land metadata');
-  const materials = new Set(metadata.palette.map(material => material.id));
-  for (const region of metadata.regions) for (const ref of region.meshes) {
-    check();
-    const mesh = decodeBakedRegion(await store.read(ref));
-    if (mesh.rx !== ref.rx || mesh.rz !== ref.rz || mesh.level !== ref.level || mesh.minY !== ref.minY
-      || mesh.maxY !== ref.maxY || mesh.quads.length / 2 !== ref.quadCount) throw new Error('Baked mesh does not match its region reference');
-    for (let i = 0; i < mesh.quads.length; i += 2) {
-      const quad = unpackQuad(mesh.quads[i]!, mesh.quads[i + 1]!);
-      if (!materials.has(quad.material)) throw new Error('Baked mesh uses a material outside its palette');
-      const axis = quad.face >> 1, y = ((quad.slot >> 4) & 15) * 32 + quad.y;
-      const top = y + (axis === 1 ? (quad.face % 2 === 0 ? 1 : 0) : (axis + 1) % 3 === 1 ? quad.w : quad.h);
-      if (top * (1 << mesh.level) > metadata.height) throw new Error('Baked mesh exceeds the declared world height');
-    }
-  }
-  return { metadata, surface };
 }
