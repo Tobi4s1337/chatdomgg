@@ -27,12 +27,13 @@ the redeploy (e218c7c5, with this lane's first fixes), headless at both sizes an
 | 7 | Walking, HUD | pending (Tobias's sign-in) | Needs a signed-in session: once Tobias has signed in on chatdom.io in the Chrome behind `chatdom-pc`, the lane stills `/?walk=1&kingdom=129634568` on the 5080 (it opens his tab with his session) at 1440×900 and 390×844, and walks it. |
 | 7a | Minimap and lantern path | handed over | Not built yet: play PL12 ("The ledger is complete, a live minimap, and a lantern path home") is unchecked. `needs: play PL12`. |
 | 8 | A wish at the Forge that becomes a piece | fixed (part) + pending | The chat-permission round trip ("Continue to Twitch") came back to `/kingdom/<id>?forgeChat=…`, which hands a founded kingdom to its watch-only stream: the visitor lost the anvil and nothing read the outcome. It now comes back to the walk (`/?walk=1&kingdom=<id>&forgeChat=<outcome>`). The wish itself is to be walked after step 6; sending posts `!forge` in the visitor's own chat, so only on tobi4s_. |
-| 9 | Fishing at the pier and the Almanac | handed over | Fishing is built but not mounted in the walk (`apps/web/src/fishing/play-slot.ts` and its import in `play/providers.ts` do not exist; the realm needs `REALM_PIER_FISHING=1`), and the Almanac is pier PI11, unchecked. `needs: pier PI10 production mounts, PI11`. |
+| 9 | Fishing at the pier and the Almanac | built + pending (Tobias's sign-in) | Since the 18:40 walk, pier PI10 (fishing mounted in the walk: `fishing/play-slot.ts` and `kingdom-slot.ts` registered in `play/providers.ts`) and PI11 (the Almanac) are done and merged here. Live on chatdom.io (19:20) the pier answers: `/api/realm/pier/watch/129634568` streams `lines`, `/api/realm/pier/almanac/129634568` returns Willowmere's lake Almanac. Casting needs a walker, so it is walked with step 7's session. |
 | 10 | Tavern portal, a game | pending (Tobias's sign-in) | Tavern door is registered in the walk; to be walked with step 7's session. |
-| 10a | The campfire at night | handed over | gather GA11 ("The campfire at night, and Dusk Court") is unchecked; no campfire provider is registered in the walk. `needs: gather GA11`. |
+| 10a | The campfire at night | built + pending (Tobias's sign-in) | gather GA11 is done and merged here (`campfire/register` is in `play/providers.ts`). Walked with step 7's session after dark. |
 | 11 | The passport with raid stamps | handed over | There is no public passport on the web: it opens only inside the Twitch panel ("You" → "Your card" → passport). On chatdom.io a visitor has no way to it. `needs: panel-window/front-door: a web passport route, or the decision that the passport lives only in the panel`. |
 | 12 | The panel view at `/panel` | working (calm) | Outside Twitch it says "Open on Twitch to see the kingdom" in the panel frame; no errors (`gpu/panel@318x496`). |
-| 13 | The stream view | working + fixed | `/stream?kingdom=129634568` on the 5080 at 1920×1080: Willowmere at dusk with "Stream resting · Every home keeps its place" (`gpu/stream@1920x1080`). `/stream` without a kingdom says "Choose a kingdom" with "Find a kingdom"; its console error is fixed (below). A stream that cannot open now reads "The kingdom needs a moment / The kingdom could not be opened just now." instead of "Kingdom needs a moment / The kingdom revision could not be prepared". |
+| 12b | The panel on twitch.tv/tobi4s_ | working + deploy | In Hosted Test since 19:15 (operator note). On the 5080 in Tobias's Chrome (`gpu/twitch-panel@1440x2000.png`, About page): the Willowmere panel sits among his panels with its frame, "Resting", **Walk in ↗** and the Kingdom / You / Gifts tabs. Its picture says "The kingdom is out of view" because no panel painter runs on this host, so no still was ever uploaded. `deploy: 4` in `SEAMS.md` (secret, still directory, painter runner). The open Walk in row said "Leaves Twitch for chatdom.gg" (a domain that does not answer; the link itself went to chatdom.io): **fixed**, names chatdom.io (`apps/panel/src/gate.ts`), in extension zip 0.0.3. |
+| 13 | The stream view | working + fixed | `/stream?kingdom=129634568` on the 5080 at 1920×1080: Willowmere at dusk with "Stream resting · Every home keeps its place" (`gpu/stream@1920x1080`). `/stream` without a kingdom says "Choose a kingdom" with "Find a kingdom"; its console error is fixed (below). A stream that cannot open now reads "The kingdom needs a moment / The kingdom could not be opened just now." (a failed refresh: "could not refresh just now") instead of "Kingdom needs a moment / The kingdom revision could not be prepared". Only an expected refusal speaks its own words; any other cause (a realm 500, a TypeError, a scene error) is logged and kept in `stats.lastCause`, never shown (`mount.test.ts`). |
 | 14 | Developer traces | fixed | `/` with any query but the walk rendered the staged Willowmere town (unlabelled: the staged seal prints nothing), and the Forge permission's expired path (`/?forgeChat=expired`) landed there. The gateway now opens the app on `/` only for `?walk=1`; every other query keeps the front page. Two links pointed at the retired `/showcase` ("Explore Chatdom" now goes to `/`; "Compare the three kingdoms ↗" is gone). |
 | 15 | The Twitch extension zip | fixed | `node scripts/public/extension.mjs --origin https://chatdom.io --version 0.0.1` passes and writes `deploy/public/dist/chatdom-panel-0.0.1.zip` (see progress). |
 
@@ -53,3 +54,21 @@ the redeploy (e218c7c5, with this lane's first fixes), headless at both sizes an
   `scripts/public/start.mjs` refuses to start. **fixed + deploy**: `@chatdom/api`'s `build` now writes both bundles
   and `build.mjs` calls it; the steps to bring the gateway back now are `deploy: 0` in `SEAMS.md`. The real-GPU
   stills and the sign-in round trip wait for it.
+
+## Session 3 (2 Nov, 19:10–19:30)
+
+- Review points: the founded waiting card's words moved to `atlas/ui/waiting.ts` with tests (`waiting.test.ts`), and
+  the card now matches the front door's kingdoms **by login only** (`matchFoundedChannel`): a Twitch channel that
+  happened to be called `willowmere` would otherwise have been offered "Enter Willowmere". Still of the card from this
+  build through `local-door.mjs` (`shots/launch/card@1440x900.png`): "Founded · Willowmere", Enter Willowmere, the
+  one console error is the handed-over `404 /api/atlas/me`.
+- Stream failures show only calm words (step 13).
+- The panel on twitch.tv/tobi4s_ (step 12b, operator note 19:15) is up in Hosted Test; its picture needs the painter
+  running (`deploy: 4`).
+- The 5080 still of `https://chatdom.io/?walk=1&kingdom=129634568` (`gpu/walk-signed@1440x900.png`, 19:15) is still
+  the gate: Tobias has not signed in in that Chrome yet, so steps 6 (last leg), 7, 8, 9, 10 and 10a wait for it.
+- grand-world's signed-in walk bench (`work/lanes/grand-world/capture-walk.mjs --pc`, with a bench session and this
+  checkout's build) loaded Willowmere on the 5080 in about 11 s with the grand land settled (71/71 regions), but the
+  walker never took control (`owner: released`) and the bench timed out; its stand-in server does not answer
+  `/api/public/door` or the pier routes the walk now reads, so it no longer matches the product and is not evidence
+  either way. The real walk is Tobias's session on chatdom.io.

@@ -966,3 +966,8 @@ replaying an old receipt shows today's land unless that exact receipt was publis
   `console.error('The stream kingdom could not open', …)` on every load. The refusal is now a `StreamRefusal`
   (`apps/web/src/stream/mount.ts`), which the mount still turns into the failed phase but does not log; every other
   failure still logs. Test in `mount.test.ts`.
+- 2 Nov (LA10, review): the stream shows only calm words when it fails. `fail()` in `apps/web/src/stream/mount.ts`
+  now takes the cause: a `StreamRefusal` speaks its own message; any other cause (a realm 500, a TypeError, a scene
+  `onError`, the five-minute replacement timeout, a rejected final handoff) shows "The kingdom could not be opened
+  just now." (or "…could not refresh just now." for a replacement), is logged, and keeps its raw message in
+  `stats.lastCause` for diagnostics. A rejected final handoff is now logged too. Tests in `mount.test.ts`.

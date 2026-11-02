@@ -338,7 +338,7 @@ export interface Sections {
 }
 export const ALL_SECTIONS: Sections = { night: true, home: true, acts: true, shelf: true };
 
-/** Where "Walk in" leads: the kingdom's own entry gate, on chatdom.gg, in a new tab. */
+/** Where "Walk in" leads: the kingdom's own entry gate, on chatdom.io, in a new tab. */
 export type Entry = { readonly kind: 'gate'; readonly path: string } | { readonly kind: 'none' };
 
 export type Privacy =

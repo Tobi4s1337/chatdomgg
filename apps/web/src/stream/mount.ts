@@ -18,7 +18,11 @@ export interface PreparedStreamScene {
 }
 
 /** A ready scene may keep one replacement GPU context warm until its first loaded draw. */
-export interface SceneMountStats { mounts: number; alive: number; disposed: number; cancelled: number; lastFailure?: string }
+/** `lastFailure` is what the stream shows; `lastCause` is the underlying message, kept for diagnostics, never shown. */
+export interface SceneMountStats { mounts: number; alive: number; disposed: number; cancelled: number; lastFailure?: string; lastCause?: string }
+
+const OPEN_FAILED = 'The kingdom could not be opened just now.';
+const REFRESH_FAILED = 'The kingdom could not refresh just now.';
 
 interface Entry {
   canvas: HTMLCanvasElement;
@@ -111,9 +115,12 @@ export function createSceneMount(hooks: {
     hooks.onPhase(phase);
   }
 
-  function fail(entry: Entry, reason = 'The kingdom could not be opened just now.'): void {
+  /** Only a StreamRefusal speaks its own words; any other cause gets the calm sentence and stays in `lastCause`. */
+  function fail(entry: Entry, cause?: unknown): void {
     if (!owns(entry)) return;
+    const reason = cause instanceof StreamRefusal ? cause.message : pending === entry ? REFRESH_FAILED : OPEN_FAILED;
     stats.lastFailure = reason;
+    if (cause !== undefined) stats.lastCause = cause instanceof Error ? cause.message : String(cause);
     entry.opening?.fail(reason);
     if (pending !== entry) { unmount('failed'); return; }
     pending = undefined;
@@ -153,7 +160,8 @@ export function createSceneMount(hooks: {
       if (failed) { failed = false; hooks.onPhase('ready'); }
       hooks.onDirecting?.(entry.scene!.momentDirecting());
     } catch (cause) {
-      fail(entry, cause instanceof Error ? cause.message : 'The replacement could not render its final view');
+      console.error('The stream kingdom could not refresh', cause);
+      fail(entry, cause);
     } finally {
       resumePrevious(entry);
     }
@@ -183,7 +191,7 @@ export function createSceneMount(hooks: {
     const entry: Entry = { canvas, controller: new AbortController(), frame: 0, ready: false, released: false, publications: new Map() };
     if (replacement) {
       pending = entry;
-      entry.timeout = setTimeout(() => fail(entry, 'The kingdom took too long to refresh.'), REPLACEMENT_TIMEOUT_MS);
+      entry.timeout = setTimeout(() => fail(entry, 'The replacement exceeded five minutes before its final loaded draw'), REPLACEMENT_TIMEOUT_MS);
     } else {
       current = entry;
       failed = false;
@@ -254,7 +262,7 @@ export function createSceneMount(hooks: {
     }).catch((cause: unknown) => {
       if (!owns(entry)) return;
       if (!(cause instanceof StreamRefusal)) console.error('The stream kingdom could not open', cause);
-      fail(entry, cause instanceof Error ? cause.message : 'The kingdom could not be opened just now.');
+      fail(entry, cause);
     });
   }
 

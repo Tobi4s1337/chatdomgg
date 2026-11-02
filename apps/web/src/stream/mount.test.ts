@@ -222,7 +222,7 @@ it('keeps the outgoing scene and resumes it if the final handoff draw rejects', 
   expect(old.dispose).not.toHaveBeenCalled(); expect(resume).toHaveBeenCalledOnce();
   expect(h.chatOffs[0]).not.toHaveBeenCalled(); expect(h.preparations[0]!.dispose).not.toHaveBeenCalled();
   expect(h.preparations[1]!.activate).not.toHaveBeenCalled(); expect(h.hooks.onScene).not.toHaveBeenCalled();
-  expect(h.hooks.onPhase).toHaveBeenLastCalledWith('failed'); expect(h.mount.stats.lastFailure).toBe('Final coverage failed');
+  expect(h.hooks.onPhase).toHaveBeenLastCalledWith('failed'); expect(h.mount.stats.lastFailure).toBe('The kingdom could not refresh just now.'); expect(h.mount.stats.lastCause).toBe('Final coverage failed');
   h.mount.unmount('hidden'); expect(resume).toHaveBeenCalledOnce();
 });
 
@@ -270,9 +270,13 @@ it('shows a refusal in words without logging it as an error, and still logs real
   h.prepare.mockImplementationOnce(async () => { throw new StreamRefusal('Choose a founded kingdom to watch.'); });
   h.mount.mount(); await settle();
   expect(h.hooks.onPhase).toHaveBeenLastCalledWith('failed');
-  expect(logged).not.toHaveBeenCalled();
+  expect(logged).not.toHaveBeenCalled(); expect(h.mount.stats.lastFailure).toBe('Choose a founded kingdom to watch.');
   h.prepare.mockImplementationOnce(async () => { throw new Error('The realm answered 500.'); });
   h.mount.mount(); await settle();
   expect(logged).toHaveBeenCalledWith('The stream kingdom could not open', expect.any(Error));
+  expect(h.mount.stats.lastFailure).toBe('The kingdom could not be opened just now.'); expect(h.mount.stats.lastCause).toBe('The realm answered 500.');
+  h.prepare.mockImplementationOnce(async () => { throw new TypeError("Cannot read properties of undefined (reading 'manifest')"); });
+  h.mount.mount(); await settle();
+  expect(h.mount.stats.lastFailure).toBe('The kingdom could not be opened just now.');
   logged.mockRestore();
 });

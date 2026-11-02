@@ -4,22 +4,13 @@
 import { For, Show, type JSX } from 'solid-js';
 import type { Coals, Entry, Forge, PanelSnapshot, Raising, Tavern, TavernTable } from '../model';
 import { CoalArt, ForgeArt, LeaveGlyph, TableArt } from './art';
+import { gateHref, hostOf } from '../gate';
 
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 const ORDINALS = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'];
 /** Small numbers read as words in the kingdom's voice. */
 export const say = (n: number) => WORDS[n] ?? String(n);
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-
-/** The real kingdom always lives on chatdom.gg. Mounted inside the web app for review, the same app serves the gate. */
-const CHATDOM = 'https://chatdom.gg';
-function gateHref(path: string): string {
-  const inWebApp = /\/panel\/?$/.test(location.pathname);
-  return new URL(path, inWebApp ? location.origin : CHATDOM).href;
-}
-
-/** The site a gate leads to, in the words the link uses ("chatdom.io"). */
-const hostOf = (path: string) => new URL(gateHref(path)).host;
 
 /** "Walk in": secondary, says it leaves Twitch, opens a new tab at the kingdom's own entry gate. */
 export function WalkIn(props: { entry: Entry; kingdom: string }) {
