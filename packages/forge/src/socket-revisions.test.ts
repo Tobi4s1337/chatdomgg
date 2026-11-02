@@ -11,7 +11,7 @@ const nativeHome = (family: StyleKey, tier: HomeTier, variant: 0 | 1 | 2): Voxel
 
 describe('revision-bound Forge socket surveys', () => {
   it('clears the full lantern ornament above Bramblecross cottage without moving its historical revision-one socket', () => {
-    const home = createHearthHome('cottage', 1), legacy = findForgeSockets(home);
+    const home = createHearthHome('cottage', 1), legacy = findForgeSockets(home, 'street-home', 1);
     const oldSocket = legacy.find(socket => socket.kind === 'lantern')!;
     expect(oldSocket).toMatchObject({ profile: 'roof', origin: [32, 42, 90] });
     const historical = assembleForge(plan('sleeping-fox'), forgeStyleKit('hearth', 1), oldSocket);
@@ -46,19 +46,19 @@ describe('revision-bound Forge socket surveys', () => {
     expect(chamberBottom).toBeGreaterThanOrEqual(crown + 2);
 
     expect(findForgeSockets(home, 'street-home', 1)).toEqual(legacy);
-    expect(findForgeSockets(structuredClone(home))).toEqual(legacy);
+    expect(findForgeSockets(structuredClone(home), 'street-home', 1)).toEqual(legacy);
     expect(JSON.stringify(assembleForge(plan('sleeping-fox'), forgeStyleKit('hearth', 1), oldSocket))).toBe(historicalBytes);
     expect(() => checkForge(assembleForge(plan('sleeping-fox'), forgeStyleKit('hearth', 2), oldSocket), home))
       .toThrow('no longer supports');
     socket.supports[0]![1] = -100;
     expect(findForgeSockets(structuredClone(home), 'street-home', 2).find(value => value.kind === 'lantern')!.supports[0]![1]).not.toBe(-100);
-    expect(findForgeSockets(home)).toEqual(legacy);
+    expect(findForgeSockets(home, 'street-home', 1)).toEqual(legacy);
   });
 
   it('keeps the old front-wall placement and gives revision two room for every authored lantern or a supported roof', () => {
     const original = createHome('house', 'hearth', 0);
     const home: VoxelBlueprint = { ...original, id: 'front-lot-revision-survey', size: [original.size[0], original.size[1], original.size[2] + 20] };
-    const legacy = findForgeSockets(home).find(socket => socket.kind === 'lantern')!;
+    const legacy = findForgeSockets(home, 'street-home', 1).find(socket => socket.kind === 'lantern')!;
     expect(legacy.profile).toBe('wall');
     const socket = findForgeSockets(home, 'street-home', 2).find(socket => socket.kind === 'lantern')!;
     expect(socket).toBeDefined();
@@ -80,7 +80,7 @@ describe('revision-bound Forge socket surveys', () => {
         const piece = assembleForge(plan(motif), forgeStyleKit(family, 2), socket!);
         expect(checkForge(piece, home).solidCells, motif).toBeGreaterThan(80);
       }
-      expect(findForgeSockets(home)).toEqual(historical);
+      expect(findForgeSockets(home, 'street-home', 1)).toEqual(historical);
     }, 30_000);
   }
 });

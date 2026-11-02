@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ForgeDraftSchema, TokenSchema, VoxelBlueprintSchema, type KingdomId, type PersonId, type VoxelBlueprint } from '@chatdom/shared';
+import { FORGE_WISH_WORDS_MAX, ForgeDraftSchema, TokenSchema, VoxelBlueprintSchema, type KingdomId, type PersonId, type VoxelBlueprint } from '@chatdom/shared';
 import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
 import { forgeHostForPerson, ownedHostProfile } from '@chatdom/shared/realm';
 import type { ForgeAttachment, ForgeAttempt, ForgeReservation, KingdomForgeAuthority, KingdomForgeLease, NativeForgeHome, RealmDomainCommand,
@@ -372,7 +372,7 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
           || forgeHomeDigest(found.blueprint) !== input.expectedHomeDigest) { note('commit', 'held', 'stale-home'); return { kind: 'held' } as const; }
         if (!fits(input.attachment, home, kingdomId, origin)) { note('commit', 'held', 'candidate'); return { kind: 'held' } as const; }
         const words = input.creation.words.trim();
-        if (!words || words.length > 240) { note('commit', 'held', 'candidate'); return { kind: 'held' } as const; }
+        if (!words || words.length > FORGE_WISH_WORDS_MAX) { note('commit', 'held', 'candidate'); return { kind: 'held' } as const; }
         // Checked again at the transactional write: cancelled while queued or row-locked, nothing attaches or is charged.
         const result = await run(kingdom, 'commit', input, {
           type: 'forge.commitApproved', attempt: { key: input.key, attemptId: input.attemptId }, reservationId: input.reservationId,

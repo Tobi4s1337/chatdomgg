@@ -26,10 +26,11 @@ describe('street-visible lantern sockets', () => {
   it('chooses the front facade when that wall has room, never a cavity behind the door', () => {
     const original = createHome('house', 'hearth', 0);
     const home = { ...original, id: 'extended-front-lot', size: [original.size[0], original.size[1], original.size[2] + 20] as [number, number, number] };
-    const socket = findForgeSockets(home).find(s => s.kind === 'lantern')!;
+    // Revision one's survey; revision two's larger lantern envelope is covered in socket-revisions.test.ts.
+    const socket = findForgeSockets(home, 'street-home', 1).find(s => s.kind === 'lantern')!;
     expect(socket.profile).toBe('wall');
     expect(socket.origin[2]).toBeGreaterThan(80);
-    const part = assembleForge({ version: 2, kind: 'lantern', motif: 'crescent-moon', finish: 'native', accent: 'none' }, forgeStyleKit('hearth'), socket);
+    const part = assembleForge({ version: 2, kind: 'lantern', motif: 'crescent-moon', finish: 'native', accent: 'none' }, forgeStyleKit('hearth', 1), socket);
     expect(checkForge(part, home).solidCells).toBeGreaterThan(80);
     const visibility = streetVisibility(home, part.blueprint, socket.origin);
     expect(visibility.visible).toBe(visibility.total);

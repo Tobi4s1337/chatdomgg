@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCastleModule, createHome } from '@chatdom/content';
-import { assembleForge, findForgeSockets, forgeStyleKit } from '@chatdom/forge';
-import { KingdomIdSchema, PersonIdSchema, type ForgeDraft } from '@chatdom/shared';
+import { CURRENT_FORGE_STYLE_KIT_REVISION, assembleForge, findForgeSockets, forgeStyleKit } from '@chatdom/forge';
+import { FORGE_MOTIFS, KingdomIdSchema, PersonIdSchema, type ForgeDraft } from '@chatdom/shared';
 import type { ForgeProviders } from '../providers';
 import { FORGE_JUDGE_POLICY_VERSION, type ForgeWishSubject } from '../providers/policy';
 import { renderForgeContactSheet } from '../contact-sheet';
+import { FORGE_CERTIFICATE_FAMILIES, forgeMotifCertificate } from '../certificates';
 import { createKingdomForgeApplication } from './application';
 import { bindForgeCandidate } from './candidate';
 import type {
@@ -26,10 +27,10 @@ const pass = { outcome: 'pass' as const, reason: 'passed', records: [{ judge: 'c
 const read = (subject: ForgeWishSubject) => ({ ...pass, subject });
 
 /** Controlled authority only for this test. No test authorization implementation is exported to applications. */
-function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (event: ForgeActivity) => void, words = command.words) {
-  const home = createHome('house', 'hearth', 0), controller = new AbortController();
+function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (event: ForgeActivity) => void, words = command.words, family: 'hearth' | 'tide' | 'grove' = 'hearth') {
+  const home = createHome('house', family, 0), controller = new AbortController();
   const reservation: ForgeReservation = {
-    kingdomId: command.kingdomId, personId: command.personId, slot: 7, home, family: 'hearth',
+    kingdomId: command.kingdomId, personId: command.personId, slot: 7, home, family,
     reservationId: 'reservation-1', revision: 'home-revision-1', expiresAt: now + 60_000,
     safetyIdentifier: 'stable-hashed-citizen-456',
     attribution: { makerName: 'Rowan', kingdomName: 'Emberwick', approvalId: 'approved-names-1' },
@@ -68,7 +69,7 @@ function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (
 }
 
 describe('the kingdom Forge application', () => {
-  it('binds the exact current kit that generated the judged sheet and attachment while revision two stays a preview', async () => {
+  it('binds the exact current kit that generated the judged sheet and attachment', async () => {
     const moonWish = { ...command, words: 'A borrowed moon for my lantern' };
     const f = fixture('live', undefined, moonWish.words), lantern: ForgeDraft = {
       plan: { version: 2, kind: 'lantern', motif: 'crescent-moon', finish: 'native', accent: 'none' },
@@ -77,15 +78,16 @@ describe('the kingdom Forge application', () => {
     vi.mocked(f.providers.draft).mockResolvedValue(lantern);
     vi.mocked(f.providers.judgeWords).mockResolvedValue(read({ motif: 'crescent-moon', slot: 'lantern' }));
     vi.mocked(f.providers.judgeResult).mockResolvedValue(read({ motif: 'crescent-moon', slot: 'lantern' }));
-    expect(await f.run(moonWish, f.lease)).toMatchObject({ kind: 'committed', attachment: { kitId: 'hearth-native', kitRevision: 1 } });
+    expect(await f.run(moonWish, f.lease)).toMatchObject({ kind: 'committed', attachment: { kitId: 'hearth-native', kitRevision: CURRENT_FORGE_STYLE_KIT_REVISION } });
     // A certified, exactly-read subject in its named slot needs no quiet redraft and no second result read.
     expect(f.audits[0]?.selection).toMatchObject({ delivery: 'delivered', shared: 'subject' });
     expect(f.providers.draft).toHaveBeenCalledTimes(1);
     expect(f.providers.judgeResult).toHaveBeenCalledTimes(1);
     const socket = findForgeSockets(f.reservation.home).find(socket => socket.kind === lantern.plan.kind)!;
     const current = assembleForge(lantern.plan, forgeStyleKit(f.reservation.family), socket);
-    const preview = assembleForge(lantern.plan, forgeStyleKit(f.reservation.family, 2),
-      findForgeSockets(f.reservation.home, 'street-home', 2).find(socket => socket.kind === lantern.plan.kind)!);
+    const other = 3 - CURRENT_FORGE_STYLE_KIT_REVISION;
+    const preview = assembleForge(lantern.plan, forgeStyleKit(f.reservation.family, other),
+      findForgeSockets(f.reservation.home, 'street-home', other).find(socket => socket.kind === lantern.plan.kind)!);
     const sheet = (piece: typeof current) => renderForgeContactSheet(piece.blueprint, { home: f.reservation.home, origin: piece.socket.origin });
     const judged = vi.mocked(f.providers.judgeResult).mock.calls[0]![0];
     expect(judged.contactSheet).toBe(sheet(current));
@@ -121,16 +123,24 @@ describe('the kingdom Forge application', () => {
   });
 
   it('keeps both retry detail summaries privately while retaining only selected result evidence', async () => {
-    // Hearth's copper owl is certified unreadable; the native owl reads. The retry is told to choose a readable finish.
-    const owl = { ...command, words: 'A little owl watching from my chimney' }, owlWish = { motif: 'watchful-owl', slot: 'chimney' } as const;
-    const f = fixture('live', undefined, owl.words);
-    const owlDraft = (finish: 'copper' | 'native'): ForgeDraft => ({
-      plan: { version: 2, kind: 'chimney', motif: 'watchful-owl', finish, accent: 'none' },
-      title: 'The chimney owl', plaque: 'A patient owl keeps watch over the hearth.' });
+    // A finish the current kit's certificate finds unreadable, beside one that reads (revision one: hearth's copper owl).
+    // The retry is told to choose a readable finish.
+    const finishes = ['native', 'copper', 'ceramic'] as const;
+    const pick = FORGE_CERTIFICATE_FAMILIES.flatMap(family => FORGE_MOTIFS.flatMap(motif => {
+      const unread = finishes.find(finish => forgeMotifCertificate(family, CURRENT_FORGE_STYLE_KIT_REVISION, motif, finish) === 'unread');
+      const reads = finishes.find(finish => forgeMotifCertificate(family, CURRENT_FORGE_STYLE_KIT_REVISION, motif, finish) === 'reads');
+      return unread && reads ? [{ family, motif, unread, reads }] : [];
+    })).sort((a, b) => Number(b.motif === 'watchful-owl' && b.family === 'hearth') - Number(a.motif === 'watchful-owl' && a.family === 'hearth'))[0]!;
+    expect(pick).toBeDefined();
+    const owl = { ...command, words: 'A little one watching from my chimney' }, owlWish = { motif: pick.motif, slot: 'chimney' } as const;
+    const f = fixture('live', undefined, owl.words, pick.family);
+    const owlDraft = (finish: typeof finishes[number]): ForgeDraft => ({
+      plan: { version: 2, kind: 'chimney', motif: pick.motif, finish, accent: 'none' },
+      title: 'The chimney keeper', plaque: 'A patient keeper watches over the hearth.' });
     vi.mocked(f.providers.judgeWords).mockResolvedValue(read(owlWish));
     vi.mocked(f.providers.judgeResult).mockResolvedValue(read(owlWish));
-    vi.mocked(f.providers.draft).mockResolvedValueOnce(owlDraft('copper')).mockResolvedValueOnce(owlDraft('native'));
-    expect(await f.run(owl, f.lease)).toMatchObject({ kind: 'committed', attachment: { draft: owlDraft('native') } });
+    vi.mocked(f.providers.draft).mockResolvedValueOnce(owlDraft(pick.unread)).mockResolvedValueOnce(owlDraft(pick.reads));
+    expect(await f.run(owl, f.lease)).toMatchObject({ kind: 'committed', attachment: { draft: owlDraft(pick.reads) } });
     expect(f.providers.judgeResult).toHaveBeenCalledTimes(2);
     expect(vi.mocked(f.providers.draft).mock.calls[0]![0]).not.toHaveProperty('feedback');
     expect(vi.mocked(f.providers.draft).mock.calls[1]![0].feedback).toContain('readable finishes');
@@ -138,7 +148,7 @@ describe('the kingdom Forge application', () => {
       { outcome: 'pass', subject: owlWish },
       { detailMatch: 'adapted', quality: { recognisability: 0.6, score: 0.76 }, records: [] },
       { detailMatch: 'met', quality: { recognisability: 1, score: 1 }, records: pass.records, subject: owlWish,
-        measure: { certificate: 'reads', plan: { motif: 'watchful-owl', kind: 'chimney' } } },
+        measure: { certificate: 'reads', plan: { motif: pick.motif, kind: 'chimney' } } },
     ] });
     // The unselected attempt keeps only its bounded summary, never its reading or measure.
     expect(f.audits[0]?.verdicts[1]).not.toHaveProperty('measure');

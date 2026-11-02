@@ -186,6 +186,16 @@ service wish proof remain to be built in this namespace, with data under `/tmp/c
 is written in [fw10-panel-contract.md](fw10-panel-contract.md#exact-integration-needs). Current intake rejects
 longer text before posting; it never truncates a wish. The frozen overlong fixture remains unsupported.
 
+**As one patch (2 November).** The length now has one name, `FORGE_WISH_WORDS_MAX = 493`, in the new contract
+file `packages/shared/src/forge-words.ts`. The Forge's own guards (application command, durable queue, recovery,
+realm authority) already use it; that changes nothing today because everything upstream still stops at 240.
+[patches/wish-length.patch](patches/wish-length.patch) is the rest, for main and raid-show to apply together:
+`RealmHeraldForgeCommandSchema` and `ForgeRunRequestSchema` words, `FORGE_CHAT_LIMITS.words`, the realm reducer's
+commit check, both Herald guards in `apps/herald/src/forge/commands.ts`, the Herald boundary test (494 refused,
+493 read whole) and a new `forge-words.test.ts` showing the wish box, the Herald command and the Forge run share
+one bound that fits a Twitch message with `!forge `. Tested on a copy of this branch: 286 tests in 23 files pass,
+typecheck clean. The wish box's length message follows `FORGE_CHAT_LIMITS.words`, so it reads 493 once applied.
+
 ## 9. Preserve the kit that made a piece (FW10)
 
 `forgeStyleKit(family, revision?)` now registers revisions **1** and **2**. The default remains **1**. Revision
@@ -241,6 +251,21 @@ and canonical fit guards. Then change only the exported current revision in `pac
 Do not relabel old attachments, overwrite their plans, or let a revision-one approval authorize revision two.
 Old and new pieces must reconstruct their own geometry and sockets through snapshots, arrival, reload,
 displacement/refit and growth.
+
+**The promotion as one patch (2 November).** [patches/kit2-promotion.patch](patches/kit2-promotion.patch) is the
+whole change, ready for `git apply` from the repository root. It touches `apps/realm/src/founded/scene.ts` and
+`growth/native.ts` as written above, the current revision in `packages/forge/src/plan.ts`, one assertion in
+`founded/scene.test.ts` (relabelling a part to revision 2 is now a registered kit, so the fail-closed case uses an
+unregistered 9), and a new `growth/kit-revisions.test.ts`. The new test puts a revision-one dragon chimney and a
+revision-two moon lantern on one home and shows that the founded scene rebuilds each with its own kit, native
+growth refits both on their own revision without relabelling, and an unknown revision holds growth and fails the
+scene closed. The patch was tested on a copy of this branch; the branch itself still ships revision one.
+
+This branch already prepares for it: `findForgeSockets` now defaults to the current kit revision, like
+`forgeStyleKit`, so every caller that pairs the two defaults (the simulated founding, benches, tests) stays
+consistent when the revision changes; persisted parts pass their own saved revision. The Forge tests that
+mean "revision one" now say so, and the authority and application tests are written against the current
+revision, so they pass before and after the promotion.
 
 ## 10. Durable wish execution boundary (FW11)
 

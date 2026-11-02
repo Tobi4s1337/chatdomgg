@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { KingdomIdSchema, PersonIdSchema, TokenSchema, type KingdomId, type PersonId } from '@chatdom/shared';
+import { FORGE_WISH_WORDS_MAX, KingdomIdSchema, PersonIdSchema, TokenSchema, type KingdomId, type PersonId } from '@chatdom/shared';
 import type { KingdomForgeCommand } from '@chatdom/shared/realm';
 import { z } from 'zod';
 import { PrivateWishFiles } from './files';
@@ -22,7 +22,7 @@ const modelStageSchema = z.enum(['words', 'drafting', 'result']);
 const stageSchema = z.enum(['arrival', 'words', 'drafting', 'result', 'commit']);
 const commandSchema = z.strictObject({
   kingdomId: KingdomIdSchema, personId: PersonIdSchema, messageId: z.string().min(1).max(128),
-  slot: integer.max(65_534), words: z.string().trim().min(1).max(240), observedAt: integer,
+  slot: integer.max(65_534), words: z.string().trim().min(1).max(FORGE_WISH_WORDS_MAX), observedAt: integer,
 });
 const terminalSchema = z.union([
   z.strictObject({ kind: z.literal('committed'), runId: TokenSchema, committedAt: integer }),
@@ -42,7 +42,7 @@ const recordSchema = z.strictObject({
   extension: z.enum(['fit', 'vocabulary']).optional(),
   calls: z.array(z.strictObject({ ordinal: integer.min(1).max(7), stage: modelStageSchema })).max(7),
   expiresAt: integer.optional(), outcome: terminalSchema.optional(), delivery: ownerDeliverySchema.optional(),
-  private: z.strictObject({ words: z.string().min(1).max(240), checkpoints: z.array(checkpointSchema).max(16) }).optional(),
+  private: z.strictObject({ words: z.string().min(1).max(FORGE_WISH_WORDS_MAX), checkpoints: z.array(checkpointSchema).max(16) }).optional(),
 });
 type RecordData = z.infer<typeof recordSchema>;
 interface ActiveClaim { readonly claim: ForgeWishClaim; readonly abort: AbortController;

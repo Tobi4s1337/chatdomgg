@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { ForgeDraftSchema, ForgeHostProfileSchema, KingdomIdSchema, TokenSchema,
+import { FORGE_WISH_WORDS_MAX, ForgeDraftSchema, ForgeHostProfileSchema, KingdomIdSchema, TokenSchema,
   VoxelBlueprintSchema, type ForgeStyleKit } from '@chatdom/shared';
 import { homeFingerprint } from '@chatdom/forge';
 import { createQueuedForgeRunRecovery } from '../run-recovery';
@@ -34,7 +34,7 @@ const attachmentSchema = z.strictObject({ version: z.literal(1), id: TokenSchema
 }).transform(({ hostProfile, ...value }) => ({ ...value, ...(hostProfile ? { hostProfile } : {}) }));
 const commitInputSchema = z.strictObject({ key: z.string().regex(/^forge-chat-[a-f0-9]{64}$/), attemptId: TokenSchema,
   reservationId: TokenSchema, expectedRevision: TokenSchema, expectedHomeDigest: hash,
-  attachment: attachmentSchema, creation: z.strictObject({ words: z.string().min(1).max(240) }),
+  attachment: attachmentSchema, creation: z.strictObject({ words: z.string().min(1).max(FORGE_WISH_WORDS_MAX) }),
 });
 const selectionSchema = z.strictObject({ verdict: integer.min(1).max(2), attempt: integer.min(1).max(2),
   delivery: z.enum(['delivered', 'retried', 'softened']), shared: z.enum(['subject', 'family', 'slot', 'mood', 'colour']),

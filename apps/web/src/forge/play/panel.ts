@@ -73,7 +73,7 @@ export function openForge(host: ForgeHost, _from: 'anvil' | 'hud', transport: Fo
   async function send() {
     if (busy || !snapshot || snapshot.grant.status !== 'ready' || snapshot.availability.status !== 'ready' || active(wish)) return;
     const value = words.trim();
-    if (!ForgeChatWishRequestSchema.safeParse({ version: 1, kingdomId, requestId: crypto.randomUUID(), words: value }).success) { error = 'Write a wish on one line, up to 240 characters.'; render(); return; }
+    if (!ForgeChatWishRequestSchema.safeParse({ version: 1, kingdomId, requestId: crypto.randomUUID(), words: value }).success) { error = `Write a wish on one line, up to ${FORGE_CHAT_LIMITS.words} characters.`; render(); return; }
     busy = true; render();
     try { if (!(await sameSession())) return; } catch { busy = false; error = 'Your session could not be checked. Please try again.'; render(); return; }
     requestId = crypto.randomUUID(); startedAt = Date.now();

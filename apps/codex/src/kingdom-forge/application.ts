@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  ForgeRunRequestSchema, KingdomIdSchema, PersonIdSchema, TokenSchema, type ForgeRunEvent,
+  FORGE_WISH_WORDS_MAX, ForgeRunRequestSchema, KingdomIdSchema, PersonIdSchema, TokenSchema, type ForgeRunEvent,
 } from '@chatdom/shared';
 import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
 import { z } from 'zod';
@@ -16,7 +16,7 @@ import type {
 
 const CommandSchema = z.strictObject({
   kingdomId: KingdomIdSchema, personId: PersonIdSchema, messageId: z.string().min(1).max(128),
-  slot: z.number().int().min(0).max(65_534), words: z.string().trim().min(1).max(240),
+  slot: z.number().int().min(0).max(65_534), words: z.string().trim().min(1).max(FORGE_WISH_WORDS_MAX),
   observedAt: z.number().int().nonnegative(),
 });
 const AttributionSchema = z.strictObject({

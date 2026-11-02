@@ -5,6 +5,7 @@ import { createForgeMotif } from '@chatdom/content/forge-motifs';
 import { createForgeOrnament } from '@chatdom/content/forge-ornaments';
 import { rasterizeBlueprint } from '@chatdom/voxel';
 import { canonicalSceneJson } from '@chatdom/world/founded-codec';
+import { CURRENT_FORGE_STYLE_KIT_REVISION } from './plan';
 
 export function homeFingerprint(home:VoxelBlueprint):string {let hash=2166136261;for(const c of canonicalSceneJson(home))hash=Math.imul(hash^c.charCodeAt(0),16777619);return `home-${(hash>>>0).toString(16)}`;}
 interface HostSurvey {
@@ -54,7 +55,8 @@ function lanternEnvelope():Readonly<LanternEnvelope> {
   return revisionTwoLanternEnvelope;
 }
 /** Slots are discovered from retained occupancy, not from empty bounding-box corners or a prompt's coordinates. */
-export function findForgeSockets(home:VoxelBlueprint,hostProfile:ForgeHostProfile='street-home',kitRevision=1):ForgeHouseSocket[]{
+/** The survey defaults to the current kit, like `forgeStyleKit`; persisted parts pass their own saved revision. */
+export function findForgeSockets(home:VoxelBlueprint,hostProfile:ForgeHostProfile='street-home',kitRevision:number=CURRENT_FORGE_STYLE_KIT_REVISION):ForgeHouseSocket[]{
   if(kitRevision!==1&&kitRevision!==2)throw new Error('Unregistered Forge socket revision.');
   validateHost(home,hostProfile);
   const cacheKey=`${hostProfile}:${kitRevision}`,survey=surveyHost(home),cached=survey.sockets.get(cacheKey);

@@ -19,7 +19,7 @@ describe('saved Forge kit revisions', () => {
       const plan = { version: 2, kind: 'lantern', motif: 'crescent-moon', finish: 'native', accent: 'none' } as const;
       const legacy = assembleForge(plan, forgeStyleKit(family, 1), socket);
       expect(createHash('sha256').update(JSON.stringify(legacy)).digest('hex')).toBe(previous[family][profile]);
-      expect(forgeStyleKit(family)).toEqual(legacy.kit);
+      expect(forgeStyleKit(family, 1)).toEqual(legacy.kit);
       const next = assembleForge(plan, forgeStyleKit(family, 2), socket);
       expect(next.blueprint).not.toEqual(legacy.blueprint);
       expect(next.emitter).not.toEqual(legacy.emitter);

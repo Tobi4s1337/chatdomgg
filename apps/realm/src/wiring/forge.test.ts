@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCastle, createHearthHome } from '@chatdom/content';
-import { assembleForge, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
+import { CURRENT_FORGE_STYLE_KIT_REVISION, assembleForge, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
 import { WORLD_FIXTURE_KINGDOM as kingdomId, WORLD_FIXTURE_PERSON as personId } from '@chatdom/shared/world-fixtures';
 import { PersonIdSchema } from '@chatdom/shared';
 import type { ForgeAttachment, ForgeAttempt, ForgeReservation, KingdomForgeLease, RealmFact, RealmOwnedCastle, RealmOwnedForgeHost, RealmPrivateState,
@@ -242,7 +242,7 @@ it('requires audited approval and verifies the exact current host, socket, kit, 
   expect(await f.authority.commit(input, lease)).toEqual({ kind: 'held' });
   for (const attachment of [
     { ...input.attachment, hostFingerprint: 'wrong' }, { ...input.attachment, socketId: 'wrong' },
-    { ...input.attachment, kitRevision: 2 }, { ...input.attachment, kitRevision: 99 },
+    { ...input.attachment, kitRevision: 3 - input.attachment.kitRevision }, { ...input.attachment, kitRevision: 99 },
     { ...input.attachment, kitId: 'tide-native' }, { ...input.attachment, origin: [1, 2, 3] as const },
     { ...input.attachment, provenance: { ...input.attachment.provenance, source: 'live' as const } },
     { ...input.attachment, provenance: { ...input.attachment.provenance, makerName: 'Other' } },
@@ -251,10 +251,10 @@ it('requires audited approval and verifies the exact current host, socket, kit, 
   expect(f.state().coals[personId]).toBe(2); expect(f.state().attachments).toEqual({});
 });
 
-it('holds a registered revision-two attachment even with a successful approval while the current kit is revision one', async () => {
+it('holds an attachment on another registered kit revision even with a successful approval', async () => {
   const f = await fixture(), attempt = f.wish(), lease = caller().lease, reservation = await f.reserve(attempt, lease);
-  const input = commitInput(attempt, reservation), preview = forgeStyleKit(reservation.family, 2);
-  expect(input.attachment.kitRevision).toBe(1);
+  const input = commitInput(attempt, reservation), preview = forgeStyleKit(reservation.family, 3 - CURRENT_FORGE_STYLE_KIT_REVISION);
+  expect(input.attachment.kitRevision).toBe(CURRENT_FORGE_STYLE_KIT_REVISION);
   expect(await f.authority.commit({ ...input, attachment: { ...input.attachment, kitId: preview.id, kitRevision: preview.revision } }, lease))
     .toEqual({ kind: 'held' });
   expect(await f.approvals.approved.mock.results.at(-1)!.value).toBe('simulated-judge-receipt');
@@ -290,7 +290,7 @@ it('binds the real private approval to the selected draft, host and exact kit be
     candidate: bindForgeCandidate(input.attachment.draft, reservation.home, piece.kit) });
   f.approvals.approved.mockImplementation((key, id, expected) => approvals.approved(key, id, expected));
   for (const attachment of [
-    { ...input.attachment, kitRevision: 2 }, { ...input.attachment, kitId: 'tide-native' },
+    { ...input.attachment, kitRevision: 3 - input.attachment.kitRevision }, { ...input.attachment, kitId: 'tide-native' },
   ]) {
     expect(await f.authority.commit({ ...input, attachment }, lease)).toEqual({ kind: 'held' });
     expect(await f.approvals.approved.mock.results.at(-1)!.value).toBeNull();
