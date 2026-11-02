@@ -17,6 +17,11 @@ import { RealmMomentObservationSchema } from '@chatdom/shared/realm';
 import { streamNotice } from '../ingest/spectacles';
 import { providerToken } from '../twitch-moments/credit';
 import { HelixRaidCrierTransport, RaidCrierWorker } from '../raid-gate/crier';
+import { RAID_AUTHORITY_ROUTE } from '../../../api/src/raid-gate/raid-authority-contracts';
+import { createRaidAuthorityRoute, liveRaidAuthority, type RaidAuthority } from '../raid-gate/raid-authority';
+import { decodeTokenKey, RaidAuthorityStore } from '../raid-gate/raid-authority-store';
+import { HelixRaidWire, RaidLedgerError, RaidWriteLedger, RaidWrites } from '../raid-gate/raids';
+import { RaidUserSession } from '../raid-gate/user-token';
 
 export interface LiveSourceHandle {
   readonly server: PresenceServer;
@@ -62,7 +67,15 @@ export async function startLiveSource(options: {
 }): Promise<LiveSourceHandle> {
   const { config, print } = options;
   let host: SourceHost = unstarted('configured', 'starting', []);
-  const server = await startPresenceServer({ host: () => host, port: options.port ?? options.config.port });
+  // The raid authority answers on the same loopback port; until it is bound (secret, kingdom, ledger) it answers 503.
+  let raidAuthority: RaidAuthority | null = null;
+  let raidLedger: RaidWriteLedger | null = null;
+  let raidSession: RaidUserSession | null = null;
+  let raidFault: string | null = config.raidGateSecret ? 'starting' : 'secret_unset';
+  const raidRoute = createRaidAuthorityRoute({ authority: () => raidAuthority, secret: config.raidGateSecret ?? null });
+  const raidHealth = () => ({ origin: 'live', configured: Boolean(config.raidGateSecret), keyConfigured: Boolean(config.tokenKey), bound: raidAuthority !== null,
+    fault: raidFault, writes: raidAuthority?.writes.counters ?? null, session: raidSession?.counters ?? null });
+  const server = await startPresenceServer({ host: () => host, port: options.port ?? options.config.port, routes: new Map([[RAID_AUTHORITY_ROUTE, raidRoute]]) });
   print(`Herald source · LIVE · ${config.channelLogin} · http://127.0.0.1:${server.port}/presence-data/stream`);
 
   let tokens: AppTokenSession | null = null;
@@ -78,6 +91,8 @@ export async function startLiveSource(options: {
     runtime?.stop();
     reconciler?.stop();
     await raidCrier?.close();
+    raidAuthority = null;
+    await raidLedger?.close().catch(() => undefined);
     authority?.stop();
     tokens?.close();
     await source?.close();
@@ -109,17 +124,37 @@ export async function startLiveSource(options: {
     return { server, source, stop };
   }
 
+  const root = options.repositoryRoot === undefined ? repositoryRoot() : options.repositoryRoot;
+  if (config.raidGateSecret) {
+    // Only the broadcaster's own sealed grant ever raids, and only from this kingdom.
+    const key = config.tokenKey ? decodeTokenKey(config.tokenKey.reveal()) : null;
+    const { clientId, clientSecret } = config.credentials;
+    raidSession = new RaidUserSession({ store: key ? new RaidAuthorityStore({ dataDir: config.dataDir, key, clientId, repositoryRoot: root }) : null,
+      clientId, clientSecret, broadcasterId: kingdomId.data, fetch: twitchFetch });
+    try {
+      raidLedger = await RaidWriteLedger.open({ dir: config.dataDir, repositoryRoot: root });
+      const writes = new RaidWrites({ ledger: raidLedger, broadcasterId: kingdomId.data,
+        wire: new HelixRaidWire({ session: raidSession, clientId, fetch: twitchFetch }) });
+      raidAuthority = liveRaidAuthority({ kingdomId: kingdomId.data, session: raidSession, writes, helix });
+      raidFault = key ? null : 'token_key_unset';
+      print(key ? '  raid authority bound on the private route' : '  raid authority bound, but the raid control cannot be held until HERALD_TOKEN_KEY is set');
+    } catch (error) {
+      raidFault = error instanceof RaidLedgerError ? `ledger_${error.fault}` : 'ledger_unusable';
+      print(`  raid authority unavailable: the raid write ledger is ${raidFault.slice(7).replace('_', ' ')}`);
+    }
+  }
+
   const kingdom = presentKingdom(config.kingdom);
   source = new PresenceSource({
     kingdomId: kingdomId.data, origin: 'live', slots: kingdom.slots,
     store: new FileBindingStore({
-      dataDir: config.dataDir, kingdomId: kingdomId.data,
-      repositoryRoot: options.repositoryRoot === undefined ? repositoryRoot() : options.repositoryRoot,
+      dataDir: config.dataDir, kingdomId: kingdomId.data, repositoryRoot: root,
     }),
     ...(options.realm ? { realm: options.realm } : {}),
   });
   const live = source;
   const health = () => ({ ...live.health(), ...(options.realm ? { realm: options.realm.health() } : {}),
+    raidAuthority: raidHealth(),
     raidCrier: raidCrier?.health() ?? { origin: 'live', enabled: crierEnabled, ready: false, reason: 'realm_unconfigured' },
     authorization: authority?.report?.capabilities.filter(entry => entry.capability === 'raids' || entry.capability === 'shield') ?? null });
   host = { get current() { return live.current; }, subscribe: listener => live.subscribe(listener), health };
@@ -183,7 +218,11 @@ export async function startLiveSource(options: {
   const watched = authority;
   let missing = new Set(AWAITED.filter(capability => !watched.available(capability)));
   watched.on(event => {
-    if (event.type === 'revoked' && event.role === 'broadcaster') void live.erase().catch(() => undefined);
+    if (event.type === 'revoked' && event.role === 'broadcaster') {
+      void live.erase().catch(() => undefined);
+      // user.authorization.revoke for the broadcaster: the sealed raid control goes with it.
+      void raidSession?.revoke().catch(() => undefined);
+    }
     if (event.type !== 'report') return;
     const now = new Set(AWAITED.filter(capability => !watched.available(capability)));
     for (const capability of missing) if (!now.has(capability)) print(`  ${capability} grant recorded; ${GRANT_READY[capability]}`);

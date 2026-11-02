@@ -322,7 +322,8 @@ function processAlive(pid: number): boolean {
   }
 }
 
-function isInside(parent: string, child: string): boolean {
+/** Whether `child` is `parent` or lies inside it; the guard that keeps private tables out of the repository. */
+export function isInside(parent: string, child: string): boolean {
   const path = relative(parent, child);
   return path === '' || (!path.startsWith('..') && !isAbsolute(path));
 }

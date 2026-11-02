@@ -21,6 +21,7 @@ import { createRaidGateApplication, createRaidMarchCheck, type RaidGateApplicati
 import { createRealmGiftHosts } from './gift-hosts';
 import { createPostgresItemTransfers, type ItemRows } from './gift-postgres';
 import { createVisitorGifts } from './gifts';
+import { createPolledGateFanout } from './gate-changes';
 import { createGateFanout, createRaidGateHttp, type RaidGateHttp } from './http';
 import { createRealmGatePolicy, type LiveChannels, type RaidGrants, type TargetDirectory, type WriteConsent } from './policy';
 import type { AtlasRoadIngress, AuthorizedRaidTransport, PreviewTokens, RaidGateRecovery } from './ports';
@@ -62,6 +63,11 @@ export type RaidGateServiceDeps = Readonly<{
   pathPrefix?: string;
   tokens?: PreviewTokens;
   heartbeatMs?: number;
+  /**
+   * How often watched gates are reread from storage, so a landing the realm committed reaches open streams here.
+   * 0 turns it off (a single-process test).
+   */
+  changePollMs?: number;
 }>;
 
 export const RAID_GATE_RECOVER_EVERY_MS = 15_000;
@@ -151,7 +157,10 @@ export function createRaidGateService(deps: RaidGateServiceDeps): RaidGateServic
   const publicOrigin = new URL(deps.publicOrigin).origin;
   const repository = createPostgresRaidGateRepository({ pool: deps.pool });
   const policy = createRealmGatePolicy({ pool: deps.pool, origin: deps.origin, issuer: deps.issuer, ...deps.policyPorts });
-  const fanout = createGateFanout();
+  const fanout = createPolledGateFanout(createGateFanout(), {
+    pool: deps.pool, ...(deps.changePollMs === undefined ? {} : { everyMs: deps.changePollMs }),
+    onError: error => deps.onRecovery?.({ kind: 'error', error }),
+  });
   const travel = deps.rooms ? createRaidTravelCoordinator({
     repository: createPostgresTravelRepository({ pool: deps.pool }), rooms: deps.rooms, marches: createRaidMarchCheck(repository),
     origin: deps.origin, clock: deps.clock,
@@ -198,6 +207,6 @@ export function createRaidGateService(deps: RaidGateServiceDeps): RaidGateServic
     async serve(request, response) {
       await writeWebResponse(await http.handle(toWebRequest(request, response, publicOrigin)), response);
     },
-    close: () => { if (timer) clearInterval(timer); http.close(); },
+    close: () => { if (timer) clearInterval(timer); fanout.close(); http.close(); },
   };
 }

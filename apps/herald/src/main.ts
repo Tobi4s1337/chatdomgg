@@ -19,6 +19,9 @@ import { configuredRealmDelivery } from './realm-delivery/config';
 import { RealmDelivery } from './realm-delivery/delivery';
 import { startMockDoor } from './mock/door';
 import { createMockRaidCrier } from './mock/crier';
+import { createMockRaidAuthority, parseMockLiveChannels } from './mock/raids';
+import { RAID_GATE_SECRET_PATTERN } from './raid-gate/raid-authority';
+import { Secret } from '@chatdom/twitch';
 
 const USAGE = [
   'Usage: herald <command>',
@@ -35,7 +38,10 @@ const USAGE = [
   '  check-source                            verify the source path end to end on a private port (SIMULATED)',
   '  mock --kingdom <id> --port <port>       SIMULATED EventSub webhook door for Twitch CLI: verified deliveries go',
   '                                          through ingest to $HERALD_REALM_URL, signed with $HERALD_MOCK_SECRET;',
-  '                                          the outbox lives in $HERALD_REALM_OUTBOX_DIR (never the repository)',
+  '                                          the outbox lives in $HERALD_REALM_OUTBOX_DIR (never the repository);',
+  '                                          with $HERALD_RAID_GATE_SECRET it also serves the raid authority route over',
+  '                                          recorded writes kept in $HERALD_MOCK_RAID_DIR (default <outbox dir>-raid-gate);',
+  '                                          $HERALD_MOCK_LIVE_CHANNELS lists further channel IDs it reports live',
 ];
 
 /** Runs until SIGINT/SIGTERM, then stops everything it started. */
@@ -103,7 +109,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       const outcome = await runAuthorize({ config: await loadConfig(), role: role satisfies Role, fetch, print, signal: controller.signal });
       print('');
       formatAuthorizeOutcome(outcome).forEach(print);
-      return outcome.status === 'recorded' ? 0 : 1;
+      return outcome.status === 'recorded' && outcome.raidControl !== 'unstored' ? 0 : 1;
     } finally {
       process.off('SIGINT', onSignal);
     }
@@ -135,13 +141,24 @@ export async function main(argv: readonly string[]): Promise<number> {
       process.stderr.write('herald mock: needs --kingdom <id>, --port <port>, HERALD_REALM_URL, HERALD_REALM_OUTBOX_DIR and HERALD_MOCK_SECRET\n');
       return 2;
     }
+    const gateSecret = process.env.HERALD_RAID_GATE_SECRET?.trim() ?? '', liveChannels = parseMockLiveChannels(process.env.HERALD_MOCK_LIVE_CHANNELS);
+    if (gateSecret && !RAID_GATE_SECRET_PATTERN.test(gateSecret) || liveChannels === null) {
+      process.stderr.write('herald mock: HERALD_RAID_GATE_SECRET must be 32–512 printable characters and HERALD_MOCK_LIVE_CHANNELS comma-separated Twitch IDs\n');
+      return 2;
+    }
+    const raidDir = resolve(process.env.HERALD_MOCK_RAID_DIR?.trim() || `${resolve(directory)}-raid-gate`);
     const realm = await RealmDelivery.open({ url, secret: process.env.REALM_INGRESS_HERALD_SECRET ?? '', directory, repositoryRoot: repositoryRoot(), origin: 'simulated' });
     const crier = createMockRaidCrier({ kingdomId: kingdom.data, realm });
+    let raids: Awaited<ReturnType<typeof createMockRaidAuthority>> | null = null;
     try {
-      const door = await startMockDoor({ kingdomId: kingdom.data, secret, realm, port, print, crier: crier.health });
+      raids = await createMockRaidAuthority({ kingdomId: kingdom.data, dir: raidDir, repositoryRoot: repositoryRoot(),
+        secret: gateSecret ? new Secret(gateSecret) : null, liveChannels });
+      const door = await startMockDoor({ kingdomId: kingdom.data, secret, realm, port, print, crier: crier.health, raidGate: raids });
+      print(gateSecret ? `  raid authority · POST ${door.port} /internal/herald/raid-gate · recorded writes, no Twitch` : '  raid authority refused: HERALD_RAID_GATE_SECRET is not set');
       crier.worker.start();
-      return await untilSignal(async () => { await crier.worker.close(); await door.stop(); await realm.close(); });
-    } catch (error) { await crier.worker.close(); await realm.close(); throw error; }
+      const bound = raids;
+      return await untilSignal(async () => { await crier.worker.close(); await door.stop(); await bound.close(); await realm.close(); });
+    } catch (error) { await crier.worker.close(); await raids?.close(); await realm.close(); throw error; }
   }
 
   if (command === 'replay') {

@@ -8,13 +8,22 @@ import { AUTHORIZE_CALLBACK_PORT, type HeraldConfig, isLocalCallback } from '../
 import { describe } from './authority';
 import { missingScopes, ROLE_SCOPES, type Role, scopesToRequest } from './grants';
 import { type PageCopy, renderPage } from './page';
+import { decodeTokenKey, exchangeUserCode, RAID_SCOPE, RaidAuthorityStore } from '../raid-gate/raid-authority-store';
+import { repositoryRoot } from '../source/live';
 
 export const AUTHORIZE_DEADLINE_MS = 600_000;
 const RESULT_PATH = '/chatdom-herald/result';
 const MAX_FOREIGN_CALLBACKS = 20;
 
+/**
+ * Whether Herald now holds the broadcaster's raid control: `held` (the refresh token is sealed at rest),
+ * `key_missing` / `key_invalid` (HERALD_TOKEN_KEY is not usable, so the tokens were discarded), `not_granted` (Twitch
+ * returned no refresh token or no raid scope) or `unstored` (the sealed record could not be written).
+ */
+export type RaidControl = 'held' | 'key_missing' | 'key_invalid' | 'not_granted' | 'unstored';
+
 export type AuthorizeOutcome =
-  | { readonly status: 'recorded'; readonly login: string; readonly scopes: readonly string[] }
+  | { readonly status: 'recorded'; readonly login: string; readonly scopes: readonly string[]; readonly raidControl?: RaidControl }
   | { readonly status: 'not_ready'; readonly reasons: readonly string[] }
   | { readonly status: 'denied' }
   | { readonly status: 'wrong_account'; readonly expected: string }
@@ -37,13 +46,17 @@ export interface AuthorizeOptions {
   /** How long the result page stays reachable after the callback. */
   readonly lingerMs?: number;
   readonly signal?: AbortSignal;
+  /** Workspace root the raid authority must stay out of; found from the working directory by default. */
+  readonly repositoryRoot?: string | null;
 }
 
 /**
  * The interactive grant bootstrap. It asks one account for its Herald role's scopes plus every existing scope for this client, receives the
  * callback on loopback, checks single-use CSRF state, exchanges the code server-side and verifies the
- * client, the account and the scopes. The user tokens are discarded unrevoked; afterwards the grant is
- * confirmed the way the runtime will see it, through Get Authorization By User with the app token.
+ * client, the account and the scopes. The user tokens are discarded unrevoked, with one exception: for the
+ * broadcaster, when `HERALD_TOKEN_KEY` is configured and the grant carries `channel:manage:raids`, the refresh token
+ * is sealed into Herald's raid authority (the only place it is kept). Afterwards the grant is confirmed the way the
+ * runtime will see it, through Get Authorization By User with the app token.
  * Nothing here prints a code, a token or a callback query, and nothing opens a browser on its own.
  */
 export async function runAuthorize(options: AuthorizeOptions): Promise<AuthorizeOutcome> {
@@ -59,6 +72,8 @@ export async function runAuthorize(options: AuthorizeOptions): Promise<Authorize
   const { clientId, clientSecret } = config.credentials;
   const redirectUri = config.redirectUri.toString();
   const callbackPath = config.redirectUri.pathname;
+  const tokenKey = role === 'broadcaster' && config.tokenKey ? decodeTokenKey(config.tokenKey.reveal()) : null;
+  const keyProblem = config.problems.some(problem => problem.key === 'HERALD_TOKEN_KEY');
   const tokens = new AppTokenSession({ clientId, clientSecret, fetch: options.fetch });
   const helix = new HelixReader({ tokens, fetch: options.fetch });
   try {
@@ -147,14 +162,26 @@ export async function runAuthorize(options: AuthorizeOptions): Promise<Authorize
 
       async function verify(code: Secret): Promise<AuthorizeOutcome> {
         try {
-          const identity = await confirmGrant({ clientId, clientSecret, code, redirectUri, fetch: options.fetch });
+          const { identity, refresh } = tokenKey
+            ? await exchangeUserCode({ clientId, clientSecret, code, redirectUri, fetch: options.fetch })
+            : { identity: await confirmGrant({ clientId, clientSecret, code, redirectUri, fetch: options.fetch }), refresh: null };
           if (identity.clientId !== clientId) return { status: 'wrong_client' };
           if (identity.userId !== expected.id) return { status: 'wrong_account', expected: expected.login };
           const missing = missingScopes(identity.scopes, ROLE_SCOPES[role]);
           if (missing.length > 0) return { status: 'missing_scopes', scopes: missing };
           const [recorded] = await helix.getAuthorizationByUser([expected.id]);
           if (!recorded?.hasAuthorized || missingScopes(recorded.scopes, ROLE_SCOPES[role]).length > 0) return { status: 'not_recorded' };
-          return { status: 'recorded', login: expected.login, scopes: recorded.scopes };
+          if (role !== 'broadcaster') return { status: 'recorded', login: expected.login, scopes: recorded.scopes };
+          let raidControl: RaidControl;
+          if (!tokenKey) raidControl = keyProblem ? 'key_invalid' : 'key_missing';
+          else if (!refresh || !identity.scopes.includes(RAID_SCOPE)) raidControl = 'not_granted';
+          else {
+            const store = new RaidAuthorityStore({ dataDir: config.dataDir, key: tokenKey, clientId,
+              repositoryRoot: options.repositoryRoot === undefined ? repositoryRoot() : options.repositoryRoot });
+            raidControl = await store.write({ userId: identity.userId, login: identity.login, scopes: identity.scopes, recordedAt: Date.now() }, refresh)
+              .then(() => 'held' as const, () => 'unstored' as const);
+          }
+          return { status: 'recorded', login: expected.login, scopes: recorded.scopes, raidControl };
         } catch (error) {
           return { status: 'failed', reason: describe(error) };
         }
@@ -203,7 +230,9 @@ function page(response: ServerResponse, status: number, copy: PageCopy): void {
 
 function copyFor(outcome: AuthorizeOutcome, login: string): PageCopy {
   switch (outcome.status) {
-    case 'recorded': return { tone: 'done', title: 'Herald can listen now', body: `Twitch recorded the grant for ${login}. Herald keeps no token from this sign-in.` };
+    case 'recorded': return { tone: 'done', title: 'Herald can listen now', body: outcome.raidControl === 'held'
+      ? `Twitch recorded the grant for ${login}. Herald keeps the raid control sealed on its own machine and nothing else from this sign-in.`
+      : `Twitch recorded the grant for ${login}. Herald keeps no token from this sign-in.` };
     case 'denied': return { tone: 'stopped', title: 'Not approved', body: 'The request was declined on Twitch. Nothing was granted.' };
     case 'wrong_account': return { tone: 'stopped', title: 'A different account signed in', body: `This step needs ${outcome.expected}. Sign out of Twitch, then start again from the terminal.` };
     case 'missing_scopes': return { tone: 'stopped', title: 'Some permissions are missing', body: 'Twitch recorded fewer permissions than Herald asked for. Start again from the terminal.' };
