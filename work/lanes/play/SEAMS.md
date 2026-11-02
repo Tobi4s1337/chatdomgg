@@ -231,9 +231,13 @@ How gather mounts the tavern (in its own `apps/web/src/tavern/play-slot.ts`, plu
 What play guarantees:
 - One walker in exactly one room: the source is left (any seat stood up first, pointer lock let go) before the
   destination is mounted, and the destination is disposed before the source is joined again. One journey at a time.
-  Each leave is awaited to the end, never raced against the curtain: a source leave that fails or stays silent sends
-  you back outside, and the way back waits for that leave to settle; a destination that will not let go strands the
-  curtain with a retry, and a late success goes on by itself. A `visit.fail` from inside `mount` is heard at once.
+  Each leave is awaited to the end, never raced against the curtain, and the source's `leave` and a destination's
+  `dispose` share one rule: resolve once the room has really let you go, reject only while you may still be in it. A
+  source leave that fails or stays silent sends you back outside without the tavern, and the way back sees that
+  leave through first (it joins one still going, runs a refused one once more at once, then on the person's retry),
+  so the kingdom is never joined on top of a connection it may still hold. A leave that went through is never
+  repeated. A destination that will not let go strands the curtain with a retry, and a late success goes on by
+  itself. A `visit.fail` from inside `mount` is heard at once.
 - Entry is reported only after `ready`. A refusal, a 20 s silence or a `fail` puts you back outside the door with one
   calm line on parchment. If the way back is not open, the curtain says so and waits for the person's "Try the door
   again"; it never pretends.

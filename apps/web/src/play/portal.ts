@@ -9,8 +9,9 @@ import type { PlayContext } from './slots';
  * Play owns the transfer and its recovery; a destination lane (gather for the tavern) owns the room and its scene.
  * - One walker in exactly one room: the source room is left before the destination is joined, and the destination
  *   is disposed before the source is joined again.
- * - Leaving a room is awaited to the end. A leave that fails or stays silent strands the curtain with a retry; it never
- *   lets the next room join early.
+ * - Leaving a room is awaited to the end, the kingdom and the destination alike. A leave that fails or stays silent
+ *   strands the curtain with a retry; it never lets the next room join early, and a room that refused to let you go
+ *   is never joined again on top of itself: it is left first.
  * - Entry is never reported before the destination says it is ready. A destination that fails, times out or is
  *   lost puts you back outside the door; while that way back is not open, the curtain says so and offers a retry.
  * - The session travels, the ticket never does: the destination asks `visit.entry.ticket()` for a fresh one.
@@ -79,7 +80,11 @@ export interface PortalSource {
   readonly self: PlayContext['self'];
   /** The curtain's words coming back, e.g. the kingdom's name. */
   readonly title: string;
-  /** Stand up (freeing any seat), stop walking and leave the source room. */
+  /**
+   * Stand up (freeing any seat), stop walking and leave the source room. Like a destination's dispose: resolve once the
+   * room has really let you go (a connection already gone counts) and reject only while you may still be in it. Play
+   * then calls leave again (once at once, then on the person's retry) and joins the room again only after it resolves.
+   */
   leave(): Promise<void>;
   /** Join the source room with a fresh ticket, arriving at the anchor; resolves once you are walking there. */
   rejoin(arrival: { readonly portal: string; readonly anchor: PortalAnchor }): Promise<void>;
@@ -175,8 +180,8 @@ interface Journey {
   readonly curtain: PortalCurtain;
   /** The visit generation this journey lent out; a newer generation makes the visit stale. */
   readonly visit: number;
-  /** Settles once the source room has really been let go (or refused to be); nothing joins it again before. */
-  sourceLeft: Promise<void>;
+  /** Leaves the source room; one run at a time, a refused run may run again. Nothing joins it again before it resolves. */
+  readonly leaveSource: () => Promise<void>;
   /** The destination's surface until it has really been left. */
   surface: PortalSurface | null;
   leaveRoom: (() => Promise<void>) | null;
@@ -209,7 +214,7 @@ export function createPortalTransfer(options: PortalTransferOptions): PortalTran
   function newJourney(source: PortalSource, portal: PortalDescriptor, curtain: PortalCurtain): Journey {
     let end = noop;
     const ended = new Promise<void>(resolve => { end = resolve; });
-    return { source, portal, curtain, visit: ++generation, sourceLeft: Promise.resolve(), surface: null, leaveRoom: null, failure: null, failReady: null, ended, end };
+    return { source, portal, curtain, visit: ++generation, leaveSource: once(() => source.leave()), surface: null, leaveRoom: null, failure: null, failReady: null, ended, end };
   }
 
   /** How a step went within `ms`: done, failed, still silent, or the journey ended under it. */
@@ -245,13 +250,15 @@ export function createPortalTransfer(options: PortalTransferOptions): PortalTran
     }
   }
 
-  /** Back to the source door, once the source room has really been let go. */
+  /**
+   * Back to the source door, once the source room has really been let go. A leave that was refused may still hold you
+   * in that room, so it is run again (and, failing that, on the person's retry) before the room is joined: never a
+   * second connection on top of the first. A leave that already went through is not repeated.
+   */
   async function home(current: Journey, note: string | undefined): Promise<PortalOutcome> {
     const { source, portal, curtain } = current;
-    const rejoin = once(async () => {
-      await current.sourceLeft.then(noop, noop);
-      await source.rejoin({ portal: portal.id, anchor: portal.returnAnchor });
-    });
+    if (!(await must(current, current.leaveSource, 'The kingdom room did not let you go'))) return 'back-outside';
+    const rejoin = once(() => source.rejoin({ portal: portal.id, anchor: portal.returnAnchor }));
     if (!(await must(current, rejoin, 'The way back through the door is not open'))) return 'back-outside';
     journey = null;
     current.end();
@@ -301,11 +308,11 @@ export function createPortalTransfer(options: PortalTransferOptions): PortalTran
     cue('door');
     // The source room must really be let go before another room is joined; the curtain closing never decides that.
     const closing = draw(() => curtain.close({ label: LABEL_IN, title: portal.title ?? destination.title }));
-    current.sourceLeft = (async () => { await source.leave(); })();
-    const [, left] = await Promise.all([closing, settle(current, current.sourceLeft, stepMs)]);
+    const [, left] = await Promise.all([closing, settle(current, current.leaveSource(), stepMs)]);
     if (over(current) || left.kind === 'ended') return 'unavailable';
     if (left.kind !== 'ok') {
-      // Refused or silent: stay (or be put back) outside rather than be in two rooms. The way back waits for the leave.
+      // Refused or silent: never the tavern, and never the kingdom joined on top of a room that may still hold you. The
+      // way back first sees the leave through (joining one still going, running a refused one again), then joins.
       console.error('The kingdom room could not be left for the door', left.kind === 'failed' ? left.error : `still not left after ${stepMs} ms`);
       set('returning');
       return home(current, NOTE_REFUSED);

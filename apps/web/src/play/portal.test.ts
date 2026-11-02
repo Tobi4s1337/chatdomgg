@@ -146,14 +146,61 @@ describe('a door into a room of its own', () => {
     expect(w.transfer.phase).toBe('idle');
   });
 
-  it('a kingdom that cannot be left keeps you outside rather than in two rooms', async () => {
-    const w = world({ leave: async () => { throw new Error('seat release refused'); } });
+  it('a kingdom that refuses to let you go is left again before it is joined, never joined on top of itself', async () => {
+    // A refused leave may still hold the connection: the room is "connected" until a leave really goes through.
+    let connected = true, leaves = 0, joins = 0;
+    const w = world({
+      leave: async () => { leaves++; if (leaves <= 2) throw new Error('seat release refused'); connected = false; },
+      rejoin: async () => { joins++; if (connected) throw new Error('joined on top of a live connection'); connected = true; },
+    });
     w.transfer.bindSource(w.source); w.transfer.registerDestination(w.destination);
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await w.transfer.enter(door)).toBe('back-outside');
+    const entered = w.transfer.enter(door);
+    await flush();
+    // Refused on the way in, tried once more at once, then the curtain asks the person.
+    expect(leaves).toBe(2);
+    expect(w.transfer.phase).toBe('stranded');
+    expect(joins).toBe(0);
+    w.retry();
+    expect(await entered).toBe('back-outside');
     error.mockRestore();
+    expect(leaves).toBe(3);
+    expect(joins).toBe(1);
+    expect(connected).toBe(true);
     expect(w.log).not.toContain('tavern mounted');
-    expect(w.log).toContain('kingdom joined at 10,0,20');
+    expect(w.log.at(-2)).toBe('curtain opens: The door would not open just now. You are back outside.');
+  });
+
+  it('a kingdom leave that went through is never repeated on the way back', async () => {
+    let leaves = 0;
+    const w = world({ leave: async () => { leaves++; w.log.push('kingdom left'); } });
+    w.transfer.bindSource(w.source); w.transfer.registerDestination(w.destination);
+    await w.transfer.enter(door);
+    expect(await w.transfer.leave()).toBe('back-outside');
+    expect(leaves).toBe(1);
+    expect(w.log.filter(line => line === 'kingdom left')).toHaveLength(1);
+  });
+
+  it('a kingdom leave that is refused after staying silent is run again before the kingdom is joined', async () => {
+    const first = deferred();
+    let leaves = 0;
+    const w = world({ leave: () => { leaves++; if (leaves === 1) return first.promise; w.log.push('kingdom left'); return Promise.resolve(); } });
+    w.transfer.bindSource(w.source); w.transfer.registerDestination(w.destination);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const entered = w.transfer.enter(door);
+    await flush();
+    w.timers.pending[0]!();                                  // silent past the step timer
+    await flush();
+    expect(w.transfer.phase).toBe('returning');
+    first.reject(new Error('leave not acknowledged'));       // then refused: the connection may still be up
+    await flush();
+    expect(w.transfer.phase).toBe('stranded');
+    expect(w.log).not.toContain('kingdom joined at 10,0,20');
+    w.retry();
+    expect(await entered).toBe('back-outside');
+    error.mockRestore();
+    expect(leaves).toBe(2);
+    expect(w.log.indexOf('kingdom left')).toBeLessThan(w.log.indexOf('kingdom joined at 10,0,20'));
   });
 
   it('one journey at a time, and the journey keeps the source it started from', async () => {
