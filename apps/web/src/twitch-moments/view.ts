@@ -787,6 +787,8 @@ export function createTwitchMomentView(host: MomentViewHost) {
     /** The feature host supplies its adopted surface; no sampler means no stationary fixtures. */
     setRaidChatGround(sample: RaidChatGround | undefined): void { if (!disposed) raid.ground(sample); },
     raidPennantSites: () => pennantWall.sites(),
+    /** The torch posts the current raid has actually drawn beside the street, for the scene's occupancy and light field. */
+    raidTorchSites: () => raid.torchSites(),
     receiveRaidPennants(frame: RaidPennantFrame | null): void { if (!disposed) pennantWall.receive(frame); },
     setRaidPennantGround(sample: RaidChatGround | undefined): void { if (!disposed) pennantWall.ground(sample); },
     onDispose(listener: () => void): () => void {

@@ -243,11 +243,11 @@ describe('Incoming raid in the view', () => {
     expect(played).toEqual(expect.arrayContaining(['horn', 'cloth-unfurl', 'cart-roll', 'festival-drum']));
     expect(played.filter(c => c === 'horn')).toHaveLength(1);
 
-    // The shot stands outside the gate, looking down its real road into the town.
+    // The shot stands beside the real road inside the town, looking back out through the gate at the column.
     const shot = writes.at(-1)!;
-    expect(shot.eye[0]).toBeLessThan(-30);
+    expect(shot.eye[0]).toBeGreaterThan(-15);
     expect(shot.eye[1]).toBeGreaterThan(3);
-    expect(shot.target[0]).toBeGreaterThan(shot.eye[0]);
+    expect(shot.target[0]).toBeLessThan(-30);
     const eye = new THREE.PerspectiveCamera(shot.fov, 1920 / 1080, 0.5, 400);
     eye.position.set(...shot.eye); eye.lookAt(...shot.target); eye.updateMatrixWorld(); eye.updateProjectionMatrix();
     const labels = view.labels(eye);

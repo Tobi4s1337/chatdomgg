@@ -11,17 +11,19 @@ import { startCapturePreview, closeCapturePreview } from '../../../packages/test
 import { superviseCapture } from '../../../apps/web/src/twitch-moments-bench/capture-supervisor.mjs';
 
 if (!process.argv.includes('--worker')) {
-  await superviseCapture(process.execPath, [fileURLToPath(import.meta.url), '--worker'], { deadlineMs: 1_200_000 });
+  await superviseCapture(process.execPath, [fileURLToPath(import.meta.url), '--worker'], { deadlineMs: 3_600_000 });
 } else {
-  const release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(900_000) });
+  const release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(3_000_000) });
   const life = new globalThis.AbortController();
   let browser;
-  const timer = setTimeout(() => { life.abort(); void browser?.close(); }, 240_000);
+  const timer = setTimeout(() => { life.abort(); void browser?.close(); }, 270_000);
   const servers = [];
   const report = { renderer: 'SwiftShader', scenes: false, performanceEvidence: false, errors: [], surfaces: [] };
   try {
     async function serve(kind) {
-      for (let port = 5170; port <= 5186; port++) {
+      // Highest free lane port first: another worker's cleanup has reclaimed 5171 under a running capture.
+      for (let port = 5186; port >= 5170; port--) {
+        if (port === 5175) continue; // Shared with another worker's wildcard listener.
         life.signal.throwIfAborted();
         try {
           if (kind === 'web') {
@@ -83,7 +85,8 @@ if (!process.argv.includes('--worker')) {
       }, surface);
       const frame = await page.waitForEvent('framenavigated', { predicate: frame => frame.name() === surface.name, timeout: 20000 }).catch(() => page.frame(surface.name));
       assert.ok(frame);
-      await frame.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 45000 });
+      console.log(`[capture] ${surface.name}`);
+      await frame.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 90000 });
       if (surface.finder) {
         await frame.getByRole('button', { name: 'Choose where to ride' }).click();
         await frame.waitForFunction(() => window.__chatdomRaidGate?.snapshot().phase === 'choosing');
@@ -97,8 +100,9 @@ if (!process.argv.includes('--worker')) {
         assert.equal(state.welcome.view.offers.length, 2);
         assert.equal(state.welcome.view.offers.filter(offer => offer.receipt !== null).length, 1);
       }
-      assert.equal(await frame.getByText(/simulated/i).count(), 0, surface.name);
-      assert.equal(await frame.locator('[aria-label*="simulated" i], [title*="simulated" i]').count(), 0, surface.name);
+      // Labels are recorded per surface; the contact still is taken either way so every surface can be looked at.
+      const labels = await frame.getByText(/simulated/i).count() + await frame.locator('[aria-label*="simulated" i], [title*="simulated" i]').count();
+      if (labels) report.labelled = [...(report.labelled ?? []), surface.name];
       const layout = await frame.evaluate(() => {
         const board = document.querySelector('.rg-board')?.getBoundingClientRect();
         return { horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
@@ -112,9 +116,10 @@ if (!process.argv.includes('--worker')) {
     assert.deepEqual(report.errors, []);
     await mkdir('work/evidence/raid-show', { recursive: true });
     await page.screenshot({ path: 'work/evidence/raid-show/copy-surfaces.png', timeout: 30000 });
-    report.result = 'passed';
+    report.result = report.labelled ? 'labels-found' : 'passed';
     await writeFile('work/evidence/raid-show/copy-surfaces.json', JSON.stringify(report, null, 2));
     console.log(JSON.stringify(report));
+    if (report.labelled) process.exitCode = 2;
   } finally {
     await browser?.close();
     for (const server of servers.reverse()) await closeCapturePreview(server);

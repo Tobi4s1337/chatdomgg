@@ -80,3 +80,19 @@ export type RaidGatePorts = Readonly<{
   /** Pauses between journey steps; defaults to a timer. Tests inject an instant one. */
   wait?: (ms: number, signal: AbortSignal) => Promise<void>;
 }>;
+
+/**
+ * The gate party for the scene's mount (SEAMS §3/§11): who gathers at the kingdom's real gate and how far the
+ * set-out has gone. Walker slots are the observed walkers present in the world; nobody is drawn from a count.
+ */
+export type RaidPartyFrame = Readonly<{
+  phase: 'gather' | 'setout';
+  /** The streamer's walker slot when they walk, otherwise the crown's standard leads. */
+  leader: number | 'standard';
+  marchers: readonly number[];
+  /** 0..1 through the set-out; 0 while gathering. */
+  progress: number;
+}>;
+
+/** Read-only party feed the scene subscribes to; `null` clears the party (cancel, leave, departure done). */
+export type RaidPartyFeed = Readonly<{ subscribe: (listener: (frame: RaidPartyFrame | null) => void) => () => void }>;

@@ -6,7 +6,7 @@ import { breeze } from './choreography';
 import { CART_CELLS, PONY_CELLS, ponyLegBlueprint, ponyTailBlueprint, wheelBlueprint } from './gift-art';
 import { Path, type GiftRoute, type PlaceAnchor } from './gift-view';
 import {
-  BRAZIER_CELLS, GATE_CELLS, RAID_WAGON_CELLS, RAID_WAGON_ORIGIN, ADORNMENT_CELLS, bannerRuns, brazierBlueprint, dyeBlueprint, gatePoleBlueprint, raidParts,
+  BRAZIER_CELLS, GATE_CELLS, TORCH_CELLS, skyLanternsPerWagon, torchPairs, torchPostBlueprint, RAID_WAGON_CELLS, RAID_WAGON_ORIGIN, ADORNMENT_CELLS, bannerRuns, brazierBlueprint, dyeBlueprint, gatePoleBlueprint, raidParts,
   raidPonyBlueprint, raidWagonBlueprint, raiderArms, adornmentBlueprint, adornmentsOf, type RaiderArms, type Run,
 } from './raid-art';
 import { Pool } from './train-view';
@@ -16,7 +16,12 @@ import { RAID_BEAT, RAID_LIMITS, gatePose, wagonElapsed, wagonKind, wagonPose, t
 /** Hard caps for one view: instances per part, lit cores, glows and light pools on the ground. */
 export const RAID_VIEW_LIMITS = {
   wagons: RAID_LIMITS.units * RAID_LIMITS.caravans, dye: 1400, adornments: 3 * RAID_LIMITS.units * RAID_LIMITS.caravans, cores: 96, glows: 40, pools: 40, arms: 8,
+  /** Torch posts along the street (six pairs per caravan) and the sky lanterns over the biggest columns. */
+  torches: 12 * RAID_LIMITS.caravans, torchCores: 36 * RAID_LIMITS.caravans, sky: 96,
 } as const;
+
+/** The torch avenue in metres: the first pair this far inside the gate, then one pair every `spacing` along the street. */
+export const RAID_TORCH_LAYOUT = { start: 4.2, spacing: 3.4, aside: [2.75, 3.05, 3.35] as const, ignite: 520, step: 240 } as const;
 
 export type RaidChatGround = (x: number, z: number) => number | null;
 
@@ -123,9 +128,10 @@ class Cores {
     this.mesh.frustumCulled = false; this.mesh.count = 0; this.mesh.visible = false; this.mesh.name = 'raid-flames';
     parent.add(this.mesh);
   }
-  push(at: THREE.Vector3, size: number, yaw: number, colour: THREE.Color, strength: number): void {
+  /** `tall` stretches the core upright (a paper lantern is taller than it is wide). */
+  push(at: THREE.Vector3, size: number, yaw: number, colour: THREE.Color, strength: number, tall = 1): void {
     if (this.count >= this.capacity || size <= 0.004) return;
-    this.mesh.setMatrixAt(this.count, this.matrix.compose(at, this.turn.setFromAxisAngle(UP, yaw), this.scale.setScalar(size)));
+    this.mesh.setMatrixAt(this.count, this.matrix.compose(at, this.turn.setFromAxisAngle(UP, yaw), this.scale.set(size, size * tall, size)));
     this.mesh.setColorAt(this.count, this.scratch.copy(colour).multiplyScalar(strength));
     this.count++;
   }
@@ -142,6 +148,9 @@ const TONGUE_COLOURS = TONGUES.map(([, , c]) => new THREE.Color(c));
 const FIRE_GLOW = new THREE.Color('#ff8d40'), FIRE_POOL = new THREE.Color('#ff8436'), EMBER = new THREE.Color('#ffb25a');
 const LAMP = new THREE.Color('#ffe2a2'), LAMP_GLOW = new THREE.Color('#ffa850'), LAMP_POOL = new THREE.Color('#ff9440');
 const EMBERS = 6;
+const SKY_LANTERN = new THREE.Color('#ffcf7a'), SKY_GLOW = new THREE.Color('#ff9c4a');
+/** A sky lantern: released this long after its wagon is through the gate, every `every` ms, and how long it rises. */
+const SKY = { from: 1600, every: 850, life: 11_000, rise: 0.62 } as const;
 
 /** The gate as the road supplies it: its ground point, the way into the town, and the side its standard stands. */
 export interface RaidGateSite { readonly position: THREE.Vector3; readonly facing: THREE.Vector3; readonly side: THREE.Vector3 }
@@ -182,10 +191,19 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
   const cores = new Cores(layer, RAID_VIEW_LIMITS.cores);
   const glows = new Glows(layer, RAID_VIEW_LIMITS.glows, false, 'raid-glows');
   const lightPools = new Glows(layer, RAID_VIEW_LIMITS.pools, true, 'raid-light-pools');
+  // The street's torches and the sky lanterns have their own budgets, so a long column never starves the gate's fire.
+  const torchCores = new Cores(layer, RAID_VIEW_LIMITS.torchCores);
+  const torchGlows = new Glows(layer, RAID_VIEW_LIMITS.torches, false, 'raid-torch-glows');
+  const torchPools = new Glows(layer, RAID_VIEW_LIMITS.torches, true, 'raid-torch-pools');
+  const skyCores = new Cores(layer, RAID_VIEW_LIMITS.sky);
+  const skyGlows = new Glows(layer, RAID_VIEW_LIMITS.sky, false, 'raid-sky-glows');
+  /** Torch sites per raid, chosen once from supported ground beside the actual street; never re-guessed per frame. */
+  const avenues = new Map<string, { at: THREE.Vector3; pair: number }[]>();
+  let torchSites: Vec3[] = [];
   const banners = new Map<string, Banners | null>();
   let road: Path | null | undefined;
   let gate: { site: RaidGateSite; caption: THREE.Vector3 } | null = null;
-  let counts = { caravans: 0, wagons: 0 };
+  let counts = { caravans: 0, wagons: 0, torches: 0, skyLanterns: 0 };
 
   const m = new THREE.Matrix4(), w = new THREE.Matrix4(), p = new THREE.Matrix4(), c = new THREE.Matrix4(), t = new THREE.Matrix4(), r = new THREE.Matrix4();
   const q = new THREE.Quaternion(), e = new THREE.Euler(), one = new THREE.Vector3(1, 1, 1), a = new THREE.Vector3(), b = new THREE.Vector3();
@@ -310,6 +328,86 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     }
   }
 
+  /**
+   * Where the street's torches stand for this raid: pairs beside the actual road inside the gate, each on ground
+   * the host's conservative sampler supports (clear of the street, lots, squares and water). A side with no supported
+   * ground simply has no torch there; nothing is planted through a house or a stall.
+   */
+  function avenueOf(frame: RaidFrame, here: RaidGateSite, line: Path): { at: THREE.Vector3; pair: number }[] {
+    const known = avenues.get(frame.key);
+    if (known) return known;
+    const sites: { at: THREE.Vector3; pair: number }[] = [];
+    const L = RAID_TORCH_LAYOUT, pairs = torchPairs(frame.units);
+    if (ground) for (let pair = 0; pair < pairs; pair++) {
+      const distance = L.start + pair * L.spacing;
+      if (distance > line.length - 2) break;
+      const spot = line.at(distance), across = new THREE.Vector3().crossVectors(UP, spot.tangent).normalize();
+      for (const sign of [-1, 1]) for (const aside of L.aside) {
+        const x = spot.position.x + across.x * aside * sign, z = spot.position.z + across.z * aside * sign;
+        let height: number | null;
+        try { height = ground(x, z); } catch { height = null; }
+        if (height === null || !Number.isFinite(height)) continue;
+        // Never a torch in the gateway itself, behind the braziers.
+        if (new THREE.Vector3(x, height, z).sub(here.position).dot(here.facing) < BRAZIER_IN + 1) continue;
+        sites.push({ at: new THREE.Vector3(x, height, z), pair }); break;
+      }
+    }
+    avenues.set(frame.key, sites);
+    if (avenues.size > RAID_LIMITS.caravans + RAID_LIMITS.queued) avenues.delete(avenues.keys().next().value!);
+    return sites;
+  }
+
+  /** The town lines its street with torches that catch in a wave from the gate inward, and sleep with the gate. */
+  function drawAvenue(frame: RaidFrame, here: RaidGateSite, line: Path, atMs: number): void {
+    const fade = gatePose(frame.t, frame.sleep).presence;
+    if (fade <= 0.01) return;
+    const [tx, , tz] = TORCH_CELLS.pivot, L = RAID_TORCH_LAYOUT;
+    for (const torch of avenueOf(frame, here, line)) {
+      // Each pair catches a beat after the one nearer the gate; all of them go out with the gate.
+      const delay = L.ignite + torch.pair * L.step, lit = gatePose(frame.t - delay, frame.sleep - delay).flame;
+      pool(torchPostBlueprint(host.kit), RAID_VIEW_LIMITS.torches).push(m.makeTranslation(torch.at).multiply(t.makeTranslation(cells(-tx, 0, -tz))), fade);
+      counts.torches++;
+      torchSites.push(torch.at.toArray() as Vec3);
+      const flame = lit * fade;
+      if (flame <= 0.02) continue;
+      const coals = b.copy(torch.at).addScaledVector(UP, TORCH_CELLS.fire[1] * CELL), sign = torch.pair % 2 ? 1 : -1;
+      for (let k = 0; k < 3; k++) {
+        const [size, height] = TONGUES[k]!;
+        const flicker = 1 + 0.16 * Math.sin(atMs * 0.014 + k * 1.7 + torch.pair * 2.3) + 0.07 * Math.sin(atMs * 0.033 + k);
+        point.copy(coals).addScaledVector(UP, height * 0.5 * (0.7 + 0.3 * Math.min(1.4, flame)));
+        point.x += Math.sin(atMs * 0.01 + k * 2.3 + sign) * 0.02;
+        torchCores.push(point, size * 0.48 * (0.6 + 0.4 * Math.min(1.5, flame)) * flicker, atMs * 0.0013 * (k + 1) + torch.pair, TONGUE_COLOURS[k]!, 1.25 + 0.45 * Math.min(1.5, flame));
+      }
+      torchGlows.push(point.copy(coals).addScaledVector(UP, 0.3), 1.9 * (0.6 + 0.4 * Math.min(1.5, flame)), FIRE_GLOW, 0.42 * flame);
+      torchPools.push(point.copy(torch.at).addScaledVector(UP, 0.06), 4.4, FIRE_POOL, 0.2 * Math.min(1.3, flame));
+    }
+  }
+
+  /**
+   * Over the biggest columns, sky lanterns rise from each wagon once it is through the gate, drift on the breeze and
+   * go out high over the street. They are light, not people: a fixed number per wagon from the beat alone.
+   */
+  function drawSkyLanterns(frame: RaidFrame, index: number, line: Path, atMs: number): void {
+    const per = skyLanternsPerWagon(frame.viewers), elapsed = wagonElapsed(frame, index);
+    if (!per || elapsed === null) return;
+    for (let j = 0; j < per; j++) {
+      const released = SKY.from + j * SKY.every, age = elapsed - released;
+      if (age < 0 || age > SKY.life) continue;
+      const from = wagonPose(released, line.length, frame.timing);
+      if (from.presence <= 0.05) continue;
+      const spot = line.at(from.distance), across = new THREE.Vector3().crossVectors(UP, spot.tangent).normalize();
+      const h = ((frame.seed ^ Math.imul(index * 13 + j + 1, 0x9e3779b1)) >>> 0) / 4294967296, s = age / 1000;
+      const drift = (h - 0.5) * 2.2, swirl = Math.sin(s * 0.9 + h * TAU) * 0.35;
+      point.copy(spot.position).addScaledVector(across, drift + swirl + (h - 0.5) * 0.8 * s * 0.25)
+        .addScaledVector(spot.tangent, 0.12 * s).addScaledVector(UP, 2.4 + SKY.rise * s + 0.04 * s * s);
+      const opacity = Math.min(1, age / 700) * Math.min(1, (SKY.life - age) / 3200);
+      const flicker = 1 + 0.08 * Math.sin(atMs * 0.009 + j * 1.3 + index);
+      skyCores.push(point, 0.17, h * TAU, SKY_LANTERN, 1.35 * flicker * opacity, 1.45);
+      skyGlows.push(point, 1.15, SKY_GLOW, 0.3 * flicker * opacity);
+      counts.skyLanterns++;
+    }
+  }
+
   function drawWagon(frame: RaidFrame, set: Banners, index: number, line: Path, atMs: number): boolean {
     const elapsed = wagonElapsed(frame, index);
     if (elapsed === null) return false;
@@ -416,7 +514,8 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     apply(frames: readonly RaidFrame[], atMs: number): void {
       for (const instances of pools.values()) instances.count = 0;
       cores.count = 0; glows.count = 0; lightPools.count = 0; gate = null;
-      counts = { caravans: 0, wagons: 0 };
+      counts = { caravans: 0, wagons: 0, torches: 0, skyLanterns: 0 };
+      torchCores.count = 0; torchGlows.count = 0; torchPools.count = 0; skyCores.count = 0; skyGlows.count = 0; torchSites = [];
       anchors = []; drawnLights = []; gateLanterns = 0;
       cues = cues.filter(cue => cue.expiresAt > atMs);
       lights = lights.filter(light => light.expiresAt > atMs);
@@ -456,8 +555,14 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
           entries.push({ light, slot: assignment.slot % 4 }); wagonLights.set(index, entries);
         }
         counts.caravans++;
-        if (here && frame.t < frame.sleep + RAID_BEAT.sleepFade) drawGate(frame, here, set, atMs);
-        if (line) for (let i = 0; i < Math.min(frame.units, RAID_LIMITS.units); i++) if (drawWagon(frame, set, i, line, atMs)) counts.wagons++;
+        if (here && frame.t < frame.sleep + RAID_BEAT.sleepFade) {
+          drawGate(frame, here, set, atMs);
+          if (line) drawAvenue(frame, here, line, atMs);
+        }
+        if (line) for (let i = 0; i < Math.min(frame.units, RAID_LIMITS.units); i++) {
+          if (drawWagon(frame, set, i, line, atMs)) counts.wagons++;
+          drawSkyLanterns(frame, i, line, atMs);
+        }
       }
       // Gate slots are independent from wagon slots. A light whose assigned wagon is not
       // presently visible can wait here; an unrelated caravan never hides it.
@@ -518,19 +623,35 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
       priorWagonLights = wagonNow;
       for (const instances of pools.values()) instances.flush();
       cores.flush(); glows.flush(); lightPools.flush();
+      torchCores.flush(); torchGlows.flush(); torchPools.flush(); skyCores.flush(); skyGlows.flush();
       chatLights.apply(drawnLights);
       layer.updateWorldMatrix(true, false);
       for (const anchor of anchors) layer.localToWorld(anchor.position);
     },
+    /** Torch posts drawn in the last frame, at most twelve per caravan: their foot, footprint radius and height. */
+    torchSites: (): { foot: Vec3; radius: number; height: number }[] => torchSites.map(foot => ({ foot, radius: 0.65, height: 2.4 })),
     /** The gate while a raid holds it: where the shot is composed from and the caption hangs. */
     gate: (): RaidGateSite | null => gate?.site ?? null,
     captionPoint: (): THREE.Vector3 | null => gate?.caption.clone() ?? null,
-    /** Look in from outside the gate, along the actual road, so the town welcomes the column behind the gate. */
+    /**
+     * The arrival is seen from the town: from beside the actual street inside the gate, a little above the roofs'
+     * eaves, looking back out at the standard so the column comes through the gate towards the viewer, ponies and
+     * banners first. Only when the host rejects every view from inside (a wall, a hill) does the shot fall back to
+     * looking in from outside along the road.
+     */
     *shots(portrait: boolean): Generator<readonly [THREE.Vector3, THREE.Vector3, number]> {
       const here = gate?.site ?? site();
       if (!here) return;
-      const line = path(), target = here.position.clone().addScaledVector(here.facing, 2).add(new THREE.Vector3(0, portrait ? 2.5 : 3.2, 0));
-      const fov = portrait ? 60 : 50, k = portrait ? 0.8 : 1;
+      const line = path(), fov = portrait ? 60 : 50, k = portrait ? 0.8 : 1;
+      const welcome = here.position.clone().addScaledVector(here.facing, -2.5).add(new THREE.Vector3(0, portrait ? 3.4 : 3, 0));
+      const inside = portrait ? [[22, 1.5, 8.5], [25, -1.5, 9.5], [19, 1.2, 7.5]] as const
+        : [[21, 4, 6.5], [21, -4, 6.5], [25, 3, 8], [18, 3.5, 5.5], [25, -3, 8]] as const;
+      for (const [ahead, aside, rise] of inside) {
+        const spot = line && line.length > ahead * 0.6 ? line.at(ahead) : { position: here.position.clone().addScaledVector(here.facing, ahead), tangent: here.facing };
+        const across = new THREE.Vector3().crossVectors(UP, spot.tangent).normalize();
+        yield [spot.position.clone().addScaledVector(across, aside).add(new THREE.Vector3(0, rise, 0)), welcome, fov] as const;
+      }
+      const target = here.position.clone().addScaledVector(here.facing, 2).add(new THREE.Vector3(0, portrait ? 2.5 : 3.2, 0));
       for (const [back, aside, rise] of [[18, -3, 8], [21, -2, 9], [16, -3, 7.5], [18, 3, 8], [23, 2, 10]] as const) {
         const spot = line ? line.at(-back * k) : { position: here.position.clone().addScaledVector(here.facing, -back * k), tangent: here.facing };
         const across = new THREE.Vector3().crossVectors(UP, spot.tangent).normalize();
@@ -546,13 +667,15 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
         chatLanterns: chatLights.stats().lanterns, chatGateLanterns: gateLanterns,
         chatGateX: centre.x, chatGateY: centre.y, chatGateZ: centre.z,
         chatGateSpan: points.length ? Math.hypot(bounds.max.x - bounds.min.x, bounds.max.z - bounds.min.z) : 0,
-        lights: cores.count + glows.count + lightPools.count };
+        torches: counts.torches, skyLanterns: counts.skyLanterns,
+        lights: cores.count + glows.count + lightPools.count + torchCores.count + torchGlows.count + torchPools.count + skyCores.count + skyGlows.count };
     },
     dispose(): void {
       for (const instances of pools.values()) instances.dispose();
       pools.clear(); banners.clear();
       chatLights.dispose(); cues = []; lights = []; anchors = []; lightSlots.clear(); gateSlots.clear(); gateWakeAt.clear(); priorWagonLights.clear();
       cores.dispose(); glows.dispose(); lightPools.dispose();
+      torchCores.dispose(); torchGlows.dispose(); torchPools.dispose(); skyCores.dispose(); skyGlows.dispose(); avenues.clear(); torchSites = [];
       root.remove(layer);
     },
   };

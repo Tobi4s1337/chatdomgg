@@ -1,5 +1,6 @@
 // One still through the actual kingdom scene. GPU runs use this page through pc-lease instead.
 import { chromium } from '@playwright/test';
+import { preview } from 'vite';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setTimeout, clearTimeout } from 'node:timers';
@@ -8,30 +9,47 @@ import { startCapturePreview, closeCapturePreview } from '../../../packages/test
 import { superviseCapture } from '../../../apps/web/src/twitch-moments-bench/capture-supervisor.mjs';
 
 if (!process.argv.includes('--worker')) {
-  await superviseCapture(process.execPath, [fileURLToPath(import.meta.url), '--worker', ...process.argv.slice(2)], { deadlineMs: 1_200_000 });
+  await superviseCapture(process.execPath, [fileURLToPath(import.meta.url), '--worker', ...process.argv.slice(2)], { deadlineMs: 3_600_000 });
 } else {
-  const release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(900_000) });
+  const release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(3_000_000) });
   const controller = new globalThis.AbortController();
-  const timer = setTimeout(() => controller.abort(new Error('Short still exceeded four minutes')), 240_000);
+  // One still per lock hold, bounded below five minutes.
+  const timer = setTimeout(() => controller.abort(new Error('Short still exceeded four and a half minutes')), 270_000);
   let server, browser;
   controller.signal.addEventListener('abort', () => { void browser?.close().catch(() => {}); }, { once: true });
   try {
     let base;
-    for (let port = 5170; port <= 5186; port++) {
+    // Highest free lane port first: another worker's cleanup has reclaimed 5171 under a running capture.
+    for (let port = 5186; port >= 5170; port--) {
       controller.signal.throwIfAborted();
       process.env.CHATDOM_RAID_SHOW_PORT = String(port);
-      try { ({ server, base } = await startCapturePreview('CHATDOM_RAID_SHOW_PORT')); break; }
+      try {
+        // An alternate build directory (outside the repo) leaves the shared dist alone for captures already queued.
+        if (process.env.CHATDOM_RAID_SHOW_DIST) {
+          server = await preview({ root: 'apps/web', configFile: 'apps/web/vite.config.ts', build: { outDir: process.env.CHATDOM_RAID_SHOW_DIST },
+            preview: { host: '127.0.0.1', port, strictPort: true } });
+          base = `http://127.0.0.1:${port}`;
+        } else ({ server, base } = await startCapturePreview('CHATDOM_RAID_SHOW_PORT'));
+        break;
+      }
       catch (error) { if (!/EADDRINUSE|in use/i.test(String(error?.message ?? error))) throw error; }
     }
     if (!base) throw new Error('No free lane preview port in 5170–5186');
     console.log(`[capture] own preview ${base}`);
     browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
     const argument = (name, fallback) => process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : fallback;
-    const size = argument('--size', '1920x1080');
-    if (!/^(1920x1080|1280x720|1440x900|390x844)$/.test(size)) throw new Error('Use a standard stream, web or phone size.');
+    // One incoming still per lock hold.
+    const shots = (argument('--shots', null)?.split(',') ?? [`${argument('--viewers', '140')}@${argument('--size', '1920x1080')}:${argument('--at', '12000')}`]).map(spec => {
+      const match = /^(\d+)@(\d+x\d+):(\d+)$/.exec(spec);
+      if (!match) throw new Error(`Shot ${spec} must read viewers@WxH:ms`);
+      const [, viewers, size, at] = match;
+      if (!/^(1920x1080|1280x720|1440x900|390x844)$/.test(size)) throw new Error('Use a standard stream, web or phone size.');
+      if (![3, 140, 10000, 70000].includes(Number(viewers)) || Number(at) > 600000) throw new Error('Choose a specified raid scale and a time within the ten-minute arrival window.');
+      return { viewers: Number(viewers), size, at: Number(at) };
+    });
+    if (shots.length !== 1) throw new Error('Take one still per lock hold.');
+    for (const { viewers, size, at } of shots) {
     const [width, height] = size.split('x').map(Number);
-    const viewers = Number(argument('--viewers', '140')), at = Number(argument('--at', '12000'));
-    if (![3, 140, 10000, 70000].includes(viewers) || !Number.isFinite(at) || at < 0 || at > 600000) throw new Error('Choose a specified raid scale and a time within the ten-minute arrival window.');
     const chatAge = Number(argument('--chat-age', '2000'));
     if (!Number.isFinite(chatAge) || chatAge < 500 || chatAge > 89500) throw new Error('Chat age must retain some of its original light lease.');
     const scene = argument('--scene', 'incoming');
@@ -45,7 +63,7 @@ if (!process.argv.includes('--worker')) {
     await page.goto(`${base}${route}`);
     console.log('[capture] incoming page opened');
     try {
-      await page.waitForFunction(() => window.__chatdomReady === true || document.querySelector('.raid-show-error'), null, { timeout: 210_000 });
+      await page.waitForFunction(() => window.__chatdomReady === true || document.querySelector('.raid-show-error'), null, { timeout: 240_000 });
     } catch (error) {
       console.error(await page.evaluate(() => ({ ready: window.__chatdomReady, state: window.__chatdomRaidShow?.inspect() })));
       throw error;
@@ -93,6 +111,8 @@ if (!process.argv.includes('--worker')) {
       state: await page.evaluate(() => window.__chatdomRaidShow?.inspect() ?? window.__guestInsignia),
     }, null, 2));
     console.log(`Look at ${out}`);
+    await page.close();
+    }
   } finally {
     clearTimeout(timer); await browser?.close(); if (server) await closeCapturePreview(server); await release();
   }

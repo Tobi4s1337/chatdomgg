@@ -329,6 +329,30 @@ export function brazierBlueprint(kit: BannerKit): VoxelBlueprint {
 }
 
 /**
+ * A torch post the town plants along its street for a raid: a 2.1 m timber post on a stone foot, a brass collar and
+ * an iron cage holding the fire. It fits the chat lamp's .65 m footprint. Pivot: bottom centre; the fire sits in the cage.
+ */
+export const TORCH_CELLS = { size: [5, 18, 5] as const, pivot: [2.5, 0, 2.5] as const, fire: [2.5, 16.6, 2.5] as const } as const;
+
+export function torchPostBlueprint(kit: BannerKit): VoxelBlueprint {
+  const iron = MAT.darkStone, boxes: Box[] = [];
+  boxes.push(box(0, 0, 0, 5, 1, 5, MAT.limestone), box(1, 1, 1, 4, 2, 4, MAT.limestone));
+  boxes.push(box(2, 2, 2, 3, 15, 3, MAT.timber), box(1, 9, 1, 4, 10, 4, MAT.brass));
+  boxes.push(box(1, 14, 1, 4, 15, 4, iron), box(2, 15, 2, 3, 16, 3, MAT.hairCopper));
+  for (const [x, z] of [[1, 1], [3, 1], [1, 3], [3, 3]] as const) boxes.push(box(x, 15, z, x + 1, 18, z + 1, iron));
+  return blueprint(`moment-raid-torch-${kit}`, kit, [5, 18, 5], boxes);
+}
+
+/**
+ * Torch pairs the town lights along its street, by the size of the column: one pair for a single treasured wagon,
+ * then wider avenues up to six pairs. The smallest raid stays intimate; the largest reads as a whole street turned out.
+ */
+export const torchPairs = (units: number): number => Math.max(1, Math.min(6, Math.round(1 + (Math.max(1, units) - 1) * 5 / 11)));
+
+/** Sky lanterns released over the column for the biggest raids only ("Lanterns fill the road"), per visible wagon. */
+export const skyLanternsPerWagon = (viewers: number): number => viewers >= 50_000 ? 9 : viewers >= 10_000 ? 6 : 0;
+
+/**
  * The gate's standard: a 7.5 m pole on a stone footing with brass collars, a crossbar at 7 m and a gilt finial. The
  * cloth hangs in front of the pole (z 4) from under the crossbar. Local x runs across the road, z into the town.
  */
@@ -349,12 +373,12 @@ export function gatePoleBlueprint(kit: BannerKit): VoxelBlueprint {
   return blueprint(`moment-raid-gate-pole-${kit}`, kit, [16, 64, 6], boxes);
 }
 
-/** Every raid part, meshed up front: dyes, wagons and ponies in each colour, festival fittings, the brazier and the pole. */
+/** Every raid part, meshed up front: dyes, wagons and ponies in each colour, festival fittings, the brazier, the torch post and the pole. */
 export function raidParts(kit: BannerKit): VoxelBlueprint[] {
   return [
     ...TINCTURE_LIST.map(t => dyeBlueprint(kit, t)),
     ...COLOURS.flatMap(c => [...(['lead', 'covered', 'lantern'] as const).map(k => raidWagonBlueprint(kit, k, c)), raidPonyBlueprint(kit, c)]),
     ...(['lantern-rack', 'banner-bundle', 'cloth-roll'] as const).map(k => adornmentBlueprint(kit, k)),
-    brazierBlueprint(kit), gatePoleBlueprint(kit),
+    brazierBlueprint(kit), torchPostBlueprint(kit), gatePoleBlueprint(kit),
   ];
 }
