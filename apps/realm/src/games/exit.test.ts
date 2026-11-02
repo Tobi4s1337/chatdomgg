@@ -1,9 +1,9 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { createServer as createPortProbe } from 'node:net';
 import { GatherInteriorSchema, TavernRoomState, type GatherInterior } from '@chatdom/shared';
 import type { RealmWalkInput } from '@chatdom/shared/realm';
 import { expect, it } from 'vitest';
 import { createRealmServer } from '../server';
+import { listenForTest } from './test-socket';
 import { referenceServices } from '../reference';
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -11,25 +11,14 @@ const waitFor = async (predicate: () => boolean, timeout = 8_000) => {
   const until = Date.now() + timeout;
   while (!predicate()) { if (Date.now() > until) throw new Error('Tavern state did not arrive'); await pause(25); }
 };
-async function freeTestPort(): Promise<number> {
-  for (const port of [5183, 5184, 5185, 5186, 5188, 5189, 5170, 5171, 5172, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180, 5181, 5182]) {
-    const free = await new Promise<boolean>(resolve => {
-      const probe = createPortProbe();
-      probe.once('error', () => resolve(false));
-      probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)));
-    });
-    if (free) return port;
-  }
-  throw new Error('No approved free port for the tavern exit test');
-}
 
 it('tells only the walker who crosses the interior doorway, once per crossing, and never on arrival', async () => {
   // Reference services issue one-use local tickets: transport evidence for the room's own doorway watch.
-  const base = referenceServices(), { server } = createRealmServer(base), port = await freeTestPort();
+  const base = referenceServices(), created = createRealmServer(base), { server } = created;
   const sockets: Room<InstanceType<typeof TavernRoomState>>[] = [];
-  await server.listen(port, '127.0.0.1');
+  const url = await listenForTest(created);
   try {
-    const client = new Client(`http://127.0.0.1:${port}`);
+    const client = new Client(url);
     const walker = await client.joinOrCreate<InstanceType<typeof TavernRoomState>>('tavern', base.issue(), TavernRoomState);
     const watcher = await client.joinOrCreate<InstanceType<typeof TavernRoomState>>('tavern', base.issue(), TavernRoomState);
     sockets.push(walker, watcher);

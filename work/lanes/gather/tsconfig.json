@@ -6,6 +6,8 @@
     "../../../apps/web/src/tavern/**/*.tsx",
     "../../../apps/web/src/games/**/*.ts",
     "../../../packages/content/src/tavern/**/*.ts",
-    "../../../packages/shared/src/games.ts"
+    "../../../packages/shared/src/games.ts",
+    "../../../apps/web/src/realm-reference/index.tsx",
+    "../../../apps/web/src/avatar-builder/lineup.ts"
   ]
 }

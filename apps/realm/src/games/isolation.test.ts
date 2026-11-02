@@ -1,11 +1,11 @@
 import { Client, type Room } from '@colyseus/sdk';
 import { randomUUID } from 'node:crypto';
-import { createServer as createPortProbe } from 'node:net';
 import { ServerError } from '@colyseus/core';
 import { KingdomIdSchema, PersonIdSchema, TavernRoomState, type GatherFrame, type KingdomId } from '@chatdom/shared';
 import type { RealmPrincipal } from '@chatdom/shared/realm';
 import { expect, it } from 'vitest';
 import { createRealmServer } from '../server';
+import { listenForTest } from './test-socket';
 import { referenceServices } from '../reference';
 import type { RealmRoomServices } from '../ports';
 
@@ -14,17 +14,6 @@ const waitFor = async (predicate: () => boolean, timeout = 8_000) => {
   const until = Date.now() + timeout;
   while (!predicate()) { if (Date.now() > until) throw new Error('Tavern state did not arrive'); await pause(25); }
 };
-async function freeTestPort(): Promise<number> {
-  for (const port of [5184, 5185, 5186, 5188, 5189, 5170, 5171, 5172, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180, 5181, 5182, 5183]) {
-    const free = await new Promise<boolean>(resolve => {
-      const probe = createPortProbe();
-      probe.once('error', () => resolve(false));
-      probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)));
-    });
-    if (free) return port;
-  }
-  throw new Error('No approved free port for the tavern isolation test');
-}
 
 /** One-use local tickets for two kingdoms; each principal belongs to exactly one. */
 function twoKingdomServices(kingdoms: readonly KingdomId[]): RealmRoomServices & { issue(kingdom: KingdomId): { ticket: string; kingdomId: string; protocol: 1 } } {
@@ -51,11 +40,11 @@ function twoKingdomServices(kingdoms: readonly KingdomId[]): RealmRoomServices &
 
 it('gives each kingdom its own tavern: separate walkers and tables, and no entry across', async () => {
   const north = KingdomIdSchema.parse('999000011'), south = KingdomIdSchema.parse('999000012');
-  const services = twoKingdomServices([north, south]), { server } = createRealmServer(services), port = await freeTestPort();
+  const services = twoKingdomServices([north, south]), created = createRealmServer(services), { server } = created;
   const sockets: Room<InstanceType<typeof TavernRoomState>>[] = [];
-  await server.listen(port, '127.0.0.1');
+  const url = await listenForTest(created);
   try {
-    const client = new Client(`http://127.0.0.1:${port}`);
+    const client = new Client(url);
     const join = async (kingdom: KingdomId) => {
       const room = await client.joinOrCreate<InstanceType<typeof TavernRoomState>>('tavern', services.issue(kingdom), TavernRoomState);
       room.reconnection.enabled = false; sockets.push(room);

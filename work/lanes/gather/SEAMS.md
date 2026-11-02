@@ -148,6 +148,11 @@ wardrobe/look continuity must use the same approved look source as play before p
   out under the shared movement rule. No placement changes. The interior's local dimensions have no effect on lots,
   roads or the exterior. When grand land installs a tavern under the same placement id, the same derivation applies.
 - The tavern scene is mounted only as the portal destination, never in `apps/web/src/kingdom/scene.ts`.
+- **Ask (growth-civic / grand-world, 2026-11-02):** the real-GPU street stills (`ga10-street-*`) show the level-1
+  tavern as a plain cottage: no sign, door lamp or chimney smoke, and its open doorway shows the grey hollow of the
+  box. The vision's tavern on the square has "warm windows and smoke from its chimney". A hanging sign, a lamp by the
+  door and chimney smoke, plus a warm glow or a closed wooden door in the doorway, would make the door read as a way
+  in. Gather does not change the exterior; the derived door keeps working as long as the carve stays where it is.
 
 ### Campfire (unchanged world ownership)
 
@@ -232,6 +237,23 @@ production transport or dependency file is changed here. This is a host-isolatio
   simultaneous total abandonment draws. Lifecycle retries are coalesced per table and bypass the bounded user
   command queue. Uncertain storage freezes mutation until durable truth is reconciled. Pong's live physics is
   memory-only; start, interruption/concession and terminal points have durable checkpoints.
+
+- **Coming back out (2026-11-02, applied here: no round lane owns realm core and main takes no patches).** When a
+  person's last tavern session ends, by the doorway or any other way, the tavern room records it
+  (`apps/realm/src/games/return.ts`, in memory, 120 s, consumed by the next arrival, bounded). That person's next
+  fresh arrival in the same kingdom's room stands at the derived `returnAnchor` with its yaw. The realm decides from
+  its own record and its own door; the client never chooses where it appears. Hooks: `kingdom-room.ts` one import
+  and two expressions in `onJoin` (`back?.feet ?? this.handle.spawn(auth)` and `yaw: resume?.yaw ?? back?.yaw ?? 0`);
+  `games/room.ts` one call in `onLeave`; `main.ts` one import and
+  `installTavernReturns(boot.services, kingdomId => boot.loader.current(kingdomId)?.scene)`. Backward compatible:
+  without an install, or with no record, no scene, a scene/collision revision mismatch, no derivable door or an
+  unsafe step, the arrival is exactly as before. A resumed seat keeps its carried pose. Tests:
+  `games/return.test.ts` (unit, plus real kingdom and tavern rooms over sockets: the traveller returns at the anchor
+  facing out once, later arrivals and strangers arrive at the gate). Both rooms of a kingdom must stay in one realm
+  process (they do: `server.ts` registers both); a multi-process realm would need this record in the shared store.
+  Play's `rejoin(arrival)` needs no join field for this: a plain fresh kingdom join is enough.
+- Socket tests bind their own loopback address through `games/test-socket.ts` (`127.0.0.10`), since the lane
+  ports on 127.0.0.1 are usually held by other lanes.
 
 ## 5. Read routes (gather offers; panel-window, play and the future bag read)
 

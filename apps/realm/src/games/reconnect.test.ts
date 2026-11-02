@@ -1,9 +1,9 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { createServer as createPortProbe } from 'node:net';
 import { TavernRoomState, type GatherFrame, type GatherSelf } from '@chatdom/shared';
 import type { RealmWalkInput } from '@chatdom/shared/realm';
 import { expect, it } from 'vitest';
 import { createRealmServer } from '../server';
+import { listenForTest } from './test-socket';
 import { referenceServices } from '../reference';
 import { severWalker } from '../auth/reconnect-harness';
 import { createTavernInterior } from './interior';
@@ -15,13 +15,6 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(predicate: () => boolean, what: string, timeout = 8_000) {
   const until = Date.now() + timeout;
   while (!predicate()) { if (Date.now() > until) throw new Error(`Timed out waiting for ${what}`); await delay(25); }
-}
-async function freePort() {
-  for (const port of [5182, 5170, 5171, 5172, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180, 5181, 5183, 5184, 5185, 5186, 5188, 5189]) {
-    const free = await new Promise<boolean>(resolve => { const probe = createPortProbe(); probe.once('error', () => resolve(false)); probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true))); });
-    if (free) return port;
-  }
-  throw new Error('No approved free socket test port');
 }
 function observe(room: Tavern) {
   let frame: GatherFrame | undefined, self: GatherSelf | undefined;
@@ -52,10 +45,10 @@ async function interact(room: Tavern, observer: ReturnType<typeof observe>, id: 
 it('holds a real physical game chair through a socket drop and reconnect, then concedes on standing', async () => {
   // Local reference identities and an in-memory store exercise sockets, not production identity or durability.
   const services = referenceServices(); installGatherStore(services, new MemoryGatherStore());
-  const { server } = createRealmServer(services), rooms: Tavern[] = [];
-  const port = await freePort(); await server.listen(port, '127.0.0.1');
+  const created = createRealmServer(services), { server } = created, rooms: Tavern[] = [];
+  const url = await listenForTest(created);
   try {
-    const client = new Client(`http://127.0.0.1:${port}`);
+    const client = new Client(url);
     const join = async () => { const room = await client.joinOrCreate<InstanceType<typeof TavernRoomState>>('tavern', services.issue(), TavernRoomState); rooms.push(room); room.reconnection.enabled = false; return room; };
     const first = await join(), second = await join();
     const a = observe(first), b = observe(second);
@@ -118,11 +111,11 @@ it.skip('blocked: replaces the older socket for the same reference principal and
     return issued;
   } } };
   installGatherStore(services, new MemoryGatherStore());
-  const { server } = createRealmServer(services), rooms: Tavern[] = [];
-  const port = await freePort(); await server.listen(port, '127.0.0.1');
-  console.info(`Replacement socket test port: ${port}`);
+  const created = createRealmServer(services), { server } = created, rooms: Tavern[] = [];
+  const url = await listenForTest(created);
+  console.info(`Replacement socket test realm: ${url}`);
   try {
-    const client = new Client(`http://127.0.0.1:${port}`);
+    const client = new Client(url);
     const join = async (ticket = base.issue()) => { const room = await client.joinOrCreate<InstanceType<typeof TavernRoomState>>('tavern', ticket, TavernRoomState); rooms.push(room); room.reconnection.enabled = false; return room; };
     const first = await join(), second = await join(), a = observe(first), b = observe(second);
     await waitFor(() => first.state.walkers.size === 2 && !!a.frame() && !!b.frame(), 'replacement test walkers');
@@ -167,11 +160,11 @@ it.skip('blocked: replaces the older socket for the same reference principal and
 
 it('concedes and releases the physical chair on explicit socket leave', async () => {
   const services = referenceServices(); installGatherStore(services, new MemoryGatherStore());
-  const { server } = createRealmServer(services), rooms: Tavern[] = [];
-  const port = await freePort(); await server.listen(port, '127.0.0.1');
-  console.info(`Explicit leave socket test port: ${port}`);
+  const created = createRealmServer(services), { server } = created, rooms: Tavern[] = [];
+  const url = await listenForTest(created);
+  console.info(`Explicit leave socket test realm: ${url}`);
   try {
-    const client = new Client(`http://127.0.0.1:${port}`);
+    const client = new Client(url);
     const join = async () => { const room = await client.joinOrCreate<InstanceType<typeof TavernRoomState>>('tavern', services.issue(), TavernRoomState); rooms.push(room); room.reconnection.enabled = false; return room; };
     const first = await join(), second = await join(), a = observe(first), b = observe(second);
     await waitFor(() => first.state.walkers.size === 2 && !!a.frame() && !!b.frame(), 'leave test walkers');

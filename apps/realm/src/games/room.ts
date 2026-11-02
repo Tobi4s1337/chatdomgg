@@ -9,6 +9,7 @@ import { createInteractionAuthority, composeInteractionHosts, type InteractionAu
 import type { RealmRoomServices } from '../ports';
 import { GatherTables, TAVERN_TABLES } from './tables';
 import { gatherStoreFor } from './store';
+import { tavernReturnsFor } from './return';
 import { createTavernInterior, tavernArrival, TAVERN_ENTRY, TAVERN_EXIT } from './interior';
 
 /** Its own world and physical seats. The generic portal controller supplies a fresh session entry ticket. */
@@ -159,7 +160,11 @@ export function createTavernRoom(services: RealmRoomServices) {
     onLeave(client: Client<{ auth: RealmPrincipal }>) {
       if (client.auth && this.state.walkers.has(client.sessionId)) this.authority.lifecycle('leave', client.auth, client.sessionId, Date.now());
       this.remove(client.sessionId);
-      if (client.auth && this.owner.get(client.auth.personId) === client.sessionId) this.owner.delete(client.auth.personId);
+      if (client.auth && this.owner.get(client.auth.personId) === client.sessionId) {
+        this.owner.delete(client.auth.personId);
+        // Their last tavern session has ended: the kingdom room stands them outside the street door next.
+        tavernReturnsFor(services)?.left(this.state.kingdomId, client.auth.personId, Date.now());
+      }
     }
     private remove(id: string) {
       this.inputs.get(id).clear(); this.walking.delete(id); this.actions.delete(id); this.exits.delete(id); this.state.walkers.delete(id); this.seats.left(id);

@@ -145,3 +145,9 @@ drop only a random test schema. No database credentials are printed.
 
 Real GPU: `chatdom-pc-lease --wait 0 --max 3 -- bash apps/web/src/tavern/capture-gpu.sh`. The lease owns 5192.
 These are empty-room studies; its frame-time result cannot satisfy the eight-walker game acceptance.
+
+The tavern from the street: `nice -n 10 node apps/web/src/games/street-still.mjs prepare` founds a hamlet from a
+seed (`GATHER_PLAN_SEED`, default `tobi4s_`), derives the door, frames the shots from it and builds
+`street/page.tsx` (the real kingdom page on that scene, nobody walking) into `/tmp/chatdom-gather/street`; then
+`chatdom-pc-lease --wait 30 -- nice -n 10 node apps/web/src/games/street-still.mjs shoot` takes the stills on the
+real GPU. The page is a dev bench only, never a route or part of the product build.

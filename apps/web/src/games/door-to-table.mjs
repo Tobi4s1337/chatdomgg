@@ -43,8 +43,7 @@ const report = { started: new Date().toISOString(),
   fixture: `Temporary reference sessions with synthetic identities, memory only. The kingdom is a founded hamlet generated from the seed "${seed}" with its tavern at growth level ${level}, not an adopted plan from a database.`,
   limitations: [
     'Headless realm clients drive the walk; the door crossing uses predicted feet the way the kingdom walk will, and play performs the transfer in the product.',
-    'The kingdom room spawns arrivals at the portal return anchor because this fixture tells it to; choosing that anchor on return is the kingdom room\'s decision (play/integrator).',
-    'The kingdom room places a new arrival at yaw 0 (its spawn has feet only); the walker faces out from its first standing input, as the kingdom walk would turn to the anchor. A spawn yaw is the kingdom room\'s change.',
+    'New arrivals start at a fixture gate on the door\'s axis a step and a half out (the founded market anchors are far from the door); coming back out of the tavern, the kingdom room itself stands them at the derived return anchor facing out (games/return.ts).',
     'No browser, Twitch identity, durable session, database or GPU is involved.',
   ], checks: [], walkers: {}, games: {} };
 let loader, realm;
@@ -57,11 +56,12 @@ try {
   const load = path => loader.ssrLoadModule(path);
   const [{ createRealmServer }, { referenceServices, REFERENCE_KINGDOM }, shared, { KingdomRoomState }, { createTavernInterior, ARRIVAL_SPACING, TAVERN_ENTRY, TAVERN_EXIT },
     { seatApproachDriver }, { installGatherStore, MemoryGatherStore }, { tavernPortalFor }, worldPkg, { createGrowthState }, { createRealmState },
-    { createNativeTown, assembleFoundedScene, compileFoundedScene }, { stepPlayer }] = await Promise.all([
+    { createNativeTown, assembleFoundedScene, compileFoundedScene }, { stepPlayer }, { installTavernReturns }, { embeddedSolids, supported }] = await Promise.all([
     load('/apps/realm/src/server.ts'), load('/apps/realm/src/reference.ts'), load('/packages/shared/src/index.ts'), load('/packages/shared/src/realm/index.ts'),
     load('/apps/realm/src/games/interior.ts'), load('/apps/web/src/games/walker.ts'), load('/apps/realm/src/games/store.ts'),
     load('/apps/realm/src/games/portal.ts'), load('/packages/world/src/index.ts'), load('/packages/world/src/growth/index.ts'),
     load('/packages/world/src/realm/reducer.ts'), load('/apps/realm/src/founded/index.ts'), load('/packages/world/src/movement/step.ts'),
+    load('/apps/realm/src/games/return.ts'), load('/packages/world/src/movement/collide.ts'),
   ]);
   const { TavernRoomState, starterCitizenLook, createThresholdWatch, insideTavernThreshold } = shared;
 
@@ -80,6 +80,17 @@ try {
   report.kingdom = { seed, level, placements: scene.placements.length, homes: plan.homes.length, tavern: { position: tavern.position, rotation: tavern.rotation },
     door: portal.door, returnAnchor: portal.returnAnchor, collisionRevision: world.revision };
   report.checks.push(`The installed tavern (turn ${tavern.rotation}) offers a door; the derivation moved none of the ${scene.placements.length} placements.`);
+  // Where newcomers arrive in this fixture: the first safe standing spot on the door's axis, 1.5 m or more out
+  // from the return anchor (down off the step if need be), so coming back at the anchor is the realm's doing.
+  const gate = (() => {
+    const [ax, ay, az] = portal.returnAnchor.feet, [tx, tz] = portal.door.through;
+    for (let out = 1.5; out <= 5; out += .25) for (let drop = .5; drop >= -2.5; drop -= .0625) {
+      const at = { x: ax - tx * out, y: ay + drop, z: az - tz * out };
+      if (!embeddedSolids(at, world).length && supported(at, world)) return [at.x, at.y, at.z];
+    }
+    throw new Error('No safe gate on the door axis');
+  })();
+  report.kingdom.gate = gate;
 
   // Fresh single-use tickets for one signed-in principal, as play's transfer asks for one per room.
   const base = referenceServices(), byTicket = new Map(), again = new Map();
@@ -93,13 +104,15 @@ try {
   } }, open: async kingdomId => {
     const handle = await base.open(kingdomId);
     let effects;
-    return { ...handle, layoutRevision: scene.layoutRevision, world, spawn: () => [...portal.returnAnchor.feet],
+    return { ...handle, layoutRevision: scene.layoutRevision, world, spawn: () => [...gate],
       bootstrap: principal => ({ ...handle.bootstrap(principal), layoutRevision: scene.layoutRevision, collisionRevision: world.revision }),
-      recoverWalker: (id, revision) => revision === world.revision && !!effects?.placeWalker(id, [...portal.returnAnchor.feet], revision),
+      recoverWalker: (id, revision) => revision === world.revision && !!effects?.placeWalker(id, [...gate], revision),
       bindRoom: bound => { effects = bound; const off = handle.bindRoom(bound); return () => { if (effects === bound) effects = undefined; off(); }; } };
   } };
   const fresh = principal => { const ticket = randomUUID(); again.set(ticket, principal); return { ticket, kingdomId: REFERENCE_KINGDOM, protocol: 1 }; };
   installGatherStore(services, new MemoryGatherStore());
+  // The realm's own return: whoever leaves the tavern next arrives outside its street door, facing out.
+  installTavernReturns(services, kingdomId => kingdomId === REFERENCE_KINGDOM ? scene : undefined);
   const created = createRealmServer(services); realm = created.server;
   await listenLocalRealm(realm, created.transport, port, host);
   const sdk = new Client(`http://${host}:${port}`);
@@ -129,9 +142,9 @@ try {
   for (const walker of walkers) {
     const body = walker.kingdom.state.walkers.get(walker.kingdom.sessionId);
     walker.arrived = [body.x, body.y, body.z];
-    assert.ok(Math.hypot(body.x - portal.returnAnchor.feet[0], body.z - portal.returnAnchor.feet[2]) < .01, `${walker.label} starts at the door`);
+    assert.ok(Math.hypot(body.x - gate[0], body.z - gate[2]) < .01, `${walker.label} starts at the gate before the door`);
   }
-  report.checks.push('Three walkers stand on the square outside the tavern door in one kingdom room, with a fourth person who stays outside throughout.');
+  report.checks.push('Three walkers stand on the square a step and a half before the tavern door in one kingdom room, with a fourth person who stays outside throughout.');
 
   // Cross the door with the kingdom walk's own prediction: the same inputs drive the server and the local body.
   const crossIn = async walker => {
@@ -445,6 +458,9 @@ try {
       const kingdom = await kingdomJoin(walker, fresh(walker.principal));
       walker.kingdom = kingdom;
       const body = kingdom.state.walkers.get(kingdom.sessionId), spawnYaw = body.yaw;
+      // Placed by the kingdom room itself: at the return anchor, already facing out, not at the gate.
+      assert.ok(Math.hypot(body.x - portal.returnAnchor.feet[0], body.z - portal.returnAnchor.feet[2]) < .01, `${walker.label} arrives at the return anchor`);
+      assert.equal(spawnYaw, portal.returnAnchor.yaw, `${walker.label} arrives facing out`);
       // Standing still on the step, the walker first looks along the wall (so the square's view must change before
       // the check can pass, even where the spawn's default already faces out), then turns to the anchor's facing as
       // the kingdom walk does with its first input.
@@ -482,7 +498,7 @@ try {
   await until(() => square.state.walkers.size === 4, 'everyone back on the square');
   const names = [...square.state.walkers.values()].map(w => w.name);
   assert.equal(new Set(names).size, 4, 'each person is on the square once');
-  report.checks.push('All three walked out through the interior doorway; only the crosser was told. Each closed the tavern before opening the square, was never seen in both rooms (sampled on every patch of both rooms by an observer who stayed in each, on the way in and on the way out, the last person out included), and came back once at the return anchor, off the door, as the same name and look. The square\'s view of each returned walker shows its actual yaw: first looking along the wall, then facing out.');
+  report.checks.push('All three walked out through the interior doorway; only the crosser was told. Each closed the tavern before opening the square, was never seen in both rooms (sampled on every patch of both rooms by an observer who stayed in each, on the way in and on the way out, the last person out included), and came back once, placed by the kingdom room at the return anchor already facing out (not at the gate where newcomers arrive), off the door, as the same name and look. The square\'s view of each returned walker shows its actual yaw: first looking along the wall, then facing out.');
   assert.equal(JSON.stringify(scene.placements), placementsBefore, 'the kingdom is unchanged');
   report.result = 'passed';
 } catch (error) {

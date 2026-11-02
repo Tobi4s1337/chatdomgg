@@ -20,15 +20,19 @@ const body = (feet: readonly number[], revision: number): PlayerState =>
 
 // Distinct founded plans, both tiers: each places its tavern on its own site and turn.
 // Distinct founded plans; the first is also checked at its mature tavern (the stage-four porch and steps).
-const PLANS = [
+const PLANS: readonly { readonly kingdom: string; readonly seed: string; readonly tier: 'hamlet' | 'town'; readonly levels: readonly number[] }[] = [
   { kingdom: '900000011', seed: 'founded-scene-test', tier: 'hamlet', levels: [1, 4] },
   { kingdom: '900000012', seed: 'tavern-door-north', tier: 'hamlet', levels: [1] },
   { kingdom: '900000013', seed: 'tavern-door-harbour', tier: 'hamlet', levels: [1] },
-] as const;
+  // Founded from the four launch channels' names at both tiers, youngest and mature tavern. Their adopted plans live
+  // in the realm database (Genesis); these seeds widen the sites and turns checked, they are not those plans.
+  ...(['tobi4s_', 'the_aggman', 'pinkkittyrose', 'mashad4'] as const).flatMap((seed, index) => (['hamlet', 'town'] as const)
+    .map((tier, t) => ({ kingdom: `90000002${index * 2 + t}`, seed, tier, levels: [1, 4] }))),
+];
 // All four exterior turns are covered against the authored form in packages/content/src/tavern/portal.test.ts.
 
 describe('the founded tavern door', () => {
-  for (const { kingdom, seed, tier, levels } of PLANS) it(`derives a supported return outside the installed door of ${seed}, facing out, that real walking crosses both ways`, async () => {
+  for (const { kingdom, seed, tier, levels } of PLANS) it(`derives a supported return outside the installed door of ${seed} (${tier}), facing out, that real walking crosses both ways`, async () => {
       const kingdomId = KingdomIdSchema.parse(kingdom), plan = generateSettlementPlan({ seed, tier, firstYear: 2025, year: 2026 });
       const native = createNativeTown(plan), empty = createRealmState(kingdomId, 'simulated');
       for (const level of levels) {
@@ -61,5 +65,5 @@ describe('the founded tavern door', () => {
         expect(insideTavernThreshold(portal!.door, [walker.x, walker.y, walker.z]), `${label} out`).toBe(false);
         expect(walker.grounded, `${label} out`).toBe(true);
       }
-  }, 90_000);
+  }, 240_000);
 });

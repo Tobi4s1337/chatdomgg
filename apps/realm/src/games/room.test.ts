@@ -1,9 +1,9 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { createServer as createPortProbe } from 'node:net';
 import { KingdomIdSchema, TavernRoomState, type GatherFrame, type GatherSelf } from '@chatdom/shared';
 import type { RealmWalkInput } from '@chatdom/shared/realm';
 import { expect, it } from 'vitest';
 import { createRealmServer } from '../server';
+import { listenForTest } from './test-socket';
 import { REFERENCE_KINGDOM, referenceServices } from '../reference';
 import { createTavernInterior, TAVERN_COLLISION_REVISION } from './interior';
 import { seatApproachDriver } from '../../../web/src/games/walker';
@@ -16,17 +16,6 @@ const waitFor = async (predicate: () => boolean, timeout = 8_000) => {
   }
 };
 
-async function freeTestPort(): Promise<number> {
-  for (const port of [5182, 5170, 5171, 5172, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180, 5181, 5183, 5184, 5185, 5186, 5188, 5189]) {
-    const free = await new Promise<boolean>(resolve => {
-      const probe = createPortProbe();
-      probe.once('error', () => resolve(false));
-      probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)));
-    });
-    if (free) return port;
-  }
-  throw new Error('No approved free port for the tavern socket test');
-}
 
 it('accepts separate authenticated walkers in the same tavern and refuses wrong-kingdom and remote chair claims', async () => {
   // Reference services issue one-use local test tickets; this is transport evidence, not database-session evidence.
@@ -37,12 +26,11 @@ it('accepts separate authenticated walkers in the same tavern and refuses wrong-
     const principal = await base.auth.authenticate(join);
     return misdirect ? { ...principal, kingdomId: otherKingdom } : principal;
   } } };
-  const { server } = createRealmServer(services);
+  const created = createRealmServer(services), { server } = created;
   const sockets: Room<InstanceType<typeof TavernRoomState>>[] = [];
-  const port = await freeTestPort();
-  await server.listen(port, '127.0.0.1');
+  const url = await listenForTest(created);
   try {
-    const client = new Client(`http://127.0.0.1:${port}`);
+    const client = new Client(url);
     const first = await client.joinOrCreate<InstanceType<typeof TavernRoomState>>('tavern', base.issue(), TavernRoomState);
     sockets.push(first);
     for (const type of ['interior', 'transient']) first.onMessage(type, () => {});

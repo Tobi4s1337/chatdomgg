@@ -4,6 +4,7 @@ import { KingdomRoomState, WalkerSchema, WalkInputSchema, RealmJoinSchema, Realm
   sanitizeRealmWalkInput, type RealmPrincipal, type RealmReceipt } from '@chatdom/shared/realm';
 import { stepPlayer, bodyStuck, embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmRoomHandle, RealmRoomServices } from './ports';
+import { tavernReturnsFor } from './games/return';
 import { RealmSeats, RealmSeatRefusedError, REALM_SESSION_CHECK_MS } from './auth/seats';
 import { RealmDistricts } from './limits/districts';
 
@@ -176,13 +177,15 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       const resume = carried && carried.collisionRevision === this.world.revision
         && [carried.x, carried.y, carried.z].every(Number.isFinite)
         && !embeddedSolids(carried, this.world).length && supported(carried, this.world) ? carried : undefined;
-      const position = resume ? [resume.x, resume.y, resume.z] as const : this.handle.spawn(auth), body = {x:position[0],y:position[1],z:position[2]};
+      // Just out of the tavern: outside its street door, facing out (gather's record of the leave; null otherwise).
+      const back = resume ? null : tavernReturnsFor(services)?.arrival(auth.kingdomId, auth.personId, this.world, Date.now()) ?? null;
+      const position = resume ? [resume.x, resume.y, resume.z] as const : back?.feet ?? this.handle.spawn(auth), body = {x:position[0],y:position[1],z:position[2]};
       if (!position.every(Number.isFinite) || embeddedSolids(body,this.world).length || !supported(body,this.world)) throw new ServerError(503,'The kingdom gate has no safe arrival yet');
       const replacedPrincipal = previous ? this.viewers.get(previous)?.auth : undefined;
       const replaced = this.seats.seat(auth, client.sessionId);
       if (replaced) this.removeWalker(replaced, replacedPrincipal);
       const walker = new WalkerSchema({ name: auth.publicName, look: auth.look, district: '', x: position[0], y: position[1], z: position[2],
-        vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
+        vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? back?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
       this.state.walkers.set(client.sessionId, walker);
       // Attached to state first, then shared: Colyseus sends this socket the full state of its view after the join.
       client.view = this.districts.enter(client.sessionId, walker);
