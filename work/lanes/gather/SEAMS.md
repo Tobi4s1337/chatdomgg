@@ -31,10 +31,28 @@ gather does not edit play's files or implement a second generic transfer control
 - The independent tavern scene under `apps/web/src/tavern/**`, the same scene on `/-/tavern` and the portal
   destination. `mountTavern(scene, options)` supplies the room's content; `kit` contains local collision,
   table positions and chair/approach anchors. The composed scene has no ceiling between the camera and game.
-- A portal descriptor for play: `{ id, kingdomId, sourceRoom: 'kingdom', destinationRoom: 'tavern',
-  entryAnchor, returnAnchor }`. Anchors carry feet in metres and yaw in radians. The entry anchor is just inside
-  the interior exit door, facing the room; the return anchor is just outside the existing exterior door facing
-  out. Exterior orientation comes from the existing placement, never from the interior dimensions.
+- The portal descriptor, `TavernPortal` in `packages/shared/src/games.ts` (implemented 2026-11-02):
+  `{ version: 1, id: 'tavern:<kingdomId>:door', kingdomId, sourceRoom: 'kingdom', destinationRoom: 'tavern',
+  source: { placement, collisionRevision }, door, returnAnchor, entry, exit }`. Anchors are `{ feet, yaw }`, with feet
+  in metres and the walker's yaw byte (zero faces +Z, 64 faces +X). `door` and `exit` are walk-through thresholds,
+  `{ min, max, through }`: an axis-aligned volume of feet positions, crossed in the unit horizontal direction
+  `through`. The frozen interaction target kinds have no portal, so the door is crossed, never pressed: "crossing its
+  door" in the founder's words. `createThresholdWatch(threshold)` fires once per crossing, only after the body was seen
+  outside, so a spawn or reconnect on a threshold never fires.
+  - Kingdom frame: `tavernPortalFor(kingdomId, scene, world)` (exported from `apps/web/src/tavern/index.tsx`; the
+    same derivation is `apps/realm/src/games/portal.ts` for the realm) reads the installed
+    `civic:growth:v1:tavern` placement and its own blueprint. It finds the body-height carve through the public face,
+    the way home doors are found, so every growth level and turn gives the same doorway. `door` covers that opening,
+    with `through` pointing inward. `returnAnchor` is supported clear feet just outside, facing out, checked against
+    the exact installed collision. An absent tavern or blocked forecourt yields `null`: no door is offered. A stale
+    collision revision throws. Nothing is placed, reserved or changed in the kingdom.
+  - Tavern frame: `entry` is a step in from the interior doorway facing the room (`[7, .125, 8.6]`, yaw 128); `exit`
+    is that doorway. The tavern room watches every walker's authoritative feet against `exit` and sends that walker
+    alone `exit` (`{ at }`). The destination surface turns it into `TavernRoomSurface({ leave })`. The room never
+    leaves, transfers or moves anyone itself.
+  - Play's part: watch `door` against the kingdom walker's feet. On a crossing, leave `kingdom`, join `tavern` with
+    a fresh ticket and the carried session, and spawn at `entry`. On `leave()`, leave `tavern`, join `kingdom` and
+    spawn at `returnAnchor`. If `source.collisionRevision` no longer matches the installed world, derive again.
 - The working destination adapter is `connectTavern(endpoint, entry, storage?)`, exported by
   `apps/web/src/tavern/index.tsx`. `entry` has the existing `RealmEntry` shape and must issue a fresh ticket for
   this destination. It returns the tavern's authenticated room, authoritative collision, movement adapter,
@@ -68,11 +86,10 @@ gather does not edit play's files or implement a second generic transfer control
   clears it and offers a fresh destination open through the supplied `open()`. That retry is destination recovery,
   not a claimed source-room return. Play still owns the safe generic portal recovery path.
 
-The existing action/target contract has no generic portal action. Gather will add portal contracts only to its new
-`packages/shared/src/games.ts`; it will not widen `RealmIntentSchema` or existing target kinds silently.
-**needs: play** confirm the descriptor and implement generic portal transfer/return; supply the retained common
-audio owner to the destination; agree the additive portal
-interaction before installing the door anchor. Until then `/-/tavern` is the same destination scene, with no fake
+The existing action/target contract has no generic portal action, and none is added: `RealmIntentSchema` and the
+target kinds are unchanged. **needs: play** adopt `TavernPortal` and implement generic portal transfer and return
+(watch `door`, transfer, spawn at `entry`, and on `leave()` return to `returnAnchor`). Supply the retained common audio
+owner to the destination. Until then `/-/tavern` is the same destination scene, with no fake
 transfer success. No tavern chairs are installed in the kingdom registry.
 
 **needs: play/render owner** review common citizen cost with approved looks on real GPU. The populated phone
@@ -97,9 +114,11 @@ wardrobe/look continuity must use the same approved look source as play before p
 
 - Keep the existing growth-civic tavern placement, asset and footprint. Gather no longer requests a 14 × 10 m
   site, a replacement `gather:tavern:v1` placement, or any tavern change in `founded/scene.ts` or `civic-growth.ts`.
-- Grand-world/play provide the existing exterior door's feet and yaw as a portal point. Gather derives its return
-  anchor just outside that door, facing out, checked against current collision. The interior's local dimensions
-  have no effect on lots, roads or the exterior.
+- Gather derives the door from the installed placement and collision itself (`tavernPortalFor`, §1). Grand-world
+  and play supply nothing for it. Tests: the authored form at levels 1 to 4, both styles and all four turns; and real
+  assembled founded scenes at levels 1 and 4, where a walker steps from the return anchor through the door and back
+  out under the shared movement rule. No placement changes. The interior's local dimensions have no effect on lots,
+  roads or the exterior. When grand land installs a tavern under the same placement id, the same derivation applies.
 - The tavern scene is mounted only as the portal destination, never in `apps/web/src/kingdom/scene.ts`.
 
 ### Campfire (unchanged world ownership)

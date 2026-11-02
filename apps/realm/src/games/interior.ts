@@ -1,9 +1,12 @@
-import { createTavernKit, TAVERN_DOOR, TAVERN_FLOOR, TAVERN_ROOM_BOUNDS } from '../../../../packages/content/src/tavern';
+import { createTavernKit, TAVERN_FLOOR, TAVERN_ROOM_BOUNDS } from '../../../../packages/content/src/tavern';
+import { TAVERN_INTERIOR_ENTRY, TAVERN_INTERIOR_EXIT } from '../../../../packages/content/src/tavern/portal';
 import type { CollisionWorld, SolidBox } from '@chatdom/shared/realm';
 import { createInteractionRegistry } from '@chatdom/world/interactions';
 import { tavernPlacement } from '../../../../packages/world/src/interactions/places';
 
-export const TAVERN_ENTRY = { feet: [TAVERN_DOOR.centre[0], TAVERN_FLOOR, 8.6] as const, yaw: 128 };
+export const TAVERN_ENTRY = TAVERN_INTERIOR_ENTRY;
+/** Crossing this doorway from inside asks the portal owner to return the walker to the kingdom. */
+export const TAVERN_EXIT = TAVERN_INTERIOR_EXIT;
 export const TAVERN_COLLISION_REVISION = 1;
 /** No kingdom placement changes: these solids and targets belong only to the portal destination. */
 export function createTavernInterior() {

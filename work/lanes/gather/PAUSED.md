@@ -1,5 +1,7 @@
 # Gather paused
 
+Resumed 2026-11-02 06:20: the lane continues from this state (see the last progress line). The evidence and parked paths below still hold.
+
 Explicit user pause. Last green commit: `79c1f050`. GA10 remains unchecked.
 
 The original Dice desktop capture was cancelled through its live handle and completed with exit 130 before lease acquisition. The log contains only waiting/queued lines. No realm, preview, game result or new screenshot started; phone was never queued. The former active record at `/tmp/chatdom-gather/ga10-dice-sounded-desktop.active.json` now records terminal cancellation. Do not poll/reuse it as a live job.

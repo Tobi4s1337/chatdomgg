@@ -92,6 +92,11 @@ The bar: every place and game is pleasant to watch without reading anything, fun
 
 ## Decisions
 
+- **2026-11-02 — The door is crossed, not pressed.** The frozen target kinds have no portal, and Tobias says "crossing
+  its door". Each side is therefore a walk-through threshold in `games.ts`'s `TavernPortal`. The exterior doorway and
+  return anchor are derived from the installed tavern blueprint's own carve and the exact collision, so every level
+  and turn works. Nothing is placed or reserved. A blocked forecourt offers no door. The tavern room watches
+  authoritative feet with hysteresis and tells only the crossing walker. Play performs the transfer.
 - **2026-11-02 — Tavern composition and sound.** Seated views fit the actual authored board after collision
   clearance and retain the chair's axis for flat games. The room uses four baked hearth/lantern pools and one
   shared sheltered grade for furniture and citizens; the near wall cuts away with hysteresis. Sound connects

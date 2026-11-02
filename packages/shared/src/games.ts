@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DisplayNameSchema, EpochMsSchema, TokenSchema, UIntSchema } from './identity';
+import { DisplayNameSchema, EpochMsSchema, KingdomIdSchema, TokenSchema, UIntSchema } from './identity';
 import { schema, t } from '@colyseus/schema';
 import { WalkerSchema } from './realm/schema';
 
@@ -125,10 +125,59 @@ export const GatherFrameSchema: z.ZodType<GatherFrame> = z.strictObject({ at: Ep
     players: z.array(DisplayNameSchema).max(4).optional(), status: z.enum(['ready', 'saving', 'unavailable']).optional() })).max(8),
 });
 export const GatherSelfSchema: z.ZodType<GatherSelf> = z.strictObject({ table: TokenSchema.nullable(), seat: twoSeats.nullable(), seatIndex: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]).nullable().optional(), playerIndex: z.number().int().min(0).max(3).nullable().optional() });
+/**
+ * Portals are walk-through doorways, not interaction targets: the frozen target kinds stay unchanged. A threshold
+ * is an axis-aligned volume of feet positions in its own room's frame, crossed in the unit horizontal `through`
+ * direction. Kingdom coordinates are wider than the interior's.
+ */
+const worldCoordinate = z.number().finite().min(-100_000).max(100_000);
+const worldPoint = z.tuple([worldCoordinate, worldCoordinate, worldCoordinate]);
+export const TavernThresholdSchema = z.strictObject({
+  min: worldPoint, max: worldPoint,
+  through: z.tuple([z.number().finite().min(-1).max(1), z.number().finite().min(-1).max(1)]),
+}).refine(t => t.min.every((v, i) => v < t.max[i]!) && Math.abs(Math.hypot(...t.through) - 1) < 1e-6, 'A threshold needs volume and a unit direction');
+export type TavernThreshold = z.infer<typeof TavernThresholdSchema>;
 export const GatherInteriorSchema = z.strictObject({
   revision: z.number().int().min(1).max(0xffff_ffff), layoutRevision: TokenSchema,
   boxes: z.array(z.strictObject({ min: point, max: point })).max(128),
   targets: z.array(z.strictObject({ id: TokenSchema, kind: z.literal('tavern-seat'), position: point, approach: point, reach: z.number().finite().positive().max(3) })).max(32),
   entry: z.strictObject({ feet: point, yaw: z.number().int().min(0).max(255) }),
+  /** The interior exit doorway. The room says `exit` when an armed walker's feet cross it. */
+  exit: TavernThresholdSchema.optional(),
 });
 export type GatherInterior = z.infer<typeof GatherInteriorSchema>;
+
+/** Feet in metres; yaw is the walker's byte (zero faces +Z, 64 faces +X). */
+export const TavernAnchorSchema = z.strictObject({ feet: worldPoint, yaw: z.number().int().min(0).max(255) });
+export type TavernAnchor = z.infer<typeof TavernAnchorSchema>;
+/**
+ * The tavern door, for the generic portal transfer. `door` and `returnAnchor` are in the kingdom's frame, derived
+ * from the installed exterior: the doorway itself, and supported clear feet just outside it facing out. `entry`
+ * and `exit` are in the tavern's own frame: where you appear facing the room, and its interior doorway.
+ */
+export const TavernPortalSchema = z.strictObject({
+  version: z.literal(1), id: TokenSchema, kingdomId: KingdomIdSchema,
+  sourceRoom: z.literal('kingdom'), destinationRoom: z.literal('tavern'),
+  /** The installed placement this was derived from; a changed collision revision means derive again. */
+  source: z.strictObject({ placement: TokenSchema, collisionRevision: z.number().int().min(0).max(0xffff_ffff) }),
+  door: TavernThresholdSchema, returnAnchor: TavernAnchorSchema,
+  entry: TavernAnchorSchema, exit: TavernThresholdSchema,
+});
+export type TavernPortal = z.infer<typeof TavernPortalSchema>;
+export function insideTavernThreshold(threshold: TavernThreshold, feet: readonly [number, number, number]): boolean {
+  return feet.every((v, i) => Number.isFinite(v) && v >= threshold.min[i]! && v <= threshold.max[i]!);
+}
+/**
+ * Edge-triggered crossing with hysteresis: it fires once on entering, and only after the walker was seen outside
+ * the threshold. Arriving on a threshold (a spawn, a reconnect) never fires until they step off and back on.
+ */
+export function createThresholdWatch(threshold: TavernThreshold): (feet: readonly [number, number, number]) => boolean {
+  let armed = false, inside = true;
+  return feet => {
+    const now = insideTavernThreshold(threshold, feet), crossed = armed && now && !inside;
+    if (!now) armed = true;
+    if (crossed) armed = false;
+    inside = now;
+    return crossed;
+  };
+}

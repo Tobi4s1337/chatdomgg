@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Room, ServerError, type Client } from '@colyseus/core';
-import { KingdomIdSchema, GATHER_HZ, GatherPongInputSchema, GatherStartSchema, GatherMoveSchema, TavernRoomState } from '@chatdom/shared';
+import { KingdomIdSchema, GATHER_HZ, createThresholdWatch, GatherPongInputSchema, GatherStartSchema, GatherMoveSchema, TavernRoomState } from '@chatdom/shared';
 import { RealmJoinSchema, RealmIntentSchema, WalkInputSchema, WalkerSchema, sanitizeRealmWalkInput,
   type RealmPrincipal, type PlayerState } from '@chatdom/shared/realm';
 import { stepPlayer, embeddedSolids, supported } from '@chatdom/world/movement';
@@ -9,7 +9,7 @@ import { createInteractionAuthority, composeInteractionHosts, type InteractionAu
 import type { RealmRoomServices } from '../ports';
 import { GatherTables, TAVERN_TABLES } from './tables';
 import { gatherStoreFor } from './store';
-import { createTavernInterior, TAVERN_ENTRY } from './interior';
+import { createTavernInterior, TAVERN_ENTRY, TAVERN_EXIT } from './interior';
 
 /** Its own world and physical seats. The generic portal controller supplies a fresh session entry ticket. */
 export function createTavernRoom(services: RealmRoomServices) {
@@ -25,6 +25,8 @@ export function createTavernRoom(services: RealmRoomServices) {
     private readonly owner = new Map<string, string>();
     private readonly walking = new Map<string, boolean>();
     private readonly actions = new Set<string>();
+  /** Per walker: has their body crossed the interior doorway since it last stood clear of it? */
+  private readonly exits = new Map<string, (feet: readonly [number, number, number]) => boolean>();
     private accepting = true;
     private tableSignature = '';
     private tableSentAt = 0;
@@ -99,6 +101,8 @@ export function createTavernRoom(services: RealmRoomServices) {
           if (!client || !this.current(client) || this.walking.get(id) === false) { this.inputs.get(id).clear(); walker.vx = 0; walker.vz = 0; continue; }
           const input = this.inputs.get(id).next();
           if (input && input.placement === walker.placement) stepPlayer(walker, input, ctx.dt, this.interior.world);
+          // The room only says the door was crossed; the portal owner leaves, transfers and returns the walker.
+          if (this.exits.get(id)?.([walker.x, walker.y, walker.z])) client.send('exit', { at: Date.now() });
         }
         this.authority.expire(Date.now()); this.tables.tick(Date.now());
         const frame = this.tables.view(Date.now());
@@ -118,7 +122,7 @@ export function createTavernRoom(services: RealmRoomServices) {
     }
     private bootstrap(client: Client<{ auth: RealmPrincipal }>) {
       client.send('interior', { revision: this.interior.world.revision, layoutRevision: this.interior.registry.layoutRevision,
-        boxes: this.interior.boxes, targets: this.interior.registry.targets(), entry: TAVERN_ENTRY });
+        boxes: this.interior.boxes, targets: this.interior.registry.targets(), entry: TAVERN_ENTRY, exit: TAVERN_EXIT });
       client.send('tables', this.tables.view(Date.now())); client.send('self', this.tables.self(client.auth!.personId));
       client.send('transient', this.authority.seats());
       client.send('private', { type: 'interaction', requestId: null, writerEpoch: this.state.writerEpoch, state: this.authority.selfState(client.auth!.sessionId) });
@@ -131,6 +135,7 @@ export function createTavernRoom(services: RealmRoomServices) {
       const replaced = this.seats.seat(auth, client.sessionId);
       if (replaced) this.remove(replaced);
       this.owner.set(auth.personId, client.sessionId); this.state.origin = auth.origin;
+      this.exits.set(client.sessionId, createThresholdWatch(TAVERN_EXIT));
       this.state.walkers.set(client.sessionId, new WalkerSchema({ name: auth.publicName, look: auth.look, district: 'tavern',
         x: position[0], y: position[1], z: position[2], vx: 0, vy: 0, vz: 0, grounded: true, yaw: carried?.yaw ?? TAVERN_ENTRY.yaw,
         distance: carried?.distance ?? 0, collisionRevision: this.interior.world.revision }));
@@ -157,7 +162,7 @@ export function createTavernRoom(services: RealmRoomServices) {
       if (client.auth && this.owner.get(client.auth.personId) === client.sessionId) this.owner.delete(client.auth.personId);
     }
     private remove(id: string) {
-      this.inputs.get(id).clear(); this.walking.delete(id); this.actions.delete(id); this.state.walkers.delete(id); this.seats.left(id);
+      this.inputs.get(id).clear(); this.walking.delete(id); this.actions.delete(id); this.exits.delete(id); this.state.walkers.delete(id); this.seats.left(id);
     }
     async onDispose() { this.accepting = false; const drained = this.tables?.close(); this.authority?.dispose(); this.seats?.dispose(); await drained; }
   };

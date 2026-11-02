@@ -24,6 +24,8 @@ export interface TavernClient extends WalkRealm {
   readonly predicted: Readonly<PlayerState>;
   readonly presentations: ReadonlyMap<string, PongPresentation>;
   subscribe(listener: () => void): () => void;
+  /** The room saw this walker's body cross the interior doorway. The portal owner decides what happens next. */
+  onExit(listener: () => void): () => void;
   start(table: string): void;
   aim(value: number, now: number): void;
   move(action: 'drop' | 'roll' | 'hold', column?: number): void;
@@ -46,7 +48,7 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
   try { room = saved ? await network.reconnect<InstanceType<typeof TavernRoomState>>(saved, TavernRoomState) : await fresh(); }
   catch (error) { if (!saved) throw error; storage?.removeItem(key); room = await fresh(); }
   if (room.roomId !== `t:${entry.kingdomId}`) { void room.leave(); throw new Error('The door opened into another tavern.'); }
-  const listeners = new Set<() => void>(), offs: (() => void)[] = [];
+  const listeners = new Set<() => void>(), exits = new Set<() => void>(), offs: (() => void)[] = [];
   let disposed = false, connected = true, ended = false, interior: GatherInterior | null = null;
   let transportUp = true, resuming = false, resumeStateSeen = false, disconnects = 0, reconnects = 0;
   const resumeParts = new Set<string>();
@@ -85,7 +87,9 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
       notify();
       witnessed('self');
     } else protocolFailure();
-  }), room.onMessage('receipt', () => {}));
+  }), room.onMessage('receipt', () => {}), room.onMessage('exit', () => {
+    if (!disposed && connected) for (const listener of [...exits]) listener();
+  }));
   // These are consumed by the interaction binding after scene admission; bootstrap repeats them when it mounts.
   const earlyPrivate = room.onMessage('private', (message: RealmPrivateMessage) => {
     if (message.type === 'interaction' && message.requestId === null && message.writerEpoch === room.state.writerEpoch) witnessed('interaction');
@@ -161,6 +165,7 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
     get resumeStored() { return !!storage && storage.getItem(key) === room.reconnectionToken; },
     clearInput,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    onExit(listener) { exits.add(listener); return () => exits.delete(listener); },
     tick(now, sample: WalkInput): readonly RealmWalkerPose[] {
       if (disposed || !connected || room.state.collisionRevision !== world.revision) return [];
       if (placement !== walker.placement) { placement = walker.placement; reconciler.reset(); clearInput(); }
@@ -209,7 +214,7 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
       if (disposed) return; disposed = true; connected = false;
       offs.forEach(off => off()); room.onDrop.remove(dropped); room.onLeave.remove(left); room.onReconnect.remove(rejoined);
       room.onStateChange.remove(freshState);
-      listeners.clear(); reconciler.dispose(); predict.dispose(); storage?.removeItem(key); void room.leave();
+      listeners.clear(); exits.clear(); reconciler.dispose(); predict.dispose(); storage?.removeItem(key); void room.leave();
     },
   };
 }

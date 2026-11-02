@@ -27,6 +27,8 @@ export function TavernRoomSurface(props: {
   readonly audio: KingdomAudio;
   readonly audioControls?: boolean;
   readonly benchSeat?: string;
+  /** The walker crossed the interior doorway. The portal owner returns them to the kingdom's exterior door. */
+  readonly leave?: () => void;
 }) {
   let root: HTMLDivElement | undefined, host: HTMLDivElement | undefined, stage: ReturnType<typeof createTavernStage> | undefined;
   let sound: TavernSound | undefined, offSound: (() => void) | undefined, offGesture: (() => void) | undefined;
@@ -88,7 +90,8 @@ export function TavernRoomSurface(props: {
       if (disposed) { opened.dispose(); return; }
       client = opened;
       const update = () => { setFrame(client!.tables); setLink({ connected: client!.connected, ended: client!.ended }); if (!client!.connected) sound?.quiet(); else observeSound?.(); };
-      update(); off = client.subscribe(update);
+      const offUpdate = client.subscribe(update), offExit = client.onExit(() => { sound?.quiet(); props.leave?.(); });
+      update(); off = () => { offUpdate(); offExit(); };
       const scene = await sceneReady!;
       if (!scene.ok) throw scene.error;
       await document.fonts.ready;

@@ -13,6 +13,7 @@ import { audibleTavernHost, bindTavernSoundGesture, toggleTavernSound } from './
 export { mountTavern, type TavernMount } from './mount';
 export { TavernRoomSurface } from './Surface';
 export { connectTavern, type TavernClient } from './client';
+export { tavernPortalFor } from './portal';
 
 /** A room inspection route. No staged people or pretend games enter this surface. */
 export default function TavernBench() {
