@@ -406,7 +406,7 @@ table above (each can be overridden from the environment; `ATLAS_SEED_FROM` name
 loops and the health gate were rehearsed on this lane's copy on 2 Nov (127.0.0.2:5199): seed 2 min 22 s, the service
 restarted 10 s after it was ended and shut down cleanly on SIGTERM, health green.
 
-**2. Seed (about 2.5 minutes; safe to run again, it then copies nothing).** Copies the old service's current revision,
+**2. Seed (about 2.5 minutes; safe to run again, it then copies nothing, and an interrupted seed resumes without copying a finished revision twice).** Copies the old service's current revision,
 its import ledger and the operator's withheld list read-only (the pointer last, so it never names a missing revision),
 draws this build's own preview from that revision (language names, codes-only artifacts; the old preview is not
 copied), runs `check` (fails the seed unless it ends "verified: …") and publishes the first live wash frame.

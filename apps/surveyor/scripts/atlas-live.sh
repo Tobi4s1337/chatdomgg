@@ -63,10 +63,16 @@ seed() {
     local rev
     rev=$(node -p "require('$from/current.json').revision")
     [ -d "$from/revisions/$rev" ] || die "the seed's current revision $rev is missing"
-    say "copying revision $rev read-only"
-    rm -rf "$to/revisions/$rev.partial"
-    nice -n 10 ionice -c3 cp -a "$from/revisions/$rev" "$to/revisions/$rev.partial"
-    mv "$to/revisions/$rev.partial" "$to/revisions/$rev"
+    # A revision directory only ever appears whole (copied under .partial, then renamed), so one that exists is
+    # complete: a seed interrupted after the rename and before the pointer resumes here without copying it again.
+    if [ -d "$to/revisions/$rev" ]; then
+      say "revision $rev already copied"
+    else
+      say "copying revision $rev read-only"
+      rm -rf "$to/revisions/$rev.partial"
+      nice -n 10 ionice -c3 cp -a "$from/revisions/$rev" "$to/revisions/$rev.partial"
+      mv -T "$to/revisions/$rev.partial" "$to/revisions/$rev"
+    fi
     cp -a "$from/ledger/imports.ndjson" "$to/ledger/"
     if [ -d "$from/moderation" ]; then cp -a "$from/moderation" "$to/"; fi   # the operator's withheld list
     cp -a "$from/current.json" "$to/current.json.partial"
