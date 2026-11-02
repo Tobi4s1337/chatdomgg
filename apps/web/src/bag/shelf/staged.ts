@@ -15,6 +15,8 @@ const at = (day: number, hour: number, minute: number) => Date.UTC(2026, 9, day,
 const HOURS = ['dusk', 'night', 'dawn', 'day'] as const;
 const MOODS = ['mist', 'clear', 'rain', 'clear', 'mist'] as const;
 const WORDS: Record<string, string> = { dusk: 'at dusk', night: 'at night', dawn: 'at dawn', day: 'in the afternoon' };
+/** The hour (UTC, as the card reads it) each band is staged at, so "at dusk" never sits beside a morning time. */
+const CLOCK: Record<string, number> = { dusk: 18, night: 22, dawn: 6, day: 14 };
 const WEATHER: Record<string, string> = { mist: 'in the mist', clear: 'in clear weather', rain: 'in the rain' };
 /** How long the staged kingdom takes to answer, so the pending state is visible in review. */
 const ROUND_TRIP_MS = 140;
@@ -27,7 +29,7 @@ function stagedKeepsake(index: number, place: 'shelf' | 'bag', slot: number | nu
   const def = FISH_MOUNT_DEFINITIONS[index % FISH_MOUNT_DEFINITIONS.length]!;
   const species = FISH_SPECIES.find(fish => fish.id === fishOfMount(def.id));
   const hour = HOURS[index % HOURS.length]!, mood = MOODS[index % MOODS.length]!;
-  const caught = at(1 + (index * 3) % 30, 6 + (index * 5) % 15, (index * 17) % 60);
+  const caught = at(1 + (index * 3) % 30, CLOCK[hour]! + index % 2, (index * 17) % 60);
   // Toward the top of the species' range: these are the catches worth keeping.
   const lengthMm = species ? Math.round(species.lengthMm[0] + (species.lengthMm[1] - species.lengthMm[0]) * (.72 + (index % 4) * .07)) : 300;
   const weightG = species ? Math.round(species.weightG[0] + (species.weightG[1] - species.weightG[0]) * (.7 + (index % 4) * .075)) : 900;

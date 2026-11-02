@@ -82,9 +82,11 @@ describe('the keepsake shelf', () => {
         }
         expect(cell(asset, Math.floor(x), y, slot.back - 1)).not.toBe(0);
       }
-      // A candle over every post and one on each bay's middle tier, each light in its own flame.
+      // A candle over every post and one on each bay's middle tier, and two display lamps over each tier, each light in
+      // its own flame or glowing strip.
       expect(shelf.lights).toHaveLength(bays + 1 + bays);
-      for (const [lx, ly, lz] of shelf.lights) expect([MAT.fabricGold, MAT.fabricOrange, MAT.hairGold]).toContain(cell(asset, Math.floor(lx), Math.floor(ly), Math.floor(lz)));
+      expect(shelf.lamps).toHaveLength(bays * 3 * 2);
+      for (const [lx, ly, lz] of [...shelf.lights, ...shelf.lamps]) expect([MAT.fabricGold, MAT.fabricOrange, MAT.hairGold]).toContain(cell(asset, Math.floor(lx), Math.floor(ly), Math.floor(lz)));
       expect(parts(asset).parts).toBe(1);
     }
   }, 60_000);

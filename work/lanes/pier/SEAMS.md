@@ -35,6 +35,9 @@ writes itself; section 6 lists the other lanes that touch this one.
   drag (a finger after a short hold), by Shift and an arrow key, and shows all nine places while a tool moves. Play
   gets a `Shelf` ledger page (order 27), a `pier.shelf` world prompt ("Your shelf" at your door, "Wren’s shelf" at a
   shown one), and nine rebindable `hotbar.1`..`hotbar.9` bindings that follow the rail's keys.
+- **Review**: `/-/pier?view=shelf` (`count=`, `card=1`, `visit=1`, `drawer=1`) stages the shelf with no kingdom behind it.
+  The shelf content (`createKeepsakeShelf`) now carries `lamps` beside `lights`: a brass display lamp under the board over
+  each tier, two per bay, lighting the plaques; places stop three cells above them.
 
 How another lane writes into the item foundation, tested by example in `apps/realm/src/items/seams.test.ts` (memory
 and Postgres): gather defines a game keepsake (`game:pong.ribbon`, `branch: 'kept'`, `keepsake: true`, places

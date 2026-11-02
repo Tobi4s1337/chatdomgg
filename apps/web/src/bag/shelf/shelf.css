@@ -127,6 +127,8 @@
 .cdsh-turn[data-dir='prev'] { left: 16px; }
 .cdsh-turn[data-dir='next'] { right: 16px; }
 .cdsh[data-card='open'][data-compact='false'] .cdsh-turn[data-dir='next'] { right: calc(16px + 420px); }
+/* The open tag hangs down the right side; the door's toggle and the close step left of it rather than under it. */
+.cdsh[data-card='open'][data-compact='false'] .cdsh-head { right: calc(22px + 420px); }
 .cdsh-turn:hover { box-shadow: inset 0 1px 0 #ffe1b44d, inset 0 -2px 0 #00000059, 0 0 0 1px #c99f5b59, 0 6px 14px #0c0a1c80, 0 0 16px #ffc46a33; }
 .cdsh-turn:active { transform: scale(.96); }
 .cdsh-turn:disabled { opacity: .32; cursor: default; }

@@ -32,6 +32,8 @@ const TOP_BOARD = floorOf(SHELF_TIERS) - BOARD;         // the board over the to
 const FRIEZE = TOP_BOARD + BOARD, CORNICE = FRIEZE + 5, CORNICE_TOP = CORNICE + 6;
 const CREST_H = 11, CREST_HALF = 34;
 const CANDLE_CROWN = 9, CANDLE_TIER = 7, FLAME = 4;
+/** Cells a display lamp hangs below the board over a tier; a place's clear room stops above it. */
+const LAMP_DROP = 3;
 const HEIGHT = CORNICE_TOP + 4 + CANDLE_CROWN + 1 + FLAME;
 const DEPTH = 29;
 /** Pride order inside a bay: [tier, column] for slot 0..11. */
@@ -64,6 +66,8 @@ export interface KeepsakeShelf {
   readonly slots: readonly ShelfSlot[];
   /** Candle flames, in avatar cells (cell centres), for the room's warm light. */
   readonly lights: readonly Vec3[];
+  /** The display lamps' glowing strips under each board, in avatar cells: steady light into every tier. */
+  readonly lamps: readonly Vec3[];
   /** Each bay's span across x, in cells, posts included: for framing a camera on one bay at a time. */
   readonly bayX: readonly (readonly [number, number])[];
 }
@@ -128,6 +132,19 @@ function candle(b: Block, cx: number, y: number, cz: number, wax: number): Vec3 
   return [cx + .5, top + 2.5, cz + .5];
 }
 
+/**
+ * A brass display lamp hung under the front of a board: a hood on two short arms, a warm glowing strip under it and
+ * capped ends. `under` is the first air cell below the board. Returns the strip's centre, for the room's warm light.
+ */
+function displayLamp(b: Block, cx: number, under: number): Vec3 {
+  const x0 = cx - 5, x1 = cx + 5, z0 = FRONT - 4;
+  for (const ax of [x0 + 2, x1 - 3]) b.put(ax, under, z0 + 1, MAT.brass);
+  for (let x = x0; x < x1; x++) for (let z = z0; z < z0 + 3; z++) b.put(x, under - 1, z, MAT.brass);
+  b.put(x0 - 1, under - 2, z0 + 1, MAT.brass); b.put(x1, under - 2, z0 + 1, MAT.brass);
+  for (let x = x0; x < x1; x++) b.put(x, under - 2, z0 + 1, x === cx || x === cx - 1 ? MAT.hairGold : MAT.fabricGold);
+  return [cx, under - 1.5, z0 + 1.5];
+}
+
 /** A stoneware crock with a band, soil and a sprig of leaves and small flowers. */
 function crock(b: Block, cx: number, y: number, cz: number, band: number, bloom: number, seed: number): void {
   for (let k = 0; k < 6; k++) b.disc(cx + .5, y + k, cz + .5, k === 0 ? 2.2 : k === 5 ? 2.2 : 2.7, k === 3 ? band : MAT.cream);
@@ -190,7 +207,7 @@ export function createKeepsakeShelf(bays: number): KeepsakeShelf {
   const width = OVER + bays * STEP + POST + OVER;
   const b = new Block(width, HEIGHT, DEPTH);
   const posts = Array.from({ length: bays + 1 }, (_, k) => OVER + k * STEP);
-  const lights: Vec3[] = [];
+  const lights: Vec3[] = [], lamps: Vec3[] = [];
 
   // Back panel: tongue-and-groove boards, a dark groove every ten cells.
   for (let x = posts[0]! + POST; x < posts[bays]!; x++) for (let y = FOOT; y < TOP_BOARD; y++) {
@@ -295,6 +312,15 @@ export function createKeepsakeShelf(bays: number): KeepsakeShelf {
     for (let y = CORNICE_TOP + 3; y < CORNICE_TOP + 6; y++) for (let x = Math.floor(cx) - 1; x <= Math.floor(cx); x++) b.put(x, y, FRONT, MAT.goldLeaf);
   }
 
+  // Display lamps under the board over every tier, two to a bay, so the plaques at the back are lit, not only the ends.
+  for (let k = 0; k < bays; k++) {
+    const inner0 = posts[k]! + POST;
+    for (let t = 0; t < SHELF_TIERS; t++) {
+      const under = floorOf(t + 1) - BOARD - 1;
+      for (const column of [1, 3]) lamps.push(displayLamp(b, inner0 + MARGIN + column * SLOT_W, under));
+    }
+  }
+
   // Candles on the cornice over every post.
   for (const px of posts) lights.push(candle(b, px + 3, CORNICE_TOP, FRONT - 6, CANDLE_CROWN));
 
@@ -333,13 +359,14 @@ export function createKeepsakeShelf(bays: number): KeepsakeShelf {
     const floor = floorOf(tier) + (tier === 1 ? 1 : 0);
     slots.push(Object.freeze({
       at: Object.freeze([x0 + SLOT_W / 2, floor, (BACK + FRONT) / 2]) as unknown as Vec3,
-      width: SLOT_W - 2, height: floorOf(tier) + SLOT_H - floor - 1, depth: FRONT - BACK, back: BACK, bay, tier, column,
+      width: SLOT_W - 2, height: floorOf(tier) + SLOT_H - floor - 1 - LAMP_DROP, depth: FRONT - BACK, back: BACK, bay, tier, column,
     }));
   }
   const bayX = Array.from({ length: bays }, (_, k) => Object.freeze([posts[k]!, posts[k + 1]! + POST] as const));
   return {
     asset: { id: `keepsake:shelf.${bays}`, revision: 1, lattice: 'avatar', size: [width, HEIGHT, DEPTH], voxels: b.v },
     bays, slots: Object.freeze(slots), lights: Object.freeze(lights.map(light => Object.freeze(light) as unknown as Vec3)),
+    lamps: Object.freeze(lamps.map(lamp => Object.freeze(lamp) as unknown as Vec3)),
     bayX: Object.freeze(bayX),
   };
 }

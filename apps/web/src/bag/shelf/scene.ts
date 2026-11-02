@@ -345,7 +345,8 @@ export function createShelfScene(canvas: HTMLCanvasElement, options: ShelfSceneO
         for (const state of materials.values()) shadows.bindReceiver(state.material);
       }
       roomDetach.push(shadows.register(shelfMesh));
-      const lights = nextShelf.lights.map(([x, y, z]): Vec3 => [shelfAt.x + x * CELL, shelfAt.y + y * CELL, shelfAt.z + z * CELL]);
+      // The candles and the display lamps light the field together; only the flames get halos.
+      const lights = [...nextShelf.lights, ...nextShelf.lamps].map(([x, y, z]): Vec3 => [shelfAt.x + x * CELL, shelfAt.y + y * CELL, shelfAt.z + z * CELL]);
       field = candleField(lights, [0, 0, 0], [ax, ay, az]);
       for (const state of materials.values()) applyField(state, field);
       pageList = shelfPages(next, compact);
