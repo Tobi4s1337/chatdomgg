@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { expect, it } from 'vitest';
 import { MATERIALS } from '@chatdom/content';
 import { createVoxelMaterial } from '@chatdom/render';
-import { createWalkerFigures, createWalkerSplit, FIGURE_HEAD_TOP_M, FIGURE_VARYINGS, nearestWalkers, walkerFigureGeometry, WALKER_DETAIL_BLEND_MS } from './walker-figures';
+import { createWalkerFigures, FIGURE_ATTRIBUTE_SLOTS, FIGURE_VERTEX, createWalkerSplit, FIGURE_HEAD_TOP_M, FIGURE_VARYINGS, nearestWalkers, walkerFigureGeometry, WALKER_DETAIL_BLEND_MS } from './walker-figures';
 
 const walker = (id: string, z: number, self = false) => ({ id, x: 0, y: 0, z, ...(self ? { self } : {}) });
 const eye = { x: 0, y: 1.6, z: 0 };
@@ -53,10 +53,10 @@ it('draws every simple figure in one instanced draw, feet on the datum, easing i
     // Grown past its first capacity, still a single mesh.
     expect(meshes()).toHaveLength(1);
     expect(figures.count).toBe(40);
-    const fade = meshes()[0]!.geometry.getAttribute('aLodFade');
-    expect(fade.getX(0)).toBeGreaterThan(0); expect(fade.getX(0)).toBeLessThan(1);
+    const fade = () => meshes()[0]!.geometry.getAttribute('aGait');
+    expect(fade().getZ(0)).toBeGreaterThan(0); expect(fade().getZ(0)).toBeLessThan(1);
     figures.update(many, 200);
-    expect(fade.getX(0)).toBe(1);
+    expect(fade().getZ(0)).toBe(1);
     const matrix = new THREE.Matrix4(); meshes()[0]!.getMatrixAt(5, matrix);
     expect(new THREE.Vector3().setFromMatrixPosition(matrix).toArray()).toEqual([5, 3, 0]);
     expect(figures.heads.get('f5')!.y).toBeCloseTo(3 + FIGURE_HEAD_TOP_M + .08, 9);
@@ -80,7 +80,7 @@ it('stands on its soles and feeds every input the kingdom paint shader reads', (
   geometry.computeBoundingBox();
   expect(geometry.boundingBox!.min.y).toBe(0);
   expect(geometry.boundingBox!.max.y).toBeCloseTo(FIGURE_HEAD_TOP_M, 6);
-  for (const name of ['position', 'normal', 'aPaint', 'aMask', 'aFaceUv', 'aTangentU', 'aTangentV']) expect(geometry.getAttribute(name)).toBeDefined();
+  for (const name of ['position', 'normal', 'aPaint', 'aFaceUv', 'aTangentU', 'aTangentV', 'aMask']) expect(geometry.getAttribute(name)).toBeDefined();
   const lighting = createVoxelMaterial(MATERIALS, 'avatar'), scene = new THREE.Scene();
   const figures = createWalkerFigures(scene, lighting);
   const mesh = scene.children[0] as THREE.InstancedMesh, material = mesh.material as THREE.ShaderMaterial;
@@ -91,4 +91,32 @@ it('stands on its soles and feeds every input the kingdom paint shader reads', (
   for (const name of inputs) expect(mesh.geometry.getAttribute(name), name).toBeDefined();
   expect(inputs.length + 2 + 4).toBeLessThanOrEqual(14);
   figures.dispose(); lighting.dispose(); geometry.dispose();
+});
+
+it('draws seated walkers in full however far they are, since a simple figure cannot sit', async () => {
+  const { nearestWalkers } = await import('./walker-figures');
+  const poses = Array.from({ length: 6 }, (_, i) => ({ id: `w${i}`, x: i, y: 0, z: 0 }));
+  const seated = { id: 'fire', x: 90, y: 0, z: 0, posture: 'seated' };
+  const { full, simple } = nearestWalkers([...poses, seated], { x: 0, y: 0, z: 0 }, 3);
+  expect(full.map(pose => pose.id)).toEqual(['fire', 'w0', 'w1']);
+  expect(simple.map(pose => pose.id)).not.toContain('fire');
+});
+
+it('fits the 16 vertex attribute slots desktop GPUs offer, so the shader links and the kingdom keeps drawing', () => {
+  // Every `in` the figure stage declares, plus what three.js adds for an instanced mesh: position, normal and the
+  // instance matrix (a mat4, four slots). Over budget the program fails to link and the scene stops on its first figure.
+  const declared = [...FIGURE_VERTEX.matchAll(/\bin\s+(vec[234]|float|mat4)\s+([^;]+);/g)]
+    .flatMap(([, type, names]) => names!.split(',').map(() => type === 'mat4' ? 4 : 1));
+  const slots = declared.reduce((sum, n) => sum + n, 0) + 1 + 1 + 4;
+  expect(slots).toBeLessThanOrEqual(FIGURE_ATTRIBUTE_SLOTS);
+  const lighting = createVoxelMaterial(MATERIALS, 'avatar'), scene = new THREE.Scene();
+  const figures = createWalkerFigures(scene, lighting);
+  const mesh = scene.children[0] as THREE.InstancedMesh;
+  const used = Object.values(mesh.geometry.attributes).length + 4;
+  expect(used).toBeLessThanOrEqual(FIGURE_ATTRIBUTE_SLOTS);
+  // Every attribute the stage reads is fed by the geometry (three.js supplies the instance matrix itself).
+  for (const [, , names] of FIGURE_VERTEX.matchAll(/\bin\s+(vec[234]|float)\s+([^;]+);/g)) for (const name of names!.split(',').map(n => n.trim())) {
+    expect(mesh.geometry.getAttribute(name), name).toBeDefined();
+  }
+  figures.dispose(); lighting.dispose();
 });

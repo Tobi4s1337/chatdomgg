@@ -137,8 +137,12 @@ for it.
   `unadjustedMovement` and keeps OS acceleration; that is accepted, not retried.
 - **Flicks survive.** `createSpikeFilter` keeps every event of a real fast turn (traces of 400 to 900 px per event
   at 60 to 1000 Hz pass whole) and drops only an isolated warp: an event of 160 px or more that is over six times
-  both neighbours, or that flips sign in the middle of steady motion. A big event is held for its next neighbour or
-  24 ms at most, so a flick is at worst one frame late and never lost. Nothing is clamped.
+  both neighbours, or that flips sign in the middle of steady motion. A big event the next one carries on in the same
+  direction at a twelfth of its size or more is a flick, not a warp: a snap from a still hand often lands in one
+  coalesced 60 Hz frame and decays over the next (`[0, 1000, 120, 0]`), and a warp has no such tail. A big event is
+  held for its next neighbour or 24 ms at most, so a flick is at worst one frame late and never lost. Nothing is
+  clamped. Where `requestPointerLock` returns a promise, the promise alone answers that request: Chromium without raw
+  input also fires `pointerlockerror` for the refused raw request, which must not end the ordinary retry.
 - **Letting go.** The browser spends Escape on the lock and may never deliver the keydown. The lock's own
   `pointerlockchange` is the signal: `onLetGo('browser')` fires, keys and sticks clear, and the play layer opens the
   ledger. Blur and a hidden page release the same way.
@@ -172,8 +176,9 @@ belong above that band or are hidden while walking (integrator).
 not deliver that keydown to the page at all. If one does arrive while `document.pointerLockElement` is still
 the world surface (it clears only on the following `pointerlockchange`, whatever order the listeners run in),
 it means "give me my cursor": the interaction owner should not also stand the citizen up with it, and the ledger
-opens from the lock change. With a free cursor Escape goes to whoever owns it first; if nobody took it, it opens
-or closes the ledger.
+opens from the lock change. With a free cursor Escape goes to whoever owns it first: the play session hears it last,
+in the bubble phase on the window, so a gesture panel, a place view, a seat or the ledger's own book closes on it and
+takes it; only an Escape nobody took opens or closes the ledger. While a key plate listens, every key is the plate's.
 
 ## Integration recipe (integrator)
 
@@ -352,6 +357,29 @@ REALM_SIMULATED=1 REALM_STORAGE=memory REALM_PORT=5191 pnpm --filter @chatdom/re
 Do not start a second process on an occupied port. The actual kingdom entry above consumes its founded collision
 world through realm wiring; the separate reference court remains a labelled diagnostic.
 
+### PL10 stills (`stills/`)
+
+```sh
+node apps/web/src/walk/stills/stills.mjs [--land town|hamlet] [--only third,first]      # SwiftShader, one still per lock hold
+chatdom-pc-lease -- node apps/web/src/walk/stills/stills.mjs --target pc [--land town]  # real GPU, web 5192, realm 5191
+```
+
+The real kingdom page on a stills fixture (`stills/fixture.ts`: Willowmere or the Brackenfold hamlet, full production
+collision, spots found in that collision: an open street, the slope where the drawn ground and the half-metre physics
+differ most, a stair tread and a raised floor) with a memory realm the script owns. `stills/page.tsx` stages each
+still from `?still=` and sets `__chatdomReady` only once it has settled, so `chatdom-pc shot`, which can only open a
+URL, takes the same pictures: `third`, `first`, `dusk` (bubbles over lit homes, only walkers in the street) and
+`<slope|stairs|floor>-<before|after>` (the "before" binds the walk with `drawnGround: false`, bodies at the physics
+height), and `crowd`, the 5,000-chatter town: Willowmere's 240 homes (the largest town the founding makes) all lit and
+speaking at about 15 lines a second, a Poisson stream from random lit homes, with 120 more walkers that the runner
+joins from Node (not the page, which only draws them) and stands on open spots at least 2.5 m apart, so the nearest
+64 draw in full and the rest as simple figures, seen from above and behind the walker. The hamlet is nine people: three walking and six chatting from home; its street stands in the open nearest a
+cluster of six homes, because a hamlet's homes sit beyond bubble range of its market. The sole close-up camera is
+chosen in the collision (low beside the feet, on the first side with a clear sight line). A chat still waits for a
+bubble to ease fully in, and a page that fails while setting up ends the run at once, so nothing waits out a timeout
+under the capture lock. Settings the page changes (first or third person) are put back when it closes. Dev only:
+never a route, never built.
+
 ## WC07 founder finish (main, 2026-10-31)
 
 The distance-driven avatar cycle is 1.8 m per complete left/right cycle rather than .75 m. Arm swing is .30 rad,
@@ -447,3 +475,14 @@ main's authority and projection seams, plus actual town and stream captures at t
 
 `node apps/web/src/walk/check-integration.mjs` applies the recorded six-file consumer patch entirely in memory
 and typechecks it with the current workspace. It writes no main-owned source and does not replace runtime review.
+
+## Running the tests
+
+Every walk, play, kingdom-walk and gait test runs in Node; none needs a DOM. jsdom is not a dependency of this
+workspace (it is in no lockfile), and from `apps/web` vitest reads `vite.config.ts`, where the Solid plugin
+defaults the environment to jsdom. So name the environment, or use the root config:
+
+```
+nice -n 10 pnpm --filter @chatdom/web exec vitest run --environment node src/walk src/play
+nice -n 10 pnpm exec vitest run apps/web/src/walk apps/web/src/play   # from the repo root
+```

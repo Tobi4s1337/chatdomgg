@@ -63,6 +63,30 @@ export function latestSpeech(canvas: HTMLCanvasElement): SpeechFrame | undefined
 
 /** Frames older than this belong to a scene that has stopped drawing (disposed, hidden or replaced). */
 export const SPEECH_FRAME_STALE_MS = 400;
+/** However slowly a scene draws, a frame this old means it has stopped. */
+export const SPEECH_FRAME_STALE_MAX_MS = 3_000;
+
+/**
+ * Follows how often one scene publishes, so a slow device keeps its bubbles between two of its own frames. A fixed
+ * 400 ms dropped every home bubble on a scene drawing below about 2.5 frames a second: the layer re-laid out between
+ * two frames (a walker moved, a fade went on), found the last frame stale, dropped the lines and faded them in again
+ * from nothing on the next frame, so they never showed. A frame is stale once it is older than three of the scene's
+ * own recent intervals, never sooner than 400 ms and never later than 3 s.
+ */
+export function createSpeechCadence() {
+  let lastAt = -Infinity, interval = 0;
+  return {
+    /** Records a published frame's time. */
+    heard(at: number): void {
+      const gap = at - lastAt;
+      if (Number.isFinite(gap) && gap > 0) interval = interval ? interval * .7 + Math.min(gap, SPEECH_FRAME_STALE_MAX_MS) * .3 : Math.min(gap, SPEECH_FRAME_STALE_MAX_MS);
+      lastAt = at;
+    },
+    /** How old a frame from this scene may be before it no longer counts. */
+    get staleAfter(): number { return Math.min(SPEECH_FRAME_STALE_MAX_MS, Math.max(SPEECH_FRAME_STALE_MS, interval * 3)); },
+    reset(): void { lastAt = -Infinity; interval = 0; },
+  };
+}
 
 /**
  * An always-drawn, empty object that learns which canvas its scene is drawn into. Three calls `onBeforeRender`

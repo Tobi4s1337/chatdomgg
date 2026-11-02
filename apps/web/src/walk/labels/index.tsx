@@ -1,7 +1,7 @@
 import { createComputed, createSignal, For, onCleanup, onMount, Show, untrack, type Accessor } from 'solid-js';
 import type { LabelRect } from '../labels';
 import { sharedPlaySettings } from '../../play/settings';
-import { SPEECH_FRAME_STALE_MS, subscribeSpeech, type SpeechFrame } from './bus';
+import { createSpeechCadence, subscribeSpeech, type SpeechFrame } from './bus';
 import { labelLimits, type LabelDensity } from './density';
 import { joinSpeech, labelContentKey, type PersonLabel } from './model';
 import { createLabelStage, type LabelSize } from './stage';
@@ -57,6 +57,7 @@ export function PeopleLabels(props: PeopleLabelsProps) {
   const settings = sharedPlaySettings();
   let density = { labels: settings.get('labels'), bubbles: settings.get('bubbles') }, reduced = settings.get('reducedMotion');
   let speech: { canvas: HTMLCanvasElement; frame: SpeechFrame } | undefined;
+  const cadence = createSpeechCadence();
   let viewport = { width: 0, height: 0 };
   let scheduled = false, raf = 0, disposed = false;
 
@@ -70,7 +71,7 @@ export function PeopleLabels(props: PeopleLabelsProps) {
     if (disposed || !root) return;
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     const now = performance.now();
-    const frame = speech && now - speech.frame.at <= SPEECH_FRAME_STALE_MS && owns(speech.canvas) ? speech.frame : null;
+    const frame = speech && now - speech.frame.at <= cadence.staleAfter && owns(speech.canvas) ? speech.frame : null;
     const people = joinSpeech(untrack(() => props.people), frame);
 
     let membership = false;
@@ -118,7 +119,11 @@ export function PeopleLabels(props: PeopleLabelsProps) {
     const resize = () => { viewport = { width: layer.clientWidth, height: layer.clientHeight }; schedule(); };
     resize(); props.onRoot?.(layer);
     const observer = new ResizeObserver(resize); observer.observe(layer);
-    const offSpeech = subscribeSpeech((canvas, frame) => { if (!owns(canvas)) return; speech = { canvas, frame }; schedule(); });
+    const offSpeech = subscribeSpeech((canvas, frame) => {
+      if (!owns(canvas)) return;
+      if (speech?.canvas !== canvas) cadence.reset();
+      cadence.heard(frame.at); speech = { canvas, frame }; schedule();
+    });
     const offSettings = settings.subscribe(next => { density = { labels: next.labels, bubbles: next.bubbles }; reduced = next.reducedMotion; schedule(); });
     onCleanup(() => {
       disposed = true; observer.disconnect(); offSpeech(); offSettings();

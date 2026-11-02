@@ -98,6 +98,9 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
   let walkers: WalkerSlots = new Map();
   const speech = new Map<number, Spoken>();
   let lastAtMs = -Infinity, namedHomes: ReadonlySet<number> = new Set();
+  // Kept with the frame and the doors they come from, never rebuilt per drawn frame (thousands of chatters).
+  let namesBySlot: ReadonlyMap<number, string | null> = new Map(), presentSlots: ReadonlySet<number> = new Set();
+  let sampleIndex: ReadonlyMap<number, number> = new Map();
 
   const probe = createCanvasProbe();
   scene.add(probe);
@@ -123,7 +126,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
 
   function buildDoors(atMs: number) {
     doorBuiltAt = atMs; nextArrivalMs = Infinity;
-    if (!frame) { doorSamples = []; return; }
+    if (!frame) { doorSamples = []; presentSlots = new Set(); sampleIndex = new Map(); return; }
     const built: CitizenMotionSample[] = [];
     for (const window of frame.windows) {
       if (!window.present) continue;
@@ -135,6 +138,8 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
         goalNodeId: route.destinationNodeId, goalReached: true });
     }
     doorSamples = built.sort((a, b) => a.slot - b.slot);
+    presentSlots = new Set(doorSamples.map(sample => sample.slot));
+    sampleIndex = new Map(doorSamples.map((sample, index) => [sample.slot, index]));
   }
   /** A walker's own feet stand in for their door sample; they are drawn, so they are seen. */
   const walkerSample = (sample: CitizenMotionSample): CitizenSample => {
@@ -153,11 +158,10 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       const eyeWorld = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
       const eyeLocal = identity ? eyeWorld : eyeWorld.clone().applyMatrix4(new THREE.Matrix4().copy(toWorld).invert());
       const eye: Vec3 = [eyeLocal.x, eyeLocal.y, eyeLocal.z];
-      const names = new Map(frame?.windows.map(window => [window.slot, window.publicName]));
       for (const [slot, { cue }] of speech) {
         if (cue.asOf > lastAtMs) continue;
         const walker = walkers.get(slot);
-        const name = namedHomes.has(slot) ? null : names.get(slot) ?? null;
+        const name = namedHomes.has(slot) ? null : namesBySlot.get(slot) ?? null;
         if (walker) { lines.push({ slot, cueId: cue.id, name, parts: cue.parts, from: 'walker' }); continue; }
         const anchor = anchorFor(slot);
         if (!anchor) continue;
@@ -191,6 +195,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       if (frame && (frame.kingdomId !== next.kingdomId || frame.epoch !== next.epoch || frame.origin !== next.origin || next.asOf < frame.asOf)) { suppliedLooks.clear(); speech.clear(); }
       for (const window of next.windows) if (window.look !== undefined) suppliedLooks.set(window.slot, window.look);
       frame = next; motion.applyFrame(next);
+      namesBySlot = new Map(next.windows.map(window => [window.slot, window.publicName]));
       doorBuiltAt = -Infinity;
     },
     /** Called only after the outgoing renderer has stopped advancing its motion. */
@@ -238,9 +243,8 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       if (doorBuiltAt === -Infinity || atMs < doorBuiltAt || atMs >= nextArrivalMs) buildDoors(atMs);
       samples = walkers.size ? doorSamples.map(sample => walkers.has(sample.slot) ? walkerSample(sample) : sample) : doorSamples;
       carrying = walkers.size ? samples.filter(sample => { const walker = walkers.get(sample.slot); return walker && !walker.posture; }) : [];
-      const present = new Set(doorSamples.map(sample => sample.slot));
       for (const [slot, spoken] of speech) {
-        if (!present.has(slot)) { speech.delete(slot); continue; }
+        if (!presentSlots.has(slot)) { speech.delete(slot); continue; }
         if (spoken.cue.asOf > atMs) continue;
         spoken.firstSeenMs ??= atMs;
         if (atMs >= speechHoldUntil(spoken.cue, spoken.firstSeenMs)) speech.delete(slot);
@@ -270,7 +274,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
      * their own door, unseen (opacity 0) and already home, so an arrival shot frames their lit window and nothing
      * aims at a person who is not there.
      */
-    subject(slot: number) { return samples.find(sample => sample.slot === slot); },
+    subject(slot: number) { const index = sampleIndex.get(slot); return index === undefined ? undefined : samples[index]; },
     /**
      * The host still calls this every 80 ms. Speech now goes to the label layer every frame from `drawLanterns`,
      * so this returns nothing; it only learns which homes already show their name plate, so a bubble from that home
@@ -284,6 +288,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
     },
     clear() {
       pendingCheckpoint = undefined; motion.clear(); frame = undefined; doorSamples = []; doorBuiltAt = -Infinity; nextArrivalMs = Infinity;
+      namesBySlot = new Map(); presentSlots = new Set(); sampleIndex = new Map();
       samples = []; carrying = []; walkers = new Map(); suppliedLooks.clear(); speech.clear(); lanterns.update([], 0, 0);
     },
     dispose() { lanterns.dispose(); material.dispose(); disposeCanvasProbe(probe); speech.clear(); },

@@ -115,6 +115,7 @@ function Motion() {
         const point = projectToCanvas(head, camera, width, height);
         if (!point) continue;
         next.set(`walker:${walker.id}`, point);
+        next.set(`speech:${walker.id}`, point);
         walkers.push({ id: `walker:${walker.id}`, walkerId: walker.id, slot: walker.slot, ...point, self: walker.self, name: walker.name });
       }
       const speech: SpeechAnchor[] = [];

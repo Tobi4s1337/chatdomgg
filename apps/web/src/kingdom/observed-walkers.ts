@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { MATERIALS } from '@chatdom/content';
-import { REALM_NO_HOME_SLOT, REALM_WALKER_FRAME_INTERVAL_MS, type RealmFoundedManifest, type RealmWalkerFeed, type RealmWalkerFrame } from '@chatdom/shared/realm';
+import { REALM_NO_HOME_SLOT, REALM_WALKER_FRAME_INTERVAL_MS, type CollisionWorld, type RealmFoundedManifest, type RealmWalkerFeed, type RealmWalkerFrame } from '@chatdom/shared/realm';
 import type { VoxelRenderState } from '@chatdom/render';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
-import type { CitizenMotionSample } from '@chatdom/world';
+import type { CitizenMotionSample, SettlementPlan } from '@chatdom/world';
+import { sampleFoundedTerrain } from '@chatdom/world/founded-collision';
+import { createWalkerGround } from '../walk/ground';
 import type { InteractionRegistry } from '@chatdom/world/interactions';
 import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import type { RealmWalkerPose } from '../realm/client';
@@ -60,16 +62,25 @@ export function createObservedWalkerTrack(manifest: WalkerScene) {
   };
 }
 
-/** The public stream observes exactly the same actual people, without opening a walk client or input owner. */
+/**
+ * The public stream observes exactly the same actual people, without opening a walk client or input owner. With
+ * `land` (the installed plan and its compiled collision) every body is drawn on the drawn ground as in the walk;
+ * without it bodies stand at their physical height.
+ */
 export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Camera, canvas: HTMLCanvasElement,
-  pool: VoxelWorkerPool, material: VoxelRenderState, manifest: WalkerScene, feed: RealmWalkerFeed, registry: InteractionRegistry) {
+  pool: VoxelWorkerPool, material: VoxelRenderState, manifest: WalkerScene, feed: RealmWalkerFeed, registry: InteractionRegistry,
+  land?: { readonly plan: SettlementPlan; readonly world: CollisionWorld }) {
   const looks = createDefaultCitizenLooks(), known = new Set(looks.map(look => look.id));
   const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool });
   // The nearest walkers in full, the rest as simple figures, crossfading at the boundary.
   const split = createWalkerSplit(), figures = createWalkerFigures(scene, material);
   const track = createObservedWalkerTrack(manifest);
   let poses: readonly WalkerPresentation[] = [];
-  const off = feed.subscribe(frame => track.receive(frame, performance.now()), () => { track.clear(); split.clear(); poses = []; people.update([]); figures.update([]); });
+  const terrain = land ? sampleFoundedTerrain(land.plan) : undefined;
+  const ground = land && terrain ? createWalkerGround({ scene, world: () => land.world, terrainFloorY: terrain.origin[1], terrainCeilingY: terrain.ceilingY }) : undefined;
+  const heights = new Map<string, number>();
+  let lastDraw: number | null = null;
+  const off = feed.subscribe(frame => track.receive(frame, performance.now()), () => { track.clear(); split.clear(); poses = []; people.update([]); figures.update([]); ground?.reset(); });
   const point = new THREE.Vector3(), eye = new THREE.Vector3();
   return {
     get poses() { return poses; },
@@ -77,14 +88,26 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
     get heads() { return people.heads; },
     frame(now: number) { poses = presentWalkers(track.sample(now), track.seats, registry); return poses; },
     draw(now: number, visible = true) {
-      const drawn = (visible ? poses : []).filter(pose => known.has(pose.look));
-      const { full, simple } = split.split(drawn, eye.setFromMatrixPosition(camera.matrixWorld), now);
+      // A walker whose look is not here yet is still a person in the street: a simple figure until it is.
+      const parts = split.split(visible ? poses : [], eye.setFromMatrixPosition(camera.matrixWorld), now);
+      const full = parts.full.filter(({ pose }) => known.has(pose.look));
+      const simple = [...parts.simple, ...parts.full.filter(({ pose }) => !known.has(pose.look))];
+      const dt = lastDraw === null ? 0 : Math.max(0, Math.min(.1, (now - lastDraw) / 1000));
+      lastDraw = now;
+      heights.clear();
+      const bodyY = (pose: WalkerPresentation) => {
+        if (!ground) return pose.y;
+        let y = heights.get(pose.id);
+        if (y === undefined) heights.set(pose.id, y = ground.bodyY(pose.id, { x: pose.x, y: pose.y, z: pose.z, posed: !!pose.posture }, dt));
+        return y;
+      };
       people.update(full.map(({ pose, opacity }) => ({ id: pose.id, look: pose.look,
-        position: [pose.x, pose.y, pose.z] as const, heading: pose.yaw * Math.PI * 2 / 256,
+        position: [pose.x, bodyY(pose), pose.z] as const, ...(ground ? { ground: ground.groundFor(pose.id), floor: ground.floorAt } : {}), heading: pose.yaw * Math.PI * 2 / 256,
         distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, opacity,
         ...(pose.posture ? { posture: pose.posture } : {}), time: now / 1000 })), camera);
-      figures.update(simple.map(({ pose, opacity }) => ({ id: pose.id, position: [pose.x, pose.y, pose.z] as const,
+      figures.update(simple.map(({ pose, opacity }) => ({ id: pose.id, position: [pose.x, bodyY(pose), pose.z] as const,
         heading: pose.yaw * Math.PI * 2 / 256, distance: pose.distance, speed: pose.posture ? 0 : pose.speed, opacity })), now);
+      ground?.retain(heights);
     },
     labels(): WalkerLabel[] {
       const labels: WalkerLabel[] = [];

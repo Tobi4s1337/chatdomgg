@@ -1,6 +1,6 @@
 /**
  * The two lands a walker can stand in, founded exactly as the realm provider founds them, and the solids of the
- * fixtures drawn in them. For `solids.test.ts`: every box here comes from a real blueprint or the drawn anvil sculpt.
+ * fixtures drawn in them. For `solids-cases.ts` (run per land by `solids-old.test.ts` and `solids-grand.test.ts`): every box here comes from a real blueprint or the drawn anvil sculpt.
  */
 import { KingdomIdSchema, VOXEL_METRES, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
 import { WALK_BODY, WALK_BUTTON, WALK_HZ, type CollisionWorld, type PlayerState, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
@@ -25,6 +25,8 @@ export interface Land {
   readonly world: CollisionWorld;
   readonly floorY: number;
   readonly ceilingY: number;
+  /** The compiled terrain volume in x and z: outside it the compiler answers with clipped barriers. */
+  readonly volume: { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number };
 }
 
 /** The realm provider's founding pipeline for `plan` with no citizens: a bench founding, never shown to anyone. */
@@ -38,8 +40,9 @@ async function found(kingdomId: string, plan: SettlementPlan): Promise<RealmFoun
 }
 
 function land(name: string, scene: RealmFoundedScene, world: CollisionWorld): Land {
-  const terrain = sampleFoundedTerrain(scene.plan);
-  return { name, scene, world, floorY: terrain.origin[1], ceilingY: terrain.ceilingY };
+  const terrain = sampleFoundedTerrain(scene.plan), [ox, bottom, oz] = terrain.origin;
+  return { name, scene, world, floorY: bottom, ceilingY: terrain.ceilingY,
+    volume: { minX: ox, maxX: ox + terrain.columns * .5, minZ: oz, maxZ: oz + terrain.rows * .5 } };
 }
 
 /** The old land: the simulated founded town's adopted plan, its collision compiled by the realm's own compiler. */
@@ -154,6 +157,50 @@ export function standAt(land: Land, x: number, z: number): PlayerState | null {
   return null;
 }
 
+/**
+ * The compiled world around one fixture, read once. The collision compiler's answer to a query is every fixed box
+ * (placement solids and terrain columns) that strictly intersects it, de-duplicated and sorted, plus barriers clipped
+ * to the query only where it leaves the terrain volume. So for a query inside a region that is itself inside the
+ * volume, the answer is exactly the region's answer filtered by the same strict intersection, in the same order.
+ * The region's boxes sit in metre bins, so a query reads a few bins instead of building terrain columns again.
+ * Queries that leave the region go to the compiled world itself. `solids-cases.ts` checks the two agree query for
+ * query along real walks; this only saves the walk sweep from asking the compiler's broad phase every tick.
+ */
+export function neighbourhood(land: Land, around: SolidBox, margin: number): CollisionWorld {
+  const v = land.volume;
+  const region: SolidBox = { min: [Math.max(v.minX, around.min[0] - margin), land.floorY, Math.max(v.minZ, around.min[2] - margin)],
+    max: [Math.min(v.maxX, around.max[0] + margin), land.ceilingY, Math.min(v.maxZ, around.max[2] + margin)] };
+  const boxes = land.world.query(region);
+  // The compiler's refusal of an oversized query is the query itself as one solid: never read that as the region.
+  if (boxes.length === 1 && boxes[0]!.min.every((n, i) => n === region.min[i]) && boxes[0]!.max.every((n, i) => n === region.max[i])) return land.world;
+  const x0 = Math.floor(region.min[0]), z0 = Math.floor(region.min[2]);
+  const columns = Math.ceil(region.max[0]) - x0, rows = Math.ceil(region.max[2]) - z0;
+  const bins: number[][] = Array.from({ length: columns * rows }, () => []);
+  const cell = (n: number, lo: number, count: number) => Math.min(count - 1, Math.max(0, Math.floor(n) - lo));
+  boxes.forEach((b, index) => {
+    for (let z = cell(b.min[2], z0, rows); z <= cell(b.max[2], z0, rows); z++)
+      for (let x = cell(b.min[0], x0, columns); x <= cell(b.max[0], x0, columns); x++) bins[x + columns * z]!.push(index);
+  });
+  const inside = (b: SolidBox) => b.min.every((n, i) => n >= region.min[i]! && b.max[i]! <= region.max[i]! && n <= b.max[i]!);
+  const seen = new Uint32Array(boxes.length);
+  let stamp = 0;
+  return { revision: land.world.revision, query(bounds) {
+    if (!inside(bounds)) return land.world.query(bounds);
+    stamp++;
+    const hits: number[] = [];
+    for (let z = cell(bounds.min[2], z0, rows); z <= cell(bounds.max[2], z0, rows); z++)
+      for (let x = cell(bounds.min[0], x0, columns); x <= cell(bounds.max[0], x0, columns); x++) for (const index of bins[x + columns * z]!) {
+        if (seen[index] === stamp) continue;
+        seen[index] = stamp;
+        const b = boxes[index]!;
+        if (bounds.min[0] < b.max[0] && bounds.max[0] > b.min[0] && bounds.min[1] < b.max[1] && bounds.max[1] > b.min[1]
+          && bounds.min[2] < b.max[2] && bounds.max[2] > b.min[2]) hits.push(index);
+      }
+    // The region's answer is sorted, so its indices in order are the compiler's own order.
+    return hits.sort((a, b) => a - b).map(index => boxes[index]!);
+  } };
+}
+
 export interface Approach {
   readonly from: readonly [number, number];
   readonly sprint: boolean;
@@ -177,21 +224,29 @@ function depth(a: SolidBox, b: SolidBox): number {
  * Walk a body at the shared movement law's rate from `start` straight at the fixture's centre for `seconds`, and
  * measure how deep it ever got into the fixture's solids.
  */
-export function walkInto(land: Land, fixture: Fixture, start: PlayerState, sprint: boolean, seconds = 4): Approach {
+export function walkInto(land: Land, fixture: Fixture, start: PlayerState, sprint: boolean, seconds = 4,
+  world: CollisionWorld = land.world): Approach {
   const box = bounds(fixture.solids), cx = (box.min[0] + box.max[0]) / 2, cz = (box.min[2] + box.max[2]) / 2;
   const s = { ...start }, from = [start.x, start.z] as const;
   let deepest = 0, reached = false;
   for (let tick = 0; tick < seconds * WALK_HZ; tick++) {
     const dx = cx - s.x, dz = cz - s.z, length = Math.hypot(dx, dz) || 1;
     const input: WalkInput = { moveX: Math.round(dx / length * 127), moveZ: Math.round(dz / length * 127),
-      buttons: sprint ? WALK_BUTTON.sprint : 0, yaw: 0, collisionRevision: land.world.revision };
-    stepPlayer(s, input, 1 / WALK_HZ, land.world);
+      buttons: sprint ? WALK_BUTTON.sprint : 0, yaw: 0, collisionRevision: world.revision };
+    const was = [s.x, s.y, s.z, s.vx, s.vy, s.vz, s.grounded] as const;
+    stepPlayer(s, input, 1 / WALK_HZ, world);
     const at = body(s), near = body(s, .05);
     if (s.x > box.min[0] && s.x < box.max[0] && s.z > box.min[2] && s.z < box.max[2]) reached = true;
-    for (const solid of fixture.solids) {
+    // Only boxes the grown body can touch are measured: the fixture's bounds reject the rest of the walk at once.
+    if (overlaps(near, box, 0)) for (const solid of fixture.solids) {
       if (!reached && overlaps(near, solid, 0)) reached = true;
       if (overlaps(at, solid)) deepest = Math.max(deepest, depth(at, solid));
     }
+    // The movement law is a pure function of the state, the input and the revision, and the input here is a pure
+    // function of the position. A tick that leaves the state exactly as it found it (pressed against a wall) is a
+    // fixed point: every later tick would repeat it, so the rest of the walk is already measured.
+    if (was[0] === s.x && was[1] === s.y && was[2] === s.z && was[3] === s.vx && was[4] === s.vy && was[5] === s.vz
+      && was[6] === s.grounded) break;
   }
   return { from, sprint, deepest, reached };
 }

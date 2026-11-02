@@ -120,7 +120,7 @@ it('places a walker’s bubble on the projected head and a chat-only bubble abov
     const people = joinSpeech(peopleFromLabels([label], []), speech);
     const staged = new Map(stage.frame({ people, viewport: { width: 1440, height: 900 }, limits: labelLimits(), reducedMotion: true, now: atMs, size: () => sizes })
       .map(item => [item.id, item]));
-    const bubble = staged.get(`walker:${walker.id}`)!;
+    const bubble = staged.get(`speech:${walker.id}`)!;
     expect(bubble.person.speech).toEqual(parts);
     // Tail tip on the head, this frame: the same camera, no older projection.
     expect(bubble.left + sizes.width / 2).toBeCloseTo(label.x, 6);

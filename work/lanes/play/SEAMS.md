@@ -197,6 +197,60 @@ Shapes as gather's SEAMS §1 and pier's SEAMS §2 asked, with these decisions:
 - `registerWorldPrompt`: asked five times a second with your pose; the nearest prompt is shown by the HUD with your
   use key, and the use key (or a click with nothing in hand) uses it, unless a realm interaction target is highlighted.
 
+### B1b. Doors into rooms of their own (landed in `play/portal.ts` and `play/portals.ts`, additive; PL10, 2026-11-02)
+
+The tavern is a separate room (gather SEAMS §1). Play confirms gather's descriptor as proposed, with one optional field:
+
+```ts
+// apps/web/src/play/portal.ts (types and the state machine) · apps/web/src/play/portals.ts (the page's one transfer)
+export interface PortalAnchor { readonly feet: Vec3; readonly yaw: number }
+export interface PortalDescriptor { id; kingdomId; sourceRoom: 'kingdom'; destinationRoom: string;   // e.g. 'tavern'
+  entryAnchor: PortalAnchor; returnAnchor: PortalAnchor; title?: string }                          // title: curtain words
+export interface PortalDestination { room: string; title: string;                                   // gather: 'tavern', 'The tavern'
+  mount(host: HTMLElement, visit: PortalVisit): { ready: Promise<void>; dispose(): void | Promise<void> } }
+export interface PortalVisit { portal; entry: RealmEntry; endpoint: string; self; readonly active: boolean;
+  leave(): void;              // walk back out through the door
+  fail(reason: string): void } // the destination cannot go on: play takes you back outside
+export function registerPortalDestination(destination: PortalDestination): () => void;
+export function registerPortalDoor(portal: PortalDescriptor, options?: { label?: string; reach?: number }): () => void;
+export function portalAvailable(portal): boolean; enterPortal(portal); leavePortal(); portalPhase(); onPortalPhase(listener);
+```
+
+How gather mounts the tavern (in its own `apps/web/src/tavern/play-slot.ts`, plus one line in `play/providers.ts`):
+- `registerPortalDestination({ room: 'tavern', title: 'The tavern', mount(host, visit) { ... } })`. `mount` renders
+  `TavernRoomSurface` into `host` (a full-window layer under the curtain) with `open: () => connectTavern(visit.endpoint,
+  visit.entry)`. `ready` resolves once the room has placed you (the same barrier `connectTavern` already waits for);
+  `dispose` leaves the tavern room: resolve once the room has really let you go (a connection already gone counts),
+  reject only while you may still be in it; play awaits it before the kingdom is joined again and, if it fails or stays
+  silent past 12 s, strands the curtain and calls `dispose` again on the person's retry. A terminal leave or revoked session calls `visit.fail(reason)`; the surface's exit
+  door calls `visit.leave()`. The destination composes play's HUD in its own walk with `createPlaySession` as the
+  kingdom walk does.
+- `registerPortalDoor(descriptor)` puts "Go into the tavern" by the outside anchor, shown only while the door really
+  opens; the use key or a click goes through. Gather builds the descriptor from grand-world's exterior door anchor.
+
+What play guarantees:
+- One walker in exactly one room: the source is left (any seat stood up first, pointer lock let go) before the
+  destination is mounted, and the destination is disposed before the source is joined again. One journey at a time.
+  Each leave is awaited to the end, never raced against the curtain, and the source's `leave` and a destination's
+  `dispose` share one rule: resolve once the room has really let you go, reject only while you may still be in it. A
+  source leave that fails or stays silent sends you back outside without the tavern, and the way back sees that
+  leave through first (it joins one still going, runs a refused one once more at once, then on the person's retry),
+  so the kingdom is never joined on top of a connection it may still hold. A leave that went through is never
+  repeated. A destination that will not let go strands the curtain with a retry, and a late success goes on by
+  itself. A `visit.fail` from inside `mount` is heard at once.
+- Entry is reported only after `ready`. A refusal, a 20 s silence or a `fail` puts you back outside the door with one
+  calm line on parchment. If the way back is not open, the curtain says so and waits for the person's "Try the door
+  again"; it never pretends.
+- The session travels, never the ticket: the visit carries the source's `RealmEntry`, so the destination asks for a
+  fresh ticket. A visit that has ended can no longer steer the transfer.
+- The curtain (`play/hud/portal-curtain.ts`): the street darkens and an arched oak door swings open onto lamplight with
+  the room's name in the story face; coming out you step through the light. Wood on the door, two steps over the
+  threshold boards, brass on the latch, at the ledger's interface volume. Reduced motion only fades.
+
+What the source must give (the kingdom entry; `KingdomWalkBinding.portal`, optional): `{ entry, endpoint, title,
+leave(), rejoin({ portal, anchor }) }`. Without it no door opens. Asked of front-door and of the realm room's owner in
+play's progress (`needs:`), because spawning at the return anchor is the room's decision.
+
 ### B2. The look (play provides to panel-window, front-door, atlas-map, raid-show, forge-wish)
 
 ```ts

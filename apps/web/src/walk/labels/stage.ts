@@ -14,7 +14,8 @@ import { BUBBLE_RISE_PX, LABEL_FADE_IN_MS, LABEL_FADE_OUT_MS } from './timing';
  *   even when clearly covered it holds for a short while before it fades;
  * - a label that is down needs clear space with a margin before it may appear;
  * - bubbles come before names, your own name before others, then the nearest first;
- * - a new bubble may push aside other people's name plates (never another bubble or your own name).
+ * - a new bubble may push aside other people's name plates (never another bubble or your own name), and the
+ *   speaker's own name plate always: a walker's bubble is its own label beside their name, eased in over it.
  */
 
 export interface LabelSize { readonly width: number; readonly height: number }
@@ -143,7 +144,9 @@ export function createLabelStage() {
         || reserved.some(rect => near(c.bounds, rect, NEW_LABEL_CLEARANCE_PX))) continue;
       const blockers = accepted.filter(other => near(c.bounds, other.bounds, NEW_LABEL_CLEARANCE_PX));
       if (blockers.length) {
-        if (!c.speaking || blockers.some(other => other.speaking || other.person.self)) continue;
+        // A person's own name plate always yields to their own bubble, yours too.
+        const own = (other: Candidate) => c.person.walkerId !== undefined && other.person.walkerId === c.person.walkerId;
+        if (!c.speaking || blockers.some(other => !own(other) && (other.speaking || other.person.self))) continue;
         for (const other of blockers) { accepted.splice(accepted.indexOf(other), 1); names--; drop(other); }
       }
       take(c);

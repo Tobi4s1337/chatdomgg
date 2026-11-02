@@ -38,40 +38,54 @@ export interface SpeechLabelInput {
   readonly opacity?: number;
 }
 
-/** Join only on authority-supplied home slots. Unmatched speech and walkers remain visible independently. */
+/** The id of a walker's bubble: its own label beside the name plate, so each eases in and out on its own. */
+export const speechLabelId = (walkerId: string) => `speech:${walkerId}`;
+
+/** A walker's bubble at the same projected head as their name plate. */
+function walkerBubble(walker: PersonLabel, name: string | null, parts: CitizenChatCue['parts']): PersonLabel {
+  return { ...walker, id: speechLabelId(walker.walkerId!), name: name ?? walker.name, speech: parts };
+}
+
+/**
+ * Join only on authority-supplied home slots. Unmatched speech and walkers remain visible independently. A walker
+ * who speaks keeps their name plate and gains a bubble beside it (see `joinSpeech`).
+ */
 export function peopleFromLabels(walkers: readonly WalkerLabelInput[], speech: readonly SpeechLabelInput[]): PersonLabel[] {
-  const bySlot = new Map(walkers.filter(walker => walker.slot !== undefined).map(walker => [walker.slot!, walker]));
-  const spoken = new Set<string>();
-  const people: PersonLabel[] = speech.map(cue => {
-    const walker = bySlot.get(cue.slot);
-    if (walker) spoken.add(walker.id);
-    return { id: walker ? `walker:${walker.id}` : `slot:${cue.slot}`, ...(walker ? { walkerId: walker.id } : {}), slot: cue.slot,
-      x: cue.x, y: cue.y, distance: cue.distance, self: walker?.self ?? false, name: cue.name ?? walker?.name ?? null,
-      speech: cue.parts, ...(cue.opacity !== undefined ? { opacity: cue.opacity } : walker?.opacity !== undefined ? { opacity: walker.opacity } : {}) };
-  });
-  for (const walker of walkers) if (!spoken.has(walker.id)) people.push({ id: `walker:${walker.id}`, walkerId: walker.id,
+  const people: PersonLabel[] = walkers.map(walker => ({ id: `walker:${walker.id}`, walkerId: walker.id,
     ...(walker.slot !== undefined ? { slot: walker.slot } : {}), x: walker.x, y: walker.y, distance: walker.distance,
-    self: walker.self, name: walker.name, ...(walker.opacity !== undefined ? { opacity: walker.opacity } : {}) });
+    self: walker.self, name: walker.name, ...(walker.opacity !== undefined ? { opacity: walker.opacity } : {}) }));
+  const bySlot = new Map(people.filter(person => person.slot !== undefined).map(person => [person.slot!, person]));
+  for (const cue of speech) {
+    const walker = bySlot.get(cue.slot);
+    if (walker) { people.push({ ...walkerBubble(walker, cue.name, cue.parts), x: cue.x, y: cue.y, distance: cue.distance,
+      ...(cue.opacity !== undefined ? { opacity: cue.opacity } : {}) }); continue; }
+    people.push({ id: `slot:${cue.slot}`, slot: cue.slot, x: cue.x, y: cue.y, distance: cue.distance, self: false, name: cue.name,
+      speech: cue.parts, ...(cue.opacity !== undefined ? { opacity: cue.opacity } : {}) });
+  }
   return people;
 }
 
 /**
- * Join the frame's names with the same frame's speech. A walker's line rides on that walker's own label, so the
- * bubble sits on the head the host projected this frame; there is no second, older projection of the same head.
+ * Join the frame's names with the same frame's speech. A walker's line becomes a bubble at that walker's own
+ * projected head, beside their name plate, so the bubble sits on the head the host projected this frame (there is
+ * no second, older projection of it) and each label fades and rises on its own: the bubble eases in over the name,
+ * the name yields under it, and they cross back when the line ends. A speaker beyond bubble range keeps their name.
  * A chat-only person's line becomes a bubble over their home. A walker hidden this frame (behind a wall, too far,
  * your own head in first person) has no label, and so no bubble: it fades where it was.
  */
 export function joinSpeech(people: readonly PersonLabel[], frame: SpeechFrame | null | undefined): PersonLabel[] {
   if (!frame?.speech.length) return [...people];
-  const walkerBySlot = new Map<number, number>();
-  people.forEach((person, index) => { if (person.walkerId !== undefined && person.slot !== undefined && !walkerBySlot.has(person.slot)) walkerBySlot.set(person.slot, index); });
+  const walkerBySlot = new Map<number, PersonLabel>();
+  for (const person of people) if (person.walkerId !== undefined && person.slot !== undefined && !person.speech && !walkerBySlot.has(person.slot)) walkerBySlot.set(person.slot, person);
   const joined = [...people], homes: PersonLabel[] = [];
+  const bubbles = new Set(people.filter(person => person.speech?.length).map(person => person.id));
   for (const line of frame.speech) {
-    const index = walkerBySlot.get(line.slot);
-    if (index !== undefined) {
-      const walker = joined[index]!;
-      // A host that still supplies its own speech for this walker keeps it; the per-frame line wins only on content.
-      joined[index] = { ...walker, name: line.name ?? walker.name, speech: line.parts };
+    const walker = walkerBySlot.get(line.slot);
+    if (walker) {
+      const bubble = walkerBubble(walker, line.name, line.parts);
+      // A host that still supplies its own speech for this walker keeps its place; the per-frame line wins on content.
+      if (bubbles.has(bubble.id)) joined[joined.findIndex(person => person.id === bubble.id)] = bubble;
+      else { joined.push(bubble); bubbles.add(bubble.id); }
       continue;
     }
     if (line.from !== 'home' || line.x === undefined || line.y === undefined || line.distance === undefined) continue;

@@ -28,6 +28,11 @@ export const LOOK = {
   spikePx: 160,
   /** A held event is a warp when it is more than this many times larger than both of its neighbours. */
   spikeRatio: 6,
+  /**
+   * ...unless the next event carries on in the same direction at least this fraction of its size: a snap from a
+   * still hand that lands in one coalesced frame and decays over the next is a flick. A warp has no such tail.
+   */
+  tailFraction: 1 / 12,
   /** A neighbour this small counts as a still hand when judging direction flips. */
   stillPx: 6,
   /** How long a held event waits for its next neighbour before it is judged alone. */
@@ -81,7 +86,8 @@ export function createSpikeFilter(): SpikeFilter {
   let before = { dx: 0, dy: 0 }, held: Held | null = null, rejected = 0;
   const isWarp = (h: Held, after: { dx: number; dy: number } | null) => {
     const mag = size(h.dx, h.dy), prev = size(h.before.dx, h.before.dy), next = after ? size(after.dx, after.dy) : 0;
-    if (mag > prev * LOOK.spikeRatio && mag > next * LOOK.spikeRatio) return true;
+    const tail = !h.flip && !!after && dot(after, h) > 0 && next >= mag * LOOK.tailFraction;
+    if (mag > prev * LOOK.spikeRatio && mag > next * LOOK.spikeRatio && !tail) return true;
     // A reversal in the middle of a steady motion that the next event does not continue: the sign-flip warp.
     if (h.flip && after && next >= LOOK.stillPx && dot(after, h.before) > 0 && dot(after, h) <= 0) return true;
     return false;
@@ -176,6 +182,8 @@ export function createWalkLook(surface: LockSurface, doc: LockDocument, keyboard
   const filter = createSpikeFilter();
   let mode: LookMode = surface.requestPointerLock ? 'idle' : 'unavailable';
   let enabled = true, attempt = 0, dx = 0, dy = 0, raw = true, ownExit = false, lastLetGo = -Infinity, refusals = 0;
+  /** The attempt whose request returned a promise: its answer comes from the promise, never the error event. */
+  let promised = -1;
   let keyboardLocked = false, disposed = false;
   const leases = new Map<number, string>();
   let leaseId = 0;
@@ -213,6 +221,9 @@ export function createWalkLook(surface: LockSurface, doc: LockDocument, keyboard
       if (withRaw && (error as { name?: string })?.name === 'NotSupportedError') { raw = false; ask(id, false); return; }
       refuse(id); return;
     }
+    // A promise answers for this attempt: Chrome also fires pointerlockerror for the refused raw request, which
+    // must not end the ordinary retry that follows it in the same click.
+    promised = result && typeof result.then === 'function' ? id : promised;
     if (result && typeof result.then === 'function') result.then(undefined, (error: unknown) => {
       // Raw input is not on this platform: once, at once, inside the same click, ask for the ordinary lock.
       if (withRaw && id === attempt && (error as { name?: string })?.name === 'NotSupportedError') { raw = false; ask(id, false); return; }
@@ -242,7 +253,7 @@ export function createWalkLook(surface: LockSurface, doc: LockDocument, keyboard
       else set(resting());
     }
   };
-  const error = () => refuse(attempt);
+  const error = () => { if (promised !== attempt) refuse(attempt); };
   const move = (rawEvent: Event) => {
     if (mode !== 'locked' || !ours()) return;
     const event = rawEvent as unknown as MoveEventLike;

@@ -46,33 +46,81 @@ export function createWalkFootsteps() {
   };
 }
 
+type StepScene = Pick<RealmFoundedScene, 'assets' | 'placements' | 'materials'>;
+type Placed = { readonly placement: RealmFoundedScene['placements'][number]; readonly blueprint: RealmFoundedScene['assets'][number]['blueprint']; readonly home?: boolean };
+
+/**
+ * The step a solid voxel gives, by what it is made of. `indoor` is a home's own floor: boards there are the
+ * floor's wood; out of doors (a bridge deck, a pier, a stall's boards) they are planks.
+ */
+function voxelStep(surface: string, indoor: boolean): StepSurface | undefined {
+  switch (surface) {
+    case 'wood': return indoor ? 'wood' : 'plank';
+    case 'stone': case 'earth': case 'metal': case 'glass': case 'fabric': case 'grass': return surface;
+    case 'plaster': return 'stone';
+    default: return undefined;
+  }
+}
+
+/** The solid voxel a sole rests on in one placement, read from its retained blueprint; later writes (air too) win. */
+function readPlaced({ placement, blueprint }: Placed, materials: ReadonlyMap<number, { readonly solid: boolean; readonly surface: string }>,
+  feet: Vec3): { readonly solid: boolean; readonly surface: string } | null | undefined {
+  const unit = VOXEL_METRES[blueprint.lattice];
+  const dx = feet[0] - placement.position[0], dz = feet[2] - placement.position[2];
+  const local = placement.rotation === 0 ? [dx, dz] : placement.rotation === 1 ? [-dz, dx]
+    : placement.rotation === 2 ? [-dx, -dz] : [dz, -dx];
+  const cell = [Math.floor(local[0]! / unit), Math.floor((feet[1] - placement.position[1] - .001) / unit), Math.floor(local[1]! / unit)];
+  if (!cell.every((value, axis) => value >= 0 && value < blueprint.size[axis]!)) return undefined;
+  for (let index = blueprint.boxes.length - 1; index >= 0; index--) {
+    const box = blueprint.boxes[index]!;
+    if (!cell.every((value, axis) => value >= box.from[axis]! && value < box.to[axis]!)) continue;
+    return materials.get(box.material) ?? null;
+  }
+  return undefined;
+}
+
 /** Samples only an accepted home's retained geometry, on contact; later writes (including air) win. */
-export function createHomeStepMaterial(scene: Pick<RealmFoundedScene, 'assets' | 'placements' | 'materials'>) {
+export function createHomeStepMaterial(scene: StepScene) {
   const assets = new Map(scene.assets.map(asset => [asset.assetHash, asset.blueprint]));
   const homes = new Map(scene.placements.filter(placement => placement.plotId && assets.get(placement.assetHash)?.kind === 'home')
     .map(placement => [placement.plotId!, { placement, blueprint: assets.get(placement.assetHash)! }]));
   const materials = new Map(scene.materials.materials.map(material => [material.id, material]));
-  return (plotId: string | null, feet: Vec3): AudioMaterial | undefined => {
+  return (plotId: string | null, feet: Vec3): StepSurface | undefined => {
     const home = plotId ? homes.get(plotId) : undefined;
     if (!home) return undefined;
-    const { placement, blueprint } = home;
-    const dx = feet[0] - placement.position[0], dz = feet[2] - placement.position[2];
-    const local = placement.rotation === 0 ? [dx, dz] : placement.rotation === 1 ? [-dz, dx]
-      : placement.rotation === 2 ? [-dx, -dz] : [dz, -dx];
-    const cell = [Math.floor(local[0]! / VOXEL_METRES.build),
-      Math.floor((feet[1] - placement.position[1] - .001) / VOXEL_METRES.build),
-      Math.floor(local[1]! / VOXEL_METRES.build)];
-    for (let index = blueprint.boxes.length - 1; index >= 0; index--) {
-      const box = blueprint.boxes[index]!;
-      if (!cell.every((value, axis) => value >= box.from[axis]! && value < box.to[axis]!)) continue;
-      const material = materials.get(box.material);
-      if (!material?.solid) return undefined;
-      switch (material.surface) {
-        case 'wood': case 'stone': case 'earth': case 'metal': case 'glass': case 'fabric': return material.surface;
-        case 'grass': return 'earth';
-        case 'plaster': return 'stone';
-        default: return undefined;
-      }
+    const voxel = readPlaced(home, materials, feet);
+    return voxel?.solid ? voxelStep(voxel.surface, true) : undefined;
+  };
+}
+
+/**
+ * The placement a sole stands on in the street, whoever stands there: a bridge deck over a channel, a pier, the
+ * castle steps, a stall's boards, the floor of someone's home seen from the street. Read from the same retained
+ * blueprints the collision is compiled from, so the step is what is drawn under the foot. Undefined off every
+ * placement (then the public ground decides). Placements are binned in 4 m cells; a step reads a few blueprints.
+ */
+export function createPlacementStepSurface(scene: StepScene) {
+  const assets = new Map(scene.assets.map(asset => [asset.assetHash, asset.blueprint]));
+  const materials = new Map(scene.materials.materials.map(material => [material.id, material]));
+  const bins = new Map<string, Placed[]>();
+  for (const placement of scene.placements) {
+    const blueprint = assets.get(placement.assetHash);
+    if (!blueprint) continue;
+    const unit = VOXEL_METRES[blueprint.lattice], w = blueprint.size[0] * unit, d = blueprint.size[2] * unit;
+    const [px, , pz] = placement.position, turn = placement.rotation;
+    // The footprint after the cardinal turn (local [x, z] goes to [z, -x] per turn).
+    const xs = turn === 0 ? [px, px + w] : turn === 1 ? [px, px + d] : turn === 2 ? [px - w, px] : [px - d, px];
+    const zs = turn === 0 ? [pz, pz + d] : turn === 1 ? [pz - w, pz] : turn === 2 ? [pz - d, pz] : [pz, pz + w];
+    const placed: Placed = { placement, blueprint, home: blueprint.kind === 'home' };
+    for (let z = Math.floor(zs[0]! / 4); z <= Math.floor(zs[1]! / 4); z++) for (let x = Math.floor(xs[0]! / 4); x <= Math.floor(xs[1]! / 4); x++) {
+      const key = `${x},${z}`, bin = bins.get(key);
+      if (bin) bin.push(placed); else bins.set(key, [placed]);
+    }
+  }
+  return (feet: Vec3): StepSurface | undefined => {
+    for (const placed of bins.get(`${Math.floor(feet[0] / 4)},${Math.floor(feet[2] / 4)}`) ?? []) {
+      const voxel = readPlaced(placed, materials, feet);
+      if (voxel?.solid) return voxelStep(voxel.surface, placed.home === true);
     }
     return undefined;
   };
