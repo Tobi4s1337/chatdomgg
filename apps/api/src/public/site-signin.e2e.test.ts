@@ -10,8 +10,8 @@ import { migrateRealmSchema } from '../../../realm/src/persistence/migrate';
 
 /**
  * The front door's sign-in round trip on the built public gateway: a visitor reading a section of the story page
- * (or a legal page) presses the seal, signs in through the development provider, and comes back to the same place,
- * signed in. Runs against its own throwaway schema, dropped afterwards, and its own port.
+ * (or a legal page, or standing at a kingdom's walk-in gate) presses the seal, signs in through the development
+ * provider, and comes back to the same place, signed in. Runs against its own throwaway schema, dropped afterwards, and its own port.
  *   node scripts/public/build.mjs --no-panel
  *   PUBLIC_SITE_E2E=1 node --env-file=<file with DATABASE_URL> node_modules/vitest/vitest.mjs run apps/api/src/public/site-signin.e2e.test.ts
  * PUBLIC_SITE_E2E_PORT picks the gateway's port (5198 by default; 5170–5186 or 5198–5199).
@@ -34,9 +34,9 @@ async function untilUp(): Promise<void> {
   throw new Error(`The gateway did not answer within a minute:\n${log}`);
 }
 
-/** Presses the first seal in view and signs in as the provider's first person. */
-async function signIn(page: Page): Promise<void> {
-  await page.locator('.site-top [data-seal="out"]').click();
+/** Presses the seal (the header's, unless told) and signs in as the provider's first person. */
+async function signIn(page: Page, seal = '.site-top [data-seal="out"]'): Promise<void> {
+  await page.locator(seal).click();
   await page.waitForURL(url => url.pathname.endsWith('/simulated-oidc/authorize'));
   await page.locator('button[name="person"]').first().click();
   await page.waitForURL(url => url.origin === base && !url.pathname.startsWith('/api/'));
@@ -100,6 +100,10 @@ describe.skipIf(!enabled)('signing in from the front door', () => {
     // The development provider names its people; the seal says who is signed in once the session reply carries it.
     await expect.poll(() => page.locator('.site-top .cd-signin-who-label').textContent()).toBe('Signed in with Twitch');
     expect(await page.locator('.site-top .cd-signin-walk').getAttribute('href')).toBe('/map');
+    // A returning visitor is offered the Atlas first, in the hero's own seal; its scroll link steps aside.
+    await expect.poll(() => page.locator('.story-hero .cd-signin-walk').textContent()).toContain('Open the Atlas');
+    expect(await page.locator('.story-hero .cd-signin-walk').getAttribute('href')).toBe('/map');
+    expect(await page.locator('.story-hero-ways > .story-way').isVisible()).toBe(false);
 
     // Signing out turns the seals back, says so, and the session is gone.
     // In the header the wax opens the card with the way out.
@@ -146,4 +150,59 @@ describe.skipIf(!enabled)('signing in from the front door', () => {
     expect(await page.locator('[data-seal="out"]').count()).toBeGreaterThan(0);
     await context.close();
   }, 90_000);
+
+  const GATE = '/?walk=1&kingdom=129634568';
+
+  it('brings a visitor back to the same kingdom’s walk-in gate, signed in', async () => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    await page.goto(`${base}${GATE}`);
+    // Signed out, the gate offers the seal at once, without waiting on the kingdom's realm.
+    await page.locator('[data-gate="waiting"]').waitFor({ timeout: 30_000 });
+    expect(await page.locator('.ke-plate h1').textContent()).toBe('Your place is waiting.');
+    // The seal returns to the front page (the gate's own address has a query the sign-in service refuses) ...
+    const href = await page.locator('.ke-ways [data-seal="out"]').getAttribute('href');
+    expect(href).toBe('/api/realm/auth/start?returnTo=%2F');
+    await signIn(page, '.ke-ways [data-seal="out"]');
+    // ... and the front page carries the visitor on to the same gate.
+    await page.waitForURL(`${base}${GATE}`, { timeout: 30_000 });
+    // Signed in, the gate goes through to the kingdom; no realm runs here, so it says it could not open, and why.
+    await page.locator('[data-gate="closed"]').waitFor({ timeout: 30_000 });
+    expect(await page.locator('.ke-plate h1').textContent()).toBe('The gate could not open.');
+    expect(await page.locator('.ke-said').textContent()).toContain('What the gate said');
+    expect(await page.locator('.ke-ways button').textContent()).toContain('Try the gate again');
+    await page.locator('.ke-top [data-seal="in"]').waitFor();
+    expect(await page.locator('[data-seal="out"]').count()).toBe(0);
+
+    // Signing out at the gate turns it back to the seal.
+    await page.locator('.ke-top button.cd-signin-wax').click();
+    await page.locator('.ke-top .cd-signin-out').click();
+    await page.locator('[data-gate="waiting"]').waitFor();
+    await expect.poll(() => page.locator('[data-cd-notice-words]').textContent()).toContain('You have signed out');
+    await context.close();
+  }, 90_000);
+
+  it('says so at the gate when the visitor turns back at Twitch', async () => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await page.goto(`${base}${GATE}`);
+    await page.locator('.ke-ways [data-seal="out"]').click();
+    await page.waitForURL(url => url.pathname.endsWith('/simulated-oidc/authorize'));
+    await page.locator('button[name="decision"][value="deny"]').click();
+    // Back at the same gate, not the front page, with the outcome said there and taken out of the address.
+    await page.waitForURL(url => url.origin === base && url.searchParams.get('kingdom') === '129634568', { timeout: 30_000 });
+    await page.locator('[data-gate="waiting"]').waitFor({ timeout: 30_000 });
+    await expect.poll(() => page.locator('[data-cd-notice-words]').textContent()).toContain('turned back');
+    expect(new URL(page.url()).searchParams.has('signin')).toBe(false);
+    await context.close();
+  }, 90_000);
+
+  it('asks which kingdom when the gate names none', async () => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await page.goto(`${base}/?walk=1`);
+    await page.locator('[data-gate="lost"]').waitFor({ timeout: 30_000 });
+    expect(await page.locator('.ke-ways a').first().getAttribute('href')).toBe('/map');
+    await context.close();
+  }, 60_000);
 });

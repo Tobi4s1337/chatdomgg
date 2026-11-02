@@ -55,7 +55,7 @@ Operator details (fetched from https://saartech.de/impressum and /datenschutz on
   Quality bar: the kit reads as one family on the front page, the Atlas and the panel; a long Thai or Arabic name never overflows or clips; right-to-left names stay right-to-left inside an English line; no font flash that shifts layout.
   Done when: a kit bench page shows names in at least 8 scripts (Cyrillic, Arabic, Hebrew, Devanagari, Thai, Chinese, Japanese, Korean) in the seal, the footer, a card-like slip and on a canvas, with stills at 1440x900 and 390x844 in `work/evidence/front-door/fd11/`; a test proves a Latin-only page requests no non-Latin font file; the kit's tests pass; `grep -rn SIMULATED packages/ui/src --include=*.tsx --include=*.ts` finds nothing outside tests and benches.
 
-- [ ] **FD12 — Sign in from anywhere, and come back to the same place.**
+- [x] **FD12 — Sign in from anywhere, and come back to the same place.**
   Outcome: wherever you are on a page this lane owns, or on the Atlas through the kit, one gesture signs you in with Twitch and returns you to the exact same view; the walk-in gate is part of the same designed flow.
   - The return trip keeps the view (scroll section on the story page; position, zoom and open card on the Atlas through atlas-map's view handle; the kingdom you were about to enter) using the one return-view helper the kit exports (see SEAMS.md).
   - The walk-in gate in `apps/web/src/kingdom-entry/` ("Your place is waiting", "The gate could not open") is rebuilt from the kit with the sign-in seal, its states designed in the kingdom's voice; `kingdom-entry/simulated.ts` and `live.ts` stop requiring the word SIMULATED in notices, and the staged entry remains a dev bench only.

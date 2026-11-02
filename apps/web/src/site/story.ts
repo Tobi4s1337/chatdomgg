@@ -1,5 +1,6 @@
 // The story page: the shared site start, then the hero's slow sequence of real captures of the land at dusk, the
 // sections settling in as they are reached, and the live Atlas mounted near the end of the page when it exists.
+import { atlasFirstWays } from '@chatdom/ui/site';
 import { markReady, startSite } from './site';
 import heroB960 from './img/hero-b-960.webp';
 import heroB1440 from './img/hero-b-1440.webp';
@@ -8,7 +9,8 @@ import heroC960 from './img/hero-c-960.webp';
 import heroC1440 from './img/hero-c-1440.webp';
 import heroC1920 from './img/hero-c-1920.webp';
 
-const settled = startSite();
+// A visitor coming back signed in is offered the Atlas first, then the kingdom they can walk into.
+const settled = startSite({ ways: atlasFirstWays });
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const phone = matchMedia('(max-width: 700px) and (orientation: portrait)');
 
@@ -62,7 +64,8 @@ function startReveal(): void {
   });
 }
 
-interface AtlasHandle { destroy?: () => void; ready?: Promise<unknown> }
+/** atlas-map's handle (SEAMS.md §1): `ready` settles on 'map', 'still' or 'failed'; `dispose` unmounts. */
+interface AtlasHandle { dispose?: () => void; destroy?: () => void; ready?: Promise<unknown> }
 type MountAtlas = (element: HTMLElement, options: { mode: 'hero' }) => AtlasHandle | Promise<AtlasHandle>;
 // atlas-map's embed, when it exists in the build (see work/lanes/front-door/SEAMS.md §1). Until then the section
 // shows its real capture of the Atlas, and the page builds and works the same.
@@ -93,12 +96,14 @@ function startAtlas(): void {
       const module = await load!();
       if (typeof module.mountAtlas !== 'function') throw new Error('The Atlas embed has no mountAtlas');
       handle = await module.mountAtlas(host, { mode: 'hero' });
-      await handle?.ready;
+      const state = await handle?.ready;
+      // Without a live map (no WebGL, a failed survey) our own capture is the better picture than the embed's still.
+      if (state === 'failed' || state === 'still') throw new Error(`The Atlas embed settled as ${String(state)}`);
       section!.classList.add('is-live');
     } catch (error) {
       // The capture stays: a real picture of the Atlas with its way in, never a broken map.
       console.warn('The live Atlas could not open on the front page; its picture stays.', error);
-      try { handle?.destroy?.(); } catch { /* already gone */ }
+      try { (handle?.dispose ?? handle?.destroy)?.call(handle); } catch { /* already gone */ }
       host.remove();
     }
   }

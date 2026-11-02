@@ -1,11 +1,89 @@
 .kingdom-entry{position:fixed;inset:0;color:var(--cd-cream);font-family:var(--cd-face-body)}
-/* The gate wears the carved kit: storybook headings, the kit's seal, a brass button to try again. */
-.kingdom-entry-gate h2{font:clamp(26px,3vw,34px)/1.1 var(--cd-face-story);color:var(--cd-cream)}
-.kingdom-entry-gate p{font:italic 16px/1.45 var(--cd-face-body);color:var(--cd-cream-soft);max-width:30em}
-.kingdom-entry-ways{margin-top:22px}
-.kingdom-gate .kingdom-entry-again{display:inline-flex;align-items:center;min-height:44px;margin:22px 0 0;padding:0 22px;border:0;border-radius:9px;cursor:pointer;appearance:none;color:var(--cd-wood-edge);
-  font:19px/1 var(--cd-face-story);background:linear-gradient(180deg,var(--cd-brass-hi),var(--cd-brass) 55%,#a9813f);box-shadow:inset 0 1px 0 #fff6d8,inset 0 -2px 0 #7c5a2a,0 2px 0 #00000080}
-.kingdom-gate .kingdom-entry-again:hover{filter:brightness(1.05)}
-.kingdom-gate .kingdom-entry-again:focus-visible{outline:var(--cd-focus-width) solid var(--cd-focus);outline-offset:var(--cd-focus-offset)}
+
+/* ——— The walk-in gate: a carved plate under the dusk, with the brand above and the legal line below. ——— */
+.ke-gate{--ke-pad:clamp(16px,4vw,56px);position:absolute;inset:0;z-index:4;display:grid;grid-template-rows:auto 1fr auto;overflow-x:hidden;overflow-y:auto;
+  color:var(--cd-cream);font:var(--cd-size-body)/1.5 var(--cd-face-body);font-synthesis:none;-webkit-font-smoothing:antialiased;color-scheme:dark;
+  background:#151729;overscroll-behavior:contain}
+.ke-gate *,.ke-gate *::before,.ke-gate *::after{box-sizing:border-box}
+.ke-gate p{margin:0}
+
+/* The sky is painted: night overhead, lilac and ember along the horizon, a far ridge, a few early stars. */
+.ke-sky{position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(1.2px 1.2px at 12% 14%,#fff4dcd0 50%,transparent),radial-gradient(1px 1px at 27% 8%,#fff4dca0 50%,transparent),
+    radial-gradient(1.4px 1.4px at 43% 19%,#fff4dcb0 50%,transparent),radial-gradient(1px 1px at 61% 6%,#fff4dc90 50%,transparent),
+    radial-gradient(1.3px 1.3px at 77% 15%,#fff4dcc0 50%,transparent),radial-gradient(1px 1px at 89% 9%,#fff4dc80 50%,transparent),
+    radial-gradient(1px 1px at 6% 31%,#fff4dc70 50%,transparent),radial-gradient(1.2px 1.2px at 94% 27%,#fff4dc90 50%,transparent),
+    radial-gradient(ellipse 70% 38% at 50% 104%,#e3a66b66,transparent 70%),
+    radial-gradient(ellipse 120% 60% at 50% 100%,#8d7bb459,transparent 72%),
+    linear-gradient(180deg,#101223 0%,#1a1c33 38%,#2c2645 70%,#4a3550 100%)}
+.ke-sky::after{content:'';position:absolute;inset:auto 0 0;height:22vh;min-height:120px;
+  background:linear-gradient(176deg,transparent 0 40%,#1b1628f0 41%),linear-gradient(184deg,transparent 0 52%,#211a30f5 53%);
+  -webkit-mask:linear-gradient(180deg,transparent,#000 30%);mask:linear-gradient(180deg,transparent,#000 30%)}
+
+.ke-top{position:relative;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px var(--ke-pad) 0;min-height:72px}
+.ke-brand{display:contents}
+
+.ke-stage{display:grid;place-items:center;padding:24px var(--ke-pad) 40px}
+.ke-plate{position:relative;width:min(100%,560px);padding:30px clamp(22px,4vw,44px) 32px;text-align:center}
+.ke-plate h1{margin:6px 0 0;letter-spacing:0;font:400 clamp(32px,2.4vw + 14px,44px)/1.05 var(--cd-face-story);color:var(--cd-cream);text-wrap:balance;text-shadow:0 2px 0 #00000059}
+.ke-kicker{margin-top:10px!important;color:var(--cd-brass-hi);font-size:13px}
+.ke-words{margin:14px auto 0!important;max-width:30em;color:var(--cd-cream);font-size:var(--cd-size-lead);line-height:1.45;text-wrap:pretty}
+.ke-said{margin:18px auto 0!important;max-width:34em;padding:10px 14px 11px;border-radius:6px;text-align:left;color:var(--cd-cream-soft);font-size:var(--cd-size-note);line-height:1.45;overflow-wrap:anywhere;
+  background:#1a0f0866;box-shadow:inset 0 1px 3px #00000066,0 1px 0 #ffe1b41f}
+.ke-said .cd-label{display:block;margin-bottom:3px;color:var(--cd-brass)}
+.ke-ways{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px 20px;margin-top:26px}
+.ke-ways:empty{display:none}
+
+/* The ways: a brass plate for the one to take, a quiet carved link for the other. */
+.ke-way{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:44px;border-radius:9px;text-decoration:none;cursor:pointer;-webkit-tap-highlight-color:transparent;font:19px/1.1 var(--cd-face-story)}
+.ke-way .cd-icon{width:19px;height:19px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ke-way-brass{padding:0 22px 0 18px;border:0;appearance:none;color:var(--cd-wood-edge);
+  background:linear-gradient(180deg,var(--cd-brass-hi),var(--cd-brass) 55%,#a9813f);box-shadow:inset 0 1px 0 #fff6d8,inset 0 -2px 0 #7c5a2a,0 2px 0 #00000080;transition:transform .12s,box-shadow .12s}
+.ke-way-brass:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 #fff6d8,inset 0 -2px 0 #7c5a2a,0 3px 0 #00000080}
+.ke-way-brass:active{transform:translateY(1px);box-shadow:inset 0 1px 0 #f4dc9d,inset 0 -1px 0 #7c5a2a,0 1px 0 #00000080}
+.ke-way-quiet{padding:0 8px;color:var(--cd-cream);font-size:18px;text-decoration:underline;text-decoration-color:#c99f5b88;text-underline-offset:4px;text-decoration-thickness:1px}
+button.ke-way-quiet{border:0;background:none;appearance:none}
+.ke-way-quiet:hover{color:var(--cd-brass-hi);text-decoration-color:currentColor}
+.ke-way:focus{outline:none}
+.ke-way:focus-visible{outline:var(--cd-focus-width) solid var(--cd-focus);outline-offset:var(--cd-focus-offset)}
+@media (forced-colors:active){.ke-way:focus-visible{outline-color:Highlight}}
+
+/* The gate in brass: stone arch, studded doors, and a lantern whose light says how the gate stands. */
+.ke-arch{display:block;width:124px;height:96px;margin:0 auto;overflow:visible;fill:none;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 2px 0 #00000066)}
+.ke-arch-stone{stroke:var(--cd-brass);stroke-width:3}
+.ke-arch-inner{stroke:var(--cd-brass-lo);stroke-width:1.4}
+.ke-arch-door{fill:#2a190e;stroke:var(--cd-brass-lo);stroke-width:1.4}
+.ke-arch-stud{stroke:var(--cd-brass);stroke-width:3.2}
+.ke-arch-step{stroke:var(--cd-brass);stroke-width:2.4}
+.ke-arch-lantern{fill:#3a2414;stroke:var(--cd-brass-hi);stroke-width:1.3}
+.ke-arch-glow{fill:#ffc86b;stroke:none;opacity:.6;filter:blur(4px);transform-origin:60px 8px}
+.ke-arch[data-state='waiting'] .ke-arch-glow{opacity:.9}
+.ke-arch[data-state='opening'] .ke-arch-glow{animation:ke-glow 1.5s ease-in-out infinite alternate}
+.ke-arch[data-state='lost'] .ke-arch-glow{opacity:.35}
+.ke-arch[data-state='closed'] .ke-arch-glow{opacity:.3;fill:#d9925a}
+.ke-arch[data-state='refused'] .ke-arch-glow{opacity:0}
+.ke-arch[data-state='refused'] .ke-arch-lantern{stroke:var(--cd-brass-lo)}
+@keyframes ke-glow{from{opacity:.35;transform:scale(.8)}to{opacity:1;transform:scale(1.25)}}
+@media (prefers-reduced-motion:reduce){.ke-arch[data-state='opening'] .ke-arch-glow{animation:none;opacity:.8}}
+
+.ke-foot{margin-top:auto}
+.ke-foot .cd-foot{background:linear-gradient(180deg,#2a1a0de6,#1a1009f2)}
+.ke-foot .cd-foot[data-compact] .cd-foot-inner{max-width:none;justify-items:center;text-align:center;padding:10px var(--ke-pad) calc(12px + env(safe-area-inset-bottom))}
+.ke-foot .cd-foot[data-compact] .cd-foot-links{justify-content:center}
+
+@media (max-width:700px){
+  .ke-top{min-height:64px;padding-top:10px}
+  .ke-top .cd-brand-word{font-size:24px}
+  .ke-stage{padding:16px 12px 28px}
+  .ke-plate{padding:26px 20px 26px}
+  .ke-arch{width:104px;height:80px}
+  .ke-ways{flex-direction:column;align-items:stretch;gap:10px}
+  .ke-ways>.cd-piece>.cd-signin{display:flex;width:100%}
+  .ke-ways .cd-signin{justify-content:center}
+  .ke-way-brass{width:100%}
+}
+
+/* A rehearsal's own notice over the kingdom, once inside. */
 .kingdom-entry-notice{position:fixed;z-index:3;left:50%;top:112px;transform:translateX(-50%);width:max-content;max-width:min(620px,calc(100% - 40px));box-sizing:border-box;padding:9px 14px;border:1px solid #ba966263;border-radius:4px;background:#342b25ed;box-shadow:0 3px 14px #080e2440;color:#e9d2ad;font:13px/1.5 var(--cd-face-body);text-align:center;pointer-events:none}
 @media(max-width:700px){.kingdom-entry-notice{top:116px;max-width:calc(100% - 32px);font-size:12px;padding:8px 12px}}

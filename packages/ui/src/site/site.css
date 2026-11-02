@@ -21,12 +21,12 @@
 .cd-brand:hover .cd-brand-crest-shield { fill: var(--cd-brass-hi); }
 
 /* Every piece's keyboard focus: the brass wire, outside the fitting. */
-:is(.cd-brand, .cd-twitch-button, .cd-signin-wax, .cd-signin-out, .cd-signin-walk, .cd-foot a, .cd-foot-out, .cd-notice-close, .cd-hiw a):focus { outline: none; }
-:is(.cd-brand, .cd-twitch-button, .cd-signin-wax, .cd-signin-out, .cd-signin-walk, .cd-foot a, .cd-foot-out, .cd-notice-close, .cd-hiw a):focus-visible {
+:is(.cd-brand, .cd-twitch-button, .cd-signin-wax, .cd-signin-out, .cd-signin-walk, .cd-signin-also, .cd-foot a, .cd-foot-out, .cd-notice-close, .cd-hiw a):focus { outline: none; }
+:is(.cd-brand, .cd-twitch-button, .cd-signin-wax, .cd-signin-out, .cd-signin-walk, .cd-signin-also, .cd-foot a, .cd-foot-out, .cd-notice-close, .cd-hiw a):focus-visible {
   outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); }
 :is(.cd-notice-close, .cd-hiw a):focus-visible { outline-color: var(--cd-brass-lo); }
 @media (forced-colors: active) {
-  :is(.cd-brand, .cd-twitch-button, .cd-signin-wax, .cd-signin-out, .cd-signin-walk, .cd-foot a, .cd-foot-out, .cd-notice-close, .cd-hiw a):focus-visible { outline-color: Highlight; }
+  :is(.cd-brand, .cd-twitch-button, .cd-signin-wax, .cd-signin-out, .cd-signin-walk, .cd-signin-also, .cd-foot a, .cd-foot-out, .cd-notice-close, .cd-hiw a):focus-visible { outline-color: Highlight; }
 }
 
 /* ——— The Twitch mark: the official Glitch, unaltered, on its flat black plate. The plate is exactly the clear space
@@ -90,7 +90,12 @@ button.cd-signin-wax:hover { filter: brightness(1.08); }
 .cd-signin-walk .cd-icon { width: 18px; height: 18px; stroke-width: 1.9; }
 .cd-signin-walk-short { display: none; }
 .cd-signin[data-size='large'] .cd-signin-walk { min-height: 44px; font-size: 19px; }
-@media (pointer: coarse) { .cd-signin-walk { min-height: 44px; } .cd-signin-out { min-height: 36px; } }
+/* A second way onward beside the brass one: a quiet carved link in the seal's own cream. */
+.cd-signin-also { display: inline-flex; align-items: center; min-height: 40px; padding: 0 6px; border-radius: 6px; color: var(--cd-cream); font: 17px/1.2 var(--cd-face-story);
+  text-decoration: underline; text-decoration-color: #c99f5b88; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+.cd-signin-also:hover { color: var(--cd-brass-hi); text-decoration-color: currentColor; }
+.cd-signin[data-size='large'] .cd-signin-also { min-height: 44px; font-size: 18px; }
+@media (pointer: coarse) { .cd-signin-walk, .cd-signin-also { min-height: 44px; } .cd-signin-out { min-height: 36px; } }
 
 /* The compact seal (a page header): the wax is a button that lets down a small walnut card. */
 .cd-signin[data-size='header'] { position: relative; }

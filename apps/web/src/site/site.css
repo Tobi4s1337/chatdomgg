@@ -12,6 +12,8 @@ html { background: var(--site-night); scrollbar-color: var(--cd-brass-lo) var(--
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: var(--site-night); }
 ::-webkit-scrollbar-thumb { background: linear-gradient(90deg, var(--cd-brass-lo), var(--cd-brass), var(--cd-brass-lo)); border: 2px solid var(--site-night); border-radius: 6px; }
+/* Carrying a returning visitor on to the place they signed in from: the dusk only, never a flash of the story. */
+html.is-leaving body { visibility: hidden; }
 *, *::before, *::after { box-sizing: border-box; }
 body.site { margin: 0; min-height: 100svh; color: var(--cd-cream); font: var(--site-body)/1.5 var(--cd-face-body); font-synthesis: none;
   -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; background: var(--site-night); }
@@ -70,6 +72,8 @@ body.site { margin: 0; min-height: 100svh; color: var(--cd-cream); font: var(--s
   font: 17px/1 var(--cd-face-label); letter-spacing: var(--cd-label-tracking); }
 .story-way:hover { text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1px; }
 .story-caption-hero { position: absolute; right: var(--site-pad); bottom: 18px; }
+/* Signed in, the seal itself offers the Atlas first, so the hero's own "Explore the map" steps aside. */
+.site-story[data-session='in'] .story-hero-ways > .story-way { display: none; }
 
 /* The sign swings; its corners must never widen the page on a phone, where the browser would then pan the view. */
 .site main { overflow-x: clip; }

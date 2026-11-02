@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 // The kit takes no dependency on the contracts package; the test reads the frozen routes from its source.
 import { REALM_AUTH_ROUTES } from '../../../shared/src/realm/index';
-import { RETURN_VIEW_KEY, rememberReturnView, takeReturnView } from './return-view';
+import { RETURN_VIEW_KEY, rememberReturnView, returnDestination, takeReturnView, walkHref, walkReturnView } from './return-view';
+import { atlasFirstWays, defaultWay } from './seal';
 import { forgetSeats, parseKingdoms, parseSession } from './session';
 import { SIGNIN_NOTICES, SIGNIN_ROUTES, readOutcome, signInHref, signInReturnPath } from './signin';
 
@@ -123,5 +124,52 @@ describe('the session as the seal reads it', () => {
     expect(store.getItem(seat('theirs'))).toBe('b');
     expect(store.getItem('chatdom:realm:v1:not json')).toBe('c');
     expect(store.getItem('other')).toBe('d');
+  });
+});
+
+describe('the walk-in gate’s way back from sign-in', () => {
+  it('keeps the kingdom in the stored view, because the gate’s own address has a query sign-in refuses', () => {
+    const view = walkReturnView('129634568');
+    expect(view).toEqual({ path: '/', view: { walk: '129634568' } });
+    // The path it returns to is one the sign-in service accepts.
+    expect(signInReturnPath(view.path)).toBe('/');
+    expect(() => walkReturnView('../map')).toThrow();
+    expect(() => walkReturnView('0')).toThrow();
+  });
+
+  it('survives the trip through storage and carries the visitor on from the front page to the gate', () => {
+    const store = memory();
+    rememberReturnView(walkReturnView('129634568'), store, 1_000);
+    const back = takeReturnView(store, 2_000)!;
+    expect(returnDestination(back, '/')).toBe('/?walk=1&kingdom=129634568');
+    // The way back from Twitch goes along, so the gate itself can say what happened.
+    expect(returnDestination(back, '/', 'declined')).toBe('/?walk=1&kingdom=129634568&signin=declined');
+    expect(walkHref('42', 'expired')).toBe('/?walk=1&kingdom=42&signin=expired');
+  });
+
+  it('restores a page in place, and carries on to a page sign-in could not return to', () => {
+    expect(returnDestination({ path: '/', section: 'growth' }, '/')).toBeNull();
+    expect(returnDestination({ path: '/privacy', scrollY: 1600 }, '/privacy')).toBeNull();
+    expect(returnDestination({ path: '/how-it-works' }, '/')).toBe('/how-it-works');
+    expect(returnDestination({ path: '/how-it-works' }, '/', 'unavailable')).toBe('/how-it-works?signin=unavailable');
+    // An Atlas view is the Atlas's own; the kit hands it back untouched and leads nowhere else.
+    expect(returnDestination({ path: '/map', view: { x: 1, y: 2, scale: 3, selected: null, mapId: 'pv' } }, '/map')).toBeNull();
+    // A walk view naming no real kingdom leads nowhere new.
+    expect(returnDestination({ path: '/', view: { walk: 'javascript:alert(1)' } }, '/')).toBeNull();
+  });
+});
+
+describe('the ways onward once signed in', () => {
+  const willowmere = { kingdomId: '129634568', name: 'Willowmere', login: 'tobi4s_' };
+  it('offers a returning visitor the Atlas first, then the kingdom they can walk into', () => {
+    expect(atlasFirstWays(willowmere)).toEqual([
+      { href: '/map', words: 'Open the Atlas', short: 'The map' },
+      { href: '/?walk=1&kingdom=129634568', words: 'Walk into Willowmere', short: 'Walk in' },
+    ]);
+    expect(atlasFirstWays(null)).toEqual([{ href: '/map', words: 'Open the Atlas', short: 'The map' }]);
+  });
+  it('keeps the default of walking in, or finding a kingdom on the map', () => {
+    expect(defaultWay(willowmere).href).toBe(walkHref('129634568'));
+    expect(defaultWay(null).href).toBe('/map');
   });
 });

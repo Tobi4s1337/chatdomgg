@@ -26,6 +26,11 @@ export interface SealOptions {
   readonly signInHref?: string;
   /** The way onward once signed in; `null` shows none. Defaults to walking into your kingdom, or the map. */
   readonly way?: (kingdom: OpenKingdom | null) => SealWay | null;
+  /**
+   * Several ways onward, in order, instead of `way`: the first is the brass one, the rest are quiet links beside it
+   * (the compact header seal shows only the first).
+   */
+  readonly ways?: (kingdom: OpenKingdom | null) => readonly SealWay[];
 }
 
 /** The default way onward: into the first kingdom you can enter, or to the map to find one. */
@@ -33,6 +38,15 @@ export function defaultWay(kingdom: OpenKingdom | null): SealWay {
   return kingdom
     ? { href: `/?walk=1&kingdom=${encodeURIComponent(kingdom.kingdomId)}`, words: `Walk into ${kingdom.name}`, short: 'Walk in' }
     : { href: '/map', words: 'Find a kingdom on the map', short: 'The map' };
+}
+
+/**
+ * The ways for a visitor coming back to the front page signed in: the Atlas first, then the kingdom they can walk
+ * into, if any. (Opening the map on their own homes waits for the Atlas to know whose homes are where.)
+ */
+export function atlasFirstWays(kingdom: OpenKingdom | null): SealWay[] {
+  const map: SealWay = { href: '/map', words: 'Open the Atlas', short: 'The map' };
+  return kingdom ? [map, defaultWay(kingdom)] : [map];
 }
 
 // ——— Notices ———
@@ -171,7 +185,8 @@ function signedIn(session: Authenticated, kingdom: OpenKingdom | null, options: 
   }
   who.append(signOutButton('cd-signin-out', session));
   seal.append(wax, who);
-  const way = (options.way ?? defaultWay)(kingdom);
+  const ways = options.ways ? options.ways(kingdom) : [(options.way ?? defaultWay)(kingdom)].filter((way): way is SealWay => Boolean(way));
+  const [way, ...also] = ways;
   if (way) {
     const walk = el('a', 'cd-signin-walk');
     walk.href = way.href;
@@ -184,6 +199,11 @@ function signedIn(session: Authenticated, kingdom: OpenKingdom | null, options: 
     }
     walk.insertAdjacentHTML('beforeend', iconSvg('arrow-right'));
     seal.append(walk);
+  }
+  if (!compact) for (const other of also) {
+    const link = el('a', 'cd-signin-also', other.words);
+    link.href = other.href;
+    seal.append(link);
   }
   return seal;
 }
@@ -210,6 +230,13 @@ async function leave(button: HTMLButtonElement, session: Authenticated): Promise
   reading = Promise.resolve(current);
   drawAll();
   showNotice(SIGNIN_NOTICES['signed-out']);
+  announceSession(current.session);
+}
+
+/** Fired on `window` whenever the page's shared reading of the session changes (a sign-out, a refresh). */
+export const SESSION_EVENT = 'chatdom:session';
+function announceSession(session: Session): void {
+  window.dispatchEvent(new CustomEvent<Session>(SESSION_EVENT, { detail: session }));
 }
 
 function draw(entry: Mounted): void {
@@ -290,6 +317,7 @@ export async function refreshSeals(): Promise<Session> {
   reading = null;
   const { session } = await readSealSession();
   drawAll();
+  announceSession(session);
   return session;
 }
 

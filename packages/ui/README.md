@@ -48,13 +48,13 @@ same markup in the browser. Solid owners use the components from `@chatdom/ui`.
 
 | Piece | Plain | Solid | Notes |
 |---|---|---|---|
-| Sign-in seal | `startSignInSeals()`, `mountSignInSeal(el, opts)`, `signInSeal()` | `<SignInSeal />` | Signed out: "Sign in with Twitch" with the official Glitch on its clear-space plate in a brass bezel. Signed in: a wax seal with the initial, who is signed in, a quiet Sign out, one brass way onward (`way`). `size: 'header'` lets the wax open a small card. One session reading per page; signing out anywhere redraws every seal. |
+| Sign-in seal | `startSignInSeals()`, `mountSignInSeal(el, opts)`, `signInSeal()` | `<SignInSeal />` | Signed out: "Sign in with Twitch" with the official Glitch on its clear-space plate in a brass bezel. Signed in: a wax seal with the initial, who is signed in, a quiet Sign out, one brass way onward (`way`), or several (`ways`: the first in brass, the rest as quiet links; `atlasFirstWays` offers the Atlas, then your kingdom). `size: 'header'` lets the wax open a small card and shows only the first way. One session reading per page; signing out anywhere redraws every seal and fires `SESSION_EVENT` (`chatdom:session`) on `window`. |
 | Twitch mark | `createTwitchMark()`, `twitchMark()` | `<TwitchMark />` | Decorative unless given a `label`. Never filtered, shadowed, recoloured or moved; see `work/lanes/front-door/twitch-brand.md`. |
 | Watch on Twitch | `createWatchOnTwitch(login)`, `watchOnTwitch()` | `<WatchOnTwitch />` | Opens `twitch.tv/<login>` in a new tab and says so to screen readers; `small` for cards. |
 | Site footer | `createSiteFooter()`, `siteFooter()` | `<SiteFooter />` | Imprint · Impressum, Privacy, Terms, How it works, The Atlas; the Twitch line; the operator; "Signed in with Twitch as … · Sign out" on chatdom.io. `base`, `external`, `twitch: false` and `compact` for the panel. |
 | How it works | `createHowItWorks()`, `howItWorksSheet()` | `<HowItWorksSheet />` | Four real pictures (`site/img/`), at most 40 words each; what we never collect; the privacy link. |
 | Notices | `showNotice()`, `announceSignInOutcome()` | | The parchment slip for each way back from Twitch (`?signin=`) and for signing out. |
-| Return view | `rememberReturnView()`, `takeReturnView()` | | `sessionStorage['chatdom:return-view:v1']`, written just before leaving for sign-in, read once on return. |
+| Return view | `rememberReturnView()`, `takeReturnView()`, `returnDestination()`, `walkReturnView(id)`, `walkHref(id)` | | `sessionStorage['chatdom:return-view:v1']`, written just before leaving for sign-in, read once on return. `walkReturnView` keeps a kingdom's walk-in gate (its address has a query sign-in refuses, so sign-in returns to `/`); `returnDestination(view, here, outcome)` says where the front page carries the visitor on to, with the `?signin=` outcome along. |
 | Icons | `iconSvg(name)`, `ICON_PATHS` | `<Icon name />` | door, atlas, card, panel, home, search, watch, chat, live, crown, sign-out, external, arrow-right, arrow-down, close. |
 
 Every control is at least 44 px tall on touch, draws the brass focus wire, and has no default browser chrome. The

@@ -16,7 +16,10 @@ export interface LiveKingdomEntryOptions {
   readonly kingdomId: KingdomId;
   /** Approved public name supplied by the host. Receipts do not carry names; never infer one from the URL. */
   readonly kingdomName: string;
-  /** Explicit authenticated rehearsal only; it still uses API sessions, CSRF and checked founded geometry. */
+  /**
+   * Explicit authenticated rehearsal only, on a development machine; it still uses API sessions, CSRF and checked
+   * founded geometry. A rehearsal carries no label of its own (decision 25): it never reaches the public origin.
+   */
   readonly origin?: 'live' | 'simulated';
   readonly notice?: string;
   /** Trusted host configuration. Defaults to this origin's /realm-data transport. */
@@ -30,7 +33,6 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions): 
   const kingdomId = KingdomIdSchema.parse(options.kingdomId), origin = options.origin ?? 'live';
   const kingdomName = options.kingdomName.trim();
   if (!kingdomName || kingdomName.length > 80) throw new RealmEntryError('unavailable', 'The kingdom’s approved name is not available yet.');
-  if (origin === 'simulated' && !options.notice?.includes('SIMULATED')) throw new RealmEntryError('refused', 'This rehearsal must be labelled SIMULATED.');
   const forgeFeed = createRealmForgeFeed();
   const open: KingdomEntrySource = async signal => {
     let step = 'reading your sign-in';

@@ -152,6 +152,43 @@ for its owner to update in its own lane:
 - `apps/web/src/growth-card/render-check.mjs:12,36`, `capture.mjs:37,64` (growth card): expect the SIMULATED chip.
 - Not the kit's: `apps/panel/src/passport/PanelPassport.tsx:71`, `apps/web/src/passport/CardPassport.tsx:111` and `apps/web/src/stream/index.tsx` print their own labels; their owners remove them under decision 25.
 
+**Landed in FD12** (additive; every earlier export keeps its name and API):
+
+- **The walk-in gate's return.** The gate's address (`/?walk=1&kingdom=<id>`) has a query, which the sign-in service
+  refuses as `returnTo` (HTTP 400), so the gate's seal returns to `/` and keeps `walkReturnView(id)` =
+  `{ path: '/', view: { walk: '<id>' } }` under the same return-view key. The front page reads it once and carries the
+  visitor on with `location.replace(walkHref(id, outcome))`, so a `?signin=` outcome is said at the gate, not on the
+  story. `returnDestination(view, here, outcome)` (from `@chatdom/ui/site`) gives that rule to anyone who needs it.
+  Anyone else linking to a kingdom's gate (the Atlas's "Walk in", the panel) can link to `walkHref(id)`; the gate
+  signs the visitor in and comes back by itself.
+- **Several ways on the seal.** `SealOptions.ways(kingdom)` returns ways in order (the first in brass, the rest quiet;
+  the header seal shows only the first). `atlasFirstWays` offers "Open the Atlas", then "Walk into <kingdom>"; the
+  front page uses it for returning visitors. Opening the map on their own homes waits for A10 (atlas-map, launch
+  phase): the way goes to `/map` until the Atlas knows whose homes are where.
+- **`SESSION_EVENT`** (`'chatdom:session'`), fired on `window` with the new `Session` when the page's shared reading
+  changes (a sign-out from any seal or footer, `refreshSeals()`). The walk-in gate listens for it.
+
+**Asked of atlas-map for FD12** (the Atlas half of "come back to the same view"): the embed's handle on
+`lane/atlas-map` (`apps/web/src/atlas/embed.ts`) can read a view (`view(): AtlasView`) but not set one (`flyTo` takes
+a channel only). front-door needs one of: `handle.restore(view: AtlasView)`, or `mountAtlas(el, { mode, view })`, that
+puts the map at exactly that position, zoom and open card (a view whose `mapId` is from an older survey may fall back
+to the composed start). Then, in the Atlas's own files, the recipe above: the seal with
+`view={() => ({ path: location.pathname, view: handle.view() })}`, and `takeReturnView()` once at start, handing
+`.view` to `restore`. `/map` and `/map/<login>` are paths sign-in returns to directly. front-door's story page already
+handles the embed's real handle (`dispose`, `ready` settling on `'map' | 'still' | 'failed'`; it keeps its own Atlas
+capture for `'still'` and `'failed'`).
+
+**Heads-up: the walk-in gate's markup changed** (FD12). It no longer wears the kingdom's `.kingdom-gate` class (its
+styles are the kingdom's own and would break the gate). The gate's root is `.ke-gate[data-gate="opening|waiting|
+lost|refused|closed"]`; the failure's own words are in `.ke-said`; the retry is `.ke-ways button`. Readers that used
+`.kingdom-gate button` as the gate's failure signal now wait for their timeout instead of failing fast; each owner
+can add `[data-gate="closed"], [data-gate="refused"]` to that check in its own file:
+`apps/web/src/walk/capture.mjs:38,40` (walk). `packages/testing/kingdom-walk.mjs` opens the same gate through
+`/?walk=1&source=simulated`, which still opens on loopback (the staged rehearsal now refuses any other host).
+`kingdom-integration.mjs`, `kingdom-wave.mjs` and `kingdom-live.mjs` read the kingdom's own `.kingdom-gate`, which is
+unchanged. The staged rehearsal (`kingdom-entry/simulated.ts`) and `live.ts` no longer require the word SIMULATED
+in a notice; a realm notice, when sent, still shows over the kingdom.
+
 ## 4. The public origin (front-door owns the gate)
 
 - The page list in `apps/api/src/public/routes.ts` decides what chatdom.io serves. A lane that needs a new public page
@@ -189,3 +226,24 @@ into the shared kit once front-door reviews them. The newer Twitch mark, Watch,
 site footer and How it works exports exist on front-door's branch but are not yet
 in the Atlas checkout's shared package; the Atlas keeps words-only Watch links
 until main adopts those exports. No official mark is copied or redrawn here.
+
+## Strict-CSP host prerequisite — 2 Nov, AM10 final local checks
+
+The web entry imports `@chatdom/shared` schemas before the lazy Atlas. Zod's
+object-JIT capability probe calls `Function` and emits a caught `script-src`
+violation under the public CSP. The traced probe occurs before the Atlas chunk
+loads; the map can still render, but the zero-violation acceptance gate fails.
+
+needs: main/front-door must evaluate a bootstrap module containing
+`import { config } from 'zod'; config({ jitless: true });` before any shared-schema
+module evaluates. Import that side-effect module first in `apps/web/src/main.tsx`,
+or configure Zod before dynamically importing the app entry. Calling config in
+the body below static schema imports is too late. Keep the public CSP unchanged.
+Atlas does not modify the page bootstrap or shared package from this lane.
+
+The default `checks/phone-performance-checks.mjs` retains the real zero-CSP-
+violation gate. Its explicit `ATLAS_TEST_CSP_JITLESS=1` mode supplies this missing
+host prerequisite in the test only and names its evidence `with-bootstrap`;
+that evidence proves the consumer under the required host configuration, never
+production bootstrap completion. Provenance is in
+`work/evidence/atlas-map/am10-phone-final-provenance.json`.
