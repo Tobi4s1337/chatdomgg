@@ -4,6 +4,7 @@ import { FOUNDED_AT, makeEdition, makeWorld, publish } from '../data/fixtures.te
 import type { PreviewWorld } from '../data/preview';
 import { editionOf, holdingNote, holdingStatus, mapNoun, newerNotice, sealLive, sealWords, stillTitle } from './edition';
 import { formatCount, formatDay, formatMoment, SEARCH_PLACEHOLDER } from './format';
+import { WAY_IN_LABEL } from './opening';
 
 const DRAFT = /survey|awaiting|founding|draft|preview|still of land/i;
 /** Words as the carved-chrome check counts them (checks/carved-checks.mjs). */
@@ -52,22 +53,33 @@ describe('sealLive', () => {
 });
 
 describe('the default view’s words', () => {
-  /** Everything the default chrome shows in words: title, seal line, live line, search prompt, key toggle, scale. */
+  /** Everything the default map chrome shows in words: title, seal line, live line, search prompt, the "Map key"
+   * button, scale. The way into a kingdom is counted on its own (see below); the opening caption is read once, on a
+   * first visit only. */
   function defaultChrome(world: PreviewWorld, still: boolean): string {
     const seal = sealWords(world, still);
     // The longest live line: a held frame from another day.
     const live = sealLive(Date.UTC(2026, 9, 30, 1, 59), false, Date.UTC(2026, 10, 6, 10, 7));
     const scale = `${formatCount(1_000)} leagues · Continent`;
-    return ['Chatdom Atlas', `${seal.lead} ${seal.when.text}`, live, SEARCH_PLACEHOLDER, 'Key', scale].join(' ');
+    return ['Chatdom Atlas', `${seal.lead} ${seal.when.text}`, live, SEARCH_PLACEHOLDER, 'Map key', scale].join(' ');
   }
+  /** The way in with its kingdom's name, the one invitation beyond the map's own 25 words. */
+  const wayIn = `${WAY_IN_LABEL} Willowmere`;
 
   it.each<[string, PreviewWorld]>([
     ['a survey preview', makeWorld()],
     ['Edition I', makeEdition()],
     ['Edition 0', makeEdition({ label: 'Edition 0' })],
     ['a rehearsal', makeEdition({ rehearsal: true })],
-  ])('stays within 25 words for %s, moving and still', (_, world) => {
-    for (const still of [false, true]) expect(words(defaultChrome(world, still)).length).toBeLessThanOrEqual(25);
+  ])('stays within 25 words for %s, moving and still, and 30 with the way into a kingdom', (_, world) => {
+    for (const still of [false, true]) {
+      expect(words(defaultChrome(world, still)).length).toBeLessThanOrEqual(25);
+      expect(words(`${defaultChrome(world, still)} ${wayIn}`).length).toBeLessThanOrEqual(30);
+    }
+  });
+
+  it('keeps the way in to five words with its kingdom’s name', () => {
+    expect(words(wayIn).length).toBeLessThanOrEqual(5);
   });
 
   it('costs an edition at most one word more than the survey it replaced', () => {

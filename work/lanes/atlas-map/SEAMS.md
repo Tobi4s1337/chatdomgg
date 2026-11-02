@@ -36,7 +36,7 @@ export interface AtlasMountOptions {
   signal?: AbortSignal;
 }
 
-export interface AtlasView { x: number; y: number; scale: number; selected: string | null; mapId: string }
+export interface AtlasView { x: number; y: number; scale: number; selected: string | null; mapId: string; found?: string[] }
 
 export type AtlasReadyState = 'map' | 'still' | 'failed';
 
@@ -304,20 +304,6 @@ conflict. Checked on an export of `lane/integrator` (`ed7ac60e`): without the pa
 error, with it the site build exits 0 and writes all six pages. Apply it with `git apply` on the integrator (or on
 this branch after it takes front-door).
 
-## from launch
-
-- 2 Nov (LA10): `/kingdom/<id>` now asks the realm for adopted land before reading the survey
-  (`apps/web/src/genesis/index.tsx`): a founded kingdom the survey never observed (tobi4s_, under the 5-viewer floor)
-  stopped at "The Atlas could not be read just now". The survey is read only for an unfounded holding. The "Compare
-  the three kingdoms ↗" link to the retired `/showcase` is gone.
-- 2 Nov (LA10): until the first edition is founded, a name the register does not know is checked against the front
-  door's kingdoms (`/api/public/door`, new `apps/web/src/atlas/data/open-kingdoms.ts`): the search's empty state offers
-  "Enter <kingdom>" (`.atlas-search-door`), and `/map/<login>` gives the same notice with an Enter action. Once claims
-  draw founded kingdoms, this simply never fires for them.
-- 2 Nov (LA10): phone `.atlas-notice` is pinned left 10px / right 64px (beside the zoom column); centred on half the
-  width it wrapped one word per line.
-- 2 Nov (LA10), deploy: the live data service on 5193 is the old `lane/atlas` build without roads or lookup; exact
-  steps in `work/lanes/launch/SEAMS.md` under `deploy:`.
 ## Self-serve hide — 2 Nov, AM13 (atlas-map built the session authority itself)
 
 §4 asked front-door and main for a session authority that calls the Atlas's private hide routes. Neither round lane
@@ -531,38 +517,19 @@ git apply work/lanes/atlas-map/gateway-visitor-address.integrator.patch   # own 
 # restart the public window, then the serve loop as ATLAS_LOOKUPS_PER_CLIENT_MINUTE=6 atlas-live.sh serve (6 per visitor)
 ```
 
-## from launch
+## Found channels stay drawn, and the founded kingdoms — 2 Nov, AM15 (additive; nothing to change on the host)
 
-- 2 Nov (LA10): `needs: integrator/atlas-map: land the Atlas owner API.` On chatdom.io every Atlas load in explore mode
-  logs a console error (`404 /api/atlas/me?preview=…`): nothing serves the route, because
-  `work/lanes/atlas-map/atlas-owner-api.patch` was never applied, and it no longer applies to `lane/integrator`
-  (`git apply --check`: `apps/api/src/main.ts:44` and `apps/api/src/public/routes.ts:8` drifted). Rebase the patch
-  and land it, with its operator settings (`ATLAS_PRIVATE_URL`, `ATLAS_INGEST_TOKEN`), so a signed-out visitor
-  gets `{version:1,status:'anonymous'}` instead of a 404.
-- 2 Nov (LA10): a waiting card whose login is one of the kingdoms the front door opens (`/api/public/door`) now says
-  "Founded · <name>", offers **Enter <name>** (`/kingdom/<id>`) and replaces the pencil note with "<name> is founded
-  and open to visit. The map draws its land with the Atlas's next edition." Before, tobi4s_'s card (found by the
-  public lookup since the Atlas service was rebuilt) said "Waiting · no land of its own" with no way in.
-  (`apps/web/src/atlas/ui/Register.tsx`, `WaitingCard`.)
-  Review follow-up: the words live in `apps/web/src/atlas/ui/waiting.ts` (tested), and the card matches by the
-  channel's login only (`matchFoundedChannel` in `data/open-kingdoms.ts`), so a channel that merely shares a
-  kingdom's name is never offered its door.
-- 2 Nov (LA10): `gateway-visitor-address.integrator.patch` is applied on `lane/launch` (tests pass) and goes to
-  `lane/integrator` with the launch merge. On this host Traefik reaches the gateway from `172.18.0.4` (bridge
-  `172.18.0.0/16`), not from docker0, so the setting is `PUBLIC_TRUSTED_PROXIES=172.18.0.0/16` (launch `SEAMS.md`,
-  `deploy: 3`).
-- 2 Nov (LA10, session 4): one stale link stopped channel search for everyone. Twitch answers `GET /helix/users?id=`
-  for an ID that cannot exist (e.g. `999999999999`) with **400 Bad Identifiers**; the lookup's `call()` took every
-  throw as an outage, backed off and refused every visitor's lookup for 1–64 s (`2147483647`, which Twitch answers
-  200 with no data, then got `503 lookup-upstream` too). Now a single-identity `users` read refused with 400 is an
-  absent channel (cached for an hour like any miss, no backoff); a batch's 400 still counts as a failure, since it does
-  not say which ID was bad (`apps/surveyor/src/directory/twitch-lookup.ts`, test added). Live after the Atlas
-  service is rebuilt from the merge.
-- 2 Nov (LA10, session 4): `/kingdom/<id>` for a channel the register does not know (its card answers 404) said "The
-  Atlas could not be read just now, so the road into this land is closed"; a card `not-found` is now the calm
-  `missing` holding ("This channel has no holding on the current survey of the Atlas."). Other card failures still
-  read as unavailable (`apps/web/src/atlas/data/holding.ts`, new `holding-read.test.ts`).
-- 2 Nov (LA10, session 4, operator note 19:45): `atlas-owner-api.integrator.patch` is applied on `lane/launch` as it is
-  (`git apply --check` clean; `atlas-owner/index.test.ts` and `public/` 138 tests pass, typecheck and lint clean), so
-  it reaches `lane/integrator` with the launch merge; the `needs:` above is closed by that merge. The env lines for the
-  hide flow are launch `SEAMS.md` `deploy: 6` (pointing at your steps 2–3).
+- `AtlasView` gains one optional field, `found?: string[]`: the channel IDs this visitor found this session that the
+  survey does not hold (at most 24; only digits). `handle.view()` includes it when there are any; `mountAtlas(el,
+  { view })` and `handle.restore(view)` accept it and draw each one again only after the Atlas register answers for
+  it (so a withheld or hidden channel never comes back). A host that stores the view as before needs no change; a
+  view without the field behaves exactly as before.
+- The explore map reads the site's own public door list, `GET /api/public/door` (front-door's route, already public
+  and same-origin; `{ mode, kingdoms: [{ kingdomId, name, login }] }`), once per page, to draw a found channel that
+  founded a kingdom as that kingdom (its arms on a hamlet, the kingdom's name, "Enter <name>" first on its card, to
+  `/?walk=1&kingdom=<id>`). Only `mode: 'live'` names kingdoms; a missing door, an error or `simulated` names none.
+  Please keep the route's shape; a new field is fine.
+- The map's way in ("Walk into a kingdom" on the title plate) and a waiting card's "Visit <name>" lead to the door's
+  **first** kingdom, so the door's order is the map's choice of where newcomers walk in. A first visit to the map
+  reads one caption, remembered in local storage as `chatdom:atlas:opening:v1`; a host embedding explore mode
+  shows it too, once per browser. Nothing on the map asks for sign-in: the walk page does, at the gate.

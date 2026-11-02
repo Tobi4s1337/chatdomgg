@@ -30,8 +30,7 @@
   background: radial-gradient(ellipse at 25% 0, var(--cd-parch-hi), transparent 80%), linear-gradient(170deg, var(--cd-parch), var(--cd-parch-lo));
   box-shadow: inset 0 1px 4px #6e4b2933, 0 1px #e3b77355; }
 .atlas .atlas-cartouche .atlas-search-field:focus-within { border-color: #62431f; outline: 2px solid var(--cd-brass-hi); outline-offset: 2px; box-shadow: inset 0 1px 4px #6e4b2933; }
-/* Paper hung from the wooden plate: it sets its own ink, or its sentences inherit the plate's cream and vanish. */
-.atlas .atlas-cartouche .atlas-search-panel { top: calc(100% + 13px); border: 4px solid var(--cd-wood-lo); border-radius: 5px; color: var(--cd-ink);
+.atlas .atlas-cartouche .atlas-search-panel { top: calc(100% + 13px); border: 4px solid var(--cd-wood-lo); border-radius: 5px;
   box-shadow: inset 0 0 0 1px #dfbc8059, 0 1px 0 var(--cd-brass-lo), 0 8px 20px #34231655; }
 .atlas .atlas-cartouche .atlas-search-result[aria-selected='true'] { border-left-color: var(--cd-brass-lo); background: #9b744922; }
 /* The plate's cream lettering stops at the panel: names in the list are ink on paper. */
@@ -40,31 +39,48 @@
 .atlas .atlas-search-result { touch-action: manipulation; }
 .atlas .atlas-search-result[data-atlas-press='true'] .atlas-face-seal, .atlas .atlas-search-result:active .atlas-face-seal { transform: scale(.94); filter: brightness(.96); }
 
-/* The key is a compact rail; its line of explanation opens only while a glyph is inspected. */
-.atlas .atlas-key { left: 20px; bottom: 20px; width: auto; max-width: calc(100% - 40px); padding: 6px; border: 1px solid var(--cd-wood-edge); border-radius: 8px;
+/* The key: one worded button on a walnut bar; it opens a parchment legend that names every mark in words. */
+.atlas .atlas-key { position: absolute; left: 20px; bottom: 20px; display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: max-content; max-width: calc(100% - 40px);
+  padding: 0; border: 0; background: none; box-shadow: none; }
+.atlas .atlas-key-bar { display: flex; gap: 4px; align-self: flex-start; padding: 5px; border: 1px solid var(--cd-wood-edge); border-radius: 8px;
   background: repeating-linear-gradient(95deg, #ffe1ab08 0 2px, transparent 2px 10px, #1a0c0410 10px 11px, transparent 11px 18px), linear-gradient(165deg, var(--cd-wood-hi), var(--cd-wood-lo));
   box-shadow: inset 0 1px #ffe4b45c, inset 0 0 0 3px #2a180e38, inset 0 0 0 4px #d5ac6b38, 0 3px 0 #342012aa, 0 8px 18px #3423163a; }
-.atlas[data-layout='laptop'] .atlas-key { max-height: none; overflow: visible; }
-.atlas[data-layout='laptop'] .atlas-key-toggle { display: none; }
-.atlas .atlas-key-body { padding: 0; }
-.atlas .atlas-key-legend { position: relative; }
-.atlas .atlas-key-glyphs { display: flex; gap: 3px; }
-.atlas .atlas-key-glyph-button { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 4px; flex: none; border: 1px solid #352014; border-radius: 4px;
-  color: var(--cd-ink); cursor: pointer; touch-action: manipulation;
+.atlas .atlas-key-toggle, .atlas .atlas-key-own { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 13px 0 10px; border: 1px solid #352014; border-radius: 4px;
+  color: var(--cd-ink); cursor: pointer; touch-action: manipulation; font: 400 16px/1 var(--cd-face-story); letter-spacing: .02em; white-space: nowrap;
   background: radial-gradient(ellipse at 30% 10%, var(--cd-parch-hi), transparent 85%), linear-gradient(165deg, var(--cd-parch), var(--cd-parch-lo));
   box-shadow: inset 0 1px #fff8e16b, inset 0 -2px #98713d24, 0 1px 0 #dfbe8652; transition: transform 100ms, box-shadow 100ms, filter 100ms; }
-.atlas .atlas-key-glyph-button:hover { filter: brightness(1.04); box-shadow: inset 0 1px #fff8e199, inset 0 -2px #98713d24, 0 2px 0 #1d100b80; }
-.atlas .atlas-key-glyph-button:active, .atlas .atlas-key-glyph-button[aria-pressed='true'] { transform: translateY(1px); filter: brightness(.94); box-shadow: inset 0 1px 3px #54381755; }
-.atlas .atlas-key-glyph { display: block; width: 30px; height: 30px; fill: none; stroke: var(--cd-ink); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.atlas .atlas-key-glyph .atlas-key-pigment { fill: #be3c27; fill-opacity: .36; stroke: none; }
-.atlas .atlas-key-glyph .atlas-key-pennant { fill: #b93b28; fill-opacity: .5; stroke: #6c3321; stroke-width: 1; }
-.atlas .atlas-key-glyph .atlas-key-brass { stroke: #936421; stroke-width: 1.7; }
-.atlas .atlas-key-glyph .atlas-key-pencil { stroke: #796c5c; stroke-dasharray: 2.8 2; }
-.atlas .atlas-key-hint { position: absolute; left: 0; bottom: calc(100% + 10px); width: max-content; max-width: min(260px, calc(100vw - 40px)); padding: 8px 11px; border: 1px solid #8d704b; border-radius: 3px;
-  color: var(--cd-ink); background: var(--cd-parch-hi); box-shadow: inset 0 0 0 2px #f9eed9, 0 4px 9px #34231635; font: 400 14px/1.25 var(--cd-face-body); }
+.atlas .atlas-key-toggle:hover, .atlas .atlas-key-own:hover { filter: brightness(1.04); box-shadow: inset 0 1px #fff8e199, inset 0 -2px #98713d24, 0 2px 0 #1d100b80; }
+.atlas .atlas-key-toggle:active, .atlas .atlas-key-own:active, .atlas .atlas-key-toggle[aria-expanded='true'] { transform: translateY(1px); filter: brightness(.95); box-shadow: inset 0 1px 3px #54381755; }
+.atlas .atlas-key-toggle svg, .atlas .atlas-key-own svg { flex: none; fill: none; stroke: var(--cd-ink); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.atlas .atlas-key-book, .atlas .atlas-key-own svg { width: 20px; height: 20px; }
+.atlas .atlas-key-own svg path:first-child { fill: #b8862f40; stroke: #7a5418; }
+.atlas .atlas-key-chevron { width: 11px; height: 11px; margin-left: 1px; opacity: .75; transition: transform 160ms; }
+.atlas .atlas-key[data-open='true'] .atlas-key-chevron { transform: rotate(180deg); }
+.atlas .atlas-key-body { width: 330px; max-width: 100%; max-height: calc(100vh - var(--atlas-cartouche-bottom, 245px) - 110px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  padding: 10px 14px 8px; border: 1px solid #8d704b; border-radius: 6px; color: var(--cd-ink);
+  background: radial-gradient(ellipse at 20% 0%, var(--cd-parch-hi), transparent 70%), linear-gradient(170deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 3px #f9eed9b0, inset 0 0 0 4px #8d704b40, 0 3px 0 #34201266, 0 10px 22px #34231640;
+  transform-origin: bottom left; animation: atlas-key-unfold 190ms cubic-bezier(.2,.65,.2,1) both; }
+.atlas .atlas-key-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.atlas .atlas-key-list li { display: grid; grid-template-columns: 44px 1fr; column-gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid #8d704b2e; }
+.atlas .atlas-key-list li:last-child { border-bottom: 0; }
+.atlas .atlas-key-mark { position: relative; display: flex; align-items: flex-end; justify-content: center; gap: 0; width: 44px; height: 34px; }
+.atlas .atlas-key-mark .atlas-shield { margin-left: -6px; margin-bottom: -2px; }
+.atlas .atlas-key-words { display: grid; gap: 1px; min-width: 0; }
+.atlas .atlas-key-name { font: 400 16px/1.15 var(--cd-face-story); color: var(--cd-ink); }
+.atlas .atlas-key-line { font: 400 13px/1.3 var(--cd-face-body); color: #5a4836; }
+.atlas .atlas-key-glyph { display: block; width: 34px; height: 34px; fill: none; stroke: var(--cd-ink); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.atlas .atlas-key-glyph .atlas-key-pigment { fill: #c8402a; fill-opacity: .28; stroke: none; }
+.atlas .atlas-key-glyph .atlas-key-pennant { fill: #c23a22; fill-opacity: .85; stroke: #5c2a1a; stroke-width: .9; }
+.atlas .atlas-key-glyph .atlas-key-shield { fill: #efe4c8; stroke-width: 1.2; }
+.atlas .atlas-key-glyph .atlas-key-graphite { stroke: #5f5a52; stroke-width: 1.2; }
+.atlas .atlas-key-glyph .atlas-key-hatch { fill: #f1e7cb; }
+.atlas .atlas-key-glyph .atlas-key-dotted { stroke-dasharray: 2.2 2.6; opacity: .8; }
+.atlas .atlas-key-swatch { display: block; width: 34px; height: 22px; border: 1px solid var(--cd-ink); border-radius: 40% 55% 45% 60% / 60% 45% 55% 40%;
+  background: radial-gradient(circle at 50% 50%, #ece2c2 0 20%, transparent 22%), linear-gradient(90deg, #c8cd9b 0 34%, #d5c39c 34% 67%, #b9c3ad 67%); }
 
 /* Brass focus wire remains visible on both parchment and the dark walnut fittings. */
-.atlas .atlas-key-glyph-button:focus-visible, .atlas .atlas-controls button:focus-visible, .atlas .atlas-key-toggle:focus-visible,
+.atlas .atlas-key-own:focus-visible, .atlas .atlas-controls button:focus-visible, .atlas .atlas-key-toggle:focus-visible,
 .atlas .atlas-card button:focus-visible, .atlas .atlas-card a:focus-visible { outline: 2px solid var(--cd-brass-hi); outline-offset: 2px; box-shadow: 0 0 0 4px #4b301c; }
 .atlas .atlas-controls { padding: 5px; border: 1px solid #3b2417; border-radius: 7px; background: linear-gradient(160deg, var(--cd-wood-hi), var(--cd-wood-lo));
   box-shadow: inset 0 1px #ffe1af5c, inset 0 0 0 3px #25170e40, 0 3px 0 #342012a0, 0 7px 15px #34231635; }
@@ -90,22 +106,27 @@
 .atlas[data-layout='phone'] .atlas-cartouche .atlas-title { font-size: 20px; }
 .atlas[data-layout='phone'] .atlas-cartouche-ornament { width: 24px; height: 24px; }
 .atlas[data-layout='phone'] .atlas-cartouche .atlas-search { margin: 7px 0 0; padding: 0; }
-.atlas[data-layout='phone'] .atlas-key { left: 10px; bottom: 10px; width: auto; padding: 3px; }
-.atlas[data-layout='phone'] .atlas-key-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 70px; min-height: 44px; padding: 0 14px; color: var(--cd-cream); cursor: pointer; border: 1px solid #2d1c10; border-radius: 4px;
-  background: linear-gradient(175deg, var(--cd-wood-hi), var(--cd-wood-lo)); box-shadow: inset 0 1px #ffe4b44d, 0 1px 0 #d6af7055; }
-.atlas[data-layout='phone'] .atlas-key[data-open='true'] { left: 0; right: 0; bottom: 0; max-width: none; max-height: 70%; padding: 8px 12px calc(14px + env(safe-area-inset-bottom)); overflow: visible; border-radius: 12px 12px 0 0; }
-.atlas[data-layout='phone'] .atlas-key[data-open='true'] .atlas-key-toggle { min-height: 40px; margin-bottom: 8px; }
-.atlas[data-layout='phone'] .atlas-key[data-open='true'] .atlas-key-body { padding: 0; }
-.atlas[data-layout='phone'] .atlas-key-glyphs { justify-content: space-around; gap: 4px; }
-.atlas[data-layout='phone'] .atlas-key-legend { padding-bottom: 42px; }
-.atlas[data-layout='phone'] .atlas-key-hint { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; width: 100%; max-width: none; height: 34px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.atlas[data-layout='phone'] .atlas-key { left: 10px; bottom: 10px; max-width: calc(100% - 80px); gap: 0; }
+.atlas[data-layout='phone'] .atlas-key-bar { padding: 3px; }
+.atlas[data-layout='phone'] .atlas-key-toggle, .atlas[data-layout='phone'] .atlas-key-own { min-height: 44px; padding: 0 12px 0 9px; font-size: 15px; }
+/* On a phone the open key is a bottom sheet: the legend above, its bar below. */
+.atlas[data-layout='phone'] .atlas-key[data-open='true'] { left: 0; right: 0; bottom: 0; width: auto; max-width: none; max-height: 72%; padding: 0 0 calc(8px + env(safe-area-inset-bottom));
+  border: 1px solid #8d704b; border-bottom: 0; border-radius: 12px 12px 0 0;
+  background: radial-gradient(ellipse at 20% 0%, var(--cd-parch-hi), transparent 70%), linear-gradient(170deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 3px #f9eed9b0, 0 -6px 18px #3423163a; transform-origin: bottom center; animation: atlas-key-unfold 190ms cubic-bezier(.2,.65,.2,1) both; }
+.atlas[data-layout='phone'] .atlas-key[data-open='true'] .atlas-key-body { width: auto; max-height: none; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 16px 6px; border: 0; background: none; box-shadow: none; animation: none; }
+.atlas[data-layout='phone'] .atlas-key[data-open='true'] .atlas-key-bar { margin: 0 10px; align-self: stretch; justify-content: flex-start; }
+.atlas[data-layout='phone'] .atlas-key-list li { grid-template-columns: 46px 1fr; padding: 6px 0; }
+.atlas[data-layout='phone'] .atlas-key-name { font-size: 16px; }
+.atlas[data-layout='phone'] .atlas-key-line { font-size: 13.5px; }
 .atlas[data-layout='phone'] .atlas-card { border-bottom: 0; border-radius: 9px 9px 0 0; }
 
 @media (forced-colors: active) {
-  .atlas .atlas-key-glyph-button:focus-visible, .atlas .atlas-controls button:focus-visible, .atlas .atlas-key-toggle:focus-visible { outline-color: Highlight; }
+  .atlas .atlas-key-own:focus-visible, .atlas .atlas-controls button:focus-visible, .atlas .atlas-key-toggle:focus-visible { outline-color: Highlight; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .atlas .atlas-key-glyph-button { transition: none; }
+  .atlas .atlas-key-toggle, .atlas .atlas-key-own, .atlas .atlas-key-chevron { transition: none; }
+  .atlas .atlas-key-body { animation: none; }
 }
 
 /* A shutter swings on its far edge and a wax matrix presses in the first tenth of a second. */
@@ -121,8 +142,7 @@
   68% { transform: scale(1.025); filter: brightness(1); }
   100% { transform: scale(1); filter: brightness(1); }
 }
-.atlas[data-layout='phone'] .atlas-key[data-open='true'] { transform-origin: bottom center; animation: atlas-key-unfold 190ms cubic-bezier(.2,.65,.2,1) both; }
-@keyframes atlas-key-unfold { from { transform: translateY(15px) scaleY(.94); opacity: .7; } to { transform: translateY(0) scaleY(1); opacity: 1; } }
+@keyframes atlas-key-unfold { from { transform: translateY(12px) scaleY(.95); } to { transform: translateY(0) scaleY(1); } }
 .atlas[data-layout='phone'] .atlas-card { animation: atlas-sheet-in 220ms cubic-bezier(.2,.65,.2,1) both; }
 @media (prefers-reduced-motion: reduce) {
   .atlas .atlas-card, .atlas[data-layout='phone'] .atlas-card, .atlas .atlas-card-head .atlas-face-seal, .atlas[data-layout='phone'] .atlas-key[data-open='true'] { animation: none; }
@@ -147,3 +167,46 @@
 .atlas .atlas-card-footer .atlas-share { min-width: 0; }
 .atlas .atlas-card-footer .atlas-watch, .atlas .atlas-card-footer .atlas-button { min-width: 0; }
 .atlas .atlas-card-footer .atlas-card-actions .atlas-watch, .atlas .atlas-card-footer .atlas-card-actions .atlas-button { padding-inline: 8px; font-size: 14px; gap: 5px; }
+
+/* The way in: a brass plate carved under the search, always on the title plate, walking straight into a kingdom. */
+.atlas .atlas-way-in { display: flex; align-items: center; gap: 9px; min-height: 42px; margin-top: 9px; padding: 0 11px 0 10px; border: 1px solid #3a240f; border-radius: 3px;
+  color: var(--cd-ink) !important; text-decoration: none; cursor: pointer; touch-action: manipulation;
+  background: radial-gradient(ellipse at 22% 0, #fff0c4 0, transparent 70%), linear-gradient(172deg, #ecd08f, #d0a65a 48%, #b0843d);
+  box-shadow: inset 0 1px #fff6d8b0, inset 0 -2px #7c5a2a55, inset 0 0 0 3px #f8e2a426, 0 1px #e3b77366, 0 2px 0 #24160daa;
+  transition: transform 100ms, filter 100ms, box-shadow 100ms; }
+.atlas .atlas-way-in:hover { filter: brightness(1.05); }
+.atlas .atlas-way-in:active { transform: translateY(1px); box-shadow: inset 0 1px 3px #5e3f1a77, 0 1px 0 #24160daa; }
+.atlas .atlas-way-in > svg:first-child { flex: none; width: 22px; height: 22px; fill: #7c5a2a33; stroke: var(--cd-ink); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.atlas .atlas-way-in-label { flex: none; font: 400 16.5px/1 var(--cd-face-story); letter-spacing: .015em; white-space: nowrap; }
+.atlas .atlas-way-in-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right;
+  font: italic 400 14.5px/1 var(--cd-face-body); color: #4f3519; unicode-bidi: plaintext; }
+.atlas .atlas-way-in-go { flex: none; width: 11px; height: 11px; fill: none; stroke: var(--cd-ink); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+/* With the way in under it, the search's findings hang below the whole plate, never over the way in. */
+.atlas .atlas-cartouche:has(.atlas-way-in) .atlas-search-panel { top: calc(100% + 51px + var(--cartouche-pad-bottom) + 8px); }
+.atlas[data-layout='phone'] .atlas-way-in { min-height: 44px; margin-top: 7px; }
+.atlas[data-layout='phone'] .atlas-cartouche:has(.atlas-way-in) .atlas-search-panel { top: calc(100% + 51px + var(--cartouche-pad-bottom) + 8px); }
+
+/* The first visit's caption: one parchment slip pinned under the title plate. */
+.atlas .atlas-opening { position: absolute; z-index: 3; left: 20px; top: calc(var(--atlas-cartouche-bottom, 196px) + 12px); width: 360px; box-sizing: border-box; margin: 0;
+  display: flex; align-items: flex-start; gap: 8px; padding: 10px 8px 10px 15px; pointer-events: auto;
+  color: var(--cd-ink); font: italic 400 16px/1.35 var(--cd-face-story); border: 1px solid #8d704b; border-radius: 4px;
+  background: radial-gradient(ellipse at 25% 0, var(--cd-parch-hi), transparent 80%), linear-gradient(170deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 3px #f9eed9b0, 0 2px 0 #6b492e44, 0 8px 18px #3423162e; transform-origin: top left; animation: atlas-opening-in 260ms cubic-bezier(.2,.65,.2,1) both; }
+.atlas .atlas-opening > span { flex: 1 1 auto; padding-top: 2px; }
+.atlas .atlas-opening-x { flex: none; display: grid; place-items: center; width: 32px; height: 32px; margin: -4px 0 -4px; padding: 0; border: 0; border-radius: 3px; background: none; cursor: pointer; color: var(--cd-ink-soft); }
+.atlas .atlas-opening-x:hover { background: #9b744922; }
+.atlas .atlas-opening-x svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+@keyframes atlas-opening-in { from { transform: translateY(-6px) rotate(-.4deg); } to { transform: translateY(0) rotate(0); } }
+.atlas[data-layout='phone'] .atlas-opening { left: 10px; right: 10px; width: auto; top: calc(var(--atlas-cartouche-bottom, 186px) + 8px); font-size: 16.5px; }
+
+/* A founded kingdom's card leads with its way in: the biggest thing on the card after its name. */
+.atlas .atlas-card .atlas-enter { flex: none; display: flex; align-items: center; justify-content: flex-start; gap: 12px; width: 100%; box-sizing: border-box; min-height: 60px; margin: 2px 0 12px; padding: 8px 16px 8px 14px; text-align: left; }
+.atlas .atlas-card .atlas-enter > svg { width: 28px; height: 28px; fill: #f4dc9d22; stroke: var(--cd-brass-hi); stroke-width: 1.3; }
+.atlas .atlas-enter-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.atlas .atlas-enter-name { font: 400 20px/1.05 var(--cd-face-story); letter-spacing: .01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+.atlas .atlas-enter-line { font: italic 400 13px/1.1 var(--cd-face-body); color: var(--cd-cream-soft); letter-spacing: 0; }
+.atlas .atlas-card .atlas-door > svg:first-child:not(:last-child) { width: 19px; height: 19px; }
+.atlas .atlas-card-footer .atlas-door-land { width: 100%; margin-top: 8px; }
+.atlas .atlas-card-founding { margin: 0 0 8px !important; font: italic 400 14.5px/1.3 var(--cd-face-body); color: var(--cd-ink-soft); text-align: center; }
+.atlas[data-layout='phone'] .atlas-card .atlas-enter { min-height: 62px; }
+@media (prefers-reduced-motion: reduce) { .atlas .atlas-opening { animation: none; } .atlas .atlas-way-in { transition: none; } }

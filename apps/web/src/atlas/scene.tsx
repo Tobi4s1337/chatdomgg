@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, createSignal, createUniqueId, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, createUniqueId, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
 import './atlas.css';
 import { render } from 'solid-js/web';
 import type { AtlasGateEmit, AtlasMountOptions, AtlasReadyState, AtlasScene as SceneHandle, AtlasSceneGate, AtlasTarget, AtlasView } from './embed';
@@ -15,7 +15,6 @@ import { LatestRequest, savedView } from './saved-view';
 import type { HistoryLike } from './ui/history';
 import { adoptPreview, loadPreview, type LoadedPreview } from './data/load';
 import { dabHashOf, DirectoryError, fetchCard, type CardReply, type CardRoad, type ChannelFace, type Lookup, type PencilPosition, type SearchResult } from './data/directory';
-import { findOpenKingdom } from './data/open-kingdoms';
 import { decodeRings, geographyOf, labelWorld, SettlerStore, type Geography, type Ring, type Settler } from './data/model';
 import { fetchChunk, fetchNames, type PreviewSource } from './data/preview';
 import { atlasFailureState, mountAtlasWithRetry } from './recovery';
@@ -36,6 +35,8 @@ import { newerNotice } from './ui/edition';
 import { watchUrl } from './ui/format';
 import { CardHistory } from './ui/history';
 import { LegendBody } from './ui/Legend';
+import { Opening, WayIn } from './ui/WayIn';
+import { takeOpening } from './ui/opening';
 import { SurveySeal } from './ui/SurveySeal';
 import { FooterSlot } from './ui/FooterSlot';
 import { AtlasMaterialSound } from './ui/material-sound';
@@ -45,6 +46,8 @@ import { formatRoute, parseRoute, type AtlasRoute } from './ui/route';
 import { Search } from './ui/Search';
 import { ownerAct, OwnerActError, ownSearchRow, readOwner, type OwnerState } from './data/owner';
 import { OwnerCard, OwnerLine, type OwnerPress } from './ui/Owner';
+import { FOUND_RESTORE_LIMIT, foundable, foundIds, foundMarks, FoundRegistry, readFoundSession, writeFoundSession } from './map/found';
+import { kingdomOf, NO_KINGDOMS, readFoundedKingdoms, type FoundedKingdoms } from './data/kingdoms';
 
 type State = 'loading' | 'ready' | 'still' | 'empty' | 'unavailable' | 'invalid' | 'unsupported';
 
@@ -52,7 +55,7 @@ declare global {
   interface Window {
     __chatdomReady?: boolean;
     /** Read-only evidence of the drawn map for the Atlas checks (camera, tiles, overlay budgets). */
-    __chatdomAtlas?: { stats(): MapStats | null; marks(limit?: number): ReturnType<MapView['drawnMarks']> };
+    __chatdomAtlas?: { stats(): MapStats | null; marks(limit?: number): ReturnType<MapView['drawnMarks']>; found?(): ReturnType<MapView['drawnFound']>; foundIds?(): string[] };
   }
 }
 
@@ -82,6 +85,17 @@ type RoadAsk = { a: { id: string } | { login: string }; b: { id: string } | { lo
 function sessionStore(): Storage | null {
   try {
     return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** How many times an empty door is asked again (30 s, 1, 2, 4, then every 5 minutes): about an hour. */
+const KINGDOM_RETRIES = 14;
+
+function localStore(): Storage | null {
+  try {
+    return window.localStorage;
   } catch {
     return null;
   }
@@ -208,6 +222,8 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   const [minScale, setMinScale] = createSignal(0);
   const [distance, setDistance] = createSignal<Distance>('world');
   const [keyOpen, setKeyOpen] = createSignal(false);
+  /** The first visit's opening caption is showing. */
+  const [caption, setCaption] = createSignal(false);
   const keyBodyId = createUniqueId();
   const [notice, setNotice] = createSignal<NoticeState | null>(null);
   const [phone, setPhone] = createSignal(false);
@@ -221,6 +237,13 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   const [waitingScreen, setWaitingScreen] = createSignal<PencilPosition | null>(null);
   /** The gate's source when it has no holding to mark: its pencil place, flagged and named. */
   const [gateSource, setGateSource] = createSignal<{ x: number; y: number; name: string } | null>(null);
+  /**
+   * Channels found this session that the drawn world does not hold, drawn at their pencil places (`map/found.ts`).
+   * `foundVersion` follows the registry; `kingdoms` are the founded kingdoms the site's door lists.
+   */
+  const foundRegistry = new FoundRegistry();
+  const [foundVersion, setFoundVersion] = createSignal(0);
+  const [kingdoms, setKingdoms] = createSignal<FoundedKingdoms>(NO_KINGDOMS);
   createEffect(() => {
     const point = waiting() ? waitingPosition() : gateSource();
     if (!point || !visible()) { setWaitingScreen(null); return; }
@@ -341,6 +364,120 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     view?.setRoad(null);
     roadsLayer?.setFocus(null);
     roadsLayer?.setChosen(null);
+  };
+
+  /** Session storage, when the page may use it (an embed in a sandboxed frame may not). */
+  const sessionStorageOrNull = (): Storage | null => { try { return window.sessionStorage; } catch { return null; } };
+  /**
+   * Draw the found channels again: gated now by the drawn holdings and the names projection's withheld set (the
+   * operator's list and a streamer's own hide always win), as founded kingdoms where the door names them. The
+   * session keeps their IDs (never their names or places) so a reload in this tab draws them again.
+   */
+  const syncFound = () => {
+    const holdings = store;
+    const marks = holdings && mode() === 'explore' ? foundMarks(foundRegistry.list(), holdings, kingdoms()) : [];
+    const open = openChannel();
+    view?.setFound(marks, open && foundRegistry.has(open) ? open : null);
+    setFoundVersion(foundRegistry.version);
+    const world = loaded()?.world;
+    // Nothing is written for a map until its own session was read back, so mounting never erases it.
+    if (world && mode() === 'explore' && foundSessionFor === world.id) writeFoundSession(sessionStorageOrNull(), world.id, foundRegistry.ids());
+  };
+  /** The map whose session list has been read back (see `syncFound`). */
+  let foundSessionFor: string | null = null;
+  /** Explore on a drawn map: read the founded kingdoms and bring back this tab's found channels, once per map. */
+  const beginFound = (signal: AbortSignal, more: readonly string[] = []) => {
+    const world = loaded()?.world;
+    if (!world || mode() !== 'explore') return;
+    askKingdoms(signal);
+    const session = foundSessionFor === world.id ? [] : readFoundSession(sessionStorageOrNull(), world.id);
+    foundSessionFor = world.id;
+    if (session.length || more.length) void restoreFound([...session, ...more], signal);
+  };
+  /** Keep a channel the visitor found that the world does not hold, so the map draws it where it belongs. */
+  const rememberFound = (face: ChannelFace, position: PencilPosition | null | undefined) => {
+    if (mode() !== 'explore' || !store || store.byId.has(face.id) || store.isWithheld(face.id)) return;
+    if (foundRegistry.add(face, position)) syncFound();
+  };
+  const forgetFound = (id: string) => { if (foundRegistry.remove(id)) syncFound(); };
+  /**
+   * Bring back found channels by ID (a saved view, this tab's session, or the previous revision's), each read again
+   * from the register first, so a channel withheld or hidden since never comes back and its place is this map's.
+   */
+  const restoreFound = async (ids: readonly string[], signal: AbortSignal) => {
+    const world = loaded()?.world;
+    if (!world || mode() !== 'explore') return;
+    const wanted = foundIds(ids, FOUND_RESTORE_LIMIT).filter(id => !foundRegistry.has(id) && !store?.byId.has(id));
+    for (let i = 0; i < wanted.length; i += 3) {
+      const replies = await Promise.all(wanted.slice(i, i + 3).map(id => fetchCard(SOURCE, world.id, { id }, signal).catch(() => null)));
+      if (signal.aborted || loaded()?.world.id !== world.id) return;
+      for (const reply of replies) if (reply && foundable(reply.channel, reply.position)) foundRegistry.add(reply.channel, reply.position);
+      syncFound();
+    }
+  };
+  /**
+   * Ask the register again about every found channel (after names changed: the service's withheld set may have
+   * moved). The names projection lists only surveyed holdings, so a found channel withheld or hidden since is known
+   * by its card alone: one the register no longer answers for leaves the map, and its open card closes.
+   */
+  let revalidating: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(revalidating));
+  const revalidateFound = () => {
+    clearTimeout(revalidating);
+    if (!foundRegistry.size) return;
+    revalidating = setTimeout(async () => {
+      const world = loaded()?.world;
+      const signal = controller?.signal;
+      if (!world || !signal || signal.aborted) return;
+      const ids = foundRegistry.ids();
+      const gone: string[] = [];
+      for (let i = 0; i < ids.length; i += 3) {
+        await Promise.all(ids.slice(i, i + 3).map(id => fetchCard(SOURCE, world.id, { id }, signal).then(
+          (reply) => { if (!foundable(reply.channel, reply.position)) gone.push(id); },
+          (error: unknown) => { if (error instanceof DirectoryError && error.reason === 'not-found') gone.push(id); },
+        )));
+        if (signal.aborted || loaded()?.world.id !== world.id) return;
+      }
+      if (!gone.length) return;
+      const open = waiting()?.id ?? null;
+      for (const id of gone) foundRegistry.remove(id);
+      syncFound();
+      if (open && gone.includes(open)) closeCard();
+    }, 400);
+  };
+  /** The founded kingdoms, read once per page from the door; a host without one names none. The door names a
+   * kingdom only while its realm answers, so an empty answer is asked again, more slowly each time, and the way in
+   * appears as soon as a kingdom can be walked into. */
+  let kingdomsAsked = false;
+  let kingdomsTimer: ReturnType<typeof setTimeout> | undefined;
+  const askKingdoms = (signal: AbortSignal, attempt = 0) => {
+    if ((kingdomsAsked && attempt === 0) || mode() !== 'explore') return;
+    kingdomsAsked = true;
+    void readFoundedKingdoms(signal).then((answer) => {
+      if (signal.aborted || disposed) { kingdomsAsked = false; return; }
+      setKingdoms(answer);
+      syncFound();
+      if (answer.size === 0 && attempt < KINGDOM_RETRIES) {
+        clearTimeout(kingdomsTimer);
+        kingdomsTimer = setTimeout(() => askKingdoms(signal, attempt + 1), Math.min(30_000 * 2 ** attempt, 300_000));
+      }
+    });
+  };
+  onCleanup(() => clearTimeout(kingdomsTimer));
+  /** The founded kingdom a card's channel is, when the door names it. */
+  const kingdomFor = (face: { id: string; login: string | null }) => kingdomOf(kingdoms(), face);
+  /** The kingdom the map's way in leads to: the door's first founded kingdom (Willowmere today). */
+  const wayIn = () => kingdoms().values().next().value ?? null;
+  /** A founded kingdom to visit from the card of a channel that has none: never the channel itself. */
+  const visitFrom = (id: string) => { for (const kingdom of kingdoms().values()) if (kingdom.kingdomId !== id) return kingdom; return null; };
+  /** The signed-in visitor is this channel's verified broadcaster. */
+  const ownChannel = (id: string) => { const own = owner(); return own?.status === 'broadcaster' && own.channelId === id; };
+  /** A found channel's mark was tapped: its card opens where the map stands. */
+  const chooseFound = (id: string) => {
+    const entry = foundRegistry.get(id);
+    if (!entry) return;
+    if (mode() !== 'hero' && visible()) materialSound.play('wax');
+    void openFace(entry.face, entry.position, false);
   };
 
   /** How far the land spans, so a caravan's ride time follows its distance across the whole map. */
@@ -486,6 +623,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       readChannelRoads(reply.channel.id);
       if (waiting()?.id === reply.channel.id && reply.position) {
         setWaitingPosition(reply.position);
+        rememberFound(reply.channel, reply.position);
         // A restored card keeps the saved camera; the flag is only kept clear of the card.
         if (fly) view?.flyTo(reply.position.x, reply.position.y, Math.max(view.cameraState().scale, DISTANCE_STOP.realm));
         view?.revealPoint(reply.position);
@@ -493,7 +631,10 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       if (reply.channel.login && history.isOpen) history.opened(cardId, view?.cameraState() ?? { x: 0, y: 0, scale: 1 }, urlFor(reply.channel.login));
     }, (error: unknown) => {
       if (generation !== cardGeneration || (error as Error).name === 'AbortError') return;
-      if (error instanceof DirectoryError && error.reason === 'not-found') setRegister({ status: 'missing' });
+      if (error instanceof DirectoryError && error.reason === 'not-found') {
+        setRegister({ status: 'missing' });
+        if ('id' in lookup) forgetFound(lookup.id);
+      }
       else setRegister({ status: 'failed', reason: error instanceof DirectoryError ? error.reason : 'unavailable' });
     });
   };
@@ -557,6 +698,8 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     setKeyOpen(false);
     const id = `waiting:${face.id}`;
     opening(id, urlFor(face.login));
+    // Found means shown: the map draws it at its place from this frame on, before the register answers.
+    rememberFound(face, position);
     readRegister({ id: face.id }, id, fly);
     const realm = geo()?.realms[face.realm ?? -1];
     if (!fly) {
@@ -592,7 +735,12 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     const place = await locate(face);
     if (generation !== cardGeneration || signal?.aborted) return false;
     if (place && 'settler' in place) { choose(place.settler, fly); return true; }
-    if (place && 'dab' in place) { chooseDab(place.dab, fly, face); return true; }
+    if (place && 'dab' in place) {
+      // On air now as a pencil flag; it stays drawn at the same place once the stream ends.
+      rememberFound(face, { x: place.dab.x, y: place.dab.y });
+      chooseDab(place.dab, fly, face);
+      return true;
+    }
     if (face.place === 'waiting') { openWaiting(face, position, fly); return true; }
     // A holding the map no longer draws (withheld since the register answered) has no card to open.
     setNotice({ text: 'That channel is no longer drawn on this map.' });
@@ -649,6 +797,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     try {
       const next = await ownerAct('hide', own, world.id, controller?.signal);
       if (disposed) return;
+      forgetFound(own.channelId);
       batch(() => {
         setOwner({ ...next, card: cardNow });
         openOwnerCard(false);
@@ -687,6 +836,17 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       if ((error as Error).name === 'AbortError' || disposed) return;
       setOwnerPress(error instanceof OwnerActError && error.reason === 'signed-out' ? 'signed-out' : 'failed');
     }
+  };
+
+  /** "Your channel": the signed-in broadcaster's own card, where it stands (its own hidden card while hidden). */
+  const goOwn = () => {
+    const own = owner();
+    if (own?.status !== 'broadcaster') return;
+    setKeyOpen(false);
+    if (own.hidden) { openOwnerCard(); return; }
+    void flyTo({ channelId: own.channelId }, { openCard: true }).then((opened) => {
+      if (!opened && !disposed && !anyOpen()) setNotice({ text: 'Your channel could not be found on this map just now.' });
+    });
   };
 
   /** The owner line, only on the signed-in broadcaster's own shown card. */
@@ -784,12 +944,6 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
             openOwnerCard();
             return;
           }
-          // A kingdom chatdom.io opens is entered even before the survey draws it on the map.
-          const kingdom = await findOpenKingdom(route.login);
-          if (kingdom) return drop(`${kingdom.name}, ${kingdom.login}’s kingdom, is not drawn on the map yet.`, {
-            label: `Enter ${kingdom.name}`,
-            run: () => location.assign(`/kingdom/${encodeURIComponent(kingdom.kingdomId)}`),
-          });
           drop(`“${route.login}” is not on the map yet.`, {
             label: 'Look on Twitch',
             run: () => { const url = watchUrl(route.login); if (url) window.open(url, '_blank', 'noopener,noreferrer'); },
@@ -844,6 +998,13 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   const namesChanged = () => {
     setNamesTick(namesTick() + 1);
     if (selected()?.withheld) closeCard();
+    // A found channel withheld since (the operator's list or its own hide) leaves the map and its card closes.
+    const open = waiting()?.id;
+    if (store && foundRegistry.keep(entry => !store!.isWithheld(entry.face.id))) {
+      if (open && !foundRegistry.has(open) && store.isWithheld(open)) closeCard();
+    }
+    syncFound();
+    revalidateFound();
   };
 
   /** Drop each name the moment it goes stale, even if the service cannot be reached to say so. */
@@ -1016,6 +1177,9 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       const preview = await loadPreview(SOURCE, sessionStore(), signal);
       if (signal.aborted) return;
       const world = labelWorld(preview.world);
+      // Found channels of another revision are found again on this one: their places belong to its land.
+      const carried = loaded() && loaded()!.world.id !== world.id ? foundRegistry.ids() : [];
+      if (carried.length) foundRegistry.clear();
       const holdings = new SettlerStore(world);
       store = holdings;
       const geography = geographyOf(world);
@@ -1045,6 +1209,11 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         // The host may have settled its size since the map was made; the saved view is placed again, exactly, while
         // the still still covers it.
         if (resumed) view?.setCamera(resumed.camera);
+        if (mode() === 'explore') {
+          beginFound(signal, [...carried, ...(resumed?.found ?? [])]);
+          // A first visit reads one line of what the map is; a return from sign-in or a reload is not one.
+          if (!resumed && takeOpening(localStore())) setCaption(true);
+        }
         if (route) void applyRoute(route.route, route.adopted);
         else if (resumed?.selected && mode() === 'explore') void openSaved(resumed.selected, signal);
         else if (!resumed && props.options.focus) void flyTo(props.options.focus, { openCard: mode() === 'explore' });
@@ -1094,6 +1263,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         },
         select: choose,
         selectDab: chooseDab,
+        selectFound: chooseFound,
         camera: (camera) => {
           setScale(camera.scale);
           setMinScale(camera.minScale);
@@ -1117,6 +1287,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       if (signal.aborted) { mounted?.dispose(); return; }
       view = mounted;
       if (view) attachRoads(view);
+      syncFound();
       view?.setPaused(!inViewport || document.hidden);
       if (!view) {
         if (signal.aborted) return;
@@ -1156,6 +1327,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         if (signal.aborted) return next.dispose();
         view = next;
         attachRoads(next);
+        syncFound();
         next.setPaused(!inViewport || document.hidden);
         if (paint) next.setLive(paint);
         // Read after the wait: Back may have closed the card meanwhile.
@@ -1199,7 +1371,27 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     const flag = selectedDab() ? register() : null;
     return selected()?.id ?? waiting()?.id ?? (flag?.status === 'ready' ? flag.reply.channel.id : null);
   };
-  const currentView = () => ({ ...(view?.cameraState() ?? { x: 0, y: 0, scale: 1 }), selected: openChannel(), mapId: loaded()?.world.id ?? '' });
+  // The opening caption gives way to the first card the visitor opens after it, to the key and to leaving explore;
+  // a card already open beside it (a shared link) leaves it standing.
+  createEffect(on(openChannel, (next, before) => { if (next !== null && next !== before) setCaption(false); }, { defer: true }));
+  createEffect(on(keyOpen, (open) => { if (open) setCaption(false); }, { defer: true }));
+  createEffect(on(mode, (next) => { if (next !== 'explore') setCaption(false); }, { defer: true }));
+  // Found channels are drawn in explore only: the hero stays quiet and the gate draws only the Raid Gate's own.
+  createEffect(on(mode, (next) => {
+    if (next === 'explore' && controller && state() !== 'loading') beginFound(controller.signal);
+    syncFound();
+  }, { defer: true }));
+  // The open card's found channel is ringed on the map as a selected holding is.
+  createEffect(() => {
+    void foundVersion();
+    const open = openChannel();
+    view?.selectFound(open && foundRegistry.has(open) ? open : null);
+  });
+  const currentView = (): AtlasView => {
+    void foundVersion();
+    const found = foundRegistry.ids();
+    return { ...(view?.cameraState() ?? { x: 0, y: 0, scale: 1 }), selected: openChannel(), mapId: loaded()?.world.id ?? '', ...(found.length ? { found } : {}) };
+  };
   /** Only the page's newest restore or flight may still open a card or move the map. */
   const hostRequests = new LatestRequest();
   /**
@@ -1221,6 +1413,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     const signal = hostRequests.begin(controller.signal, options?.signal);
     view?.setCamera(saved.camera);
     if (mode() !== 'explore') return true;
+    if (saved.found.length) void restoreFound(saved.found, controller.signal);
     if (!saved.selected) {
       if (anyOpen()) closeCard();
       return true;
@@ -1493,7 +1686,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       const adopted = history.resume() !== null;
       if (!adopted && route.kind !== 'map') history.arrived();
       pendingRoute = route.kind === 'map' && !adopted ? null : { route, adopted };
-      window.__chatdomAtlas = { stats: () => view?.stats() ?? null, marks: limit => view?.drawnMarks(limit) ?? [] };
+      window.__chatdomAtlas = { stats: () => view?.stats() ?? null, marks: limit => view?.drawnMarks(limit) ?? [], found: () => view?.drawnFound() ?? [], foundIds: () => foundRegistry.ids() };
     }
     visibilityObserver = new IntersectionObserver(entries => {
       inViewport = entries[0]?.isIntersecting ?? true;
@@ -1630,12 +1823,18 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         </Show>
       </Show>
 
-      <Show when={waitingScreen()}>{(point) => (
+      {/* The moving map draws a found channel itself (map/found.ts); this pencil flag stands in on the still and for the gate's source. */}
+      <Show when={state() !== 'ready' || !waiting() ? waitingScreen() : null}>{(point) => (
         <svg data-atlas-pencil-place="true" viewBox="0 0 40 52" width="26" height="34" aria-hidden="true"
           style={{ position: 'absolute', left: `${point().x}px`, top: `${point().y}px`, transform: 'translate(-30%, -94%)', 'pointer-events': 'none', color: 'var(--ink)', 'z-index': state() === 'ready' ? 2 : 0, overflow: 'visible' }}>
           <path d="M12 48V8M12.6 9.5c6 1.6 11-1.8 17 .6-2.4 3-2.6 6.4 .4 9.6-6.2-2-11.2 1.4-17.4-.4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           <ellipse cx="12" cy="48" rx="5" ry="2" fill="none" stroke="currentColor" stroke-width="1" opacity=".5" />
         </svg>
+      )}</Show>
+      <Show when={state() !== 'ready' && waiting() && waitingScreen() ? waitingScreen() : null}>{(point) => (
+        <span class="atlas-gate-source atlas-found-name" dir="auto" style={{ left: `${point().x + 12}px`, top: `${point().y - 30}px` }}>
+          {kingdomFor(waiting()!)?.name ?? faceName(waiting()!)}
+        </span>
       )}</Show>
       <Show when={!waiting() && waitingScreen() && gateSource() ? waitingScreen() : null}>{(point) => (
         <span class="atlas-gate-source" dir="auto" style={{ left: `${point().x + 12}px`, top: `${point().y - 30}px` }}>{gateSource()!.name}</span>
@@ -1645,21 +1844,33 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         {(w) => (
           <>
             <Show when={mode() === 'explore'}>
-              <Cartouche world={w()} seal={<SurveySeal world={w()} summary={live()} still={state() === 'still'} />}>
+              <Cartouche world={w()} seal={<SurveySeal world={w()} summary={live()} still={state() === 'still'} />} way={<WayIn kingdom={wayIn()} />}>
                 <Show when={drawn()}>
                   <Search keyboardRoot={root!} source={SOURCE} world={w()} onAir={onAirResult} onChoose={openSearchResult} own={(query) => ownSearchRow(owner(), query)} />
                 </Show>
               </Cartouche>
+              <Show when={caption()}><Opening onDismiss={() => setCaption(false)} /></Show>
             </Show>
             <Show when={!phone()}><Compass size={92} /></Show>
             <Show when={phone()}><Compass size={46} /></Show>
             <Show when={mode() === 'explore'}>
-            <aside class="atlas-key" data-atlas-chrome="key" data-open={keyOpen() ? 'true' : 'false'} aria-label="Key">
-              <button type="button" class="atlas-key-toggle" aria-expanded={!phone() || keyOpen()} aria-controls={keyBodyId} on:click={() => setKeyOpen(!keyOpen())}>
-                Key
-                <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 7.5L6 4.5l3 3" /></svg>
-              </button>
-              <div class="atlas-key-body" id={keyBodyId}><LegendBody world={w()} /></div>
+            <aside class="atlas-key" data-atlas-chrome="key" data-open={keyOpen() ? 'true' : 'false'} aria-label="Map key">
+              <Show when={keyOpen()}>
+                <div class="atlas-key-body" id={keyBodyId}><LegendBody world={w()} /></div>
+              </Show>
+              <div class="atlas-key-bar">
+                <button type="button" class="atlas-key-toggle" aria-expanded={keyOpen()} aria-controls={keyBodyId} on:click={() => setKeyOpen(!keyOpen())}>
+                  <svg class="atlas-key-book" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c3-1.4 5.6-1.2 8 .6 2.4-1.8 5-2 8-.6v13c-3-1.4-5.6-1.2-8 .6-2.4-1.8-5-2-8-.6zM12 6.1v13" /><path d="M6.4 9.2c1.4-.4 2.6-.3 3.7.3M6.4 12.2c1.4-.4 2.6-.3 3.7.3M13.9 9.5c1.1-.6 2.3-.7 3.7-.3" /></svg>
+                  Map key
+                  <svg class="atlas-key-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 7.5L6 4.5l3 3" /></svg>
+                </button>
+                <Show when={owner()?.status === 'broadcaster'}>
+                  <button type="button" class="atlas-key-own" data-atlas-owner="go" on:click={goOwn}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v7c0 5-3.5 7.6-7 9-3.5-1.4-7-4-7-9z" /><path d="M9 11.5l2 2 4-4.5" /></svg>
+                    Your channel
+                  </button>
+                </Show>
+              </div>
             </aside>
             </Show>
             <Show when={mode() === 'gate' && gateFrom()}>
@@ -1714,6 +1925,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                   onRetry={() => readRegister({ id: settler.id }, settler.id)}
                   onEnter={enter}
                   owner={ownerLine(settler.id)}
+                  kingdom={(namesTick(), kingdomFor({ id: settler.id, login: settler.login }))}
                 />
               )}
             </Show>
@@ -1740,6 +1952,9 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                       ledger={ledgerView}
                       onRetry={() => readRegister({ dab: dab.hash }, `dab:${dab.hash}`)}
                       owner={ownerLine(known.reply.channel.id)}
+                      kingdom={kingdomFor(known.reply.channel)}
+                      visit={visitFrom(known.reply.channel.id)}
+                      own={ownChannel(known.reply.channel.id)}
                     />
                   )}
                 </Show>
@@ -1759,6 +1974,9 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                   ledger={ledgerView}
                   onRetry={() => readRegister({ id: face.id }, `waiting:${face.id}`)}
                   owner={ownerLine(face.id)}
+                  kingdom={kingdomFor(register().status === 'ready' ? (register() as { reply: CardReply }).reply.channel : face)}
+                  visit={visitFrom(face.id)}
+                  own={ownChannel(face.id)}
                 />
               )}
             </Show>

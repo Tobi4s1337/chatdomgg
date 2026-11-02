@@ -17,6 +17,7 @@ import { TILE_BUDGET_BYTES } from './tile-plan';
 import { closeImage, TileFarm, TileLayer, type TileImage } from './tiles';
 import { WashLayer } from './wash';
 import type { MapLayer } from '../road/layer';
+import type { FoundMark } from './found';
 
 export interface MapEvents {
   /** The map has drawn its first complete view (land, holdings and type). Called once. */
@@ -24,6 +25,8 @@ export interface MapEvents {
   select(settler: Settler | null): void;
   /** A small live channel's pencil flag was chosen. */
   selectDab(dab: Dab): void;
+  /** A found channel's mark (see `found.ts`) was chosen. */
+  selectFound?(id: string): void;
   camera(state: { scale: number; minScale: number; distance: Distance }): void;
   /** A region's towns and villages could not be read; the land stays, its smaller holdings stay unmarked. */
   chunkFailed(region: number): void;
@@ -139,6 +142,8 @@ export class MapView {
   private readyNotified = false;
   private selected: Settler | null = null;
   private hovered: Settler | null = null;
+  /** The found channel whose card is open, ringed as a selected holding is. */
+  private foundSelected: string | null = null;
   private motion: Motion | null = null;
   /** Space covered by an open card or phone sheet, on top of the page's chrome. */
   private cardInsets: Insets | null = null;
@@ -529,6 +534,27 @@ export class MapView {
     return { ...this.view };
   }
 
+  /**
+   * The found channels to draw (gated by the page: never withheld, never a drawn holding) and the one whose card is
+   * open. They are drawn from the next frame on.
+   */
+  setFound(marks: readonly FoundMark[], selected: string | null = this.foundSelected): void {
+    this.overlay.setFound(marks);
+    this.foundSelected = selected;
+    this.dirty = true;
+  }
+
+  selectFound(id: string | null): void {
+    if (this.foundSelected === id) return;
+    this.foundSelected = id;
+    this.dirty = true;
+  }
+
+  /** Found channels drawn in the last frame, for the page's evidence attributes and checks. */
+  drawnFound(): { id: string; kind: string; label: string | null; x: number; y: number }[] {
+    return this.overlay.drawnFound.map((item) => ({ id: item.mark.id, kind: item.mark.kind, label: item.mark.label, x: item.x, y: item.y }));
+  }
+
   setLive(live: LivePaint | null): void {
     this.live = live;
     this.liveVersion = -1;
@@ -678,7 +704,7 @@ export class MapView {
     this.drawFrame();
     this.drawRoad();
     this.overlay.reduceMotion = reduceMotion();
-    this.overlay.update(this.camera, this.view, { selected: this.selected, hovered: this.hovered }, now);
+    this.overlay.update(this.camera, this.view, { selected: this.selected, hovered: this.hovered, found: this.foundSelected }, now);
     this.layer?.update(this.camera, this.view, now);
     if (this.live) {
       this.wash.paint(this.app.renderer, this.camera, this.view, this.data.store, this.live, this.live.time());
@@ -917,6 +943,9 @@ export class MapView {
   private tap(x: number, y: number, type: string): void {
     if (!this.acceptsInput()) return;
     const slop = type === 'mouse' ? 4 : 14;
+    // A found channel is the one the visitor asked for: it is picked before anything drawn beside it.
+    const found = this.events.selectFound ? this.overlay.pickFound(x, y, slop) : null;
+    if (found) { this.events.selectFound!(found.id); return; }
     const settler = this.overlay.pick(x, y, slop);
     const dab = settler ? null : this.overlay.pickDab(x, y, slop);
     if (dab) this.events.selectDab(dab);
@@ -1012,7 +1041,7 @@ export class MapView {
 
   private hover(x: number, y: number): void {
     const settler = this.overlay.pick(x, y, 4);
-    const pointing = !!settler || !!this.overlay.pickDab(x, y, 4);
+    const pointing = !!settler || !!this.overlay.pickDab(x, y, 4) || !!this.overlay.pickFound(x, y, 4);
     if (pointing) this.host.dataset.hover = 'true';
     else delete this.host.dataset.hover;
     if (settler === this.hovered) return;

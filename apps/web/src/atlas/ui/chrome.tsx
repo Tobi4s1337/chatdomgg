@@ -6,8 +6,8 @@ import type { PreviewWorld } from '../data/preview';
 import { formatCount, scaleBar } from './format';
 import { StampIcon } from './marks';
 
-/** The carved map title and search; the dated survey seal is supplied by the scene. */
-export function Cartouche(props: { world: PreviewWorld; children?: JSX.Element; seal?: JSX.Element }) {
+/** The carved map title and search, and under them the way into a kingdom; the dated survey seal is supplied by the scene. */
+export function Cartouche(props: { world: PreviewWorld; children?: JSX.Element; seal?: JSX.Element; way?: JSX.Element }) {
   let header: HTMLElement | undefined;
   // The key below gives way to however tall the cartouche is (its live seal wraps): the page reads it as a variable.
   onMount(() => {
@@ -32,6 +32,7 @@ export function Cartouche(props: { world: PreviewWorld; children?: JSX.Element; 
         {props.seal}
       </div>
       <div class="atlas-cartouche-search">{props.children}</div>
+      {props.way}
     </header>
   );
 }
