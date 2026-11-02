@@ -339,3 +339,8 @@ production transport or dependency file is changed here. This is a host-isolatio
 - **front-door:** gather uses the carved kit in `packages/ui` read-only.
 - **The campfire's log generator** `packages/content/src/seating.ts` is shared with the market. gather reads it and
   never changes its output; campfire-only dressing goes in `packages/content/src/campfire/**`.
+
+## from launch
+
+- needs (2 Nov, LA10 walk): the campfire at night is a step of the launch walk; no campfire place provider is
+  registered in the walk yet (GA11). Night on the walk comes only from `&hour=`; the walk will use `hour=23`.

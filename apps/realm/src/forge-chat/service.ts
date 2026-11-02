@@ -180,7 +180,9 @@ export function createForgeChatService(options: ForgeChatServiceOptions) {
         const accepted = context ? await context.takeState(hash, principal.sessionId, now())
           : await store.takeState(hash, principal.sessionId, principal.personId, now());
         if (!accepted) return '/?forgeChat=expired';
-        const back = `/kingdom/${encodeURIComponent(accepted.kingdomId)}?forgeChat=`;
+        // Back into the walk the wish was started from. `/kingdom/<id>` would hand a founded kingdom over to its
+        // watch-only stream, and the visitor would lose the anvil they were standing at.
+        const back = `/?walk=1&kingdom=${encodeURIComponent(accepted.kingdomId)}&forgeChat=`;
         if (query.has('error')) return back + 'denied';
         const code = query.get('code');
         if (!code || code.length > 4096) return back + 'unavailable';

@@ -2,6 +2,7 @@ import '../kit.css';
 import './passport.css';
 import { createEffect, createMemo, createSignal, For, Match, on, Show, Switch, type JSX } from 'solid-js';
 import { ProvenanceSeal } from '../ProvenanceSeal';
+import { STAGED_ALLOWED } from '../staged';
 import { CrestArms } from './Arms';
 import { PassportStampMark } from './Stamp';
 import { folio, initialOf, isoDay, longDate, monthSpan } from './format';
@@ -105,7 +106,7 @@ export function PassportBook(props: PassportBookProps): JSX.Element {
     for (const bond of s.bonds.items) if (bond.with.kind === 'kingdom') known.set(bond.with.kingdom.kingdomId, bond.with.kingdom.name);
     return known;
   });
-  const simulated = () => props.book.origin === 'simulated';
+  const staged = () => STAGED_ALLOWED && props.book.origin === 'simulated';
   const section = () => sectionOfView(current());
 
   return <section class={`pp-book cd-kit${props.class ? ` ${props.class}` : ''}`} data-layout={layout()} data-view={current()?.kind}
@@ -118,7 +119,7 @@ export function PassportBook(props: PassportBookProps): JSX.Element {
     </Show>
     <div class="pp-stage" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={() => { swipe = null; }}>
       <Show when={current()?.kind === 'leaves' ? current() as { kind: 'leaves'; leaves: readonly Leaf[] } : undefined} fallback={
-        <Cover book={props.book} simulated={simulated()} onOpen={() => go(1)} />
+        <Cover book={props.book} staged={staged()} onOpen={() => go(1)} />
       }>{open => <div class="pp-case">
         <div class="pp-spread" data-count={open().leaves.length}>
           <For each={open().leaves}>{leaf => <Page leaf={leaf} total={leaves().length} names={names()} asOf={props.book.asOf}
@@ -142,9 +143,9 @@ export function PassportBook(props: PassportBookProps): JSX.Element {
       <button type="button" class="pp-turn" data-dir="next" aria-disabled={at() >= views().length - 1 ? 'true' : undefined} onClick={() => go(at() + 1)}
         aria-label={at() === 0 ? 'Open the passport' : 'Turn the page'}><TurnGlyph dir="next" /></button>
     </div>
-    <Show when={simulated() && current()?.kind === 'leaves'}>
+    {STAGED_ALLOWED && <Show when={staged() && current()?.kind === 'leaves'}>
       <ProvenanceSeal class="pp-provenance" state="simulated" />
-    </Show>
+    </Show>}
   </section>;
 }
 
@@ -169,7 +170,7 @@ export function CoverEmblem(): JSX.Element {
 }
 
 /** The closed book: blind-tooled leather, the word PASSPORT in worn gilt, the holder's name tooled beneath. */
-function Cover(props: { book: VisiblePassportView; simulated: boolean; onOpen: () => void }): JSX.Element {
+function Cover(props: { book: VisiblePassportView; staged: boolean; onOpen: () => void }): JSX.Element {
   return <div class="pp-cover-wrap">
     <button type="button" class="pp-cover" onClick={() => props.onOpen()} aria-label={`Open the passport of ${props.book.holder.name}`}>
       <span class="pp-cover-tooling" aria-hidden="true" />
@@ -179,7 +180,7 @@ function Cover(props: { book: VisiblePassportView; simulated: boolean; onOpen: (
       <span class="pp-cover-name" dir="auto">{props.book.holder.name}</span>
       <span class="pp-cover-open" aria-hidden="true">Open the book</span>
     </button>
-    <Show when={props.simulated}><ProvenanceSeal class="pp-provenance pp-provenance-cover" state="simulated" /></Show>
+    {STAGED_ALLOWED && <Show when={props.staged}><ProvenanceSeal class="pp-provenance pp-provenance-cover" state="simulated" /></Show>}
   </div>;
 }
 

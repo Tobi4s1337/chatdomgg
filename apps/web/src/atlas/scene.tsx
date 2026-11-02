@@ -14,6 +14,7 @@ import { LatestRequest, savedView } from './saved-view';
 import type { HistoryLike } from './ui/history';
 import { adoptPreview, loadPreview, type LoadedPreview } from './data/load';
 import { dabHashOf, DirectoryError, fetchCard, type CardReply, type CardRoad, type ChannelFace, type Lookup, type PencilPosition, type SearchResult } from './data/directory';
+import { findOpenKingdom } from './data/open-kingdoms';
 import { decodeRings, geographyOf, labelWorld, SettlerStore, type Geography, type Ring, type Settler } from './data/model';
 import { fetchChunk, fetchNames, type PreviewSource } from './data/preview';
 import { atlasFailureState, mountAtlasWithRetry } from './recovery';
@@ -781,6 +782,12 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
             openOwnerCard();
             return;
           }
+          // A kingdom chatdom.io opens is entered even before the survey draws it on the map.
+          const kingdom = await findOpenKingdom(route.login);
+          if (kingdom) return drop(`${kingdom.name}, ${kingdom.login}’s kingdom, is not drawn on the map yet.`, {
+            label: `Enter ${kingdom.name}`,
+            run: () => location.assign(`/kingdom/${encodeURIComponent(kingdom.kingdomId)}`),
+          });
           drop(`“${route.login}” is not on the map yet.`, {
             label: 'Look on Twitch',
             run: () => { const url = watchUrl(route.login); if (url) window.open(url, '_blank', 'noopener,noreferrer'); },

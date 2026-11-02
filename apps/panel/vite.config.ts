@@ -10,6 +10,9 @@ export default defineConfig({
   root,
   base: './',
   plugins: [solid()],
+  // The extension shows real data or nothing: every staged (practice) branch in the shared kit folds away here, so
+  // the zip Twitch reviews carries no staging code (see packages/ui/src/staged.ts).
+  define: { __CHATDOM_STAGED__: 'false' },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

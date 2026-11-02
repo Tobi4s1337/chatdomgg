@@ -30,7 +30,8 @@
   background: radial-gradient(ellipse at 25% 0, var(--cd-parch-hi), transparent 80%), linear-gradient(170deg, var(--cd-parch), var(--cd-parch-lo));
   box-shadow: inset 0 1px 4px #6e4b2933, 0 1px #e3b77355; }
 .atlas .atlas-cartouche .atlas-search-field:focus-within { border-color: #62431f; outline: 2px solid var(--cd-brass-hi); outline-offset: 2px; box-shadow: inset 0 1px 4px #6e4b2933; }
-.atlas .atlas-cartouche .atlas-search-panel { top: calc(100% + 13px); border: 4px solid var(--cd-wood-lo); border-radius: 5px;
+/* Paper hung from the wooden plate: it sets its own ink, or its sentences inherit the plate's cream and vanish. */
+.atlas .atlas-cartouche .atlas-search-panel { top: calc(100% + 13px); border: 4px solid var(--cd-wood-lo); border-radius: 5px; color: var(--cd-ink);
   box-shadow: inset 0 0 0 1px #dfbc8059, 0 1px 0 var(--cd-brass-lo), 0 8px 20px #34231655; }
 .atlas .atlas-cartouche .atlas-search-result[aria-selected='true'] { border-left-color: var(--cd-brass-lo); background: #9b744922; }
 /* The plate's cream lettering stops at the panel: names in the list are ink on paper. */
