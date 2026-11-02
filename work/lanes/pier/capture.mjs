@@ -123,6 +123,13 @@ try {
       const id = `pier-${style}-${prop}`;
       await page(`http://localhost:${previewPort}/-/pier?view=asset&asset=${id}&angle=${angle}&hour=18.6&still=1`, 480, 480, resolve(output, `pi10-${id}-${angle}@480x480.png`));
     }
+  } else if (process.argv.includes('--watch')) {
+    // The watcher's lanterns and mood (kingdom-layer.ts), read back from the installed placements: shore and head at dusk.
+    const sizes = software ? [[1440, 900]] : [[1440, 900], [390, 844]];
+    for (const view of software ? ['head'] : ['shore', 'head']) for (const [width, height] of sizes) {
+      const query = new URLSearchParams({ kingdom: scene.kingdomId, view, hour: '18.6', layer: 'watch', still: '1', ...(software ? { software: '1' } : {}) });
+      await page(`http://localhost:${previewPort}/-/pier?${query}`, width, height, resolve(output, `pi10-watch-${view}-dusk@${width}x${height}.png`));
+    }
   } else {
     const sizes = process.argv.includes('--narrow') ? [[390, 844]] : software || process.argv.includes('--first') ? [[1440, 900]] : [[1440, 900], [390, 844]];
     const chosenView = process.argv.includes('--head') ? 'head' : process.argv.includes('--deck') ? 'deck' : 'shore';
@@ -132,7 +139,7 @@ try {
       await page(`http://localhost:${previewPort}/-/pier?${query}`, width, height, resolve(output, `pi10-${view}-${hour === 12 ? 'noon' : 'dusk'}@${width}x${height}.png`));
     }
   }
-  const statsName = process.argv.includes('--fish') ? `pi10-fish-${process.argv.find(arg => arg.startsWith('--group='))?.slice(8) ?? '0'}${process.argv.includes('--narrow') ? '-narrow' : ''}-render-stats.json` : process.argv.includes('--assets') ? 'pi10-furnishing-render-stats.json' : software ? `pi10-${process.argv.includes('--head') ? 'head' : process.argv.includes('--deck') ? 'deck' : 'shore'}-${process.argv.includes('--narrow') ? 'narrow' : 'wide'}-render-stats.json` : 'pi10-pier-render-stats.json';
+  const statsName = process.argv.includes('--fish') ? `pi10-fish-${process.argv.find(arg => arg.startsWith('--group='))?.slice(8) ?? '0'}${process.argv.includes('--narrow') ? '-narrow' : ''}-render-stats.json` : process.argv.includes('--assets') ? 'pi10-furnishing-render-stats.json' : process.argv.includes('--watch') ? 'pi10-watch-render-stats.json' : software ? `pi10-${process.argv.includes('--head') ? 'head' : process.argv.includes('--deck') ? 'deck' : 'shore'}-${process.argv.includes('--narrow') ? 'narrow' : 'wide'}-render-stats.json` : 'pi10-pier-render-stats.json';
   await writeFile(resolve(output, statsName), JSON.stringify({ capturedAt: new Date().toISOString(), receipt, measurements }, null, 2) + '\n');
   console.log(`Captured ${pictures.length} ${software ? 'SwiftShader' : 'real-GPU'} stills; owned port ${previewPort}.`);
 } finally {

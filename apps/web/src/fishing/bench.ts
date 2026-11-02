@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { MATERIALS, type StyleKey } from '@chatdom/content';
 import { createAtmosphere, createSunShadows, createVoxelMaterial, geometryFromChunks, getEnvironment, windowGlowForHour } from '@chatdom/render';
 import { VoxelWorkerPool } from '@chatdom/voxel';
-import type { FishingPierSite, Vec3, VoxelBlueprint } from '@chatdom/shared';
+import { kingdomWaterMood, type FishingPierSite, type KingdomId, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
 import { generateSettlementPlan, type SettlementPlan } from '@chatdom/world';
 import type { RealmFoundedScene } from '@chatdom/world';
 import { terrainHeight } from '@chatdom/world';
@@ -13,6 +13,8 @@ import { groundMaterial, meshGround, type BenchGround } from '../places/water/su
 import { createWaterSurface, type WaterLightSource } from '../places/water/surface';
 import { createLightField } from '../kingdom/light-field';
 import { createPierLanternGlow } from './lanterns';
+import { mountPierKingdomLayer } from './kingdom-layer';
+import { mountPierLayer, type PierLayer } from './layer';
 import { mountPierAssetBench } from './asset-bench';
 import { mountFishBench } from './fish-bench';
 import { createPlayStage, type PlayStage, type PlayStageOptions } from './play-bench';
@@ -129,6 +131,8 @@ export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearch
   let view: PierView = (['shore', 'deck', 'head', 'asset', 'play'].includes(query.get('view') ?? '') ? query.get('view') : 'shore') as PierView;
   let play: PlayStage | undefined;
   let activeAsset: THREE.Mesh | undefined, disposed = false, raf = 0, painted = 0, frame = 0, started = false;
+  const ticks = new Set<(dt: number, now: number) => void>();
+  let watched: PierLayer | null = null;
   const target = new THREE.Vector3(), beacon = new THREE.Vector3(...site.root);
   const local = (at: Vec3) => pierLocalToWorld(site, at);
   let angle: Angle = (query.get('angle') === 'side' || query.get('angle') === 'back' ? query.get('angle') : 'front') as Angle;
@@ -179,9 +183,11 @@ export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearch
       water.update({ time, environment: grade, camera, sources });
       water.reflect({ renderer, scene, camera, frame: ++frame, exclusions: atmosphere.reflectionExclusions });
     }
+    for (const tick of ticks) tick(1 / 60, performance.now());
     renderer.render(scene, camera);
+    if (watched) Object.assign(stats, { watchLayer: watched.stats() });
     Object.assign(stats, { view, hour, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, light: light.stats });
-    if (++painted > 2 && (asset || light.stats.publishedRevision > 0)) {
+    if (++painted > 2 && (asset || light.stats.publishedRevision > 0) && (!ticks.size || watched)) {
       if (!stats.ready) renderer.getContext().finish();
       stats.ready = true; W.__chatdomReady = true; W.__chatdomPierPhase = 'ready';
       if (query.get('still') === '1' && !play) { raf = 0; return; }
@@ -195,6 +201,18 @@ export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearch
     play = await createPlayStage({ scene, camera, canvas, site, installation, plan, query, hour: () => hour, ...stage });
     // The layer draws its own lantern glass; the review glass would double it.
     glow.root.visible = false;
+  }
+  // `layer=watch`: the lanterns and mood exactly as a watcher's kingdom or the stream view mounts them, read back from
+  // the installed placements rather than from the installer's own light list.
+  if (query.get('layer') === 'watch' && !play) {
+    const founded = { assets: installation.pieces.map(piece => ({ assetHash: piece.id, blueprint: piece.blueprint })),
+      placements: installation.pieces.map(piece => ({ id: piece.id, assetHash: piece.id, position: piece.position, rotation: piece.rotation })) } as unknown as Pick<RealmFoundedScene, 'assets' | 'placements'>;
+    const abort = new AbortController(), kingdomId = (query.get('kingdom') ?? '1') as KingdomId;
+    glow.root.visible = false;
+    const stop = mountPierKingdomLayer({ scene, camera, mode: 'stream', kingdomId, founded, hour: () => hour, waterHeight: (x, z) => pierWaterAt(plan, x, z),
+      onTick: listener => { ticks.add(listener); return () => { ticks.delete(listener); }; }, signal: abort.signal },
+    async options => { const layer = await mountPierLayer(options); watched = layer; stats.watchMood = kingdomWaterMood(kingdomId, Date.now()); stats.watchLights = options.lights.length; return layer; });
+    cleanups.push(stop, () => abort.abort());
   }
   started = true; raf = requestAnimationFrame(draw);
   return {

@@ -472,6 +472,39 @@ With the walk feature, grand-world's `registerKingdomLayer` (now on its branch) 
 camera and frame come with the walk. It stays the route for the stream view, where the pier draws from its public
 feed (PI11).
 
+### 3a. The lanterns on stream and for watchers, through grand-world's kingdom layers (PI10, 2 November)
+
+grand-world's `registerKingdomLayer` (its SEAMS "Pier anchors and kingdom layers", `apps/web/src/kingdom/scene.ts`
+on `lane/grand-world`) is accepted as is. pier's side is `apps/web/src/fishing/kingdom-layer.ts`:
+
+- `registerPierKingdomLayer(registerKingdomLayer)` registers the layer id `pier`. Its host shape (`PierKingdomHost`) is
+  the part of `KingdomLayerMount` pier reads: scene, camera, mode, kingdomId, founded, hour, waterHeight, onTick and
+  signal. It compiles against grand-world's real `registerKingdomLayer` (checked by a throwaway compile of their
+  `kingdom-layer.ts` with a deliberate mismatch as a negative control).
+- In every mode it draws the pier's lantern glass, mist and rain rings through the same `mountPierLayer` the walk
+  uses, with no controller, no walkers, no sound and no interface. The pier comes from the installed placements alone
+  (`foundedPier` in `founded-pier.ts`: `pier:lake:root` and `pier:lake:head` give the frame, the glass boxes give the
+  lanterns); on tobi4s_'s real scene that reading matches the realm's own installation exactly (13 lanterns, root,
+  turn and walk). It waits for `waterHeight` under the head before it mounts, and mounts nothing where no pier is
+  installed. The mood is `kingdomWaterMood(kingdomId, Date.now())`, the same half-hour function the realm reads.
+- When the walk feature (2a) has a room and draws the full layer in the same scene, it claims the scene
+  (`claimPierScene`) and the watcher's lanterns stand aside until it leaves, so nothing is drawn twice.
+
+Once grand-world's layers are on the integration branch, the integrator adds pier's slot module and one import:
+
+```ts
+// apps/web/src/fishing/kingdom-slot.ts (new, pier's folder)
+import { registerKingdomLayer } from '../kingdom/scene';
+import { registerPierKingdomLayer } from './kingdom-layer';
+registerPierKingdomLayer(registerKingdomLayer);
+
+// apps/web/src/play/providers.ts (or wherever the kingdom page and the stream view both load their providers)
+import '../fishing/kingdom-slot';
+```
+
+`needs: integrator pier kingdom-slot once grand-world's registerKingdomLayer lands`. Until then the pier's timber
+stands in every kingdom, and its lanterns stay unlit outside the walk and the bench.
+
 ## 3. What pier asks of grand-world (grand-world provides; pier mounts)
 
 Owner: grand-world (`apps/web/src/kingdom/scene.ts`, the land, the water surface, the stream director,

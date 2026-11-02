@@ -4,6 +4,7 @@ import { kingdomWaterMood, type KingdomId, type Vec3 } from '@chatdom/shared';
 import { createBagStore, hotbarSlots, mountBag, mountHotbar, itemPortrait, type BagSound, type BagStore } from '../bag';
 import { createFishingController, type FishingController } from './controller';
 import { mountPierLayer, type PierLayer, type PierWalker } from './layer';
+import { claimPierScene } from './kingdom-layer';
 import { fishingLink, itemLink, type ChannelRoom } from './link';
 import { createPierSound } from './sound';
 import { mountFishingUiStaged } from './ui/mount';
@@ -109,7 +110,7 @@ function walkPier(ctx: PierWalkContext, slots: PierPlaySlots, views: PierViews):
   const surface: BagSound = kind => { ctx.audio()?.cue('wood', { ui: kind }); };
   const ui = views.ui(ctx.overlay, { compact: compact(), kingdomName: ctx.kingdomName,
     onBeat: beat => sound.cue(beat === 'dismiss' ? 'tag' : beat, { intensity: beat === 'dismiss' ? .25 : .5 }) });
-  let layer: PierLayer | null = null, mounting = false, disposed = false, closeBag: (() => void) | null = null;
+  let layer: PierLayer | null = null, mounting = false, disposed = false, closeBag: (() => void) | null = null, unclaim = () => {};
   let bagHost: HTMLDivElement | null = null;
   const camera = ctx.camera instanceof THREE.PerspectiveCamera ? ctx.camera : null;
   const self = () => ctx.selfWalkerId();
@@ -124,7 +125,8 @@ function walkPier(ctx: PierWalkContext, slots: PierPlaySlots, views: PierViews):
       viewport: () => ({ width: ctx.overlay.clientWidth, height: ctx.overlay.clientHeight }),
       touch: () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches,
       sound, ui, portrait: views.portrait })
-      .then(mounted => { if (disposed) mounted.dispose(); else layer = mounted; })
+      // Once this layer draws the lanterns and mood, the watcher's lanterns for the same scene stand aside.
+      .then(mounted => { if (disposed) mounted.dispose(); else { layer = mounted; unclaim = claimPierScene(ctx.scene); } })
       .catch(error => { console.error('The pier could not be drawn.', error); })
       .finally(() => { mounting = false; });
   };
@@ -172,7 +174,7 @@ function walkPier(ctx: PierWalkContext, slots: PierPlaySlots, views: PierViews):
       closeBag?.(); stopFrame(); stopEvents();
       for (const walkerId of posed.keys()) slots.observedWalkerPose(walkerId, null);
       posed.clear();
-      layer?.dispose(); layer = null;
+      layer?.dispose(); layer = null; unclaim();
       ui.dispose(); sound.dispose(); store.dispose(); controller.dispose(); fishing.dispose(); items.dispose();
     },
   };
