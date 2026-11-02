@@ -41,6 +41,11 @@ export interface StillProps {
   /** Called once the still is fully composed (land + marks + names). */
   onReady: () => void;
   /**
+   * Called once with a way to copy the land tiles baked so far, so the moving map built after this still takes them
+   * instead of baking the same land again. The copies are the caller's to keep (and close).
+   */
+  shareTiles?: (copy: () => Promise<{ key: TileKey; image: Baked }[]>) => void;
+  /**
    * Reads a region's towns and villages into the store. When given, they are read quietly after the first view while
    * a live frame is shown, nearest the centre first, so their washes are laid too (as the moving map does).
    */
@@ -75,6 +80,11 @@ function tinted(paint: (ctx: CanvasRenderingContext2D) => void): HTMLCanvasEleme
 
 /** One slice of wash painting may hold the main thread this long; input and the card always get the next turn. */
 const WASH_SLICE_MS = 6;
+/**
+ * Before the first frame nothing on the still answers a tap yet, so the first wash is laid in longer slices: the
+ * first frame then arrives with its live land without waiting out dozens of clamped timer turns.
+ */
+const FIRST_WASH_SLICE_MS = 48;
 
 /**
  * The vermilion wash in Canvas 2D: stains accumulate on one layer with ordinary alpha (overlaps deepen toward full
@@ -341,6 +351,8 @@ export function Still(props: StillProps): JSX.Element {
   let chunksStarted = false;
   const pixelRatio = stillPixelRatio(window.devicePixelRatio);
   const tiles = new Map<string, Baked | null>();
+  /** The key of each held tile, by its id. */
+  const tileKeys = new Map<string, TileKey>();
   const baking = new Map<string, Promise<Baked | null>>();
   const lettered = new Map<string, HTMLCanvasElement>();
   const measured = new Map<string, number>();
@@ -388,6 +400,7 @@ export function Still(props: StillProps): JSX.Element {
           return null;
         }
         tiles.set(id, tile);
+        tileKeys.set(id, key);
         return tile;
       });
       baking.set(id, pending);
@@ -410,6 +423,7 @@ export function Still(props: StillProps): JSX.Element {
       if (used.has(id)) continue;
       if (tile && 'close' in tile) tile.close();
       tiles.delete(id);
+      tileKeys.delete(id);
     }
     setLand({ canvas: image, view: target, baked: target.tiles.filter((key) => tiles.get(tileKey(key))).length, missing });
     if (drawnAt() === null) setDrawnAt(Date.now());
@@ -509,7 +523,7 @@ export function Still(props: StillProps): JSX.Element {
     washSlice = setTimeout(() => {
       washSlice = undefined;
       if (disposed || !wash) return;
-      if (!wash.step(performance.now() + WASH_SLICE_MS)) return pumpWash();
+      if (!wash.step(performance.now() + (readyFired ? WASH_SLICE_MS : FIRST_WASH_SLICE_MS))) return pumpWash();
       finishWash();
     }, 0);
   };
@@ -724,6 +738,17 @@ export function Still(props: StillProps): JSX.Element {
       if (current && current.width === width && current.height === height) return;
       setView({ width, height });
     };
+    props.shareTiles?.(async () => {
+      const held = [...tiles].flatMap(([id, tile]) => (tile && tileKeys.has(id) ? [{ key: tileKeys.get(id)!, tile }] : []));
+      const copies = await Promise.all(held.map(async ({ key, tile }) => {
+        try {
+          return { key, image: await createImageBitmap(tile) as Baked };
+        } catch {
+          return null;
+        }
+      }));
+      return copies.filter((copy): copy is { key: TileKey; image: Baked } => copy !== null);
+    });
     baker = new StillBaker(paintSceneFor(props.world, props.geo, decodeRings(props.world)), stampSheetUrl, stamps, pixelRatio);
     measureRoot();
     const observer = new ResizeObserver(() => {

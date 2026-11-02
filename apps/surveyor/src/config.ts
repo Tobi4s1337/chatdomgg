@@ -18,6 +18,8 @@ export interface ServeConfig {
   dataDir: string;
   host: string;
   port: number;
+  /** Twitch lookups one client address may start per minute (ATLAS_LOOKUPS_PER_CLIENT_MINUTE, default 6). */
+  lookupsPerClientMinute: number;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -96,6 +98,7 @@ export function serveConfigFrom(env: Env): ServeConfig {
     dataDir: dataDirFrom(env),
     host: env.ATLAS_HOST?.trim() || '127.0.0.1',
     port: intFrom(env, 'ATLAS_PORT', 5193, 1, 65_535),
+    lookupsPerClientMinute: intFrom(env, 'ATLAS_LOOKUPS_PER_CLIENT_MINUTE', 6, 1, 600),
   };
 }
 

@@ -293,7 +293,9 @@ async function main(argv: string[]): Promise<number> {
   if (command === 'serve') {
     const config = serveConfigFrom(process.env);
     const ingestConfig = ingestConfigFrom(process.env);
-    const service = createAtlasService(config.dataDir, (line) => console.log(`atlas:serve ${line}`), { ingestToken: ingestConfig?.token ?? null });
+    const service = createAtlasService(config.dataDir, (line) => console.log(`atlas:serve ${line}`), {
+      ingestToken: ingestConfig?.token ?? null, lookupsPerClientMinute: config.lookupsPerClientMinute, warmRegister: true,
+    });
     await new Promise<void>((resolve, reject) => {
       service.server.once('error', reject);
       service.server.listen(config.port, config.host, () => resolve());

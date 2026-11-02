@@ -590,6 +590,27 @@ describe('LiveFeed', () => {
       expect(raids).toEqual(['raid-9']);
     });
 
+    it('tells the page to read names again when the service says the withheld set changed, and stops on dispose', async () => {
+      const land = await Land.create();
+      const streams: FakeStream[] = [];
+      let asked = 0;
+      const feed = new LiveFeed(land.service.source, land.world, land.worldSha256, () => undefined, {
+        now: () => land.clock,
+        openStream: (url) => { const stream = new FakeStream(url); streams.push(stream); return stream; },
+        setTimer: () => 0,
+        clearTimer: () => undefined,
+        onNames: () => asked++,
+      });
+      feed.start();
+      const names = () => streams[0]!.listeners.get('names')!({ data: '{}' } as MessageEvent<string>);
+      names();
+      names();
+      expect(asked).toBe(2);
+      feed.dispose();
+      names();
+      expect(asked).toBe(2);
+    });
+
     it('subscribes once, applies streamed pointers, reconciles on a timer and closes on dispose', async () => {
       const land = await Land.create();
       const a = await land.frame({ asOf: T, live: { 0: 1 } });

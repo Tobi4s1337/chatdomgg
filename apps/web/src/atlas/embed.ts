@@ -1,6 +1,7 @@
 import type { AtlasGateEvent, AtlasGateHost, AtlasTravelStage, GateLand } from '../raid-gate/ports';
 import type { AtlasChannel } from '@chatdom/shared';
 import type { AtlasRaid, KingdomId } from '../../../api/src/raid-gate/contracts';
+import { preloadFaces } from './fonts';
 
 export type AtlasMode = 'hero' | 'explore' | 'gate';
 export type AtlasTarget = { login: string } | { channelId: string };
@@ -131,6 +132,8 @@ export function gateBridge(scene: () => AtlasScene | null, loaded: Promise<unkno
 }
 
 export function mountAtlas(el: HTMLElement, options: AtlasMountOptions): AtlasHandle {
+  // The lettering's faces travel beside the scene's code, not after it.
+  preloadFaces();
   let mode = options.mode;
   let scene: AtlasScene | null = null;
   let disposed = false;

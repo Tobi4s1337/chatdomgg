@@ -111,11 +111,22 @@ export class TileFarm {
     const canWork = typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
     this.spawn = options.spawn ?? (canWork ? spawnWorker : null);
     this.bakeOnMain = options.bakeOnMain ?? (() => mainThreadBaker(scene, stamps, stampImage, pixelRatio));
-    if (this.spawn) {
-      const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 2 : 2;
-      const count = options.workers ?? Math.max(1, Math.min(4, cores - 1));
-      for (let i = 0; i < count; i++) this.start();
-    }
+    const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 2 : 2;
+    this.count = options.workers ?? Math.max(1, Math.min(4, cores - 1));
+  }
+
+  /** How many bakers this farm runs once it has work. */
+  private readonly count: number;
+  private opened = false;
+
+  /**
+   * Bakers start with the first tile anyone wants, not with the farm: a map that took its opening land from the still
+   * spends nothing on workers (each a copy of the scene and the stamp sheet) until it pans somewhere new.
+   */
+  private open(): void {
+    if (this.opened || this.disposed) return;
+    this.opened = true;
+    if (this.spawn) for (let i = 0; i < this.count; i++) this.start();
     if (!this.workers.length) this.toMain();
   }
 
@@ -248,6 +259,7 @@ export class TileFarm {
   /** Replace the wish list: only these tiles, in this order, are worth baking now (stale wishes are dropped). */
   want(keys: TileKey[]): void {
     if (this.disposed) return;
+    if (keys.length) this.open();
     this.wishes = keys.slice();
     this.queue = keys.slice();
     this.pump();
@@ -412,6 +424,24 @@ export class TileLayer {
       this.failed.add(tileKey(key));
       this.onChange();
     };
+  }
+
+  /**
+   * Take tiles already baked elsewhere (the still's, from the same scene at the same pixel ratio), so the opening view
+   * is never baked twice. They arrive fully faded in; the layer owns them from here.
+   */
+  seed(tiles: readonly { key: TileKey; image: TileImage }[]): void {
+    for (const { key, image } of tiles) {
+      const id = tileKey(key);
+      if (this.cache.get(id)) {
+        closeImage(image);
+        continue;
+      }
+      const texture = new Texture({ source: new ImageSource({ resource: image, resolution: this.pixelRatio, scaleMode: 'linear' }) });
+      // Already on screen as the still: drawn at once, without a fade in.
+      this.cache.put(id, { key, image, texture, sprite: new Sprite(texture), bornAt: Number.NEGATIVE_INFINITY, unseen: false });
+    }
+    if (tiles.length) this.onChange();
   }
 
   /** Tiles that failed every retry; their stand-ins stay drawn until `retryFailed`. */

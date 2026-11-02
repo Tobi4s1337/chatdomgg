@@ -32,6 +32,8 @@ export function Search(props: {
   onChoose: (result: SearchResult) => void;
   /** Text to search for, set by the page (a route that found nothing hands its login here). */
   seed?: { text: string; at: number } | null;
+  /** The signed-in broadcaster's own hidden channel when the query names it: only they see it, first in the list. */
+  own?: ((query: string) => SearchResult | null) | undefined;
 }) {
   let input: HTMLInputElement | undefined;
   let wrapper: HTMLDivElement | undefined;
@@ -55,8 +57,11 @@ export function Search(props: {
 
   const results = () => {
     const current = phase();
-    return current.kind === 'results' ? current.reply.results : [];
+    if (current.kind !== 'results') return [];
+    const own = props.own?.(current.query) ?? null;
+    return own && !current.reply.results.some((result) => result.channel.id === own.channel.id) ? [own, ...current.reply.results] : current.reply.results;
   };
+  const isOwn = (result: SearchResult) => props.own?.(phase().kind === 'results' ? (phase() as { query: string }).query : '')?.channel.id === result.channel.id;
 
   const ask = (query: string) => {
     cancelSelection();
@@ -251,7 +256,8 @@ export function Search(props: {
                           </Show>
                         </span>
                         <span class="atlas-search-place">
-                          <Show when={props.onAir(result)}><span class="atlas-search-air">On air · </span></Show>
+                          <Show when={isOwn(result)}><span class="atlas-search-own">Hidden by you · </span></Show>
+                          <Show when={!isOwn(result) && props.onAir(result)}><span class="atlas-search-air">On air · </span></Show>
                           {place(result)}<Show when={result.average !== null}> · {formatCount(result.average!)} avg.</Show>
                         </span>
                       </span>
