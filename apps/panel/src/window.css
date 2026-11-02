@@ -8,7 +8,12 @@
 .cw-picture-image { width: 100%; height: 100%; object-fit: cover; display: block; }
 /* While the realm confirms the viewer's window lit in this painting, the picture leans toward it and marks it. With
    object-position at the mark's own fraction, that point of the painting sits at the same fraction of the frame. */
-.cw-picture-image { transition: object-position 1.4s cubic-bezier(.3, .1, .2, 1); }
+.cw-picture-image { position: relative; transition: object-position 1.4s cubic-bezier(.3, .1, .2, 1), opacity 1.8s ease-in-out; }
+/* The next painting rises out of the last one; its mark waits until the picture under it has settled. */
+.cw-picture-under { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.cw-picture.settling .cw-picture-image { opacity: 0; transition: object-position 1.4s cubic-bezier(.3, .1, .2, 1); }
+.cw-yours { transition: opacity .8s ease 1.2s; }
+.cw-picture.settling .cw-yours { opacity: 0; transition: none; }
 .cw-yours { position: absolute; width: 0; height: 0; pointer-events: none; }
 .cw-yours-ring { position: absolute; left: -12px; top: -12px; width: 24px; height: 24px; box-sizing: border-box; border-radius: 50%;
   border: 2px solid #f0cf8e; background: radial-gradient(circle, #ffe4a3cc 0 2px, #ffbf5c55 3px, transparent 9px);
@@ -20,7 +25,7 @@
 .cw-yours.west .cw-yours-tag { transform: translateX(-14px); }
 .cw-yours.east .cw-yours-tag { transform: translateX(calc(-100% + 14px)); }
 @keyframes cw-yours-glow { 50% { box-shadow: 0 0 0 1px #2a170cb0, inset 0 0 0 1px #2a170c80, 0 0 20px 6px #ffc76a90; } }
-@media (prefers-reduced-motion: reduce) { .cw-picture-image { transition: none; } .cw-yours-ring { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .cw-picture-image, .cw-yours { transition: none; } .cw-yours-ring { animation: none; } }
 .cw-picture figcaption { position: absolute; bottom: 0; left: 0; right: 0; padding: 18px 9px 5px; color: #f7e7c9; background: linear-gradient(transparent, #1a110de0); font: 13px/1.15 Alegreya, Georgia, serif; }
 .cw-absence { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 17px; color: #d2b993; background: radial-gradient(ellipse at 50% 55%, #3f3025, #211a16 75%); }
 .cw-absence p { margin: 0; padding: 0 20px; text-align: center; font-size: 14px; }

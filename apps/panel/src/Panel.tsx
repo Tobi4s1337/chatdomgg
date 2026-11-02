@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, Switch, Match } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, Switch, Match } from 'solid-js';
 import { createPassportReading } from '@chatdom/ui/passport';
 import { selectAdapter } from './adapters/select';
 import { CardSheet, PassportCorner } from './card/CardSheet';
@@ -82,6 +82,21 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   const card = () => cardOf(snap().home);
   const source = createMemo<Extract<PassportSource, { kind: 'readable' }> | null>(() => { const value = card()?.passport; return value?.kind === 'readable' ? value : null; });
   const picture = () => { const value = snap().picture; return value.kind === 'still' && !failed() ? value : null; };
+  // A new painting dissolves in over the one it replaces, so a turn of the camera or a street coming alight never
+  // reads as a cut. The adapter keeps the replaced painting readable until the next one arrives.
+  const placeOf = (value: { mark?: { x: number; y: number } }) => value.mark ? `${value.mark.x * 100}% ${value.mark.y * 100}%` : '50% 50%';
+  const [fading, setFading] = createSignal<{ url: string; position: string } | null>(null);
+  const [settling, setSettling] = createSignal(false);
+  let shown: { url: string; position: string } | null = null;
+  createEffect(on(picture, value => {
+    const next = value ? { url: value.url, position: placeOf(value) } : null;
+    const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (next && shown && next.url !== shown.url && tab() === 'kingdom' && !calm) { setFading(shown); setSettling(true); }
+    else if (next?.url !== shown?.url) { setFading(null); setSettling(false); }
+    shown = next;
+  }));
+  // Two frames, so the hidden new painting has been drawn once before its fade begins.
+  const reveal = () => { if (settling()) requestAnimationFrame(() => requestAnimationFrame(() => setSettling(false))); };
   const gate = () => { const value = snap().entry; return value.kind === 'gate' ? value : null; };
   // The arch on the You tab looks into the painting only while that painting shows the viewer's own window lit.
   const windowView = createMemo(() => {
@@ -162,10 +177,12 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
       </section>}>
         <Switch>
           <Match when={tab() === 'kingdom'}>
-            <figure class="cw-picture">
+            <figure class="cw-picture" classList={{ settling: settling() }}>
               <Show when={picture()} fallback={<div class="cw-absence"><span class="cw-absence-arch" aria-hidden="true"><span>✦</span></span><p>{snap().connection.kind === 'outside-twitch' ? 'Open on Twitch to see the kingdom' : snap().light.kind === 'unfounded' ? 'No kingdom here yet' : 'The kingdom is out of view'}</p></div>}>{picture =>
-                <><img class="cw-picture-image" src={picture().url} alt={picture().mark ? `${picture().alt} Your lit window is marked.` : picture().alt} onError={() => setFailed(true)}
-                  style={picture().mark ? { 'object-position': `${picture().mark!.x * 100}% ${picture().mark!.y * 100}%` } : {}} />
+                <><Show when={fading()}>{old => <img class="cw-picture-under" src={old().url} alt="" aria-hidden="true" style={{ 'object-position': old().position }} />}</Show>
+                <img class="cw-picture-image" src={picture().url} alt={picture().mark ? `${picture().alt} Your lit window is marked.` : picture().alt} onError={() => setFailed(true)}
+                  onLoad={reveal} onTransitionEnd={event => { if (event.propertyName === 'opacity' && !settling()) setFading(null); }}
+                  style={{ 'object-position': placeOf(picture()) }} />
                 <Show when={picture().mark}>{mark => <span class="cw-yours" aria-hidden="true"
                   classList={{ low: mark().y < .2, west: mark().x < .2, east: mark().x > .8 }} style={{ left: `${mark().x * 100}%`, top: `${mark().y * 100}%` }}>
                   <span class="cw-yours-ring" /><span class="cw-yours-tag">Yours</span></span>}</Show><figcaption aria-label={picture().provenance.origin === 'realm' ? `Painted at ${picture().provenance.caption}` : picture().provenance.caption}><Show when={picture().provenance.origin === 'realm'}><span class="cw-brush" aria-hidden="true">✎</span></Show>{picture().provenance.caption}</figcaption></>}

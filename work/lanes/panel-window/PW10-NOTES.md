@@ -1,3 +1,30 @@
+# PW10 checkpoint — 2 November 2026, the painting dissolves
+
+PW10 is still unticked. Main has not moved since this lane branched (`0e92df4`), and front-door's branch still keeps the Passport provenance seal, so the zip still fails only on those shared strings. The GPU tunnel was down for this whole session (`chatdom-pc status` exit 3).
+
+## What was below the bar
+
+The last checkpoint's doubt was whether a change of picture reads as a cut. It did, in every case: each new painting replaced the last one in a single frame. That happens once a minute while the stream is live, and the painter may also turn the camera 25–75° when a lit window falls outside the hero shot. The adapter also revoked the old painting's blob URL the moment the new one arrived, so the panel had nothing to dissolve from.
+
+## Implemented
+
+- **The adapter keeps the replaced painting readable** (`apps/panel/src/adapters/production.ts`). On each swap it revokes the painting from two swaps back and keeps the one just replaced, so at most two painting blobs are held at once. Both are revoked when the painting becomes unavailable and on disposal. No timers are involved. The contract is written on `Picture.url` in `model.ts`.
+- **The plate dissolves** (`Panel.tsx`, `window.css`). When the painting's URL changes while the Kingdom tab is open, the old painting stays underneath as an `aria-hidden` image at its own framing. The new one is hidden until it has loaded and been drawn once (two animation frames), then fades in over 1.8 s while its pan toward the viewer's window runs. The "Yours" mark waits until the picture has settled: it fades in 1.2 s after the fade starts, so the ring never appears over the old painting. When the fade ends, the underlay is removed. Reduced motion, another tab being open, a failed load or a change to no picture all swap at once, as before. The words do not change.
+- `pw10-capture.mjs` takes one more still, `tap-kingdom-dissolve`, 700 ms after painting 02 reaches the open panel. It then waits for the dissolve and the mark to settle before taking `lit-kingdom`.
+
+## Verified
+
+- Vitest across `apps/panel/src` (11 files, 103 tests) passed, including the updated adapter tests. They now check that the replaced painting stays readable across one swap, that the painting from two swaps back is revoked, and that disposal revokes both. The minute-refresh test still shows the next minute's painting and no polling while hidden. Repository `tsc --noEmit` shows no errors under `apps/panel`. ESLint on the touched files is clean. `node --check` passes on the capture script.
+- `node scripts/public/extension.mjs` builds and still fails only on the two shared simulation strings (viewer and window chunks), with nothing new.
+- Dissolve still sequence. The GPU tunnel was down, and nothing here needs WebGL, so headless Chrome ran under the shared capture lock (about 20 minutes queued, under a minute held). A temporary local page, deleted afterwards, mounted the real `Panel` and swapped the lane's own two real paintings: 01 (hero, 06:58) to 02 (+25° turn with the newcomer's mark, 06:59). The Vite server was on 5175 and has been stopped.
+  - 650 ms after the swap, the underlay is present and the new painting is at opacity 0.26 (318×496) and 0.24 (390×844). After 4.2 s, the underlay has been removed and the picture and the "Yours" mark are both at opacity 1.
+  - I looked at `work/evidence/panel-window/PW10/dissolve/sheet-318.png` and `sheet-390.png` (before, mid and after). The turned painting rises out of the hero shot without a cut. Mid-way, the two castles ghost over each other for a moment. The ring and tag appear only on the settled picture, on the newcomer's front window. Nothing clips, and the words are unchanged (Kingdom 2 visible on this bench page, which has no lights foot; the lane's lit Kingdom stays 12).
+
+## Doubts
+
+- A painting fetched while the You tab is open swaps without a dissolve. The Kingdom tab then shows the new picture when it opens, which is the right moment for it, but the arch crop on the You tab still changes at once.
+- The dissolve has only been seen in software rendering. Whether 1.8 s feels calm or slow at panel size should be judged on a real GPU alongside the window glow.
+
 # PW10 checkpoint — 2 November 2026, the window on the You tab
 
 PW10 is still unticked. Main has not moved since this lane branched (`0e92df4`), so the shared Passport patches have not landed and the zip still fails on their strings alone. The GPU tunnel was down again at the start of this session (`chatdom-pc status` exit 3). This session looked again at the You tab, the view a newcomer lands on after the tap, and found three things below the bar.

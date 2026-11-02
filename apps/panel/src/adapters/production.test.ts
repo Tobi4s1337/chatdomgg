@@ -225,7 +225,7 @@ describe('verified panel transport', () => {
   });
 
   it('fetches changed paintings as authenticated blobs and revokes URLs on replacement and disposal', async () => {
-    const create = vi.fn().mockReturnValueOnce('blob:first').mockReturnValueOnce('blob:second'), revoke = vi.fn();
+    const create = vi.fn().mockReturnValueOnce('blob:first').mockReturnValueOnce('blob:second').mockReturnValueOnce('blob:third'), revoke = vi.fn();
     vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL: create, revokeObjectURL: revoke }));
     const server = backend(); const picture = { capturedAt: 1_793_520_000_000, revision: 'one', kind: 'realm' };
     server.kingdom({ ...KINGDOM_STATE, picture }); const { adapter } = mount(standIn(), server); await settle();
@@ -233,9 +233,12 @@ describe('verified panel transport', () => {
     expect(calls(server, '/picture')[0]?.[1]).toMatchObject({ method: 'GET', headers: { authorization: 'Bearer token-1' } });
     await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS); expect(calls(server, '/picture')).toHaveLength(1);
     server.kingdom({ ...KINGDOM_STATE, picture: { ...picture, revision: 'two', kind: 'sketch' } });
-    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS); expect(revoke).toHaveBeenCalledWith('blob:first');
-    expect(adapter.get().picture).toMatchObject({ provenance: { origin: 'sketch' } });
-    adapter.dispose(); expect(revoke).toHaveBeenCalledWith('blob:second');
+    // The replaced painting stays readable while the plate dissolves from it, until the next one arrives.
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS); expect(revoke).not.toHaveBeenCalled();
+    expect(adapter.get().picture).toMatchObject({ url: 'blob:second', provenance: { origin: 'sketch' } });
+    server.kingdom({ ...KINGDOM_STATE, picture: { ...picture, revision: 'three' } });
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS); expect(revoke.mock.calls).toEqual([['blob:first']]);
+    adapter.dispose(); expect(revoke.mock.calls).toEqual([['blob:first'], ['blob:second'], ['blob:third']]);
   });
 
   it('marks the viewer’s own window only in a painting that shows it lit', async () => {
@@ -274,7 +277,7 @@ describe('verified panel transport', () => {
     await vi.advanceTimersByTimeAsync(60_000 - KINGDOM_REFRESH_MS);
     server.kingdom({ ...KINGDOM_STATE, picture: { ...first, capturedAt: first.capturedAt + 60_000, revision: 'minute-two' } });
     await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS);
-    expect(adapter.get().picture).toMatchObject({ url: 'blob:minute-two' }); expect(revoke).toHaveBeenCalledWith('blob:minute-one');
+    expect(adapter.get().picture).toMatchObject({ url: 'blob:minute-two' }); expect(revoke).not.toHaveBeenCalled();
     helper.visible(false); const hidden = server.send.mock.calls.length;
     server.kingdom({ ...KINGDOM_STATE, picture: { ...first, capturedAt: first.capturedAt + 120_000, revision: 'minute-three' } });
     await vi.advanceTimersByTimeAsync(5 * 60_000);

@@ -276,7 +276,10 @@ try {
         await waitFor(async () => (await realmKingdom()).lights >= 1, 'the lit window in the public frame');
         await painting('02-after');
         await tap.page.waitForFunction(previous => { const img = document.querySelector('img.cw-picture-image'); return img && img.getAttribute('src') !== previous && img.complete; }, before, { timeout: 30_000 });
-        await delay(500);
+        // The new painting dissolves in over the old one; one still mid-way, then the settled picture and its mark.
+        await delay(700); await shot(tap.page, 'tap-kingdom-dissolve', 'the painting made after the tap rising out of the one before');
+        await tap.page.waitForFunction(() => !document.querySelector('.cw-picture-under, .cw-picture.settling'), null, { timeout: 15_000 }).catch(() => {});
+        await delay(2_200);
       }
       await shot(tap.page, 'lit-kingdom', view === 'panel' ? 'the painting made after the tap, shown by the same open panel' : '');
       await tap.page.getByRole('button', { name: 'Walk in ↗' }).click();

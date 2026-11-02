@@ -121,6 +121,9 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
   let kingdom: KingdomWire | null = null, kingdomLost = false, kingdomAt = 0;
   let picture: Picture = { kind: 'unavailable', reason: 'The kingdom’s picture is on its way.' };
   let pictureRevision: string | null = null, pictureUrl: string | null = null;
+  // The painting just replaced stays readable until the next one arrives, so the plate can dissolve from it.
+  let fadingUrl: string | null = null;
+  const forgetPictures = () => { for (const url of [fadingUrl, pictureUrl]) if (url) URL.revokeObjectURL(url); fadingUrl = null; pictureUrl = null; };
   // The lit windows of exactly the painting on show, and the viewer's own window once the realm confirms it lit.
   let pictureWindows: readonly PaintedWindow[] = [], ownSlot: number | null = null;
   let light: Light | null = null, claimed: Claim | null = null;
@@ -237,8 +240,8 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       if (!['image/webp', 'image/png', 'image/jpeg'].includes(blob.type) || blob.size > 512 * 1024 || blob.size === 0) throw new Error('unreadable');
       if (version !== epoch || !visible()) return;
       const url = URL.createObjectURL(blob);
-      if (pictureUrl) URL.revokeObjectURL(pictureUrl);
-      pictureUrl = url; pictureRevision = frame.revision;
+      if (fadingUrl) URL.revokeObjectURL(fadingUrl);
+      fadingUrl = pictureUrl; pictureUrl = url; pictureRevision = frame.revision;
       // A painting newer than the reply that announced it shows no marks until the next reply describes it.
       pictureWindows = revision === frame.revision ? frame.windows ?? [] : [];
       const capturedOn = new Date(frame.capturedAt).toISOString();
@@ -286,7 +289,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       kingdom = parsed; kingdomLost = false; kingdomAt = Date.now();
       if (parsed.stream !== 'live') { clearTimeout(presenceTimer); presenceGeneration++; presenceRequest?.abort(); presenceBusy = false; presenceSent = false; if (light?.kind === 'lit') light = null; }
       if (parsed.picture) await loadPicture(parsed.picture, version);
-      else if (pictureUrl) { URL.revokeObjectURL(pictureUrl); pictureUrl = null; pictureRevision = null; pictureWindows = []; picture = { kind: 'unavailable', reason: 'No painting has arrived yet.' }; }
+      else if (pictureUrl) { forgetPictures(); pictureRevision = null; pictureWindows = []; picture = { kind: 'unavailable', reason: 'No painting has arrived yet.' }; }
       void observe();
       void gifts.refresh();
     } catch { if (version === epoch && visible()) { kingdomLost = true; void gifts.refresh(); clearTimeout(presenceTimer); presenceGeneration++; presenceRequest?.abort(); presenceBusy = false; presenceSent = false; } }
@@ -428,7 +431,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     dispose() {
       disposed = true; stop(); gifts.dispose(); clearTimeout(timer); unsubscribe(); unsubscribeRefresh?.(); listeners.clear();
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', changed);
-      if (pictureUrl) URL.revokeObjectURL(pictureUrl);
+      forgetPictures();
     },
   };
 }

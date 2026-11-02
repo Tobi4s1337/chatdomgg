@@ -45,6 +45,7 @@ export interface PictureProvenance {
 
 export type Picture =
   | {
+    /** `url` stays readable until a second newer still replaces it, so the view can dissolve from one to the next. */
     readonly kind: 'still'; readonly url: string; readonly alt: string; readonly width: number; readonly height: number;
     /** The same moment framed for a phone held upright, when the source made one. */
     readonly portrait: { readonly url: string; readonly width: number; readonly height: number } | null;
