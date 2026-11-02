@@ -214,12 +214,12 @@ describe.runIf(process.env.RAID_SHOW_STAGE === '1')('RS10 staged stream capture 
         }
       };
       // What the realm itself tells every watcher about walkers, sampled once a second: the stream draws only these.
-      const walkerTrace: { at: number; frames: number; walkers: number; events: string[] }[] = [];
+      const walkerTrace: { at: number; frames: number; walkers: number; events: string[]; self?: { x: number; z: number; yaw: number } }[] = [];
       const tracing = new AbortController();
       void (async () => {
         const response = await fetch(`${realm!.endpoint}${REALM_WATCH_ROUTE.replace(':kingdomId', kingdomId)}`, { signal: tracing.signal });
         const reader = response.body!.getReader(), decoder = new TextDecoder();
-        let text = '', second = { at: 0, frames: 0, walkers: -1, events: [] as string[] };
+        let text = '', second: (typeof walkerTrace)[number] = { at: 0, frames: 0, walkers: -1, events: [] };
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -230,7 +230,13 @@ describe.runIf(process.env.RAID_SHOW_STAGE === '1')('RS10 staged stream capture 
             if (!event) continue;
             const at = Math.floor((Date.now() - raidSent) / 1000);
             if (at !== second.at) { if (second.frames || second.events.length) walkerTrace.push(second); second = { at, frames: 0, walkers: -1, events: [] }; }
-            if (event === 'walkers' && data) { second.frames++; second.walkers = (JSON.parse(data) as { walkers: unknown[] }).walkers.length; }
+            if (event === 'walkers' && data) {
+              const frame = JSON.parse(data) as { walkers: { name: string; x: number; z: number; yaw: number }[] };
+              second.frames++; second.walkers = frame.walkers.length;
+              // The walking raider's own server pose, so a still that turned can be told from a camera that moved.
+              const self = ash ? frame.walkers.find(walker => walker.name === 'Oko') : undefined;
+              if (self) second.self = { x: Math.round(self.x * 100) / 100, z: Math.round(self.z * 100) / 100, yaw: self.yaw };
+            }
             else if (event !== 'world' && event !== 'transient' && second.events.length < 4) second.events.push(event);
           }
         }

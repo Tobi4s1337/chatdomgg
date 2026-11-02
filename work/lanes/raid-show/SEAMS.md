@@ -243,36 +243,10 @@ Private visual exercise: `/-/raid-gate?incoming=1&browse=1&at=480000`, with the 
 
 On the real GPU, a walker who joined 9.6 s after the raid saw the 10,000 column pass: 2, 4 and 6 wagons at 14, 24 and 36 s. The composed CLI-to-restart flow passes with it.
 
-**needs: integrator — keep the newest raid as the one current raid.** Realm moments and the outbox projection are the integrator's, so raid-show does not carry this change (it was applied here once and moved back out on review). Until it lands, the controller's join is inert: a raider who follows the link mid-column sees the gate and the wall but no caravan, and nothing else changes. With it applied, `records.integration`, `service.integration`, the projection tests and the composed flow passed in this worktree, and the walker stills in `work/evidence/raid-show/walker-view.md` were taken. Herald's `CurrentSlot` type already includes `raid` (this lane's file). The three lines:
+**needs: integrator — keep the newest raid as the one current raid, and face a fresh guest out through the gate.** Realm moments, the outbox projection, `ports.ts` and `kingdom-room.ts` are the integrator's, so raid-show does not carry these changes (applied here twice for the stills and moved back out on review). The exact, `git apply --check`-clean patch against `0e92df4` is `work/lanes/raid-show/handoff/integrator-raid-slot-and-arrival-facing.patch`; it carries its own tests (a projection test, and the facing assertion in this lane's `guests-flow.integration.test.ts`, which belongs with the room change). With it applied, `records.integration`, `service.integration`, the projection tests, `guests-flow` and the composed flow passed in this worktree on own Postgres schemas, and the walker stills in `work/evidence/raid-show/walker-view.md` were taken.
 
-```diff
---- apps/realm/src/moments/spectacles.ts   (case 'raid')
--      return { outcome: 'applied', facts: [{ current: false, body }], summons: [] };
-+      return { outcome: 'applied', facts: [{ current: true, slot: { name: 'raid', order: at }, body }], summons: [] };
---- apps/realm/src/outbox/projection.ts
--const SLOTTED: ReadonlySet<string> = new Set(['hype', 'battle', 'poll']);
-+const SLOTTED: ReadonlySet<string> = new Set(['hype', 'battle', 'poll', 'raid']);
---- apps/realm/src/moments/records.ts   (normalizedRecord)
--    case 'current-slot': if (id === 'hype' || id === 'battle' || id === 'poll') return CurrentSlotRecordSchema.parse(value); break;
-+    case 'current-slot': if (id === 'hype' || id === 'battle' || id === 'poll' || id === 'raid') return CurrentSlotRecordSchema.parse(value); break;
-```
-
-Only the bits case has the same `current: false` line; patch the raid case only. The slot holds one raid (the newest by occurrence); an older late report never displaces it.
-
-**needs: integrator (when play and gather land) — the arrival facing.** Not applied here: play (`door?.yaw`) and gather (`back?.yaw`) both rewrite this same `yaw:` line in their open work, so a third edit would only make a three-way conflict. Composed, the line reads `yaw: resume?.yaw ?? door?.yaw ?? back?.yaw ?? facingOf(preparation) ?? 0`. `createRaidGuestSpawn` already returns `faceToward` (world x, z, 12 m out through the gate on the caravan's approach, `raidGuestFaceToward`) beside the port's fields. The walk camera resets behind the walker's spawn yaw, so a guest facing out sees the column ride towards them. Without this patch, guests face yaw 0 and the column comes through their camera from behind (seen on the GPU).
-
-```diff
---- apps/realm/src/ports.ts   (RealmSpawnPreparation)
-   current(): boolean;
-+  /** Optional point (world x, z) a fresh arrival faces; a resumed pose keeps its own yaw. */
-+  readonly faceToward?: readonly [number, number];
- }
---- apps/realm/src/kingdom-room.ts   (onJoin, new WalkerSchema)
--        ... grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? 0, ...
-+        ... grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? (preparation?.faceToward ? ((Math.round(Math.atan2(preparation.faceToward[0] - position[0], preparation.faceToward[1] - position[2]) / (Math.PI * 2) * 256) % 256) + 256) % 256 : 0), ...
-```
-
-The byte convention is the walk input's `facingByte` (`atan2(x, z) / TAU * 256`).
+1. *The current raid.* `moments/spectacles.ts` (raid case only; bits keeps `current: false`) publishes the raid with `{ current: true, slot: { name: 'raid', order: at } }`; `outbox/projection.ts` adds `'raid'` to `SLOTTED`; `moments/records.ts` accepts the `raid` current slot. The slot holds one raid, the newest by occurrence; an older late report never displaces it. Herald's `CurrentSlot` already includes `raid` (this lane's file). Without it the controller's mid-column join is inert: a raider who follows the link mid-column sees the gate and the wall but no caravan; nothing else changes.
+2. *The arrival facing.* `RealmSpawnPreparation` gains the optional `faceToward` (world x, z), which `createRaidGuestSpawn` already returns (`raidGuestFaceToward`, 12 m out through the gate on the caravan's approach). The room's new walker takes `yaw: resume?.yaw ?? arrivalFacing(preparation, position)`, a module-level helper using the walk input's byte convention (`atan2(x, z) / TAU * 256`), 0 without a point. play (`door?.yaw`) and gather (`back?.yaw`) rewrite the same line; composed, it reads `yaw: resume?.yaw ?? door?.yaw ?? back?.yaw ?? arrivalFacing(preparation, position)`. A raid guest has no door, so the order never changes what a guest sees. Without it, guests face yaw 0 and the column comes through their walk camera from behind (seen on the GPU).
 
 **2026-11-02 — Guests keep clear of the pennant wall.** The realm's spawn furniture now includes every candidate bay of the dated wall (`RAID_PENNANT_WALL_LAYOUT`, mirrored in `RAID_GATE_FURNITURE.pennants` and compared by the cross-surface test), each with its footprint plus 1.2 m to stand back and read. On the GPU a walker had arrived with their face in a raider's cloth.
 
