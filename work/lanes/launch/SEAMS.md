@@ -13,7 +13,24 @@ The staged-data guard in the packer is unchanged: the panel build removes the st
 
 ## deploy:
 
-**1. The Atlas data service (127.0.0.1:5193) runs a stale build.** It is started from `worktrees/atlas/apps/surveyor`
+**0. (done by 18:47) chatdom.io answered 502 after the 17:55 redeploy: the gateway had no server bundle.** In the deploy checkout
+`worktrees/public-next`, `apps/api/dist/` holds only `api.mjs` (17:55:46): a `pnpm build` (or `pnpm --filter
+@chatdom/api build`) ran after `scripts/public/build.mjs` (17:54) and vite emptied `apps/api/dist/`, deleting
+`public.mjs`; `node scripts/public/start.mjs` then exits with "Not built yet (apps/api/dist/public.mjs is missing)",
+so nothing listens on 5480. Realm (5197), herald (5194), Forge (5195), API (5196) and Atlas data (5193) are up.
+Steps, now:
+
+1. `cd /srv/chatdom/public-next/apps/api && pnpm exec vite build --config src/public/vite.config.mjs`
+   (writes `dist/public.mjs` beside `api.mjs`; `emptyOutDir` is false in that config).
+2. Start the gateway as it is normally started (`node scripts/public/start.mjs` from the checkout root, its usual
+   env files, port 5480).
+3. Check: `curl -s -o /dev/null -w '%{http_code}' https://chatdom.io/` answers 200.
+
+From this lane's next merge on, `@chatdom/api`'s `build` script writes both bundles, so a later `pnpm build` can no
+longer take the gateway down. Until then, after any `pnpm build` in the deploy checkout, rerun
+`node scripts/public/build.mjs` (or step 1).
+
+**1. (done: roads answer 200 and the public lookup finds tobi4s_ on the redeploy) The Atlas data service (127.0.0.1:5193) ran a stale build.** It is started from `worktrees/atlas/apps/surveyor`
 (branch `lane/atlas`, 8d4d8676, started 2 Nov 14:19) with only `ATLAS_DATA_DIR=shots/atlas-data` (relative to that
 worktree). That build has no road routes (`/map-data/v1/roads/<preview>/busiest` answers 404 on every Atlas load and
 logs a console error) and no Twitch lookup (`card/login/<login>?lookup=1` answers 404 for any channel the survey has
@@ -29,10 +46,28 @@ not mapped). Steps:
 4. Check: `curl -s -o /dev/null -w '%{http_code}' https://chatdom.io/map-data/v1/roads/$(curl -s https://chatdom.io/map-data/v1/preview | node -pe 'JSON.parse(require("fs").readFileSync(0)).id')/busiest`
    answers 200, and the same preview's `card/login/tobi4s_?lookup=1` answers 200.
 
+**3. Real visitor addresses behind Traefik (`PUBLIC_TRUSTED_PROXIES`).** atlas-map's gateway patch
+(`gateway-visitor-address.integrator.patch`) is applied on this lane (apps/api/src/public: `proxy.ts`, `config.ts`,
+`main.ts` and their tests; 131 public tests pass). Unset, the gateway behaves exactly as before. Traefik is **not** on
+docker0: the gateway listens on `172.17.0.1:5480`, but every connection to it comes from `172.18.0.4` (bridge
+`br-3c27a4918437`, `172.18.0.0/16`; sampled 2 Nov 19:10). atlas-map's suggested `172.17.0.0/16` would trust nobody.
+After the deploy that carries this lane:
+
+1. In the gateway's environment (`ops/bin/public` or its env file): `PUBLIC_TRUSTED_PROXIES=172.18.0.0/16`
+   (the bridge, not the container's single address, so a Traefik restart that changes its address keeps working).
+2. Restart the gateway, then the Atlas serve loop with `ATLAS_LOOKUPS_PER_CLIENT_MINUTE=6` (one allowance per visitor
+   instead of one shared by everyone).
+3. Check: `ss -tn state established '( sport = :5480 )'` still shows peers in `172.18.0.0/16`, and two visitors no
+   longer share one lookup allowance (the Atlas service's per-client log line names different addresses).
+
 **2. After the next deploy of `lane/integrator`**, nothing else is needed for this lane's fixes: they are in the web
 build, the gateway (`apps/api`) and the realm (`apps/realm`).
 
 ## Only Tobias
+
+- Sign in once on chatdom.io with Twitch in the Chrome behind `chatdom-pc` (his RTX 5080), as tobi4s_. That closes
+  the sign-in round trip (WALK step 6) and lets the lane still the walk, the HUD, a Forge wish and the tavern on the
+  5080 with his session (steps 7, 8, 10). The lane never drives the Twitch login itself.
 
 - Found the first Atlas edition (`atlas:authorize` with the founder's private key, then `atlas:found`). Until then no
   founded kingdom or signed-in streamer is drawn on the map; the Atlas search offers the front door's kingdoms

@@ -22,7 +22,9 @@ const started = Date.now();
 run(['--filter', '@chatdom/realm', 'build']);
 run(['--filter', '@chatdom/web', 'build']);
 run(['exec', 'vite', 'build', '--config', 'src/site/vite.config.mjs'], join(root, 'apps/web'));
-run(['exec', 'vite', 'build', '--config', 'src/public/vite.config.mjs'], join(root, 'apps/api'));
+// The API's own build writes both of its bundles (dist/api.mjs and dist/public.mjs), so a later `pnpm build`
+// can never leave the gateway without its server.
+run(['--filter', '@chatdom/api', 'build']);
 
 // Text assets ship with brotli and gzip siblings; the public server picks one per request (never on the fly).
 const brotli = promisify(brotliCompress), gz = promisify(gzip);

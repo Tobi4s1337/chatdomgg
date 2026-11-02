@@ -336,3 +336,12 @@ call is still fetching stays as they left it. The front page needs no guard of i
 - needs (front-door): a signed-out stranger has no way from the front page into a kingdom; only the signed-in seal
   offers "Walk into Willowmere". The front door's open kingdom (`/api/public/door`) deserves a visible way in for
   everyone (the hero caption already names "The land of tobi4s_ at dusk").
+- 2 Nov (LA10, chatdom.io down): `apps/api`'s own `build` script now builds both bundles (`dist/api.mjs`, then
+  `dist/public.mjs` from `src/public/vite.config.mjs`), and `scripts/public/build.mjs` calls that script. Before, any
+  `pnpm build` after the public build emptied `apps/api/dist/` (vite's default `emptyOutDir`) and deleted
+  `public.mjs`, and `scripts/public/start.mjs` then refused to start: that is why chatdom.io answered 502 after the
+  17:55 redeploy (the deploy checkout held `api.mjs` only).
+- 2 Nov (LA10, harness request): atlas-map's `gateway-visitor-address.integrator.patch` is applied in
+  `apps/api/src/public` (`proxy.ts`: `parseTrustedProxies`, `clientAddress`; `config.ts`: `trustedProxies`;
+  `main.ts` passes it to `proxyHttp`/`proxyUpgrade`). With `PUBLIC_TRUSTED_PROXIES` unset nothing changes; on chatdom.io
+  it is `172.18.0.0/16` (launch `SEAMS.md`, `deploy: 3`).

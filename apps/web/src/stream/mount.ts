@@ -5,6 +5,9 @@ import { createOpeningJournal, type OpeningJournal } from '../kingdom/grand-land
 
 export type KingdomScene = Awaited<ReturnType<typeof createKingdomScene>>;
 export type StreamPhase = 'waking' | 'ready' | 'hidden' | 'failed';
+
+/** An expected refusal the stream shows in words (no kingdom chosen); it is not logged as an error. */
+export class StreamRefusal extends Error { override name = 'StreamRefusal'; }
 type SceneSettings = Omit<SceneOptions, 'signal' | 'onProgress' | 'onNames' | 'onSpeech' | 'onSource' | 'onError' | 'opening'>;
 export interface PreparedStreamScene {
   settings: Partial<SceneSettings>;
@@ -108,7 +111,7 @@ export function createSceneMount(hooks: {
     hooks.onPhase(phase);
   }
 
-  function fail(entry: Entry, reason = 'The kingdom revision could not be prepared'): void {
+  function fail(entry: Entry, reason = 'The kingdom could not be opened just now.'): void {
     if (!owns(entry)) return;
     stats.lastFailure = reason;
     entry.opening?.fail(reason);
@@ -180,7 +183,7 @@ export function createSceneMount(hooks: {
     const entry: Entry = { canvas, controller: new AbortController(), frame: 0, ready: false, released: false, publications: new Map() };
     if (replacement) {
       pending = entry;
-      entry.timeout = setTimeout(() => fail(entry, 'The replacement exceeded five minutes before its final loaded draw'), REPLACEMENT_TIMEOUT_MS);
+      entry.timeout = setTimeout(() => fail(entry, 'The kingdom took too long to refresh.'), REPLACEMENT_TIMEOUT_MS);
     } else {
       current = entry;
       failed = false;
@@ -250,8 +253,8 @@ export function createSceneMount(hooks: {
       entry.frame = requestAnimationFrame(opened);
     }).catch((cause: unknown) => {
       if (!owns(entry)) return;
-      console.error('The stream kingdom could not open', cause);
-      fail(entry, cause instanceof Error ? cause.message : 'The kingdom revision could not be prepared');
+      if (!(cause instanceof StreamRefusal)) console.error('The stream kingdom could not open', cause);
+      fail(entry, cause instanceof Error ? cause.message : 'The kingdom could not be opened just now.');
     });
   }
 

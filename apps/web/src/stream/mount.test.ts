@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { SceneOptions, SceneView } from '../kingdom/scene';
 import type { RealmChatMessage } from '../realm/adapters/chat';
-import { createSceneMount, type KingdomScene, type PreparedStreamScene } from './mount';
+import { createSceneMount, StreamRefusal, type KingdomScene, type PreparedStreamScene } from './mount';
 
 const { createScene } = vi.hoisted(() => ({ createScene: vi.fn() }));
 vi.mock('../kingdom/scene', () => ({ createKingdomScene: createScene }));
@@ -262,4 +262,17 @@ it('releases the outgoing hold exactly once when hidden during the awaited hando
   draw.reject(new Error('Disposed before final draw')); await settle();
   expect(h.mount.scene).toBeUndefined(); expect(h.hooks.onPhase).toHaveBeenLastCalledWith('hidden');
   expect(h.preparations[1]!.activate).not.toHaveBeenCalled(); expect(resume).toHaveBeenCalledOnce();
+});
+
+it('shows a refusal in words without logging it as an error, and still logs real failures', async () => {
+  const h = harness();
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  h.prepare.mockImplementationOnce(async () => { throw new StreamRefusal('Choose a founded kingdom to watch.'); });
+  h.mount.mount(); await settle();
+  expect(h.hooks.onPhase).toHaveBeenLastCalledWith('failed');
+  expect(logged).not.toHaveBeenCalled();
+  h.prepare.mockImplementationOnce(async () => { throw new Error('The realm answered 500.'); });
+  h.mount.mount(); await settle();
+  expect(logged).toHaveBeenCalledWith('The stream kingdom could not open', expect.any(Error));
+  logged.mockRestore();
 });

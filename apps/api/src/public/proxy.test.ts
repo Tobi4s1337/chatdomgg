@@ -1,7 +1,7 @@
 import { createServer, request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type OutgoingHttpHeaders, type Server } from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { parseTarget, proxyHttp, proxyUpgrade, type ProxyTarget } from './proxy';
+import { clientAddress, parseTarget, parseTrustedProxies, proxyHttp, proxyUpgrade, type ProxyTarget, type TrustedProxies } from './proxy';
 
 describe('parseTarget', () => {
   it('accepts a plain http://host:port address', () => {
@@ -21,6 +21,57 @@ describe('parseTarget', () => {
       try { parseTarget('PUBLIC_REALM_TARGET', value); } catch (error) { message = (error as Error).message; }
       expect(message, value).toBe('PUBLIC_REALM_TARGET must be an http://host:port address');
     }
+  });
+});
+
+describe('the visitor behind the host\'s TLS proxy', () => {
+  const bridge = parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', '172.17.0.0/16, ::1')!;
+
+  it('reads IPv4 ranges and single addresses, and trusts nobody when unset', () => {
+    expect(parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', undefined)).toBeNull();
+    expect(parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', ' , ')).toBeNull();
+    expect(bridge('172.17.0.2')).toBe(true);
+    expect(bridge('::ffff:172.17.255.254')).toBe(true);
+    expect(bridge('172.18.0.2')).toBe(false);
+    expect(bridge('::1')).toBe(true);
+    expect(bridge('203.0.113.9')).toBe(false);
+    const everyone = parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', '0.0.0.0/0')!;
+    expect(everyone('8.8.8.8')).toBe(true);
+  });
+
+  it('refuses a malformed list without repeating it', () => {
+    for (const value of ['172.17.0.0/33', '172.17.0.0/x', 'traefik', '172.17.0.0/16/2', '::1/64', '999.1.1.1']) {
+      let message = '';
+      try { parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', value); } catch (error) { message = (error as Error).message; }
+      expect(message, value).toBe('PUBLIC_TRUSTED_PROXIES must list IPv4 ranges or single addresses, comma separated');
+    }
+  });
+
+  it('believes only the entry the trusted proxy wrote, never what the browser claimed', () => {
+    // Traefik appends the address it saw to whatever the browser sent.
+    expect(clientAddress({ 'x-forwarded-for': '6.6.6.6, 203.0.113.9' }, '172.17.0.2', bridge)).toBe('203.0.113.9');
+    expect(clientAddress({ 'x-forwarded-for': '203.0.113.9' }, '::ffff:172.17.0.2', bridge)).toBe('203.0.113.9');
+    // A chain of trusted hops is walked from the right.
+    expect(clientAddress({ 'x-forwarded-for': '203.0.113.9, 172.17.0.3' }, '172.17.0.2', bridge)).toBe('203.0.113.9');
+    expect(clientAddress({ 'x-forwarded-for': '2001:db8::7' }, '172.17.0.2', bridge)).toBe('2001:db8::7');
+    // An untrusted peer is the visitor, whatever it claims; without a list nobody is believed.
+    expect(clientAddress({ 'x-forwarded-for': '203.0.113.9' }, '198.51.100.4', bridge)).toBe('198.51.100.4');
+    expect(clientAddress({ 'x-forwarded-for': '203.0.113.9' }, '172.17.0.2', null)).toBe('172.17.0.2');
+    // Nothing usable: the peer, never a made-up value.
+    expect(clientAddress({}, '172.17.0.2', bridge)).toBe('172.17.0.2');
+    expect(clientAddress({ 'x-forwarded-for': 'unknown' }, '172.17.0.2', bridge)).toBe('172.17.0.2');
+    expect(clientAddress({ 'x-forwarded-for': '172.17.0.9' }, '172.17.0.2', bridge)).toBe('172.17.0.2');
+  });
+
+  it('tells the upstream the visitor\'s address when the peer is trusted', async () => {
+    const upstream = await echoUpstream();
+    const trusted = parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', '127.0.0.1');
+    const port = await gateway(target(upstream.port), 'https', trusted);
+    await call(port, '/map-data/v1/search?q=tobi4s_', { headers: { 'X-Forwarded-For': '6.6.6.6, 203.0.113.9' } });
+    expect(upstream.seen[0]?.headers['x-forwarded-for']).toBe('203.0.113.9');
+    const untrusted = await gateway(target(upstream.port), 'https', parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', '172.17.0.0/16'));
+    await call(untrusted, '/map-data/v1/search?q=tobi4s_', { headers: { 'X-Forwarded-For': '203.0.113.9' } });
+    expect(upstream.seen[1]?.headers['x-forwarded-for']).toBe('127.0.0.1');
   });
 });
 
@@ -56,9 +107,9 @@ async function echoUpstream(extra: OutgoingHttpHeaders = {}) {
 }
 
 /** A gateway that sends everything to `target` the way the public server does. */
-async function gateway(target: ProxyTarget, proto = 'https') {
-  const server = createServer((request, response) => proxyHttp(target, request, response, proto));
-  server.on('upgrade', (request, socket, head) => proxyUpgrade(target, request, socket, head, proto));
+async function gateway(target: ProxyTarget, proto = 'https', trusted?: TrustedProxies | null) {
+  const server = createServer((request, response) => proxyHttp(target, request, response, proto, trusted));
+  server.on('upgrade', (request, socket, head) => proxyUpgrade(target, request, socket, head, proto, trusted));
   return listen(server);
 }
 
