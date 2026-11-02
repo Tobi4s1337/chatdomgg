@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { generateSettlementPlan, terrainHeight } from '@chatdom/world';
 import { compileFoundedScene, foundedTerrainFrame, primeFoundedTerrain, sampleFoundedTerrain } from '@chatdom/world/founded-collision';
-import { foundedGroundWindow, joinFoundedGround, prepareFoundedGround, sampleFoundedGroundBand } from './terrain-founded';
+import { foundedGroundWindow, foundedHeightSampler, joinFoundedGround, prepareFoundedGround, sampleFoundedGroundBand } from './terrain-founded';
 
 it('samples the founded floor and height window in bands identical to the main-thread samplers', async () => {
   const plan = generateSettlementPlan({ seed: 'founded-ground-bands', tier: 'hamlet', firstYear: 2025, year: 2026 });
@@ -36,4 +36,24 @@ it('primes the founded collision floor only with an exact installed grid', () =>
   const primed = sampleFoundedTerrain(copy);
   expect(Array.from(primed.heights as Float32Array)).toEqual(Array.from(floor!));
   expect(compileFoundedScene).toBeTypeOf('function');
+}, 120_000);
+
+it('answers ground queries from the workers\' corners exactly as terrainHeight does', () => {
+  const plan = generateSettlementPlan({ seed: 'founded-ground-sampler', tier: 'town', firstYear: 2025, year: 2026 });
+  expect(plan.version).toBe(2);
+  const window = foundedGroundWindow(plan);
+  // The corners come from another realm, as from a worker; the queries run against a fresh plan's own caches.
+  const ground = joinFoundedGround(plan, window, [sampleFoundedGroundBand({ plan: structuredClone(plan), window, part: 0, parts: 1 })]);
+  const fresh = structuredClone(plan), sample = foundedHeightSampler(fresh, ground);
+  expect(sample).not.toBeNull();
+  const [ox, oz] = window.origin;
+  // Inside the window, on its last metre and just outside it (where the sampler defers to terrainHeight).
+  for (let z = oz - 3.3; z < oz + window.depth + 3; z += 1.37) for (let x = ox - 2.9; x < ox + window.width + 3; x += 1.13)
+    expect(sample!(x, z)).toBe(terrainHeight(fresh, x, z));
+  for (const [x, z] of [[ox + 10, oz + 10], [ox + 10.5, oz + 10.5], [ox + 10.25, oz + 10.75], [ox + 10.75, oz + 10.25], [ox + window.width - 1.5, oz + window.depth - 1.5]] as const)
+    expect(sample!(x, z)).toBe(terrainHeight(fresh, x, z));
+  // Corners that are not this plan's are refused, and so is a window of the wrong size.
+  const wrong = Float32Array.from(ground.height, value => value + 0.25);
+  expect(foundedHeightSampler(structuredClone(plan), { window, height: wrong })).toBeNull();
+  expect(foundedHeightSampler(structuredClone(plan), { window, height: ground.height.subarray(1) })).toBeNull();
 }, 120_000);

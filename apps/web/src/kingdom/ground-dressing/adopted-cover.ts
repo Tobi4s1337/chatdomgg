@@ -16,3 +16,9 @@ export function planAdoptedCover(plan: SettlementPlan,
   return { pieces, blockers: [], collisionPieces: [], seatAnchors: [],
     report: { ...dressed.report, counts: Object.fromEntries([...pieces].map(([id, placements]) => [id, placements.length])) } };
 }
+
+/** The scene's keep-out around the plan's lake, as it passes to the planner on every land. */
+export function lakeKeepOut(plan: SettlementPlan): (x: number, z: number, margin: number) => boolean {
+  const lake = plan.lake;
+  return (x, z, margin) => Math.hypot((x - lake.x) / (lake.radiusX + margin), (z - lake.z) / (lake.radiusZ + margin)) < 1.19;
+}

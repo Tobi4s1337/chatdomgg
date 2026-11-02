@@ -5,7 +5,7 @@ import { grandLandRecipeHash, type GrandLandRecipe } from '../recipe';
 import { landMaterials } from '../kits';
 import { GrandKind } from '../palette';
 import { regionTouchesPhysical, type PreparedGrandLand } from './prepare';
-import { BAKED_COMPILERS, BAKED_FORMAT, HOSTED_PAVING, type BakedBlobRef, type BakedIdentity, type BakedMetadata, type BakedRegionRef } from './types';
+import { BAKED_COMPILERS, BAKED_FORMAT, bakedCompilersOf, HOSTED_PAVING, type BakedBlobRef, type BakedIdentity, type BakedMetadata, type BakedRegionRef } from './types';
 import { encodeBakedMetadata, decodeBakedMetadata } from './metadata-codec';
 
 export async function identityForBakedLand(plan: SettlementPlan, recipe: GrandLandRecipe): Promise<BakedIdentity> {
@@ -27,7 +27,7 @@ export function createBakedMetadata(prepared: PreparedGrandLand, identity: Baked
   });
   if (regions.reduce((sum, r) => sum + r.meshes.length, 0) !== meshes.length) throw new RangeError('Baked mesh lies outside the land');
   // Explicit projection. Seated data contains paved masks, debug timings and the generator's private inputs.
-  return decodeBakedMetadata(encodeBakedMetadata({ version: BAKED_FORMAT, ...identity, compilers: BAKED_COMPILERS,
+  return decodeBakedMetadata(encodeBakedMetadata({ version: BAKED_FORMAT, ...identity, compilers: bakedCompilersOf({ ...BAKED_COMPILERS, generator: land.seed.world ? 'grand-land-2' : 'grand-land-1' })!,
     size, height, seaLevel, seat: { offset: seated.seat.offset, columns: seated.seat.columns, band: seated.seat.band },
     physicalRegion: seated.identity.region,
     bounds: { min: [-ox, -oy, -oz], max: [size * .5 - ox, height * .5 - oy, size * .5 - oz] },

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GRAND_COMMON, type GrandUniforms } from './light';
+import { LAND_MIST_GLSL, NO_MIST, type LandMistUniforms } from './mist';
 
 /**
  * The sea: one plane to the horizon, coloured by the depth under it (sand-teal shallows to deep blue),
@@ -17,6 +18,8 @@ export interface GrandSeaOptions {
   readonly reflectionScale?: number;
   /** Longest side of the reflection target in pixels (spec 56 starts high reflection at 512²). */
   readonly reflectionMax?: number;
+  /** The land's sea mist (GW13), shared with the terrain; without one the sea is all open. */
+  readonly mist?: LandMistUniforms;
 }
 
 export class GrandSea {
@@ -38,6 +41,7 @@ export class GrandSea {
       glslVersion: THREE.GLSL3,
       uniforms: {
         ...uniforms,
+        ...(options.mist ?? NO_MIST.uniforms),
         uFloor: { value: options.floor }, uFloorMetres: { value: options.landMetres }, uSeaY: { value: options.seaY },
         uReflection: { value: this.target?.texture ?? null }, uReflectionOn: { value: options.reflection ? 1 : 0 },
         uTextureMatrix: { value: this.textureMatrix },
@@ -55,6 +59,7 @@ export class GrandSea {
         uniform vec2 uCloudOffset;
         in vec3 vWorld; in vec4 vReflect; out vec4 outColour;
         ${GRAND_COMMON}
+        ${LAND_MIST_GLSL}
         vec2 waves(vec2 p, float t){
           vec2 g = vec2(0.);
           g += vec2(cos(p.x * .21 + p.y * .07 + t * 1.1), cos(p.y * .23 - p.x * .05 + t * .9)) * .32;
@@ -100,6 +105,7 @@ export class GrandSea {
           float foam = band * smoothstep(.35, .7, foamNoise + .45 * sin(uTime * 1.3 + coast * 2.5));
           foam += (1. - smoothstep(0., .45, depth)) * .55;
           col = mix(col, (uSkyColor * .55 + uSunColor * .3 * cloud + vec3(.25)) , clamp(foam, 0., .85) * (1. - smoothstep(200., 900., dist)));
+          vec4 mist = landMist(vWorld); col = mix(col, mist.rgb, mist.a);
           col = aerial(col, vWorld, cameraPosition);
           outColour = vec4(col, 1.);
         }`,

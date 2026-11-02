@@ -9,7 +9,10 @@ import { pieceRole, planViews, type GroundBlocker, type GroundDressingInput, typ
 type Level = 1 | 2 | 4;
 /** [level, near, far] in metres, landscape then portrait (R4 bands; the last level of each family is its far cut). */
 type Bands = readonly (readonly [Level, number, number, number, number])[];
-const BANDS: Record<'tufts' | 'clover' | 'flowers' | 'flat' | 'solid', Bands> = {
+const BANDS: Record<'tufts' | 'clover' | 'flowers' | 'flat' | 'fields' | 'solid', Bands> = {
+  // The grand town's crop rows and borders: full detail along the walk, a coarse level beyond, then the floor's own
+  // land-use tint carries the fields to the stream's distance.
+  fields: [[1, 0, 36, 0, 24], [2, 36, 72, 24, 48]],
   // Tufts are full detail to the street's end, then a coarse level carries them to where they vanish in grass.
   tufts: [[1, 0, 30, 0, 21], [2, 30, 58, 21, 38]],
   clover: [[1, 0, 30, 0, 21]],
@@ -38,8 +41,16 @@ export interface GroundDressing {
   collisionPieces: readonly GroundBlocker[];
   update(frame: { time: number; walkers: readonly Vec3[] }): void;
   hideLot(slot: number | null): void;
+  /**
+   * For good: passive cover for which `drop` holds gives up its ground (a field planned after it). Solid pieces never
+   * yield, since their collision stays where it is. Returns how many pieces gave way.
+   */
+  yieldGround(drop: (piece: GroundPiece) => boolean): number;
   views(): GroundViews;
   stats(): GroundDressingStats;
+  /** Every dressing mesh drawn by the scene. Hosts leave it out of the water's half-resolution reflection, where
+   * tufts, flowers and pebbles are under a pixel through the moving surface. */
+  readonly root: THREE.Object3D;
   dispose(): void;
 }
 
@@ -52,6 +63,7 @@ function familyOf(blueprint: VoxelBlueprint): keyof typeof BANDS {
   const role = pieceRole(blueprint);
   if (role.form === 'seedling-bed' || role.form === 'cutting-bed' || role.form === 'stepping-stones') return 'flat';
   if (!role.cover) return 'solid';
+  if (/^(crop|border)-/.test(role.form)) return 'fields';
   return role.form.startsWith('wildflowers-') ? 'flowers' : role.form === 'clover-pebbles' ? 'clover' : 'tufts';
 }
 
@@ -73,6 +85,7 @@ export function createGroundDressing(host: GroundDressingHost): GroundDressing {
   const derived = createDressingMaterial(clay.material);
   const views = planViews(host.land, host.ground, plan);
   let disposed = false, hidden: number | null = null, dirty = true, portrait = camera.aspect < 1, cpuBytes = 0;
+  const root = new THREE.Group(); root.name = 'ground-dressing'; scene.add(root);
 
   // Tiles hold every placement by its origin, the same point the shader measures fades from.
   const tiles: Tile[] = [], tileIndex = new Map<string, number>();
@@ -176,7 +189,7 @@ export function createGroundDressing(host: GroundDressingHost): GroundDressing {
       mesh.count = 0; mesh.visible = false; mesh.frustumCulled = false; mesh.name = `${batch.blueprint.id}:lod${level.level}`;
       // Sun shadows are cast by dedicated sources; a camera-culled level must not double them.
       mesh.castShadow = false; mesh.receiveShadow = false;
-      level.geometry = geometry; level.mesh = mesh; scene.add(mesh); dirty = true;
+      level.geometry = geometry; level.mesh = mesh; root.add(mesh); dirty = true;
     }));
     await Promise.all(jobs);
     if (disposed || signal.aborted) throw new Error('Ground dressing closed while meshing');
@@ -233,15 +246,15 @@ export function createGroundDressing(host: GroundDressingHost): GroundDressing {
     for (const batch of batches) {
       if (batch.shadow) { batch.shadow.release(); batch.shadow.mesh.dispose(); batch.shadow.geometry.dispose(); delete batch.shadow; }
       for (const level of batch.levels) {
-        if (level.mesh) { scene.remove(level.mesh); level.mesh.dispose(); }
+        if (level.mesh) { root.remove(level.mesh); level.mesh.dispose(); }
         level.geometry?.dispose(); delete level.mesh; delete level.geometry;
       }
     }
-    derived.dispose();
+    derived.dispose(); scene.remove(root);
   }
 
   return {
-    ready,
+    ready, root,
     blockers: plan.blockers, collisionPieces: plan.collisionPieces,
     update,
     hideLot(slot) {
@@ -252,6 +265,30 @@ export function createGroundDressing(host: GroundDressingHost): GroundDressing {
         pendingLot.add(batch); dirty = true;
         if (batch.shadow) registerShadows(batch);
       }
+    },
+    yieldGround(drop) {
+      let yielded = 0;
+      for (const batch of batches) {
+        if (pieceRole(batch.blueprint).solid) continue;
+        let changed = false;
+        for (const block of batch.blocks) {
+          const kept = block.pieces.flatMap((piece, i) => drop(piece) ? [] : [i]);
+          if (kept.length === block.pieces.length) continue;
+          changed = true; yielded += block.pieces.length - kept.length;
+          for (const [level, matrices] of block.matrices) {
+            const next = new Float32Array(kept.length * 16);
+            kept.forEach((i, n) => next.set(matrices.subarray(i * 16, i * 16 + 16), n * 16));
+            cpuBytes += next.byteLength - matrices.byteLength; block.matrices.set(level, next);
+          }
+          block.slots = Int32Array.from(kept, i => block.slots[i]!);
+          block.pieces = kept.map(i => block.pieces[i]!);
+          block.hasSlot = new Set(block.pieces.flatMap(piece => piece.lotSlot === undefined ? [] : [piece.lotSlot]));
+        }
+        if (!changed) continue;
+        batch.count = batch.blocks.reduce((sum, block) => sum + block.pieces.length, 0);
+        pendingLot.add(batch); dirty = true;
+      }
+      return yielded;
     },
     views: () => views,
     stats() {

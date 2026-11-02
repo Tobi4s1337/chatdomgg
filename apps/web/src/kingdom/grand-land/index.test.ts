@@ -54,7 +54,7 @@ function fixture(exacts: readonly number[] = [1, 3], side = 2, quadCount = 65536
   camera.position.set(112, 150, 400); camera.lookAt(112, 0, 90); camera.updateMatrixWorld();
   const material = new THREE.ShaderMaterial(), cleanup = vi.fn(), register = vi.fn(() => cleanup);
   const options = { scene, camera, renderer: { getDrawingBufferSize: (size: THREE.Vector2) => size.set(1440, 900) } as THREE.WebGLRenderer,
-    plan, recipe, receipt, kingdomId: receipt.kingdomId, materialFactory: vi.fn(() => ({ material, bindFade: vi.fn(), dispose: vi.fn(() => material.dispose()) })),
+    plan, recipe, receipt, kingdomId: receipt.kingdomId, materialFactory: vi.fn(() => ({ material, bindFade: vi.fn(), setTownUse: vi.fn(), dispose: vi.fn(() => material.dispose()) })),
     register, onProgress: vi.fn(), onError: vi.fn() };
   async function prepare(extra: Partial<typeof options> & { signal?: AbortSignal } = {}) {
     const owner = await prepareHostedGrandLand({ ...options, ...extra }); owners.push(owner); return owner;
@@ -88,6 +88,14 @@ describe('baked terrain renderer scheduling', () => {
     expect(owner.stats).toMatchObject({ surfaceBytes: 512 ** 2 * 4, waterRasterExtraBytes: 0 });
     expect(owner.stats).toMatchObject({ generatedColumns: 0, workers: 0, networkBytes: 64 });
     expect(f.scene.children[0]!.position.toArray()).toEqual([-16, -5, -32]);
+  });
+
+  it('takes a far-detail setting from the quality governor within one to eight pixels', async () => {
+    const f = fixture(), owner = await f.start();
+    expect(() => owner.setDetail(3)).not.toThrow();
+    expect(() => owner.setDetail(null)).not.toThrow();
+    expect(() => owner.setDetail(.5)).toThrow(/1 to 8 pixels/);
+    expect(() => owner.setDetail(Number.NaN)).toThrow(/1 to 8 pixels/);
   });
 
   it('requests the physical L0 regions at open, before any camera, and reserves their exact decoded size', async () => {

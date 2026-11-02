@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GRAND_COMMON, type GrandUniforms } from './light';
+import { LAND_MIST_GLSL, NO_MIST, type LandMistUniforms } from './mist';
 
 /**
  * Shading for the grand land's packed quads (see packages/voxel/src/grand/quad-mesher.ts for the words).
@@ -54,6 +55,7 @@ const fragment = /* glsl */ `
   in vec3 vWorld; in float vAo; flat in vec3 vNormal; flat in uint vMaterial;
   out vec4 outColour;
   ${GRAND_COMMON}
+  ${LAND_MIST_GLSL}
   const vec2 POISSON[12] = vec2[12](vec2(-.326,-.406), vec2(-.840,-.074), vec2(-.696,.457), vec2(-.203,.621), vec2(.962,-.195), vec2(.473,-.480),
     vec2(.519,.767), vec2(.185,-.893), vec2(.507,.064), vec2(.896,.412), vec2(-.322,-.933), vec2(-.792,-.598));
   float sunShadow(vec3 world, vec3 n){
@@ -136,15 +138,17 @@ const fragment = /* glsl */ `
     }
     if (kind == 10) colour = base * (2.4 + 1.2 * uNight) + colour * .3;
     if (kind == 7 && near > 0.) colour *= 1. - .08 * near * step(.5, fract(vWorld.y / cellSize * .5 + hash12(cell.xz)));
+    vec4 mist = landMist(vWorld); colour = mix(colour, mist.rgb, mist.a);
     colour = aerial(colour, vWorld, cameraPosition);
     outColour = vec4(colour, 1.);
   }
 `;
 
-export function createGrandTerrainMaterial(uniforms: GrandUniforms, palette: THREE.DataTexture): THREE.RawShaderMaterial {
+/** `mist` is the land's sea mist (GW13); without one the land is all open. */
+export function createGrandTerrainMaterial(uniforms: GrandUniforms, palette: THREE.DataTexture, mist: LandMistUniforms = NO_MIST.uniforms): THREE.RawShaderMaterial {
   return new THREE.RawShaderMaterial({
     glslVersion: THREE.GLSL3,
-    uniforms: { ...uniforms, uPalette: { value: palette }, uLodScale: { value: 1 } },
+    uniforms: { ...uniforms, ...mist, uPalette: { value: palette }, uLodScale: { value: 1 } },
     vertexShader: GRAND_QUAD_VERTEX,
     fragmentShader: fragment,
   });

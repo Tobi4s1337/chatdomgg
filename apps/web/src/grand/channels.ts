@@ -1,12 +1,15 @@
 import { compileChannelGenesis } from '@chatdom/world/genesis';
 import { OBSERVED_GENESIS_FIXTURES, OBSERVED_GENESIS_SHOWCASE_CHOICES } from '@chatdom/world/genesis/observed';
 import type { GrandLandSeed } from '../../../../packages/world/src/grand/types';
+import { grandSeedFromGenesis } from '../../../../packages/world/src/grand/world';
 
 /** The four first lands: tobi4s_ and the three Genesis channels. */
 export interface GrandChannel {
   readonly login: string;
   readonly name: string;
   readonly seed: GrandLandSeed;
+  /** The same channel's own world (`grand-land-2`): its landform, forest and crest. Absent for a holding read as a world already. */
+  readonly world?: GrandLandSeed;
   /** Where the facts behind the seed came from, as shown to a person. */
   readonly evidence: 'observed' | 'simulated';
 }
@@ -23,6 +26,7 @@ function channelFromFacts(facts: unknown, login: string, name: string, character
   const recommended = recipe.landscapes.find(l => l.id === recipe.recommendedLandscapeId) ?? recipe.landscapes[0];
   return {
     login, name, evidence,
+    world: grandSeedFromGenesis(recipe, name, { character: character ?? recommended.character }),
     seed: {
       seedKey: recipe.seedKey, kingdomId: String(recipe.kingdomId), name,
       biome: recipe.identity.biome, tier: recipe.size.tier, character: character ?? recommended.character,

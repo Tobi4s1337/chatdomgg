@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createOpeningJournal, type OpeningState } from './journal';
 import { openingView } from './view';
 import { openingLandFromSurface } from './sources';
+import { contourPath, isolines } from './painter';
 
 const town = { minX: 0, maxX: 64, minZ: 0, maxZ: 64 };
 const streets = { bounds: town, streets: [{ points: [[0, 0], [64, 64]] as [number, number][], width: 4, open: true, kind: 'main' as const }],
@@ -128,4 +129,19 @@ describe('the opening map\'s land', () => {
     expect(result.heights[15]).toBe(28);
     expect(result.seaLevel).toBe(9);
   });
+});
+
+it('contours every level in one pass with exactly the segments of one pass per level', () => {
+  const columns = 48, rows = 40, bounds = { minX: -120, maxX: 120, minZ: -90, maxZ: 110 };
+  const value = (c: number, r: number) => 30 * Math.sin(c * .21) * Math.cos(r * .17) + c * .8 + (c === 7 && r === 9 ? 24 : 0);
+  const levels = [-24, 0, 24, 48];
+  const expected = levels.flatMap(level => { const s = isolines(columns, rows, value, level, bounds), out: string[] = [];
+    for (let i = 0; i < s.length; i += 4) out.push([s[i], s[i + 1], s[i + 2], s[i + 3]].map(v => Math.fround(v!)).join(','));
+    return out; });
+  const moves: number[] = [], recorded: string[] = [];
+  const segments = contourPath(columns, rows, value, levels, bounds, {
+    moveTo: (x, y) => { moves.push(x, y); }, lineTo: (x, y) => { recorded.push([moves.at(-2)!, moves.at(-1)!, x, y].map(v => Math.fround(v)).join(',')); } });
+  expect(segments).toBe(expected.length);
+  expect(expected.length).toBeGreaterThan(100);
+  expect([...recorded].sort()).toEqual([...expected].sort());
 });

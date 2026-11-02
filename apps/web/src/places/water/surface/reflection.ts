@@ -83,6 +83,8 @@ export function createPlanarReflection(options: PlanarReflectionOptions = {}) {
   if (!(Number.isInteger(maxEdge) && maxEdge >= 16)) throw new RangeError('Reflection edge must be an integer of at least 16');
   const mirror = new THREE.PerspectiveCamera();
   mirror.matrixAutoUpdate = true;
+  // Scene owners may select a lighter set for the reflection (the grand land draws its outer land coarser).
+  mirror.userData.chatdomReflection = true;
   const textureMatrix = new THREE.Matrix4();
   let target: THREE.WebGLRenderTarget | null = null;
   let rendering = false, valid = false, level = 0;

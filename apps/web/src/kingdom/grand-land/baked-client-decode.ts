@@ -1,15 +1,26 @@
 import { sha256Hex } from '../../../../../packages/world/src/founded-world/codec';
 import { decodeBakedMetadata, decodeBakedRegion, decodeBakedSurface } from '../../../../../packages/world/src/grand/baked/codec';
+import { GRAND_REGION } from '../../../../../packages/world/src/grand/types';
 import { BAKED_REGION_HEADER_BYTES, BAKED_REGION_QUAD_BYTES,
   type BakedBlobRef, type BakedFormat, type BakedMetadata, type BakedRegionMesh, type BakedRegionRef, type BakedSurface } from '../../../../../packages/world/src/grand/baked/types';
 import { BAKED_SURFACE_BYTES, validateLandBlob, type BakedLandExpected } from './baked-client-binding';
 import { checkSignal, gunzipBounded } from './baked-client-transport';
+import { runOrdered } from './terrain-runs';
 
 export type BakedDecodeContext = { readonly kind: 'metadata'; readonly expected: BakedLandExpected }
   | { readonly kind: 'surface'; readonly format: BakedFormat; readonly size: number; readonly height: number; readonly seaLevel: number }
   | { readonly kind: 'mesh'; readonly format: BakedFormat; readonly ref: BakedRegionRef; readonly height: number; readonly materials: readonly number[] };
+/**
+ * A decoded region mesh whose quads the decoder already put in run order (terrain-runs.ts), so the main thread only
+ * slices it into GPU buffers: `offsets` are then the seven run starts, and `planes`/`ends` each run's plane groups.
+ */
+export interface RunOrderedRegionMesh extends BakedRegionMesh {
+  readonly runOrdered: true;
+  readonly planes: readonly Int32Array[];
+  readonly ends: readonly Int32Array[];
+}
 export interface BakedDecoded {
-  readonly value: BakedMetadata | BakedSurface | BakedRegionMesh;
+  readonly value: BakedMetadata | BakedSurface | RunOrderedRegionMesh;
   readonly compressed: Uint8Array;
   readonly rawBytes: number;
 }
@@ -45,15 +56,23 @@ export async function verifyAndDecode(bytes: Uint8Array, ref: BakedBlobRef, cont
       || mesh.maxY !== descriptor.maxY || mesh.quads.length / 2 !== descriptor.quadCount)
       throw new Error('Baked mesh does not match its region reference');
     const materials = new Set(context.materials);
+    // Every face plane lies inside the region's cells (x and z in [0, span], y in [minY, maxY]); the renderer
+    // relies on it to select the faces that can face a camera (terrain-runs.ts).
+    const cells = GRAND_REGION >> mesh.level, top = Math.max(mesh.minY + 1, mesh.maxY);
     for (let i = 0; i < mesh.quads.length; i += 2) {
       const a = mesh.quads[i]!, b = mesh.quads[i + 1]!, face = (a >>> 25) & 7, axis = face >> 1;
       if (!materials.has(b & 255)) throw new Error('Baked mesh uses a material outside its palette');
       const y = ((b >>> 20) & 15) * 32 + ((a >>> 5) & 31);
+      const plane = axis === 0 ? ((b >>> 16) & 15) * 32 + (a & 31) : axis === 1 ? y : ((b >>> 24) & 15) * 32 + ((a >>> 10) & 31);
+      const at = plane + (face % 2 === 0 ? 1 : 0);
+      if (axis === 1 ? at < mesh.minY || at > top : at > cells) throw new Error('Baked mesh has a face outside its region');
       const span = axis === 1 ? (face % 2 === 0 ? 1 : 0)
         : (axis + 1) % 3 === 1 ? ((a >>> 15) & 31) + 1 : ((a >>> 20) & 31) + 1;
       if ((y + span) * (1 << mesh.level) > context.height) throw new Error('Baked mesh exceeds the declared world height');
     }
-    value = mesh;
+    // Off the main thread: a counting sort of a large region costs several milliseconds.
+    const order = runOrdered(mesh.quads, mesh.offsets);
+    value = { ...mesh, quads: order.quads, offsets: order.starts, runOrdered: true, planes: order.planes, ends: order.ends };
   }
   checkSignal(signal);
   return { value, compressed: bytes, rawBytes: raw.byteLength };

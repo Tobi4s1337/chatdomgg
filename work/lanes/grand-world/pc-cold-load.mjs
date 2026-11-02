@@ -22,9 +22,12 @@ import { writeFileSync } from 'node:fs';
 const CDP = 'http://127.0.0.1:9333';
 const args = process.argv.slice(2);
 const flag = name => { const i = args.indexOf(`--${name}`); return i < 0 ? undefined : args[i + 1]; };
-const [url, out] = args.filter((a, i) => !a.startsWith('--') && !['--size', '--seconds', '--timeout', '--shot', '--settle', '--pose', '--profile'].includes(args[i - 1]));
+const [url, out] = args.filter((a, i) => !a.startsWith('--') && !['--size', '--seconds', '--timeout', '--shot', '--settle', '--pose', '--profile', '--frames'].includes(args[i - 1]));
 const today = /^http:\/\/localhost:5190\//.test(url ?? '');
-if (!(today || /^http:\/\/(localhost|127\.0\.0\.1):5192\//.test(url ?? '')) || !out) throw new Error('usage: <http://localhost:5192/... | http://127.0.0.1:5192/... | http://localhost:5190/...> <out.json> [--cold]');
+// The deployed site, opened in his own browser profile: a cold load there clears the HTTP cache and only the land's
+// own database, never his sign-in, settings or anything else stored for chatdom.io.
+const deployed = /^https:\/\/chatdom\.io\//.test(url ?? '');
+if (!(today || deployed || /^http:\/\/(localhost|127\.0\.0\.1):5192\//.test(url ?? '')) || !out) throw new Error('usage: <http://localhost:5192/... | http://127.0.0.1:5192/... | http://localhost:5190/... | https://chatdom.io/...> <out.json> [--cold]');
 const origin = new URL(url).origin;
 const cold = args.includes('--cold');
 if (today && cold) throw new Error('main\'s preview is opened read-only; never cold');
@@ -39,6 +42,12 @@ const profile = flag('profile');
 // scene's own capture pose (eye-level views on the real founded plan; never a production camera).
 const poseText = flag('pose'), pose = poseText ? poseText.split(',').map(Number) : null;
 if (pose && (pose.length !== 7 || pose.some(v => !Number.isFinite(v)))) throw new Error('--pose needs seven numbers');
+// --frames 500,1500,...: capture the page at these times from navigation into <out without .json>-<ms>.png while it
+// loads (the loader's beats). Each capture costs the page time, so a frames run is never a timing run.
+const frameTimes = (flag('frames') ?? '').split(',').filter(Boolean).map(Number).sort((a, b) => a - b);
+// --programs: trace every WebGL program link on the page (when it was asked for, which uniforms name it) and every
+// call that blocked on a link for 4 ms or more, so a first-frame stall can be tied to the programs it waited for.
+const programs = args.includes('--programs');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const version = await (await fetch(`${CDP}/json/version`, { signal: AbortSignal.timeout(4000) })).json();
@@ -111,12 +120,13 @@ try {
     const { windowId, bounds } = await send('Browser.getWindowForTarget', { targetId });
     report.window = bounds?.windowState ?? null;
     if (bounds?.windowState === 'minimized') await send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
-  } catch {}
+  } catch { /* The window state is best effort; a load still runs without it. */ }
   report.renderer = await evaluate(`(() => { const gl = document.createElement('canvas').getContext('webgl2');
     const e = gl && gl.getExtension('WEBGL_debug_renderer_info'); return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : 'unknown'; })()`);
   if (cold) {
     await s('Network.clearBrowserCache');
-    await s('Storage.clearDataForOrigin', { origin, storageTypes: 'all' });
+    if (deployed) await s('IndexedDB.deleteDatabase', { securityOrigin: origin, databaseName: 'chatdom-grand-lands' }).catch(() => {});
+    else await s('Storage.clearDataForOrigin', { origin, storageTypes: 'all' });
   }
   // Watches every WebGL context and the page's frame clock without creating contexts of its own.
   await s('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
@@ -124,6 +134,20 @@ try {
     HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { const c = get.call(this, kind, ...rest); if (c && /webgl/.test(kind) && !contexts.includes(c)) contexts.push(c); return c; };
     window.__probeContexts = contexts; window.__probeFrames = 0;
     const tick = () => { window.__probeFrames++; requestAnimationFrame(tick); }; requestAnimationFrame(tick);
+  })()` });
+  if (programs) await s('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+    const P = WebGL2RenderingContext.prototype, sources = new WeakMap(), names = new WeakMap(), log = window.__probePrograms = { links: [], blocks: [] };
+    const common = new Set(['modelMatrix','modelViewMatrix','projectionMatrix','viewMatrix','normalMatrix','cameraPosition','isOrthographic','toneMappingExposure','logDepthBufFC']);
+    const name = source => [...source.matchAll(/uniform\\s+\\w+\\s+(\\w+)/g)].map(m => m[1]).filter(n => !common.has(n)).slice(0, 4).join(',') + '#' + source.length;
+    const shaderSource = P.shaderSource; P.shaderSource = function (shader, source) { sources.set(shader, source); return shaderSource.call(this, shader, source); };
+    const attach = P.attachShader; P.attachShader = function (program, shader) { const src = sources.get(shader) ?? ''; if (/gl_FragColor|out\\s+(highp\\s+)?vec4|pc_fragColor/.test(src) && /void\\s+main/.test(src) && !/gl_Position/.test(src)) names.set(program, name(src)); return attach.call(this, program, shader); };
+    let n = 0; const ids = new WeakMap(), used = new WeakSet(); log.uses = [];
+    const useProgram = P.useProgram; P.useProgram = function (program) { if (program && !used.has(program)) { used.add(program); log.uses.push({ id: ids.get(program) ?? null, at: Math.round(performance.now()) }); } return useProgram.call(this, program); };
+    const link = P.linkProgram; P.linkProgram = function (program) { ids.set(program, ++n); log.links.push({ id: n, at: Math.round(performance.now()), name: names.get(program) ?? '?' }); return link.call(this, program); };
+    for (const method of ['getProgramParameter', 'getProgramInfoLog', 'getUniformLocation', 'getActiveUniform']) {
+      const f = P[method]; P[method] = function (program, ...rest) { const t = performance.now(); const r = f.call(this, program, ...rest); const ms = performance.now() - t;
+        if (ms >= 4 && log.blocks.length < 400) log.blocks.push({ method, id: ids.get(program) ?? null, at: Math.round(t), ms: Math.round(ms), name: names.get(program) ?? '?' }); return r; };
+    }
   })()` });
   if (profile) { await s('Profiler.enable'); await s('Profiler.setSamplingInterval', { interval: 1000 }); await s('Profiler.start'); }
   navigatedWall = Date.now();
@@ -136,7 +160,7 @@ try {
     const paint = Object.fromEntries(performance.getEntriesByType('paint').map(p => [p.name, Math.round(p.startTime)]));
     const lost = (window.__probeContexts ?? []).filter(gl => gl.isContextLost()).length;
     const frames = window.__probeFrames ?? null;
-    const steps = performance.getEntriesByType('mark').filter(m => /^(gw11|chatdom:open):/.test(m.name)).map(m => m.name.replace(/^\w+:/, '') + '@' + Math.round(m.startTime));
+    const steps = performance.getEntriesByType('mark').filter(m => /^(gw11|chatdom:open|chatdom:load):/.test(m.name)).map(m => m.name.replace(/^\\w+:/, '') + '@' + Math.round(m.startTime));
     const status = (document.querySelector('.stream-curtain,.kingdom-gate,.opening')?.textContent ?? '').replace(/\\s+/g, ' ').trim().slice(0, 160);
     return { now: Math.round(performance.now()), visible: document.visibilityState, lost, frames, steps, status, ready: window.__chatdomReady === true, curtain: !!document.querySelector('.stream-curtain'),
       phase: window.__chatdomStream?.phase ?? null, paint, responseEnd: nav ? Math.round(nav.responseEnd) : null,
@@ -146,16 +170,30 @@ try {
         fadingRegions: land.fadingRegions, activeRequests: land.activeRequests, busy: land.busy, installs: land.installs } };
   })()`;
   const marks = {};
+  report.frameShots = [];
   while (Date.now() - start < timeout) {
-    await sleep(250);
+    await sleep(frameTimes.length ? 60 : 250);
     const p = await evaluate(probe).catch(() => null);
     if (!p) continue;
     report.samples.push(p);
+    if (frameTimes.length && p.now >= frameTimes[0]) {
+      const wanted = frameTimes.shift(), file = out.replace(/\.json$/, '') + `-${String(wanted).padStart(5, '0')}.png`;
+      const { data } = await s('Page.captureScreenshot', { format: 'png' });
+      writeFileSync(file, Buffer.from(data, 'base64'));
+      report.frameShots.push({ wanted, at: p.now, file, status: p.status, steps: p.steps, ready: p.ready });
+      if (!frameTimes.length && marks.ready !== undefined) break;
+      continue;
+    }
     if (p.curtain && marks.curtain === undefined) marks.curtain = p.now;
     if (p.land?.initialCoverageReady && marks.coverage === undefined) marks.coverage = p.now;
     if (p.ready && marks.ready === undefined) marks.ready = p.now;
     if (p.land?.queuedRequests === 0 && p.land?.phase === 'ready' && marks.firstViewLand === undefined) marks.firstViewLand = p.now;
-    if (marks.ready !== undefined && (marks.firstViewLand !== undefined || p.now - marks.ready > 20000)) break;
+    // The whole land for this view: every region at its desired level, nothing in flight.
+    if (p.land?.startupPhase === 'settled' && marks.settled === undefined) marks.settled = p.now;
+    const street = p.steps.map(step => /open:street@(\d+)$/.exec(step)).find(Boolean);
+    if (street && marks.street === undefined) marks.street = Number(street[1]);
+    if (frameTimes.length) continue;
+    if (marks.ready !== undefined && ((marks.firstViewLand !== undefined && marks.settled !== undefined) || p.now - marks.ready > 20000)) break;
   }
   const last = report.samples.at(-1);
   report.marks = { ...marks, firstPaint: last?.paint['first-paint'] ?? null, firstContentfulPaint: last?.paint['first-contentful-paint'] ?? null };
@@ -167,6 +205,7 @@ try {
   }
   report.pageMarks = await evaluate(`performance.getEntriesByType('mark').concat(performance.getEntriesByType('measure'))
     .map(m => ({ name: m.name, at: Math.round(m.startTime), ms: Math.round(m.duration), detail: m.detail ?? null }))`).catch(() => null);
+  if (programs) report.programs = await evaluate('window.__probePrograms ?? null').catch(() => null);
   if (marks.ready === undefined) throw new Error(`not ready after ${timeout / 1000}s`);
   await sleep(1000);
   report.frames = await evaluate(`new Promise(resolve => { const t = []; let last = performance.now(); const end = last + ${seconds} * 1000;
@@ -192,7 +231,7 @@ try {
 } finally {
   // The tunnel's real link, measured after the load so it never warms a cache: a 1-byte round trip, then 4 MiB of
   // incompressible bytes from this lane's logged land server (serve-land-logged.mjs), uncached.
-  report.link = today ? null : await evaluate(`(async () => {
+  report.link = today || deployed ? null : await evaluate(`(async () => {
     const time = async bytes => { const t = performance.now(); const r = await fetch('/api/realm/land/__throughput?bytes=' + bytes, { cache: 'no-store' });
       const n = (await r.arrayBuffer()).byteLength; return { status: r.status, bytes: n, ms: Math.round(performance.now() - t) }; };
     const ping = await time(1), bulk = await time(4194304);
@@ -210,7 +249,7 @@ try {
   ws.close();
 }
 const f = report.frames, m = report.marks ?? {};
-console.log(`${out} · ${cold ? 'cold' : 'warm'} · ${report.renderer} · paint ${m.firstContentfulPaint}ms curtain ${m.curtain}ms coverage ${m.coverage}ms ready ${m.ready}ms first view ${m.firstViewLand}ms`
+console.log(`${out} · ${cold ? 'cold' : 'warm'} · ${report.renderer} · paint ${m.firstContentfulPaint}ms curtain ${m.curtain}ms street ${m.street}ms coverage ${m.coverage}ms ready ${m.ready}ms first view ${m.firstViewLand}ms settled ${m.settled}ms`
   + (f ? ` · p50 ${f.p50.toFixed(1)} p95 ${f.p95.toFixed(1)} p99 ${f.p99.toFixed(1)} worst ${f.worst.toFixed(1)} over33 ${f.over33}` : ` · ${report.error}`));
 console.log(`link ${JSON.stringify(report.link)}`);
 process.exit(report.passed ? 0 : 1);

@@ -441,7 +441,9 @@ describe('createGroundDressing', () => {
     const view = handle.views().street;
     camera.position.set(...view.eye); camera.lookAt(...view.target); camera.updateMatrixWorld(); camera.updateProjectionMatrix();
     handle.update({ time: 0, walkers: [] });
-    const meshes = scene.children.filter((child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh);
+    // The dressing lives under one root, which the half-resolution water reflection leaves out.
+    expect(scene.children).toContain(handle.root);
+    const meshes = handle.root.children.filter((child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh);
     return { scene, camera, clay, registerShadow, releases, handle, meshes };
   }
 
@@ -493,6 +495,24 @@ describe('createGroundDressing', () => {
     handle.dispose(); clay.dispose();
   }, 120_000);
 
+  it('gives up passive cover for good where a later field asks, and never a solid', async () => {
+    const { handle, meshes, camera, clay } = await mount();
+    const cover = all(plan).find(p => pieceRole(p.blueprint).cover && !pieceRole(p.blueprint).solid)!;
+    camera.position.set(cover.position[0] + 6, cover.position[1] + 3, cover.position[2] + 6); camera.lookAt(...cover.position); camera.updateMatrixWorld();
+    handle.update({ time: 0, walkers: [] });
+    const total = () => meshes.reduce((n, mesh) => n + mesh.count, 0), shown = total();
+    const near = (p: { position: readonly number[] }) => Math.hypot(p.position[0]! - cover.position[0]!, p.position[2]! - cover.position[2]!) < 4;
+    const passiveNear = all(plan).filter(p => near(p) && !pieceRole(p.blueprint).solid).length;
+    const yielded = handle.yieldGround(near);
+    expect(yielded).toBe(passiveNear);
+    handle.update({ time: 0, walkers: [] });
+    expect(total()).toBeLessThan(shown);
+    // A second ask finds nothing left there; solids within reach still stand.
+    expect(handle.yieldGround(near)).toBe(0);
+    expect(handle.collisionPieces).toBe(plan.collisionPieces);
+    handle.dispose(); clay.dispose();
+  }, 120_000);
+
   it('casts solids only, releases every shadow and frees only what it owns', async () => {
     const { handle, scene, registerShadow, releases, clay } = await mount();
     const solids = new Map<string, number>();
@@ -501,12 +521,13 @@ describe('createGroundDressing', () => {
     expect(registerShadow).toHaveBeenCalledTimes(solids.size);
     for (const [mesh] of registerShadow.mock.calls) expect((mesh as THREE.InstancedMesh).count).toBe(solids.get(mesh.name.replace(':shadow-source', '')));
     const clayDisposed = vi.fn(); clay.material.addEventListener('dispose', clayDisposed);
-    const owned = scene.children.filter(child => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh[];
+    const owned = handle.root.children.filter(child => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh[];
     const geometryDisposed = vi.fn(); for (const mesh of owned) mesh.geometry.addEventListener('dispose', geometryDisposed);
     handle.dispose();
     for (const release of releases) expect(release).toHaveBeenCalledTimes(1);
     expect(geometryDisposed).toHaveBeenCalledTimes(owned.length);
-    expect(scene.children.some(child => child instanceof THREE.InstancedMesh)).toBe(false);
+    expect(scene.children).not.toContain(handle.root);
+    expect(handle.root.children.some(child => child instanceof THREE.InstancedMesh)).toBe(false);
     expect(clayDisposed).not.toHaveBeenCalled(); expect(pool.dispose).not.toHaveBeenCalled();
     clay.dispose();
   }, 120_000);

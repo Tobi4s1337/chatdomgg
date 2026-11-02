@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
   applyGrade, createGrandClouds, createGrandDepthMaterial, createGrandPost, createGrandSky, createGrandTerrainMaterial, createGrandUniforms,
-  createQuadGeometry, grandGrade, grandPaletteTexture, GrandSea, GrandShadow, seaFloorTexture, type GrandClouds, type GrandPost, type GrandUniforms,
+  createLandMist, createQuadGeometry, grandGrade, grandPaletteTexture, GrandSea, GrandShadow, seaFloorTexture, type GrandClouds, type GrandPost, type GrandUniforms,
 } from '../../../../packages/render/src/grand';
+import { GRAND_REVEAL_STAGES, grandRevealField, grandRevealMask, grandRevealOpening, grandRevealStage, type GrandRevealField, type GrandRevealOpening } from '../../../../packages/world/src/grand/reveal';
 import { paletteTable } from '../../../../packages/world/src/grand/palette';
 import { landMaterials } from '../../../../packages/world/src/grand/kits';
 import { skyOcclusionMap } from '../../../../packages/world/src/grand/sky-map';
@@ -120,7 +121,14 @@ export class GrandEngine {
   readonly camera = new THREE.PerspectiveCamera(38, 1, 1, 14000);
   readonly controls: OrbitControls;
   readonly uniforms: GrandUniforms = createGrandUniforms();
+  /** The sea mist over the land the kingdom has not opened yet (GW13); off while the citizen count is unknown. */
+  readonly mist = createLandMist();
   readonly stats: GrandStats;
+  /** What the last milestone opened, for the bench's caption. */
+  opening: GrandRevealOpening | null = null;
+  private reveal: GrandRevealField | null = null;
+  private revealStage = -1;
+  private citizens: number | null;
   readonly settings: GrandTierSettings;
   land: GrandLand | null = null;
   onChange: (() => void) | null = null;
@@ -165,7 +173,8 @@ export class GrandEngine {
   private governor = 1;
   private governedAt = 0;
 
-  constructor(private readonly canvas: HTMLCanvasElement, private readonly seed: GrandLandSeed, options: { tier: GrandTier; capture: boolean; hour: number; view: GrandView; time: number | null }) {
+  constructor(private readonly canvas: HTMLCanvasElement, private readonly seed: GrandLandSeed, options: { tier: GrandTier; capture: boolean; hour: number; view: GrandView; time: number | null; citizens?: number | null }) {
+    this.citizens = options.citizens ?? null;
     this.settings = options.capture && options.tier === 'software' ? { ...GRAND_TIERS[options.tier], ...GRAND_CAPTURE } : GRAND_TIERS[options.tier];
     this.hour = options.hour;
     this.time = options.time ?? 0;
@@ -262,7 +271,7 @@ export class GrandEngine {
     this.stats.trees = land.treeCount;
     const palette = grandPaletteTexture(paletteTable(landMaterials(land)));
     for (let level = 0; level < GRAND_LEVELS; level++) {
-      const material = createGrandTerrainMaterial(this.uniforms, palette);
+      const material = createGrandTerrainMaterial(this.uniforms, palette, this.mist.uniforms);
       material.uniforms.uLodScale!.value = 1 << level;
       this.terrainMaterials.push(material);
       const depth = createGrandDepthMaterial();
@@ -283,12 +292,15 @@ export class GrandEngine {
     this.scene.add(createGrandSky(this.uniforms));
     this.sea = new GrandSea(this.uniforms, {
       seaY: land.seaLevel * M, floor: seaFloorTexture(land.ground, land.coast, land.size, M), landMetres: metres,
-      reflection: this.settings.reflection, reflectionMax: this.settings.reflectionSize,
+      reflection: this.settings.reflection, reflectionMax: this.settings.reflectionSize, mist: this.mist.uniforms,
     });
     this.scene.add(this.sea.mesh);
     const peak = land.sites.summit.y * M;
     this.cloudHeight = Math.max(235, peak + 55);
     this.clouds = createGrandClouds(this.uniforms, { seed: land.size ^ land.treeCount, height: this.cloudHeight, cover: 0.3 });
+    // The mist deck lies three fifths of the way up from the sea to the summit: the valleys sink into it, the crowns stand out.
+    this.mist.setDeck(land.seaLevel * M + (peak - land.seaLevel * M) * 0.6);
+    if (this.citizens !== null) this.setCitizens(this.citizens, 0);
     this.scene.add(this.clouds.mesh);
     this.uniforms.uShadowOn.value = 0;
     this.shadow = this.settings.shadow > 0 ? new GrandShadow(this.settings.shadow) : null;
@@ -522,6 +534,9 @@ export class GrandEngine {
     const dt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 0;
     this.lastFrame = now;
     if (!this.frozen) { this.time += dt; this.dirty = true; }
+    if (this.mist.lifting) this.dirty = true;
+    this.mist.update(this.mist.lifting ? Math.max(dt, this.frozen ? 1 / 30 : 0) : 0, { fog: this.uniforms.uFogColor.value, sun: this.uniforms.uSunColor.value, night: this.uniforms.uNight.value });
+    this.mist.uniforms.uMistTime.value = this.time;
     this.camera.updateMatrixWorld();
     this.select(now);
     this.dispatch();
@@ -618,6 +633,31 @@ export class GrandEngine {
     this.dirty = true;
   }
 
+  /**
+   * Lay the mist for a citizen count: the land opens stage by stage as the count crosses each milestone, a pure
+   * function of the land and the count. With `lift` seconds the newly opened land rolls clear instead of appearing.
+   */
+  setCitizens(citizens: number, lift = 6): void {
+    this.citizens = citizens;
+    const land = this.land;
+    if (!land) return;
+    const t = land.sites.town;
+    // The founded town is the land the kingdom already lives on: its flat, with a margin, is clear from the first day.
+    this.reveal ??= grandRevealField(land, {
+      x0: Math.max(0, Math.floor(t.x - t.rx * 1.25)), z0: Math.max(0, Math.floor(t.z - t.rz * 1.25)),
+      x1: Math.min(land.size, Math.ceil(t.x + t.rx * 1.25)), z1: Math.min(land.size, Math.ceil(t.z + t.rz * 1.25)),
+    });
+    const stage = grandRevealStage(citizens);
+    if (stage === this.revealStage) return;
+    const whole = stage === GRAND_REVEAL_STAGES - 1;
+    const metres = land.size * M;
+    this.mist.set(grandRevealMask(this.reveal, stage), this.reveal.cells, [0, 0, metres, metres], whole ? 1 : 0, stage > this.revealStage && this.revealStage >= 0 ? lift : undefined);
+    this.opening = grandRevealOpening(this.reveal, stage);
+    this.revealStage = stage;
+    this.dirty = true;
+    this.readyFired = false;
+  }
+
   setHour(hour: number): void { this.hour = hour; this.applyHour(); this.readyFired = false; }
 
   setView(view: GrandView): void {
@@ -697,7 +737,7 @@ export class GrandEngine {
     for (const item of this.installs) this.free(item.mesh);
     this.terrainMaterials.forEach(m => m.dispose());
     this.depthMaterials.forEach(m => m.dispose());
-    this.shadow?.dispose(); this.sea?.dispose(); this.clouds?.dispose(); this.post?.dispose();
+    this.shadow?.dispose(); this.sea?.dispose(); this.clouds?.dispose(); this.post?.dispose(); this.mist.dispose();
     this.controls.dispose();
     this.renderer.dispose();
   }
