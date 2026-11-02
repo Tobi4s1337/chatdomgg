@@ -274,3 +274,19 @@
   .cdb-tile { border: 1px solid ButtonText; }
   .cdb-tile[data-selected='true'], .cdh-slot[aria-pressed='true'] .cdh-socket { outline: 3px double Highlight; }
 }
+
+/* ---------- The belt, rearranged ---------- */
+
+.cdh-slot[data-movable='true'] { touch-action: none; }
+.cdh-empty { cursor: default; pointer-events: none; }
+.cdh-empty .cdh-socket { background: var(--cd-wood-well); opacity: .55; box-shadow: inset 0 2px 5px #00000080, inset 0 -1px 0 #ffe1b414; }
+.cdh-empty .cdh-key { opacity: .7; }
+.cdh[data-dragging='true'] .cdh-bar { box-shadow: inset 0 1px 0 #ffe1b433, inset 0 -2px 0 #0000004d, 0 0 0 1px #c99f5b59, 0 8px 18px #0c0a1c66, 0 2px 4px #0c0a1c59; }
+.cdh-slot[data-target='true'] .cdh-socket { opacity: 1; box-shadow: inset 0 0 0 2px #c99f5b99, inset 0 2px 6px #00000099, 0 0 12px #ffc46a40; }
+.cdh-slot[data-lifted='true'] { z-index: 2; transition: none; filter: drop-shadow(0 8px 6px #0c0a1c80); }
+.cdh-slot[data-lifted='true'] .cdh-socket { box-shadow: inset 0 0 0 2px var(--cd-brass), 0 0 0 1px var(--cd-brass-hi), 0 0 14px #ffc46a59; }
+.cdh[data-moving='true'] .cdh-bar { opacity: .86; }
+.cdh-note { position: absolute; left: 50%; bottom: calc(100% + 8px); translate: -50% 0; width: max-content; max-width: min(78vw, 360px); margin: 0;
+  padding: 6px 11px; border-radius: 9px; border: 1px solid var(--cd-wood-edge); background: linear-gradient(176deg, #3d2718f2, #2a1a10f5);
+  color: var(--cd-cream); font: var(--cd-type-min)/1.35 var(--cd-face-body); text-align: center; box-shadow: 0 6px 14px #0c0a1c59; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .cdh-slot[data-lifted='true'] { filter: none; } }

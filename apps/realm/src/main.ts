@@ -20,6 +20,7 @@ import { ownRealmShutdown } from './lifecycle';
 import { composeRealmItems } from './items/compose';
 import { createItemRoomChannel } from './items/channel';
 import { createPostgresItemAdmission } from './items/entry';
+import { createShelfRoomChannel, shelfHomes } from './items/shelf';
 import { itemCatalogue } from './items';
 import { createDurableFishingChannel } from './fishing/durable';
 import { fishingSpecies } from './fishing/content';
@@ -94,6 +95,12 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     },
   });
   Object.assign(boot.services, { channels: [...(boot.services.channels ?? []), createItemRoomChannel(itemFoundation.items, createPostgresItemAdmission({ pool, origin, readiness: boot.readiness }))] });
+  // The keepsake shelf at home and the belt's order: homes and doors from the kingdom's own deeds and adopted plan.
+  Object.assign(boot.services, { channels: [...boot.services.channels!, createShelfRoomChannel({ items: itemFoundation.items,
+    admit: createPostgresItemAdmission({ pool, origin, readiness: boot.readiness }), homes: id => {
+      const kingdom = boot.services.kingdoms.get(id), plan = boot.loader.current(id)?.scene.plan;
+      return kingdom && plan ? shelfHomes(plan, kingdom.privateState.homes, kingdom.layoutRevision) : [];
+    } })] });
   // Fishing opens only where its pier layer is drawn: REALM_PIER_FISHING=1 once the kingdom view mounts it.
   const pierVisible = process.env.REALM_PIER_FISHING === '1';
   const pierWhere = (id: string) => names.has(id) ? `${names.get(id)} pier` : 'the pier';

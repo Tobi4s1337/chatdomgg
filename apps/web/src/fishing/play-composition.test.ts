@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import type { FishingPierSite, KingdomId } from '@chatdom/shared';
-import { registerPierInPlay, type PierHeldToolHandle, type PierPlaySlots, type PierViews, type PierWalkContext } from './play-composition';
+import { SHELF_CHANNEL, type FishingPierSite, type KingdomId, type ShelfDoor, type ShelfReply, type ShelfRequest } from '@chatdom/shared';
+import { nearestDoor, registerPierInPlay, type PierHeldToolHandle, type PierPlaySlots, type PierViews, type PierWalkContext } from './play-composition';
 import { createStagedPier } from './staged';
 import type { PierLayerHost } from './layer';
 import type { AlmanacOptions } from '../almanac/book';
@@ -48,13 +48,14 @@ function setup() {
     people: [{ personId: '100', walkerId: 'juniper-seat', name: 'Juniper', pose: lip },
       { personId: '101', walkerId: 'saoirse-seat', name: 'saoirse_k', pose: () => ({ ...lip(), position: [2, 1, 23.4] as [number, number, number] }) }] });
   const play = fakePlay();
-  const layers: PierLayerHost[] = [], uis: string[] = [], books: AlmanacOptions[] = [], notes: string[] = [];
+  const layers: PierLayerHost[] = [], uis: string[] = [], books: AlmanacOptions[] = [], notes: string[] = [], shelves: string[] = [];
   let almanacFails = false;
   const views: PierViews = {
     ui: () => ({ prompt() {}, fight() {}, note(message) { notes.push(message); }, caught(tag) { uis.push(tag.name); }, worldTags() {}, dispose() {} }),
     layer: async host => { layers.push(host); return { update() {}, stats: () => ({ draws: 0, triangles: 0, fishers: 0, phase: null }), dispose() {} }; },
     sound: () => ({ cue() {}, reel() {}, tension() {}, ambience() {}, dispose() {} }) as never,
-    bag: () => () => {}, hotbar: () => ({ refresh() {}, dispose() {} }), portrait: async () => null,
+    bag: () => () => {}, hotbar: () => ({ refresh() {}, press: () => false, dispose() {} }), portrait: async () => null,
+    shelf: (_host, source) => { shelves.push(source.mode === 'visit' ? `visit:${source.name}` : 'own'); return () => {}; },
     almanac: (_host, options) => { books.push(options); return { show() {}, update() {}, dispose() {}, ready: Promise.resolve(), page: 'contents' }; },
     loadAlmanac: async kingdomId => {
       if (almanacFails) throw new Error('offline');
@@ -68,15 +69,16 @@ function setup() {
     overlay: {} as HTMLElement, audio: () => null, onFrame(listener) { frames.add(listener); return () => { frames.delete(listener); }; } };
   const unmount = play.features[0]!.mount(ctx);
   const frame = () => { for (const listener of frames) listener(1 / 60, performance.now()); play.handle()?.update(1 / 60); };
-  return { staged, play, layers, uis, books, notes, failAlmanac: () => { almanacFails = true; }, stop, unmount, frame };
+  return { staged, play, layers, uis, books, notes, shelves, views, failAlmanac: () => { almanacFails = true; }, stop, unmount, frame };
 }
 
 it('registers the pier with play: the walk, the rod, the belt, the bag, its keys and the rack', () => {
   const { play, stop, unmount, staged } = setup();
   expect(play.pieces.map(p => [p.id, p.region])).toEqual([['hotbar', 'bottom-centre']]);
-  expect(play.pages.map(p => [p.id, p.title])).toEqual([['bag', 'Bag'], ['almanac', 'Almanac']]);
-  expect(play.bindings.map(b => [b.id, b.defaultCode])).toEqual([['bag', 'KeyB'], ['hotbar.1', 'Digit1']]);
-  expect(play.prompts.map(p => p.id)).toEqual(['pier.rack', 'pier.almanac']);
+  expect(play.pages.map(p => [p.id, p.title])).toEqual([['bag', 'Bag'], ['shelf', 'Shelf'], ['almanac', 'Almanac']]);
+  expect(play.bindings.map(b => [b.id, b.defaultCode])).toEqual([['bag', 'KeyB'],
+    ...Array.from({ length: 9 }, (_, i) => [`hotbar.${i + 1}`, `Digit${i + 1}`])]);
+  expect(play.prompts.map(p => p.id)).toEqual(['pier.rack', 'pier.almanac', 'pier.shelf']);
   // Watching, or nobody signed in: nothing of the pier's is offered.
   expect(play.pieces[0]!.available({ ...play.base, mode: 'watching' })).toBe(false);
   expect(play.pieces[0]!.available(play.base)).toBe(true);
@@ -153,4 +155,63 @@ it('opens the Almanac at the lectern with your own marks, and in the ledger for 
     expect(notes.length).toBeGreaterThan(0);
     third(); stop(); staged.dispose();
   } finally { vi.unstubAllGlobals(); }
+});
+
+it('offers your shelf at your own door and a shown shelf at a neighbour’s, and opens each', async () => {
+  vi.stubGlobal('document', { createElement: () => ({ style: {}, className: '', textContent: '', remove() {} }) });
+  try {
+    const { play, staged, shelves, stop, unmount } = setup();
+    unmount();
+    // The realm's shelf channel, answered here: your door, Wren's shown door and her shelf.
+    const mine: ShelfDoor = { plotId: 'home:3', at: [10, 1, 4], name: null, mine: true, shown: false };
+    const wren: ShelfDoor = { plotId: 'home:5', at: [20, 1, 4], name: 'Wren', mine: false, shown: true };
+    const inner = staged.room('100'), listeners = new Set<(message: unknown) => void>();
+    const answer = (message: ShelfReply) => queueMicrotask(() => { for (const listener of listeners) listener(message); });
+    const sent: ShelfRequest[] = [];
+    const room = {
+      onMessage(type: string, listener: (message: unknown) => void) {
+        if (type !== SHELF_CHANNEL) return inner.onMessage(type, listener);
+        listeners.add(listener); return () => { listeners.delete(listener); };
+      },
+      send(type: string, payload: unknown) {
+        if (type !== SHELF_CHANNEL) { inner.send(type, payload); return; }
+        const request = payload as ShelfRequest; sent.push(request);
+        if (request.type === 'shelf.read') answer({ type: 'shelf.state', id: request.id, settings: { shown: false, revision: 0 }, door: mine });
+        if (request.type === 'shelf.doors') answer({ type: 'shelf.doors', id: request.id, doors: [mine, wren] });
+        if (request.type === 'shelf.visit') answer(request.plotId === 'home:5'
+          ? { type: 'shelf.view', id: request.id, plotId: 'home:5', name: 'Wren', pieces: [] }
+          : { type: 'shelf.refused', id: request.id, message: 'This shelf is kept by its owner.' });
+      },
+    };
+    const overlay = { append() {}, clientWidth: 1440, clientHeight: 900 } as unknown as HTMLElement;
+    const again = play.features[0]!.mount({ ...play.base, room, scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(),
+      selfWalkerId: () => 'juniper-seat', walkers: () => [], hand: () => null, hour: () => 18.5, kingdomName: 'Willowmere',
+      overlay, audio: () => null, onFrame: () => () => {} });
+    await settle();
+    const prompt = play.prompts.find(p => p.id === 'pier.shelf')!;
+    expect(prompt.prompt({ position: [0, 1, 4], yaw: 0 })).toBeNull();
+    expect(prompt.prompt({ position: [10.5, 1, 5], yaw: 0 })).toEqual({ label: 'Your shelf', at: [10, 1, 4] });
+    prompt.use(play.base); await settle();
+    expect(shelves).toEqual(['own']);
+    expect(prompt.prompt({ position: [19, 1, 4.5], yaw: 0 })).toEqual({ label: 'Wren’s shelf', at: [20, 1, 4] });
+    prompt.use(play.base); await settle();
+    expect(shelves).toEqual(['own', 'visit:Wren']);
+    expect(sent.filter(request => request.type === 'shelf.visit')).toEqual([expect.objectContaining({ plotId: 'home:5' })]);
+    // Watching nobody's shelf from a step too high or too far.
+    expect(prompt.prompt({ position: [20, 4, 4], yaw: 0 })).toBeNull();
+    again(); stop(); staged.dispose();
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it('finds the nearest door you may look at, never a hidden neighbour’s', () => {
+  const at = (x: number): readonly [number, number, number] => [x, 1, 0];
+  const own: ShelfDoor = { plotId: 'a', at: [0, 1, 0], name: null, mine: true, shown: false };
+  const hidden: ShelfDoor = { plotId: 'b', at: [1, 1, 0], name: 'Wren', mine: false, shown: false };
+  const shown: ShelfDoor = { plotId: 'c', at: [2, 1, 0], name: 'Saoirse', mine: false, shown: true };
+  const store = { door: () => own, doors: () => [hidden, shown] };
+  expect(nearestDoor(store, { position: at(.2) })?.plotId).toBe('a');
+  expect(nearestDoor(store, { position: at(.9) })?.plotId).toBe('a');
+  expect(nearestDoor(store, { position: at(1.8) })?.plotId).toBe('c');
+  expect(nearestDoor(store, { position: at(9) })).toBeNull();
+  expect(nearestDoor({ door: () => null, doors: () => [hidden] }, { position: at(1) })).toBeNull();
 });

@@ -1,6 +1,6 @@
 import { FISHING_CHANNEL, FISHING_PRIVATE_BYTES, FISHING_PUBLIC_BYTES, FishingChannelRequestSchema,
   kingdomFishingHour, kingdomWaterMood, type FishingOwnerCast, type FishingPrivateReply, type FishingPublicBeat,
-  type FishingPublicCast, type FishingPublicReply, type FishingPublicRod, type ItemRecord, type PersonId, type PierAlmanacMark } from '@chatdom/shared';
+  type FishingPublicCast, type FishingPublicReply, type FishingPublicRod, type FishingRodHistory, type ItemRecord, type PersonId, type PierAlmanacMark } from '@chatdom/shared';
 import type { RealmChannelRoom, RealmChannelSender, RealmRoomChannel } from '../room-channels';
 import type { CastBeat, CastView, createFishingCasts } from './cast';
 import type { FishingCatchResult } from './catches';
@@ -20,6 +20,8 @@ export interface FishingRoomRuntime {
   onRodChange(listener: (personId: PersonId) => void): () => void;
   /** Your own Almanac marks: every species you have caught in this kingdom. */
   marks?(from: RealmChannelSender): Promise<readonly PierAlmanacMark[]>;
+  /** The rod's history (PI12): walker catches in this kingdom, its notches, its legend's ribbon and its reach. */
+  rodHistory?(from: RealmChannelSender): Promise<FishingRodHistory>;
   /** A newly kept walker catch, for the pier's public feed and the stream. */
   announce?(kept: Extract<FishingCatchResult, { status: 'kept' }>): void;
   dispose(): void;
@@ -42,6 +44,8 @@ interface Fisher {
   pendingCastId: string | null;
   queuedKeep: string | null;
   attemptedCastId: string | null;
+  /** Read once per seat and again after each kept catch; null until read. */
+  history: FishingRodHistory | null;
 }
 interface CastOwner { readonly owner: PersonId; readonly walkerId: string }
 const MAX_PEOPLE = 300, MAX_JOBS = 4, TICK_MS = 50, FRAME_MS = 200, REFRESH_MS = 1000;
@@ -115,7 +119,20 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
     const pending = (from: RealmChannelSender, castId: string, message: string, id?: string) => privateSend(from, {
       type: 'pier.pending', castId, message, ...(id ? { id } : {}),
     });
-    const rodEvent = (fisher: Fisher, equipped: boolean) => publicSend({ type: 'pier.rod', at: runtime.now(), walkerId: fisher.walkerId, equipped });
+    const marksOf = (fisher: Fisher) => fisher.history ? { notches: fisher.history.notches, ribbon: fisher.history.legend !== null } : {};
+    const rodEvent = (fisher: Fisher, equipped: boolean) => publicSend({ type: 'pier.rod', at: runtime.now(), walkerId: fisher.walkerId, equipped,
+      ...(equipped ? marksOf(fisher) : {}) });
+    /** The rod's history, read on the job that equips it; a failed read leaves the rod as it was, never refuses it. */
+    const readHistory = async (from: RealmChannelSender, fisher: Fisher, force = false) => {
+      if (!runtime.rodHistory || (fisher.history && !force)) return false;
+      try {
+        const history = await runtime.rodHistory(from);
+        if (!currentFisher(from, fisher)) return false;
+        const before = fisher.history;
+        fisher.history = history;
+        return !before || before.notches !== history.notches || (before.legend === null) !== (history.legend === null);
+      } catch { return false; }
+    };
     const clearRod = (fisher: Fisher) => {
       const wasSelected = !!fisher.rod;
       fisher.rod = null;
@@ -137,7 +154,7 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
       if (!old && people.size >= MAX_PEOPLE) return null;
       if (old) clearRod(old);
       const fisher: Fisher = { owner, walkerId: from.walkerId, selectedId: null, selectionVersion: 0, rod: null, refreshedAt: 0,
-        refreshNeeded: false, pendingCastId: old?.pendingCastId ?? null, queuedKeep: null, attemptedCastId: null };
+        refreshNeeded: false, pendingCastId: old?.pendingCastId ?? null, queuedKeep: null, attemptedCastId: null, history: old?.history ?? null };
       people.set(owner, fisher);
       return fisher;
     };
@@ -174,12 +191,13 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
       const installation = runtime.installation(), at = runtime.now();
       const rods: FishingPublicRod[] = [];
       for (const person of people.values()) if (person.rod && person.selectedId
-        && room.person(person.owner)?.walkerId === person.walkerId) rods.push({ walkerId: person.walkerId, model: 'tool:rod.willow' });
+        && room.person(person.owner)?.walkerId === person.walkerId) rods.push({ walkerId: person.walkerId, model: 'tool:rod.willow', ...marksOf(person) });
       privateSend(from, { type: 'pier.state', id, at, revision: installation?.revision ?? room.world().revision,
         site: installation?.site ?? null, rack: installation?.rack ?? null, ...(installation?.lights ? { lights: installation.lights } : {}),
         ...(installation?.almanac ? { almanac: installation.almanac } : {}),
         water: installation ? { hour: kingdomFishingHour(at), mood: kingdomWaterMood(room.kingdomId, at) } : null,
-        casts: publicCasts(), rods, self: { rod: fisher.rod, cast: ownCast(fisher.owner), pendingCastId: fisher.pendingCastId } });
+        casts: publicCasts(), rods, self: { rod: fisher.rod, cast: ownCast(fisher.owner), pendingCastId: fisher.pendingCastId,
+          ...(fisher.history ? { history: fisher.history } : {}) } });
     };
     const drain = (beats: readonly CastBeat[]) => {
       const projected: FishingPublicBeat[] = [];
@@ -268,9 +286,13 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
         refuse(from, 'The kingdom could not show that catch. Open your bag to check your things.', id, castId); return;
       }
       const fish = { speciesId: kept.catch.speciesId, lengthMm: kept.catch.fish.lengthMm, weightG: kept.catch.fish.weightG };
+      // The rod remembers the catch: a new notch or the legend's ribbon shows on it for everyone.
+      const marked = !kept.replayed && await readHistory(from, fisher, true);
       privateSend(from, { type: 'pier.kept', ...(id ? { id } : {}), castId, item: kept.item, fish,
         personalFirst: kept.catch.personalFirst, kingdomFirst: kept.catch.kingdomFirst, replayed: kept.replayed,
-        keepsake: kept.keepsake && kept.keepsake.ownerId === fisher.owner ? kept.keepsake : null });
+        keepsake: kept.keepsake && kept.keepsake.ownerId === fisher.owner ? kept.keepsake : null,
+        ...(fisher.history ? { history: fisher.history } : {}) });
+      if (marked && fisher.rod) rodEvent(fisher, true);
       if (!kept.replayed) {
         publicSend({ type: 'pier.caught', at: kept.catch.caughtAt, castId, walkerId: from.walkerId,
           fish, kingdomFirst: kept.catch.kingdomFirst });
@@ -333,7 +355,7 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
       };
       if (request.type === 'pier.sync') {
         await requestJob(async () => {
-          if (fisher.selectedId) await refresh(from, fisher, fisher.selectedId);
+          if (fisher.selectedId && await refresh(from, fisher, fisher.selectedId)) await readHistory(from, fisher);
           if (await authenticated(from) && currentFisher(from, fisher)) { pump(); state(from, fisher, request.id); }
         });
         return;
@@ -348,6 +370,7 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
             if (await authenticated(from) && currentFisher(from, fisher)) refuse(from, 'Your rod is put away. Move it to your hotbar to fish.', request.id);
             return;
           }
+          await readHistory(from, fisher);
           if (!currentFisher(from, fisher) || version !== fisher.selectionVersion) return;
           fisher.selectionVersion++; fisher.selectedId = taken.item.id; rodEvent(fisher, true); pump(); state(from, fisher, request.id);
         });
@@ -363,6 +386,7 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
             if (await authenticated(from) && currentFisher(from, fisher)) refuse(from, 'Choose your own rod from your hotbar.', request.id);
             return;
           }
+          await readHistory(from, fisher);
           if (!currentFisher(from, fisher)) return;
           fisher.selectionVersion++; fisher.selectedId = request.itemId; rodEvent(fisher, true); pump(); state(from, fisher, request.id);
         });

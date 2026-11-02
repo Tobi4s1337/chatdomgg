@@ -1,5 +1,5 @@
 import type { ItemEvent, ItemId, ItemRecord, KingdomId, PersonId } from '@chatdom/shared';
-import { redactItem, type GrantReceipt, type ItemStore, type ItemTransaction } from './store';
+import { redactItem, type GrantReceipt, type ItemStore, type ItemTransaction, type ShelfRow } from './store';
 import { ITEM_PAGE_ROWS } from './pages';
 
 interface MemoryState {
@@ -8,16 +8,22 @@ interface MemoryState {
   receipts: Map<string, GrantReceipt>;
   numbers: Map<string, number>;
   shared: Map<string, { defId: string; fingerprint: string; number: number }>;
+  shelves: Map<string, ShelfRow & { kingdomId: KingdomId }>;
 }
 
 /** Test store with transactional snapshots, rollback and the same ordering as Postgres. Not a durable fallback. */
 export function createMemoryItemStore(): ItemStore {
-  let state: MemoryState = { items: new Map(), events: new Map(), receipts: new Map(), numbers: new Map(), shared: new Map() };
+  let state: MemoryState = { items: new Map(), events: new Map(), receipts: new Map(), numbers: new Map(), shared: new Map(), shelves: new Map() };
   const hidden = new Set<string>();
   let tail: Promise<unknown> = Promise.resolve();
   const rawList = (state: MemoryState, ownerId: PersonId, kingdomId: KingdomId) => [...state.items.values()]
     .filter(item => item.ownerId === ownerId && item.kingdomId === kingdomId)
     .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+  const shelfKey = (kingdomId: KingdomId, ownerId: PersonId, origin: ItemRecord['origin']) => JSON.stringify([kingdomId, ownerId, origin]);
+  const plainShelf = (row: ShelfRow & { kingdomId: KingdomId }): ShelfRow => {
+    const { kingdomId: _kingdom, ...rest } = row; void _kingdom;
+    return structuredClone(rest);
+  };
   const receiptKey = (kingdomId: KingdomId, ownerId: PersonId, origin: ItemRecord['origin'], key: string) => JSON.stringify([kingdomId, ownerId, origin, key]);
   const rawAtPlace = (state: MemoryState, ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin'], place: 'hand' | 'hotbar' | 'shelf') => {
     const items: ItemRecord[] = [];
@@ -78,6 +84,15 @@ export function createMemoryItemStore(): ItemStore {
             draft.shared.set(sharedKey, { defId, fingerprint, number }); return number;
           },
           afterCommit(callback) { check(); callbacks.push(callback); },
+          // The test store keeps no slot index; the service's own checks and the Postgres suite cover the constraint.
+          async deferSlots() { check(); },
+          async shelf(ownerId, origin) { check(); const row = draft.shelves.get(shelfKey(kingdomId, ownerId, origin)); return row ? plainShelf(row) : null; },
+          async saveShelf(row) {
+            check();
+            const key = shelfKey(kingdomId, row.ownerId, row.origin), previous = draft.shelves.get(key);
+            if ((previous?.revision ?? 0) + 1 !== row.revision) throw new Error('The shelf revision changed.');
+            draft.shelves.set(key, structuredClone({ ...row, kingdomId }));
+          },
         };
         try {
           const value = await work(tx);
@@ -104,6 +119,12 @@ export function createMemoryItemStore(): ItemStore {
         .filter(row => !after || BigInt(row.cursor) > BigInt(after)).slice(0, ITEM_PAGE_ROWS + 1).map(row => structuredClone(row));
     },
     async forgetName(personId) { hidden.add(personId); },
+    async shelf(ownerId, kingdomId, origin) { const row = state.shelves.get(shelfKey(kingdomId, ownerId, origin)); return row ? plainShelf(row) : null; },
+    async shownShelves(kingdomId, origin) {
+      return [...state.shelves.values()].filter(row => row.kingdomId === kingdomId && row.origin === origin && row.shown)
+        .sort((a, b) => a.ownerId < b.ownerId ? -1 : a.ownerId > b.ownerId ? 1 : 0).slice(0, 512)
+        .map(row => ({ ...plainShelf(row), name: hidden.has(row.ownerId) ? null : row.name }));
+    },
   };
   return store;
 }

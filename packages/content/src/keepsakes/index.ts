@@ -4,6 +4,8 @@ import { createFishMount, fishMountId, fishOfMount } from './mount';
 
 export { createFishMount, fishMountId, fishOfMount } from './mount';
 export { composeFishMount, mountPoseOf, type MountPose } from './plaque';
+export { createKeepsakeShelf, shelfBaysFor, shelfPlaceOf, SHELF_COLUMNS, SHELF_TIERS, SHELF_MAX_BAYS, type KeepsakeShelf, type ShelfSlot } from './shelf';
+export { createShelfAlcove, type ShelfAlcove } from './alcove';
 
 /** Rare catches and a kingdom's first of each species: "No. 3 of the Moonlit Pike in Willowmere". */
 export const FISH_MOUNT_DEFINITIONS: readonly ItemDefinition[] = Object.freeze(FISH_SPECIES.map(fish => {
