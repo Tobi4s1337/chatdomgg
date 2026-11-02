@@ -318,8 +318,16 @@ branch's base; `git apply` it as its own commit, `feat(api): the Atlas owner's h
 so `atlas-owner-api.patch` no longer applies there. `work/lanes/atlas-map/atlas-owner-api.integrator.patch` is the same
 change rebased on `lane/integrator` `ce219fd5` (`git apply --check` passes there and on `worktrees/public-next`; the
 patched `public/routes.test.ts` passes 23/23 on the integrator's route table; `dock/auth.ts`, `realm-auth/secrets.ts`
-and `realm-auth/config.ts`, which the new handler imports, are byte-identical on both branches). To make the hide flow
-real on chatdom.io, in this order:
+and `realm-auth/config.ts`, which the new handler imports, are byte-identical on both branches).
+
+*Rebased again (2 Nov, 19:20 local):* the integrator's pending launch merge passes `config.trustedProxies` to every
+`proxyHttp` call in `public/main.ts`, which moved the patch's one context line there. The patch file now applies on
+top of that merge (`git apply --check --cached` passes on the integrator's staged index); the only change is that
+context line, the `atlas-owner` case is unchanged and still sits between `dock` and `realm`. For `lane/integrator`
+`2949613a` without the launch merge, the previous version is `git show
+f803a214:work/lanes/atlas-map/atlas-owner-api.integrator.patch`.
+
+To make the hide flow real on chatdom.io, in this order:
 
 1. Integrator: `git apply work/lanes/atlas-map/atlas-owner-api.integrator.patch`, its own commit
    (`feat(api): the Atlas owner's hide and show`); run `apps/api/src/atlas-owner/index.test.ts` and
