@@ -23,7 +23,10 @@ const all = !args.includes('--posters') && !args.includes('--timing');
 const doPosters = all || args.includes('--posters');
 const doTiming = all || args.includes('--timing');
 const CDP = process.env.PC_CDP || 'http://127.0.0.1:9333';
-const PORT = 5192;
+// 5192 is the lease's port; a rehearsal off the lease (scripts/public/hero-gpu-rehearse.mjs) passes a capture port.
+const PORT = Number(process.env.HERO_GPU_PORT || 5192);
+// The pictures are drawn at the high tier on his GPU; the rehearsal asks for the software tier, which SwiftShader can draw.
+const POSTER_TIER = process.env.HERO_GPU_TIER || 'high';
 const APP = `http://localhost:${PORT}`;
 const root = resolve(import.meta.dirname, '../..');
 // The hero's camera: keep in step with apps/web/src/site/hero/frame.ts.
@@ -84,14 +87,29 @@ const FRAME_TIMES = seconds => new Promise(done => {
   requestAnimationFrame(frame);
 });
 
+// First and largest paint, from buffered observers: the entries can land after the load event (the page is drawn
+// after it in a fresh tab), so wait for the first paint, then let the largest settle for 2.5 s (8 s at most).
 const PAINTS = () => new Promise(done => {
   const result = { fcp: null, lcp: null, lcpElement: null };
-  for (const entry of performance.getEntriesByType('paint')) if (entry.name === 'first-contentful-paint') result.fcp = entry.startTime;
+  new PerformanceObserver(list => {
+    for (const entry of list.getEntries()) if (entry.name === 'first-contentful-paint') result.fcp = entry.startTime;
+  }).observe({ type: 'paint', buffered: true });
   new PerformanceObserver(list => {
     for (const entry of list.getEntries()) { result.lcp = entry.startTime; result.lcpElement = `${entry.element?.tagName ?? '?'} ${entry.url ? entry.url.split('/').pop() : ''}`.trim(); }
   }).observe({ type: 'largest-contentful-paint', buffered: true });
-  const nav = performance.getEntriesByType('navigation')[0];
-  setTimeout(() => done({ ...result, ttfb: nav?.responseStart ?? null, domContentLoaded: nav?.domContentLoadedEventEnd ?? null, load: nav?.loadEventEnd ?? null }), 300);
+  const started = performance.now();
+  let painted = null;
+  const check = () => {
+    const now = performance.now();
+    if (result.fcp !== null && painted === null) painted = now;
+    if ((painted !== null && now - painted > 2_500) || now - started > 8_000) {
+      const nav = performance.getEntriesByType('navigation')[0];
+      done({ ...result, ttfb: nav?.responseStart ?? null, domContentLoaded: nav?.domContentLoadedEventEnd ?? null, load: nav?.loadEventEnd ?? null });
+      return;
+    }
+    setTimeout(check, 100);
+  };
+  check();
 });
 
 const report = { measured: new Date().toISOString(), hour: HOUR, posters: [], timing: [] };
@@ -114,7 +132,7 @@ try {
     for (const [id, yaw, width, height] of shots) {
       const { context, tab } = await page(browser, width, height);
       const started = Date.now();
-      await tab.goto(`${APP}${POSTER_PATH}?channel=tobi4s_&still=1&view=orbit&hour=${HOUR}&t=${TIME}&yaw=${yaw}&tier=high`, { waitUntil: 'domcontentloaded' });
+      await tab.goto(`${APP}${POSTER_PATH}?channel=tobi4s_&still=1&view=orbit&hour=${HOUR}&t=${TIME}&yaw=${yaw}&tier=${POSTER_TIER}`, { waitUntil: 'domcontentloaded' });
       await tab.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 120_000 });
       await sleep(2_500);
       // Kept as near-lossless WebP (the evidence stays small); scripts/public/site-pictures.mjs crops it for the page.
@@ -134,7 +152,12 @@ try {
       const started = Date.now();
       await tab.goto(`${APP}/site/`, { waitUntil: 'load' });
       const paints = await tab.evaluate(PAINTS);
-      await tab.waitForFunction(() => ['live', 'still'].includes(document.querySelector('.story-hero')?.dataset.heroState ?? ''), null, { timeout: 150_000 })
+      // Settled when the live land is up or has stepped back, or when the plan kept the pictures from the start (then
+      // no hero state is ever said, and waiting for one would spend the lease).
+      await tab.waitForFunction(() => {
+        const hero = document.querySelector('.story-hero');
+        return ['live', 'still'].includes(hero?.dataset.heroState ?? '') || (hero?.dataset.heroPlan ?? '').startsWith('still:');
+      }, null, { timeout: 150_000 })
         .catch(() => undefined);
       const hero = await tab.evaluate(() => ({ state: document.querySelector('.story-hero')?.dataset.heroState ?? 'none', plan: document.querySelector('.story-hero')?.dataset.heroPlan ?? 'none' }));
       const liveAfter = (Date.now() - started) / 1000;
