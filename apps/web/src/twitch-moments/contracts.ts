@@ -1,8 +1,14 @@
 import { createIntentSchema, EpochMsSchema, KingdomIdSchema, PersonIdSchema, TokenSchema, UIntSchema, VoxelBlueprintSchema } from '@chatdom/shared';
-import { MOMENT_KINDS, UNSAFE_TEXT, publicText } from '@chatdom/shared/twitch-moments';
+import { MOMENT_KINDS, UNSAFE_TEXT, publicText, type TwitchMomentFeed as SharedMomentFeed } from '@chatdom/shared/twitch-moments';
+import type { RaidPartyPublicFeed } from '@chatdom/shared';
 import { SKY_RUNGS } from './spectacle';
 import { z } from './zod';
 export * from '@chatdom/shared/twitch-moments';
+
+/** The shared feed, plus the gate party's public reader where a host already holds one (a bench, a stream view). */
+export interface TwitchMomentFeed extends SharedMomentFeed {
+  readonly raidParty?: RaidPartyPublicFeed;
+}
 
 // ---------------------------------------------------------------- commands
 

@@ -7,12 +7,18 @@
  * - `HERALD_RAID_GATE_URL` + `HERALD_RAID_GATE_SECRET`: Herald's private raid authority. Without them the gate still
  *   opens, previews nothing it cannot check, and tells the monarch the Twitch connection is unknown.
  * - `RAID_GATE_RECOVER_MS`: recovery cadence (default 15 s; 0 off).
+ *
+ * - `REALM_TRAVEL_URL` (else `DOCK_REALM_URL` / `CHATDOM_REALM_TARGET`) + `REALM_INTERNAL_SECRET`: the realm's private
+ *   travel door. Travel is bound only through it, because only the realm's actual rooms can say a walker left the source
+ *   and the destination is ready. Without it every travel command answers unavailable.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Pool } from 'pg';
 import { RaidObservationLedger } from '../../../realm/src/raid-gate/observations';
+import type { RealmTravelTransport } from '../../../realm/src/raid-gate/ports';
 import type { RealmAuthConfig } from '../realm-auth/config';
 import { createHeraldRaidAuthority } from './herald-authority';
+import { createRealmRoomsClient, realmRoomsUrl } from './realm-rooms';
 import { RaidGatePortError, type LiveChannels, type RaidGrants, type TargetDirectory, type WriteConsent } from './policy';
 import { createRaidGateService, type RaidGateService } from './service';
 
@@ -43,6 +49,8 @@ function unboundTwitch(): Readonly<{ grants: RaidGrants; consent: WriteConsent; 
 
 export function bindRaidGate(input: Readonly<{
   pool: Pool; config: RealmAuthConfig; issuer: string; env?: NodeJS.ProcessEnv; clock?: () => number;
+  /** Wraps the realm's room door (tests lose an answer on the way back); production passes nothing. */
+  rooms?: (transport: RealmTravelTransport) => RealmTravelTransport;
 }>): RaidGateBinding {
   const env = input.env ?? process.env;
   const origin = input.config.mode;
@@ -57,6 +65,8 @@ export function bindRaidGate(input: Readonly<{
     moment: async () => { throw new Error('The API does not record raid moments.'); },
   });
   const recover = Number(env.RAID_GATE_RECOVER_MS ?? '');
+  const realmUrl = realmRoomsUrl(env), internalSecret = input.config.internalSecret;
+  const door = realmUrl && internalSecret ? createRealmRoomsClient({ url: realmUrl, secret: internalSecret, origin }) : null;
   const service = createRaidGateService({
     pool: input.pool, origin, issuer: input.issuer,
     sessionCookie: input.config.secureCookies ? '__Host-chatdom_session' : 'chatdom_session',
@@ -64,14 +74,15 @@ export function bindRaidGate(input: Readonly<{
     policyPorts: { live: twitch.live, grants: twitch.grants, consent: twitch.consent, directory: createUnclassifiedTargetDirectory() },
     raids: herald?.raids ?? null,
     roads: ledger.roads,
-    rooms: null,
+    // The realm's actual rooms, through its private door: one walking membership per person, fenced at the source seat.
+    rooms: door ? (input.rooms ?? (transport => transport))(door) : null,
     ...(Number.isInteger(recover) && recover >= 0 && env.RAID_GATE_RECOVER_MS !== undefined ? { recoverEveryMs: recover } : {}),
     onRecovery: outcome => {
       if (outcome.kind === 'error') console.error('api: a Raid Gate recovery pass failed; it will retry');
       else console.info(`api: Raid Gate recovery ${Object.entries(outcome.report).filter(([, count]) => count > 0).map(([name, count]) => `${name} ${count}`).join(', ')}`);
     },
   });
-  return { service, bound: { herald: herald !== null, roads: true, rooms: false } };
+  return { service, bound: { herald: herald !== null, roads: true, rooms: door !== null } };
 }
 
 /** The one dispatch line for main: true when the request was the gate's. */

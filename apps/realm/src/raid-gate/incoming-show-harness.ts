@@ -29,6 +29,8 @@ import { mountRaidShowRoutes } from './http';
 import { RaidChatBridge } from './raid-chat-bridge';
 import { mountRaidChatRead } from './raid-chat-http';
 import { RaidChatPresentation } from './raid-chat-presentation';
+import { createRealmRoomDoor } from './room-door';
+import { RealmRoomTravel } from './room-travel';
 
 /**
  * The RS10 mock stack, shared by the composed flow test and the staged stream capture. Everything here is SIMULATED:
@@ -129,23 +131,26 @@ export async function openShowRealm(input: { pool: Pool; kingdomId: KingdomId; k
   const citizens = createRealmCitizens({ db: pool, origin: 'simulated', kingdomNames: names });
   const raidChat = new RaidChatPresentation({ origin: 'simulated' }), gate = new ForgeWriteGate();
   const joins: RaidGuestRoomReceipt[] = [];
-  const runtime = createRaidGuestRuntime({ origin: 'simulated', authority, citizens: value => citizens.observe(value),
+  const roomTravel = new RealmRoomTravel({ pool, origin: 'simulated', clock: Date.now });
+  const door = createRealmRoomDoor({ travel: roomTravel, rooms: { founded: async id => !!await boot.allocation.currentLayout(id), retain: id => boot.services.retain(id),
+    scene: id => { const prepared = boot.loader.current(id); return prepared ? { world: prepared.world, plan: prepared.scene.plan } : undefined; } } });
+  const runtime = createRaidGuestRuntime({ origin: 'simulated', authority, marchers: roomTravel, citizens: value => citizens.observe(value),
     chatPresented: (value, result) => raidChat.observe(value, result) });
   const boot = createDurableRealmBoot({ pool, origin: 'simulated', foundedDirectory: join(directory, 'founded'),
     verifier: new TenureEvidenceVerifier('simulated', input.evidenceKey), furnish: citizens.furnish,
     foundedAccess: target => target.origin === 'simulated', ingressCredentials: { herald: SHOW_SERVICE_SECRET },
     repositoryOptions: gate.install({ origin: 'simulated' }),
     attach: kingdom => {
-      const detach = runtime.attach(kingdom);
+      const detach = runtime.attach(kingdom), detachDoor = door.attach(kingdom);
       const clearRaidChat = () => raidChat.clear(kingdom.kingdomId), detachRaidChat = kingdom.onClosed(clearRaidChat);
       const record = kingdom.onLifecycle((event, principal, _walker, at) => {
         if (event === 'join') joins.push({ version: 1, origin: principal.origin, kingdomId: principal.kingdomId,
           personId: principal.personId, entryId: principal.sessionId, at });
       });
-      return () => { clearRaidChat(); detachRaidChat(); record(); detach(); };
+      return () => { clearRaidChat(); detachRaidChat(); record(); detachDoor(); detach(); };
     } });
   const current = (id: string) => boot.services.kingdoms.get(KingdomIdSchema.parse(id))?.current === true;
-  Object.assign(boot.services, { prepareSpawn: createRaidGuestSpawn({ authority, current: id => {
+  Object.assign(boot.services, { auth: door.fence(boot.services.auth), prepareSpawn: createRaidGuestSpawn({ authority, marchers: roomTravel, current: id => {
     const held = boot.services.kingdoms.get(id), scene = boot.loader.current(id);
     return held?.current && scene ? { world: held.world, layoutRevision: held.layoutRevision,
       writerEpoch: held.writerEpoch, plan: scene.scene.plan } : undefined;
@@ -160,7 +165,8 @@ export async function openShowRealm(input: { pool: Pool; kingdomId: KingdomId; k
     mountEveningRoutes(app, bridge); reader = mountRaidChatRead(app, { origin: 'simulated', presentation: raidChat, current });
   } });
   const show = mountRaidShowRoutes(realm.transport.app, { pool, origin: 'simulated', clock: Date.now, recoverEveryMs: 0,
-    credentials: { herald: SHOW_SERVICE_SECRET }, moment: observation => boot.ingress.moments.acceptMoment(observation) });
+    credentials: { herald: SHOW_SERVICE_SECRET }, moment: observation => boot.ingress.moments.acceptMoment(observation), walkers: runtime.walkerOf,
+    door: { transport: door.transport, secret: SHOW_SERVICE_SECRET } });
   const crier = mountRaidCrierRoutes(realm.transport.app, { origin: 'simulated', credentials: { herald: SHOW_SERVICE_SECRET }, recoverEveryMs: 0,
     authority: new RaidCrierAuthority({ pool, origin: 'simulated', clock: Date.now, publicOrigin: input.publicOrigin() }) });
   // The public entry and spectator watch, as main.ts mounts them, so the stream view can open this kingdom.
@@ -177,7 +183,7 @@ export async function openShowRealm(input: { pool: Pool; kingdomId: KingdomId; k
     check((await boot.readiness.start()).ready, 'the realm did not become ready');
     await realm.server.listen(port, '127.0.0.1');
   } catch (error) { await close(); throw error; }
-  return { endpoint, boot, show, runtime, authority, joins, close };
+  return { endpoint, boot, show, runtime, authority, joins, door, roomTravel, close };
 }
 
 /** Herald's mock run: door, durable realm outbox and recording-only crier, with raid replies kept for the record. */

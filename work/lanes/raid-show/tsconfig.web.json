@@ -14,6 +14,9 @@
     "../../../apps/web/src/realm-reference/index.tsx",
     "../../../apps/web/src/raid-gate/entry/**/*.ts",
     "../../../apps/web/src/raid-gate/entry/**/*.tsx",
-    "../../../apps/web/src/twitch-moments/controller.ts"
+    "../../../apps/web/src/twitch-moments/controller.ts",
+    "../../../apps/web/src/raid-gate/march-call*.ts",
+    "../../../apps/web/src/raid-gate/MarchCall.tsx",
+    "../../../apps/web/src/raid-gate/march-bench.tsx"
   ]
 }

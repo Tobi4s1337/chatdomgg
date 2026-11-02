@@ -90,7 +90,7 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
     } },
   });
   // The raid chat and pennant layers are DOM overlays; a headless host (node tests, workers) has none to mount.
-  if (typeof document !== 'undefined') mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock: () => now, plan, ground: options.ground ?? ((x, z) => terrainHeight(plan, x, z)) });
+  if (typeof document !== 'undefined') mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock: () => now, plan, ground: options.ground ?? ((x, z) => terrainHeight(plan, x, z)), party: { scene, material } });
   const disconnect = controller.connect(feed);
   const dispose = () => {
     if (disposed) return;

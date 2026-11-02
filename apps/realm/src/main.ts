@@ -41,6 +41,8 @@ import { fishingSpecies } from './fishing/content';
 import { installGatherStore, createPostgresGatherStore } from './games/store';
 import { installTavernReturns } from './games/return';
 import { RealmPortalArrivals, installPortalArrivals } from './portals/arrivals';
+import { RealmRoomTravel } from './raid-gate/room-travel';
+import { createRealmRoomDoor } from './raid-gate/room-door';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -100,23 +102,26 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names, castle: castle.observe, evidenceKey });
   const guestAuthority = new RaidGuestAuthority({ pool, origin, clock: Date.now });
   const raidChat = new RaidChatPresentation({ origin, clock: Date.now });
-  const raidGuests = createRaidGuestRuntime({ authority: guestAuthority, origin, citizens: input => citizens.observe(input), log: line => console.info(line),
+  const roomTravel = new RealmRoomTravel({ pool, origin, clock: Date.now });
+  const roomDoor = createRealmRoomDoor({ travel: roomTravel, rooms: { founded: async id => !!await boot.allocation.currentLayout(id), retain: id => boot.services.retain(id),
+    scene: id => { const prepared = boot.loader.current(id); return prepared ? { world: prepared.world, plan: prepared.scene.plan } : undefined; } } });
+  const raidGuests = createRaidGuestRuntime({ authority: guestAuthority, origin, marchers: roomTravel, citizens: input => citizens.observe(input), log: line => console.info(line),
     chatPresented: (input, result) => raidChat.observe(input, result) });
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
     repositoryOptions: gate.install({ origin, guards: [castle.guard] }), furnish: citizens.furnish,
     attach: kingdom => {
-      const detachGuests = raidGuests.attach(kingdom);
+      const detachGuests = raidGuests.attach(kingdom), detachDoor = roomDoor.attach(kingdom);
       const clearRaidChat = () => raidChat.clear(kingdom.kingdomId), detachRaidChat = kingdom.onClosed(clearRaidChat);
       const detachEvening = evening.attach(kingdom);
       const detachInteractions = attachEveningInteractions(kingdom, { auth: boot.services.auth,
         scene: () => boot.loader.current(kingdom.kingdomId)?.scene });
-      return () => { clearRaidChat(); detachRaidChat(); detachGuests(); detachInteractions(); detachEvening(); };
+      return () => { clearRaidChat(); detachRaidChat(); detachDoor(); detachGuests(); detachInteractions(); detachEvening(); };
     },
   });
   Object.assign(boot.services, { channels: [...(boot.services.channels ?? []), createItemRoomChannel(itemFoundation.items, createPostgresItemAdmission({ pool, origin, readiness: boot.readiness }))] });
-  Object.assign(boot.services, { prepareSpawn: createRaidGuestSpawn({ authority: guestAuthority, current: (kingdomId) => {
+  Object.assign(boot.services, { auth: roomDoor.fence(boot.services.auth), prepareSpawn: createRaidGuestSpawn({ authority: guestAuthority, marchers: roomTravel, current: (kingdomId) => {
     const held = boot.services.kingdoms.get(kingdomId), founded = boot.loader.current(kingdomId);
     return held?.current && founded ? { world: held.world, layoutRevision: held.layoutRevision,
       writerEpoch: held.writerEpoch, plan: founded.scene.plan } : undefined;
@@ -148,7 +153,8 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const panel = new RealmPanelService({ settings: new RealmPanelSettings({ db: pool, services: boot.services, origin }), gifts: new RealmPanelGifts({ db: pool, services: boot.services, origin }), db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded, projection: true, guard: forgetGuard });
   const chatPrivacy = new RealmChatPrivacy({ db: pool, origin, secret: credentials.herald, services: boot.services, allocation: boot.allocation, guard: forgetGuard });
   const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); mountRealmPanelRoutes(app, panel); mountChatPrivacyRoute(app, chatPrivacy); } });
-  const raidShow = mountRaidShowRoutes(transport.app, { pool, origin, credentials, clock: Date.now, moment: observation => boot.ingress.moments.acceptMoment(observation) });
+  const raidShow = mountRaidShowRoutes(transport.app, { pool, origin, credentials, clock: Date.now, moment: observation => boot.ingress.moments.acceptMoment(observation), walkers: raidGuests.walkerOf,
+    door: { transport: roomDoor.transport, secret: process.env.REALM_INTERNAL_SECRET } });
   const chatCommands = mountChatCommandRoute(transport.app, { registry: realmChatCommands, origin, credentials, clock: Date.now });
   const raidCrier = process.env.REALM_PUBLIC_ORIGIN ? mountRaidCrierRoutes(transport.app, { origin, credentials, authority: new RaidCrierAuthority({ pool, origin, publicOrigin: process.env.REALM_PUBLIC_ORIGIN, clock: Date.now }) }) : null;
   mountEntryRoutes(transport.app, boot.founded, origin, names);
