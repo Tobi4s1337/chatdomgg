@@ -53,8 +53,18 @@ export function reason(error) {
   return text.split('\n')[0].replace(/Bearer\s+\S+/gi, 'Bearer …').slice(0, 400);
 }
 
+/** The page's clock answer moved forward to the next time the shared clock reads `hour`; the runner's own time stays real. */
+export function clockAtHour(bytes, hour) {
+  const body = JSON.parse(bytes.toString()), day = 86_400_000;
+  const now = ((body.serverTime % day) + day) % day;
+  return Buffer.from(JSON.stringify({ ...body, serverTime: body.serverTime + ((((hour * 3_600_000 - now) % day) + day) % day) }));
+}
+
+// `hour` is for evidence runs only (the lane capture judging the window glow at night): the scene is lit for that
+// shared-clock hour, while the revision, the capture time and every check keep the realm's real clock.
 export async function runPainter(config, { once = false, signal, report = console.info, evidenceDirectory,
-  launch = options => chromium.launch(options), fetcher = fetch, acquireLock = acquireCaptureLock } = {}) {
+  launch = options => chromium.launch(options), fetcher = fetch, acquireLock = acquireCaptureLock, hour } = {}) {
+  if (hour !== undefined && !(Number.isFinite(hour) && hour >= 0 && hour < 24)) throw new Error('The evidence hour must lie in [0, 24).');
   let browser, context;
   const startupRelease = await acquireLock();
   try {
@@ -125,7 +135,7 @@ export async function runPainter(config, { once = false, signal, report = consol
               finally { await cdp.detach(); }
             }
             await page.route('**/api/realm/clock', async route => {
-              try { const current = await clock(); await route.fulfill({ contentType: 'application/json', body: current.bytes, headers: { 'Cache-Control': 'no-store' } }); }
+              try { const current = await clock(); await route.fulfill({ contentType: 'application/json', body: hour === undefined ? current.bytes : clockAtHour(current.bytes, hour), headers: { 'Cache-Control': 'no-store' } }); }
               catch { await route.fulfill({ status: 503, body: '' }); }
             });
             await page.exposeBinding('__chatdomPainterRead', () => input);

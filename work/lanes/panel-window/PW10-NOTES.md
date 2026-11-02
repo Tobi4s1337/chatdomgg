@@ -1,3 +1,9 @@
+# PW10 follow-up — 2 November 2026, the lit pane at night
+
+The earlier real-GPU paintings were made at mid-morning on the shared clock, where `windowGlowForHour` is 0, so no pane could glow. `pw10-capture.mjs --hour <h>` now paints the scene lit for that shared-clock hour. It is for evidence only: the runner's `hour` option changes only the clock answer the painter page sees. The revision, the capture time, the upload checks and the realm's leases keep the real clock, and the run uses its own throwaway painting store and its own evidence folder. So these stills' captions show the real capture time (11:14 AM) over a night sky; production paintings never do that.
+
+One lease on the RTX 5080 (`--gpu --only tap --hour 21.5`, realm 5198, stack 5192, stopped): taps lit in 1105 ms at 318×496 and 402 ms at 390×844, realm-confirmed. Painting 01 has 0 lights, a starlit violet sky, the keep lit and the homes dark. Painting 02 has 1 light, turned +25° to slot 11. The newcomer's front pane glows amber and throws a warm pool onto the path, with the citizen at the door, while the unlit side pane on the same house stays a dark lattice. In the Kingdom plate at both sizes the "Yours" ring frames the glowing pane. In the You arch crop the glow sits inside the ring with its spill visible beside it. Word counts are unchanged (Kingdom 12, You 11, Gifts 10). Judged: the glow reads at night and needs no change. It is the renderer's own, and the panel adds nothing over it. Stills are in `work/evidence/panel-window/PW10/gpu/hour-21.5/`.
+
 # PW10 checkpoint — 2 November 2026, the real-GPU stills
 
 PW10 stays unticked. Every real-GPU still the goal asks for now exists and I have looked at it. The only open done-when item is the zip, which still fails on the two shared simulation strings that reach the panel through front-door's Passport. Main is still at `0e92df4`, and neither front-door nor the integrator has applied the Passport patch.

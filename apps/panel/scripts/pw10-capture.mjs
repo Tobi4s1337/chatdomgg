@@ -2,7 +2,7 @@
 // and the painting before and after it. Everything runs against the real realm, gateway and painter on the isolated
 // panel_window schema; the only substitute is the operator Helper, which signs real HS256 tokens.
 //
-//   node --env-file=<lane env> --env-file=<twitch env> apps/panel/scripts/pw10-capture.mjs [--gpu]
+//   node --env-file=<lane env> --env-file=<twitch env> apps/panel/scripts/pw10-capture.mjs [--gpu] [--only …] [--hour <h>]
 //
 // Without --gpu the stills come from headless Chrome (SwiftShader) under the shared capture lock. With --gpu, run inside
 // chatdom-pc-lease: the stack serves on the forwarded port 5192 and the stills come from the real-GPU Chrome.
@@ -22,8 +22,12 @@ import { startPanelStack } from './pw10-stack.mjs';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const gpu = process.argv.includes('--gpu');
 const only = (() => { const i = process.argv.indexOf('--only'); return i >= 0 ? new Set(process.argv[i + 1].split(',')) : null; })();
+// --hour <h> paints the scene lit for that shared-clock hour (to judge the window glow at dusk or night by day); the
+// stills keep their real capture time, go to their own folder and use their own painting store.
+const hour = (() => { const i = process.argv.indexOf('--hour'); return i >= 0 ? Number(process.argv[i + 1]) : undefined; })();
+if (hour !== undefined && !(hour >= 0 && hour < 24)) throw new Error('--hour takes a shared-clock hour in [0, 24).');
 // Real-GPU stills keep their own folder and record beside the headless ones.
-const evidence = join(root, 'work/evidence/panel-window/PW10', ...(gpu ? ['gpu'] : []));
+const evidence = join(root, 'work/evidence/panel-window/PW10', ...(gpu ? ['gpu'] : []), ...(hour === undefined ? [] : [`hour-${hour}`]));
 const env = process.env;
 for (const key of ['REALM_ENTRY_KINGDOM_ID', 'TWITCH_EXTENSION_SECRET', 'REALM_INGRESS_PANEL_SECRET', 'REALM_INGRESS_HERALD_SECRET',
   'PANEL_PAINTER_SECRET', 'DATABASE_URL', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET']) if (!env[key]) throw new Error(`Missing ${key}; load the private lane and Twitch environment files.`);
@@ -281,6 +285,7 @@ try {
   secretDir = await mkdtemp(join(tmpdir(), 'pw10-capture-'));
   const secretFile = join(secretDir, 'helper-secret');
   await writeFile(secretFile, env.TWITCH_EXTENSION_SECRET, { mode: 0o600 });
+  if (hour !== undefined) env.PANEL_STILL_DIRECTORY = join(secretDir, 'stills');
   const [tapper, held, waiting, neighbour] = await twitchIds([env.PANEL_TAP_LOGIN || 'twitchdev', env.PANEL_HELD_LOGIN || 'twitch',
     env.PANEL_UNFOUNDED_LOGIN || 'twitchgaming', env.PANEL_NEIGHBOUR_LOGIN || 'twitchrivals']);
   if (new Set([tapper, held, waiting, neighbour, kingdom]).size !== 5) throw new Error('The capture needs five distinct Twitch IDs.');
@@ -320,7 +325,7 @@ try {
     const started = Date.now();
     // The painter runs inside the capture's own hold on the shared lock instead of queueing again for each step.
     const once = () => runPainter(painterConfig, { once: true, signal: abort.signal, evidenceDirectory: join(evidence, 'painting', stage), report: line => console.info(`painter: ${line}`),
-      acquireLock: async () => async () => {} });
+      acquireLock: async () => async () => {}, hour });
     // A software renderer page can crash under host load; the live painter retries on its next pass, and so does this.
     let result = await once();
     if (result.painted !== 1) result = await once();

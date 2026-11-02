@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
-import { runPainter } from './runner.mjs';
+import { clockAtHour, runPainter } from './runner.mjs';
 
 // Transport doubles exercise the private/public boundary and orchestration without rendering a fake kingdom.
 function harness({ changedHash = false, sourceMissing = false, rejectUpload = false } = {}) {
@@ -79,4 +79,14 @@ test('failed upload closes the affected warm page and reports no successful pain
   assert.equal(h.reports.some(message => message.includes('painted ')), false);
   assert.equal(h.reports.length, 2);
   h.assertClosed();
+});
+
+test('an evidence hour moves only the page clock forward to that hour and keeps the rest of the answer', async () => {
+  const real = Date.UTC(2026, 10, 2, 10, 7, 5);
+  const moved = JSON.parse(clockAtHour(Buffer.from(JSON.stringify({ version: 1, serverTime: real })), 22).toString());
+  assert.equal(moved.version, 1);
+  assert.equal(moved.serverTime, Date.UTC(2026, 10, 2, 22, 0, 0));
+  const wrapped = JSON.parse(clockAtHour(Buffer.from(JSON.stringify({ version: 1, serverTime: real })), 6.5).toString());
+  assert.equal(wrapped.serverTime, Date.UTC(2026, 10, 3, 6, 30, 0));
+  await assert.rejects(runPainter({}, { hour: 24 }), /evidence hour/);
 });
