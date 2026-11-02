@@ -4,6 +4,24 @@ What this lane offers other lanes and what it needs from them. A seam is frozen 
 the same thing. To change a frozen seam, write the change in both files and add a `needs:` line to progress.
 Shapes below are this lane's proposal until the other lane confirms them; names may change, the meaning should not.
 
+## FW11 recovery core checkpoint (2026-11-02)
+
+`apps/codex/src/wish-queue` now exports the private `FileForgeWishQueue` core. It preserves canonical source
+bindings, attempt IDs, arrival order, spent-call debits and immutable stage snapshots under one filesystem owner.
+Its `get` and `list` projections contain private identities and outcomes; neither is a public queue API.
+
+This module is not mounted by realm boot or the Herald handoff. No new route, configuration or shared contract
+has been activated. The lane owns the remaining adapter in the Forge-only evening path: durable admission before
+202, stable reservation/run recovery, persisted actual provider responses and budgets, uncertain-commit recovery,
+durable moderation revocation, owner-only outcome delivery and ordered single rituals. See [RECOVERY.md](RECOVERY.md).
+Calling the current coordinator on a saved command unchanged would reset its budget and release interrupted
+attempts terminally. Keep that integration closed until the complete recovery path is verified together.
+
+The queue core's process-kill evidence is [fw11-queue-process.json](../../evidence/forge-wish/fw11-queue-process.json).
+It proves private file recovery only; it does not establish served Forge/realm recovery, coal, outbox behavior,
+warm-worker latency or the anvil queue view. Named broadcaster and private maker-position views still need their
+own authorized projections through the existing play host from section 1.
+
 ## 1. The HUD slot (play offers, forge-wish fills)
 
 play owns the in-world HUD, the Esc menu, the minimap and pointer lock (mouse capture is always locked while
