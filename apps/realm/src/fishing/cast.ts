@@ -21,6 +21,8 @@ export interface CastView {
 export interface FishingCandidate {
   readonly version: 1; readonly castId: string; readonly personId: PersonId; readonly kingdomId: KingdomId;
   readonly at: number; readonly float: Vec3; readonly environment: FishingEnvironment; readonly fish: FishingRoll;
+  /** Private audit inputs, never a public feed payload. */
+  readonly castSeed: number; readonly anchor: Vec3; readonly collisionRevision: number;
   readonly fightSeed: number; readonly inputs: readonly FightInput[]; readonly result: FightState;
 }
 export type CastBeat = { readonly castId: string; readonly at: number;
@@ -123,7 +125,8 @@ export function createFishingCasts(options: FishingCastsOptions) {
     }
     cast.phase = 'landing'; cast.at = resolvedAt;
     cast.candidate = Object.freeze({ version: 1, castId: cast.id, personId: cast.personId, kingdomId: options.kingdomId,
-      at: resolvedAt, float: cast.float!, environment: cast.environment!, fish: cast.fish, fightSeed,
+      at: resolvedAt, float: cast.float!, environment: cast.environment!, fish: cast.fish, fightSeed, castSeed: cast.seed,
+      anchor: cast.anchor, collisionRevision: cast.revision,
       inputs: Object.freeze(cast.tape.map(edge => Object.freeze({ ...edge }))), result: cast.fight });
     emit(beats, cast, 'landing', resolvedAt);
     if (time - resolvedAt >= LANDING_EXPIRY) end(cast, time, beats, 'The catch could not be kept.');

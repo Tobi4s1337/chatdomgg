@@ -4,7 +4,7 @@ import type { RealmDatabase } from '../persistence/database';
 import { ItemCommitUncertainError, redactItem, type GrantReceipt, type ItemStore, type ItemTransaction } from './store';
 import { ITEM_PAGE_ROWS } from './pages';
 
-const clients = new WeakMap<ItemTransaction, { client: PoolClient; active: boolean }>();
+const clients = new WeakMap<ItemTransaction, { client: PoolClient; active: boolean; guards: (() => boolean)[] }>();
 
 /** The caller may use this client only during the item transaction callback. */
 export function postgresItemClient(tx: ItemTransaction): Pick<PoolClient, 'query'> {
@@ -18,11 +18,21 @@ export function postgresItemClient(tx: ItemTransaction): Pick<PoolClient, 'query
   }) };
 }
 
+/** Trusted synchronous guards run after the work callback settles, immediately before COMMIT is sent.
+ * They may inspect local authority/candidate state, never await or issue SQL. Session rows must already
+ * be locked and the database lease checked by the transaction's last SQL statement. */
+export function postgresItemCommitGuard(tx: ItemTransaction, current: () => boolean): void {
+  const state = clients.get(tx);
+  if (!state?.active) throw new Error('Item transaction is not active');
+  if (state.guards.length >= 16) throw new Error('Too many item commit guards');
+  state.guards.push(current);
+}
+
 export function createPostgresItemStore({ pool }: { pool: RealmDatabase }): ItemStore {
   const store: ItemStore = {
     async transaction<T>(kingdomId: KingdomId, work: (tx: ItemTransaction) => Promise<T>): Promise<T> {
       const client = await pool.connect();
-      const state = { client, active: true };
+      const state = { client, active: true, guards: [] as (() => boolean)[] };
       const callbacks: (() => void)[] = [];
       let commitSent = false;
       let uncertain = false;
@@ -70,7 +80,12 @@ export function createPostgresItemStore({ pool }: { pool: RealmDatabase }): Item
         await client.query('BEGIN');
         await client.query("SELECT pg_advisory_xact_lock(hashtextextended('chatdom.items:' || $1, 0))", [kingdomId]);
         const result = await work(tx);
+        // Commit guards are local checks only. Close even escaped query capabilities before invoking them,
+        // so a guard cannot sneak another SQL write behind a feature's declared final database fence.
         state.active = false;
+        // No await separates these local checks from sending COMMIT. A callback's resolved result
+        // alone does not prove that its controlling seat or retained authority is still current.
+        for (const current of state.guards) if (current() !== true) throw new Error('Item commit guard refused');
         commitSent = true;
         await client.query('COMMIT');
         for (const callback of callbacks) { try { callback(); } catch { /* commit is already durable */ } }
@@ -80,7 +95,7 @@ export function createPostgresItemStore({ pool }: { pool: RealmDatabase }): Item
         if (commitSent) { uncertain = true; throw new ItemCommitUncertainError(); }
         await client.query('ROLLBACK').catch(() => { uncertain = true; });
         throw error;
-      } finally { state.active = false; client.release(uncertain); }
+      } finally { state.active = false; state.guards.length = 0; client.release(uncertain); }
     },
     async get(id) { const r = await pool.query<{ record: ItemRecord; hidden: boolean }>("SELECT i.record, (h.person_id IS NOT NULL) AS hidden FROM realm_items i LEFT JOIN realm_item_hidden_names h ON h.person_id=i.record->'story'->'by'->>'personId' WHERE i.id=$1", [id]); const row = r.rows[0]; return row ? redactItem(row.record, new Set(row.hidden && row.record.story.by ? [row.record.story.by.personId] : [])) : null; },
     async list(ownerId: PersonId, kingdomId: KingdomId) { const r = await pool.query<{ record: ItemRecord; hidden: boolean }>("SELECT i.record, (h.person_id IS NOT NULL) AS hidden FROM realm_items i LEFT JOIN realm_item_hidden_names h ON h.person_id=i.record->'story'->'by'->>'personId' WHERE i.kingdom_id=$1 AND i.record->>'ownerId'=$2 ORDER BY i.id", [kingdomId, ownerId]); return r.rows.map(row => redactItem(row.record, new Set(row.hidden && row.record.story.by ? [row.record.story.by.personId] : []))); },

@@ -110,6 +110,9 @@ it('lands a fair fight as an immutable candidate without publishing a catch or g
   expect(beats).not.toContain('caught');
   const candidate = s.domain.candidate(person);
   expect(candidate).toMatchObject({ castId: id, personId: person, kingdomId, fish: { speciesId: fish.id }, result: { outcome: 'landed' } });
+  expect(candidate).toMatchObject({ castSeed: 1, anchor: [0, 1, 23.4], collisionRevision: 7 });
+  expect(s.domain.views()[0]).not.toHaveProperty('castSeed');
+  expect(s.domain.views()[0]?.fight).not.toHaveProperty('seed');
   expect(Object.isFrozen(candidate)).toBe(true); expect(Object.isFrozen(candidate!.inputs)).toBe(true);
   expect(candidate!.inputs.every(Object.isFrozen)).toBe(true);
   expect(s.domain.finish(person, id)).toBe(true);

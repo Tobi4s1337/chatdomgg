@@ -26,8 +26,8 @@ contribution run there. **The production kingdom layer is not mounted yet.** The
 `mountPierLayer(host)` to request at this checkpoint; section 3's eventual mount ask still applies once
 the fishing layer exists. Static timber renders through the ordinary founded placements already.
 
-At that physical checkpoint no room channel, fishing intent, public feed, clock mapping, bag or tool registration was added. It
-checkpoint does not change any existing API in sections 1–6. No other lane's SEAMS file is present here;
+At that physical checkpoint no room channel, fishing intent, public feed, clock mapping, bag or tool registration
+was added. That checkpoint changed no existing API in sections 1–6. No other lane's SEAMS file is present here;
 there is no additional cross-lane contract change to write into another scope.
 
 ## 1. The items API (pier provides; gather, forge-wish, play, raid-show and panel-window call it)
@@ -540,6 +540,52 @@ needs: integrator remove “Nothing has changed” from `REALM_SEAT_ENDINGS.unav
 `apps/realm/src/auth/seats.ts`. Exact replacement: “The kingdom could not check your session. Walk in again
 shortly to check your work.” This core file is outside the lane's allowed hooks. A session check can fail
 after an already committed request; reconnecting must always recover by listing, not assume rollback.
+
+### PI10 durable catch checkpoint — 2 November
+
+[Catch persistence](catch-persistence.md) freezes the implemented private writer API.
+`createPostgresFishingCatchWriter(options).keep(sender, castId)` takes a trusted sender and opaque cast id,
+never a browser candidate or replay. It obtains the current domain candidate, recomputes its species/size
+and fight from private seed, and writes catch, item, grant receipt and history through the same item store
+transaction. A personal species first is protected; later common/uncommon catches stack, and rare fish stay
+individual. Firsts are scoped by kingdom/species/origin and owner for personal firsts. The SQL has unique
+first indexes, exact five-column item/receipt linkage, record bounds and an append-only trigger.
+
+Options bind the actual retained `DurableKingdom` structural view (kingdomId, origin, writerEpoch, current),
+the single existing item store/service, authored catalogue/species, trusted pier name, domain candidate and
+finish functions, and `createPostgresFishingAdmission({pool, origin, readiness})`. The writer locks and checks
+the existing realm lease row at the beginning and end, using database time, without acquiring another writer
+or advancing realm sequence. It checks the actual entry/session policy on the same transaction connection.
+Admission explicitly locks person, then session, then entry, matching the API sign-in transaction. The
+approved name comes from the locked person row; a stale socket name is ignored.
+
+The item Postgres module adds `postgresItemCommitGuard(tx, current: () => boolean)`, for at most 16 synchronous
+local checks. All transaction/query capabilities close after the work callback settles and before guards
+run. The store then sends COMMIT with no await in between. Guards cannot query, and false or throw rolls back.
+The catch guard checks its original candidate and retained authority at that exact boundary. Session row
+locks and the last SQL lease fence remain required; this local guard replaces neither one.
+
+Only a `status: 'kept'` return permits the eventual adapter to publish catch success. Its private catch
+record includes proof and identities and must never be broadcast. Item replies are copied/frozen and
+redacted. A confirmed retry recovers by committed receipt before consulting a candidate, so it works after
+cast expiry or restart and returns a moved/spent item without granting again. Owner/kingdom/origin mismatch
+refuses privately. An uncertain COMMIT returns `status: 'uncertain'` with the same cast id; retry that id to
+resolve the ledger. Definite infrastructure failure is the existing typed unavailable error. Domain cleanup
+and item notifications happen only after confirmed commit.
+The future adapter must deliver the returned item privately after a fresh seat/auth check, including on a
+recovered receipt: an uncertain original commit deliberately emitted no item push. A reconnect can always
+recover through the existing paginated bag. Public presentation must deduplicate catches by their stable id.
+
+`0017c_realm_pier_catches.sql` was applied only to `pier` at the checked development endpoint after review
+and a fully rolled-back DDL dry run. Migrations 0017, 0017b and 0017c are frozen; the next is 0017d.
+needs: integrator migrate the intended release schema with the normal runner before starting this build,
+including 0017c. The lane did not migrate live data. The standard integration command remains
+`node --env-file-if-exists=.env apps/realm/scripts/migrate.mjs --schema realm`; the integrator owns its target.
+
+No fishing channel, public route, rod grant or content fixture is registered in production by this checkpoint.
+The eventual room adapter constructs this writer from its already retained kingdom and original cast domain;
+it must not instantiate another authority or pass arbitrary submitted proof. Full signed-in walk, observer,
+content and presentation evidence remain PI10 work. The item service is still the single process composition.
 
 ### 5a. The room channel hook (realm core; gather may reuse it)
 
