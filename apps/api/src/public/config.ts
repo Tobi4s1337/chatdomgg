@@ -15,6 +15,8 @@ export interface PublicConfig {
   readonly realm: { readonly mode: 'spawn' | 'proxy'; readonly target: ProxyTarget; readonly entry: string };
   readonly optional: { readonly herald: ProxyTarget | null; readonly map: ProxyTarget | null; readonly forge: ProxyTarget | null };
   readonly extension: { readonly clientId: string; readonly secret: string } | null;
+  /** Whether search engines may list the site (`PUBLIC_INDEXING`, closed unless set to open). See ./site.ts. */
+  readonly indexing: 'closed' | 'open';
 }
 
 const KINGDOM = /^([1-9][0-9]{0,31}):([a-z0-9_]{1,25})$/;
@@ -46,6 +48,9 @@ export function readPublicConfig(env: Record<string, string | undefined>, repoRo
   const clientId = env.TWITCH_EXTENSION_CLIENT_ID?.trim() ?? '', secret = env.TWITCH_EXTENSION_SECRET?.trim() ?? '';
   if (Boolean(clientId) !== Boolean(secret)) throw new Error('Set both TWITCH_EXTENSION_CLIENT_ID and TWITCH_EXTENSION_SECRET, or neither');
 
+  const indexing = env.PUBLIC_INDEXING?.trim() || 'closed';
+  if (indexing !== 'closed' && indexing !== 'open') throw new Error('PUBLIC_INDEXING must be closed or open');
+
   return {
     host: env.PUBLIC_HOST ?? '127.0.0.1', port, proto,
     webRoot: at(env.PUBLIC_WEB_ROOT ?? 'apps/web/dist'),
@@ -53,5 +58,16 @@ export function readPublicConfig(env: Record<string, string | undefined>, repoRo
     realm: { mode: existing ? 'proxy' : 'spawn', target: realmTarget, entry: at('apps/realm/dist/realm.mjs') },
     optional: { herald: optional('PUBLIC_HERALD_TARGET', '/presence-data'), map: optional('PUBLIC_MAP_TARGET', '/map-data'), forge: optional('PUBLIC_FORGE_TARGET', '/forge-data') },
     extension: clientId ? { clientId, secret } : null,
+    indexing,
   };
+}
+
+/**
+ * The simulated sign-in provider signs anyone in as anyone. It exists for development on a loopback origin, so the
+ * server refuses to start with it on an https origin, where real visitors could reach it.
+ */
+export function refuseSimulatedOnHttps(mode: 'live' | 'simulated', publicOrigin: string): void {
+  if (mode === 'simulated' && publicOrigin.startsWith('https:')) {
+    throw new Error('REALM_AUTH_MODE=simulated cannot serve an https REALM_PUBLIC_ORIGIN; the public origin needs live Twitch sign-in');
+  }
 }

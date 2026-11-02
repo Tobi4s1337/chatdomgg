@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readPublicConfig } from './config';
+import { readPublicConfig, refuseSimulatedOnHttps } from './config';
 
 const REPO = '/srv/chatdom';
 const BASE = { PUBLIC_KINGDOMS: '1001:tobi4s_' };
@@ -86,5 +86,26 @@ describe('the public server settings', () => {
   it('tells the realm the scheme visitors use, from the public origin', () => {
     expect(read({ REALM_PUBLIC_ORIGIN: 'https://chatdom.io' }).proto).toBe('https');
     expect(read({ REALM_PUBLIC_ORIGIN: 'http://localhost:5175' }).proto).toBe('http');
+  });
+
+  it('keeps the site out of search engines unless PUBLIC_INDEXING opens it', () => {
+    expect(read({}).indexing).toBe('closed');
+    expect(read({ PUBLIC_INDEXING: ' ' }).indexing).toBe('closed');
+    expect(read({ PUBLIC_INDEXING: 'closed' }).indexing).toBe('closed');
+    expect(read({ PUBLIC_INDEXING: ' open ' }).indexing).toBe('open');
+    for (const value of ['yes', 'OPEN', '1', 'index-secret']) refuses({ ...BASE, PUBLIC_INDEXING: value }, value, /PUBLIC_INDEXING must be closed or open/);
+  });
+});
+
+describe('the sign-in mode on the public origin', () => {
+  it('refuses simulated sign-in on an https origin', () => {
+    expect(() => refuseSimulatedOnHttps('simulated', 'https://chatdom.io')).toThrow(/REALM_AUTH_MODE=simulated cannot serve an https REALM_PUBLIC_ORIGIN/);
+    expect(() => refuseSimulatedOnHttps('simulated', 'https://localhost:5198')).toThrow(/simulated/);
+  });
+
+  it('allows live sign-in anywhere and simulated sign-in on loopback http', () => {
+    expect(() => refuseSimulatedOnHttps('live', 'https://chatdom.io')).not.toThrow();
+    expect(() => refuseSimulatedOnHttps('simulated', 'http://localhost:5198')).not.toThrow();
+    expect(() => refuseSimulatedOnHttps('simulated', 'http://127.0.0.1:5198')).not.toThrow();
   });
 });

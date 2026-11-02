@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Name faces · every script</title>
+<script type="module" src="./scripts.ts"></script>
+<style>
+  body { margin: 24px; font: 18px/1.5 Alegreya, Georgia, serif; background: #f3e6c6; color: #38261a; }
+  .row { display: flex; gap: 16px; align-items: baseline; }
+  .row > span:first-child { width: 9em; font-size: 14px; }
+  #lines > div { line-height: normal; }
+  .narrow { width: 5em; }
+</style>
+</head>
+<body>
+<!-- Names in every world script, laid out as the kit lays out names. scripts.ts fills #names and #lines and
+     reports what it measured to the check. -->
+<div id="names"></div>
+<div id="lines"></div>
+<canvas id="canvas" width="900" height="80"></canvas>
+</body>
+</html>

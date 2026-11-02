@@ -19,10 +19,19 @@
   /* Pressed wax, one colour per fact; the word always says the fact too. */
   --cd-wax-simulated: #a1402a; --cd-wax-connecting: #a07a3c; --cd-wax-live: #c4862c; --cd-wax-resting: #404c78; --cd-wax-lost: #5c6370;
   /* Type: storybook headings, readable bodies, small caps for labels. Product text never drops below 12 px. */
-  --cd-face-story: 'IM Fell English', Georgia, 'Times New Roman', serif;
-  --cd-face-label: 'IM Fell English SC', Georgia, 'Times New Roman', serif;
-  --cd-face-body: Alegreya, Georgia, 'Times New Roman', serif;
+  --cd-face-story: 'IM Fell English', Alegreya, var(--cd-face-world), Georgia, 'Times New Roman', serif;
+  --cd-face-label: 'IM Fell English SC', Alegreya, var(--cd-face-world), Georgia, 'Times New Roman', serif;
+  --cd-face-body: Alegreya, var(--cd-face-world), Georgia, 'Times New Roman', serif;
+  /* Every other script, from the self-hosted faces in fonts.css (`@chatdom/ui/fonts.css`). Without that sheet these
+     names match nothing and the stacks fall through to the system, exactly as before. */
+  --cd-face-world: 'Chatdom Arabic', 'Chatdom Hebrew', 'Chatdom Devanagari', 'Chatdom Thai', 'Chatdom JP', 'Chatdom KR', 'Chatdom TC', 'Chatdom SC';
   --cd-type-min: 12px; --cd-type-small: 13px; --cd-type-body: 14px; --cd-type-lead: 16px; --cd-type-title: 22px; --cd-type-display: 38px;
+  /* One type scale for the door, the Atlas, the card and the panel. Fixed steps for fittings and small surfaces
+     (a 318 px panel uses label to title); fluid steps for pages, which settle at their floor on a phone. */
+  --cd-size-label: 12px; --cd-size-note: 13.5px; --cd-size-small: 15px; --cd-size-body: clamp(16px, 1.05vw + 10px, 19px);
+  --cd-size-lead: clamp(18px, 1.2vw + 8px, 21px); --cd-size-title: clamp(21px, 1vw + 12px, 25px);
+  --cd-size-heading: clamp(30px, 3.5vw, 48px); --cd-size-display: clamp(44px, 5.6vw, 76px);
+  --cd-leading-tight: 1.05; --cd-leading-body: 1.5;
   --cd-label-tracking: .08em;
   /* Focus: a drawn brass wire just outside the fitting. */
   --cd-focus-width: 2px; --cd-focus-offset: 3px; --cd-focus: var(--cd-brass-hi);
@@ -85,6 +94,8 @@
 .cd-provenance-note { display: block; font: italic var(--cd-type-min)/1.15 var(--cd-face-body); color: var(--cd-ink-soft); }
 .cd-provenance-line + .cd-provenance-line { padding-top: 4px; border-top: 1px solid #9c7a4c40; }
 .cd-provenance-line[data-seal='lost'] .cd-provenance-word { color: var(--cd-ink-alarm); }
+/* An owner's own words on a staged surface may be a short sentence: they wrap inside the slip. */
+.cd-provenance-line[data-seal='simulated'] .cd-provenance-word { white-space: normal; font: italic var(--cd-type-small)/1.2 var(--cd-face-body); letter-spacing: 0; }
 .cd-provenance[data-provenance='lost'] { background:
     linear-gradient(90deg, #5c637018 0 18px, transparent 26px),
     radial-gradient(ellipse at 30% 15%, #f6eedc, transparent 75%),

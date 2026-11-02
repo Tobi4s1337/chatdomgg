@@ -70,7 +70,7 @@ function ClosedPassport(props: { state: keyof typeof CLOSED_WORDS; layout: BookL
       </div>
       <Show when={props.state === 'unavailable' && props.onRetry}>{retry =>
         <button type="button" class="pp-more-action pp-retry" onClick={() => retry()()}>Try again</button>}</Show>
-      <Show when={props.simulated}><ProvenanceSeal class="pp-provenance pp-provenance-cover" state="simulated" detail="an illustrative passport" /></Show>
+      <Show when={props.simulated}><ProvenanceSeal class="pp-provenance pp-provenance-cover" state="simulated" /></Show>
     </div>
   </section>;
 }

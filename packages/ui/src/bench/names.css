@@ -1,0 +1,36 @@
+/* The names bench: a dusk wash, then each piece that carries a name. */
+html, body { margin: 0; background: #1d2234; }
+.nb { min-height: 100vh; color: var(--cd-cream); font: var(--cd-size-body)/1.4 var(--cd-face-body);
+  background: radial-gradient(ellipse 90% 50% at 50% -10%, #e3a66b40, #8d7bb426 40%, transparent 70%), linear-gradient(180deg, #2b2645, #1d2036 40vh, #141726); }
+.nb-main { display: flex; flex-direction: column; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 28px clamp(14px, 3vw, 40px) 40px; box-sizing: border-box; }
+.nb-head { padding: 16px 24px 18px; }
+.nb-head h1 { margin: 4px 0 6px; font: 400 clamp(28px, 3vw, 40px)/1.05 var(--cd-face-story); }
+.nb-eyebrow { margin: 0; color: var(--cd-cream-soft); }
+.nb-lede { margin: 0; color: var(--cd-cream-soft); font-size: 16px; }
+.nb-h2 { margin: 0 0 12px; font: 400 var(--cd-size-title)/1.1 var(--cd-face-story); color: var(--cd-brass-hi); }
+.nb-seals { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 14px; }
+.nb-seal-open { padding-bottom: 116px; margin-right: 260px; }
+.nb-seal-open .cd-signin-who { left: 0; right: auto; }
+.nb-seal-open .cd-signin-who::before { left: 12px; right: auto; }
+.nb-marks { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; margin-top: 18px; }
+.nb-icons { display: inline-flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-radius: 9px; background: #00000033; }
+.nb-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 6px; color: var(--cd-brass-hi); background: #ffffff0d; font-size: 20px; }
+.nb-slips { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.nb-slip { position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 14px 14px 12px 22px; }
+.nb-slip-wax { position: absolute; left: -7px; top: 14px; width: 18px; height: 18px; border-radius: 46% 54% 50% 50%; background: radial-gradient(circle at 35% 30%, #c85d43, #a1402a 60%, #6f2615); box-shadow: 0 1px 0 #00000059; }
+.nb-slip p { margin: 0; }
+.nb-slip-kicker { color: var(--cd-ink-soft); }
+.nb-slip-name { margin: 2px 0 0; font-size: 22px; font-weight: 400; color: var(--cd-ink); }
+.nb-slip-home { color: var(--cd-ink); font-size: 15px; }
+.nb-slip-script { color: var(--cd-ink-soft); font: italic 13px/1.3 var(--cd-face-body); }
+.nb-line { margin: 16px 0 0; padding: 12px 16px; font-size: 17px; max-width: 760px; }
+.nb-line .cd-name { color: var(--cd-ink-alarm); }
+.nb-map { display: block; width: 100%; border-radius: 6px; box-shadow: 0 0 0 1px #9c7a4c66, 0 10px 26px #06040e80; }
+.nb-hiw { padding: 0 clamp(8px, 3vw, 40px) 48px; background: #141726; }
+@media (max-width: 700px) {
+  .nb-main { gap: 20px; padding-top: 16px; }
+  .nb-seal-open { margin-right: 0; padding-bottom: 120px; }
+  .nb-slips { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .nb-slip { padding: 12px 10px 10px 18px; }
+  .nb-slip-name { font-size: 19px; }
+}

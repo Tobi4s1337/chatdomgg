@@ -1,4 +1,8 @@
-/** Explicit development source. Production entry is owned by realm-wiring; it never falls back here. */
+/**
+ * Explicit development source: a staged rehearsal of a founded kingdom on the realm's reference room. It opens only
+ * on a development machine (the public gateway also refuses `source=simulated`), so nobody on chatdom.io meets
+ * staged people. Production entry is owned by realm-wiring; it never falls back here.
+ */
 import { KingdomPresenceFrameSchema, type PresenceFeed, type KingdomPresenceFrame } from '@chatdom/shared';
 import { RealmFoundedManifestSchema, RealmJoinSchema, REALM_FOUNDED_ROUTES, type RealmBootstrap, type RealmPublicDelivery } from '@chatdom/shared/realm';
 import type { RealmFoundedScene } from '@chatdom/world';
@@ -8,17 +12,24 @@ import type { KingdomEntrySource } from './types';
 import { observeRealm, observedRoom } from '../realm/adapters/observer';
 import { createRealmForgeFeed } from '../realm/adapters/forge-feed';
 import { createRoomChatFeed } from '../realm/adapters/chat';
+import { RealmEntryError } from '../realm/adapters/entry';
 
 const endpoint = () => `${location.origin}/realm-data`;
 async function read(path: string, signal: AbortSignal) {
   const response = await fetch(`${endpoint()}${path}`, { signal, cache: 'no-store' });
-  if (!response.ok) throw new Error('The simulated kingdom is not open.');
+  if (!response.ok) throw new Error('The rehearsal kingdom is not open.');
   return response;
 }
 
+/** A development machine: the browser is on loopback (a local preview or bench), or this is a dev build. */
+export function stagedEntryAllowed(hostname = location.hostname): boolean {
+  return import.meta.env.DEV || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
 export const openSimulatedKingdomEntry: KingdomEntrySource = async signal => {
-  const info: { kingdomId: string; kingdomName: string; origin: string; geometry: string; notice: string } = await (await read('/preview/entry', signal)).json();
-  if (info.origin !== 'simulated' || !info.kingdomName || !info.notice?.includes('SIMULATED')) throw new Error('The preview must describe its simulated source.');
+  if (!stagedEntryAllowed()) throw new RealmEntryError('refused', 'This rehearsal opens only on a development machine.');
+  const info: { kingdomId: string; kingdomName: string; origin: string; geometry: string; notice?: string } = await (await read('/preview/entry', signal)).json();
+  if (info.origin !== 'simulated' || !info.kingdomName) throw new Error('The preview must describe its staged source.');
   const manifest = RealmFoundedManifestSchema.parse(await (await read(REALM_FOUNDED_ROUTES.manifest.replace(':kingdomId', encodeURIComponent(info.kingdomId)), signal)).json());
   if (manifest.origin !== 'simulated' || manifest.kingdomId !== info.kingdomId || info.geometry !== 'founded-v1') throw new Error('The preview ground does not match its town.');
   const bytes = await (await read(REALM_FOUNDED_ROUTES.scene.replace(':sceneHash', manifest.sceneHash), signal)).arrayBuffer();
@@ -87,5 +98,5 @@ export const openSimulatedKingdomEntry: KingdomEntrySource = async signal => {
     if (frame) receive(frame); else unavailable();
     return () => listeners.delete(listener);
   } };
-  return { scene, manifest, collision, client, presenceFeed, forgeFeed, chatFeed, kingdomName: info.kingdomName, notice: info.notice, dispose };
+  return { scene, manifest, collision, client, presenceFeed, forgeFeed, chatFeed, kingdomName: info.kingdomName, ...(info.notice ? { notice: info.notice } : {}), dispose };
 };

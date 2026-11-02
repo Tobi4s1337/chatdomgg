@@ -144,11 +144,8 @@ export function citizenShareAlt(card: CitizenShareCard): string {
   } else if (book.kind === 'closed') {
     parts.push(`Beside it lies their passport, closed, with ${book.book.holder.name} on its cover and no journeys in it yet.`);
   }
-  if (simulatedOf(card)) parts.push('SIMULATED: an illustrative citizen, not a live one.');
   return parts.join(' ');
 }
-
-const simulatedOf = (card: CitizenShareCard) => card.origin === 'simulated' || (!card.passport.hidden && card.passport.book.origin === 'simulated');
 
 /* ---------- Markup ---------- */
 
@@ -287,9 +284,6 @@ export function composeCitizenShare(card: CitizenShareCard, options: CitizenShar
   const book = bookOf(card.passport);
   const title = `${card.name} of ${card.kingdom.name}`;
   const alt = citizenShareAlt(card);
-  const simulated = simulatedOf(card)
-    ? '<p class="sim" role="note"><b>SIMULATED</b><span>an illustrative citizen</span></p>'
-    : '';
   const motes = MOTES.map(([x, y, r, o]) => `<i style="left:${x}px;top:${y}px;width:${r * 2}px;height:${r * 2}px;opacity:${o}"></i>`).join('');
   const html = '<!doctype html><html lang="en"><head><meta charset="utf-8">'
     // The picture fetches nothing and runs nothing: fonts, marks and the portrait are inline, and the policy says so.
@@ -301,7 +295,7 @@ export function composeCitizenShare(card: CitizenShareCard, options: CitizenShar
     + passport(book) + plaque(card)
     + `<div class="motes" aria-hidden="true">${motes}</div>`
     + `<p class="mark"><span class="mark-word">Chatdom</span><span class="mark-site">${escapeMarkup(options.site ?? 'chatdom.gg')}</span></p>`
-    + `${simulated}</main></body></html>`;
+    + '</main></body></html>';
   return { html, title, alt, width: CITIZEN_SHARE_SIZE.width, height: CITIZEN_SHARE_SIZE.height };
 }
 
@@ -491,9 +485,5 @@ bdi{unicode-bidi:isolate}
 p.mark{position:absolute;z-index:10;right:26px;bottom:10px;display:flex;align-items:baseline;gap:10px;color:#e4c27a;text-shadow:0 1px 2px #000a}
 .mark-word{font:21px/1 ${CAPS};letter-spacing:.12em}
 .mark-site{font:italic 16px/1 ${TEXT};color:#d6bf98}
-.sim{position:absolute;z-index:10;left:18px;top:10px;display:flex;align-items:baseline;gap:8px;padding:6px 12px 7px;border-radius:5px;
-  background:linear-gradient(180deg,#a1402a,#7a2c1c);box-shadow:inset 0 1px 0 #ffd0b040,0 2px 6px #0008;color:#fbe9d6;transform:rotate(-1.3deg)}
-.sim b{font:17px/1 ${CAPS};letter-spacing:.1em}
-.sim span{font:italic 15px/1 ${TEXT};color:#f4d8c0}
 `;
 
