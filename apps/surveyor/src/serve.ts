@@ -13,6 +13,7 @@ import { LIVE_FILES, liveRoot, liveTargetDir, readLiveManifest, readLiveState } 
 import { DirectoryFallback } from './directory/fallback';
 import { LookupUnavailable, twitchLookupFromEnv, type TwitchLookup } from './directory/twitch-lookup';
 import { loadDirectory, type Directory, type DirectoryRefusal, type Lookup } from './directory/directory';
+import { createRoadRuntime, type RoadRuntimeOptions } from './roads/runtime';
 
 /**
  * The Atlas data service. It serves a fixed set of routes below /map-data from the current revision and nothing
@@ -78,6 +79,8 @@ interface NamesBody {
 }
 
 export interface AtlasServiceOptions {
+  /** Optional durable raid-show feed; recorder backfill uses this service's own verified imports. */
+  roads?: RoadRuntimeOptions;
   /** Optional public-read Twitch adapter; null disables lookup. */
   twitchLookup?: TwitchLookup | null;
   /** Trust only a loopback reverse proxy which overwrites X-Forwarded-For. */
@@ -581,15 +584,25 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
   server.requestTimeout = 10_000;
   server.headersTimeout = 5_000;
   current();
+  let roads: ReturnType<typeof createRoadRuntime>;
+  try {
+    roads = createRoadRuntime(dataDir, options.roads, log);
+  } catch (error) {
+    clearInterval(watcher);
+    twitch?.close();
+    throw error;
+  }
+  let closed: Promise<void> | undefined;
   return {
     server,
     revision: () => current()?.survey.revision ?? null,
-    close: () => new Promise((done) => {
+    close: () => closed ??= (async () => {
       clearInterval(watcher);
       twitch?.close();
       for (const clients of streams.values()) for (const res of clients.keys()) res.end();
-      server.close(() => done());
+      const stopped = new Promise<void>((done) => server.close(() => done()));
       server.closeAllConnections();
-    }),
+      await Promise.all([stopped, roads.close()]);
+    })(),
   };
 }

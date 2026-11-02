@@ -190,3 +190,18 @@ host prerequisite in the test only and names its evidence `with-bootstrap`;
 that evidence proves the consumer under the required host configuration, never
 production bootstrap completion. Provenance is in
 `work/evidence/atlas-map/am10-phone-final-provenance.json`.
+
+## Road-feed consumption checkpoint — 2 Nov, AM11
+
+The round's existing pull seam is now consumed by `apps/surveyor/src/roads/pull.ts`.
+Configure `ATLAS_RAID_FEED_URL` as the full raid-show `/realm/raid-roads` endpoint.
+Its `{version:1, items:AtlasRaid[], next:string|null}` reply and opaque cursor
+semantics are unchanged from raid-show's seam. The Atlas commits each page's tail
+cursor with its final observation in its own durable ledger; empty/short pages
+never reset history. Unconfigured or failed reads make no “no raids” assertion.
+This is adoption of the frozen pull contract, with no new route or shared type.
+
+The separate private POST and `createAtlasRoadIngress` client described above
+remain optional and are not implemented by this checkpoint. Public ledger routes
+and the gate finder are also not yet exposed. Operator adoption and remaining work
+are recorded in `AM11-durable-roads.md`.
