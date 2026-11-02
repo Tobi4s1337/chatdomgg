@@ -79,6 +79,12 @@ body.site { margin: 0; min-height: 100svh; color: var(--cd-cream); font: var(--s
   font: 17px/1 var(--cd-face-label); letter-spacing: var(--cd-label-tracking); }
 .story-way:hover { text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1px; }
 .story-caption-hero { position: absolute; right: var(--site-pad); bottom: 18px; }
+/* The hero's date follows its picture: the phone frame (the same media as its <source>) was drawn on its own day. */
+.story-drawn-phone { display: none; }
+@media (max-width: 700px) and (orientation: portrait) {
+  .story-drawn-wide { display: none; }
+  .story-drawn-phone { display: inline; }
+}
 /* Signed in, the seal itself offers the Atlas first, so the hero's own "Explore the map" steps aside. */
 .site-story[data-session='in'] .story-hero-ways > .story-way { display: none; }
 

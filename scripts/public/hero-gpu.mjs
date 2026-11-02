@@ -33,12 +33,15 @@ const root = resolve(import.meta.dirname, '../..');
 const HOUR = 18.2, TIME = 0;
 const FRAMES = [['hero-a', 120], ['hero-b', 90], ['hero-c', 150]];
 // The phone picture has a camera of its own: phones always get pictures, never the live land, so nothing has to match
-// it. The orbit view's portrait fit widens the lens to 62° and drops to ~10° under the clouds, which sets the hard
-// horizon line a third of the way down a phone. Steeper and closer puts the horizon under the header's shade and lets
-// the island fill the phone. `--portrait-camera yaw,pitch,dist` (repeatable) tries other framings: the first is
-// portrait.webp, the others portrait-<yaw>-<pitch>-<dist>.webp beside it.
+// it. The orbit view's portrait fit widens the lens to 62° and drops to ~10° under the clouds, which sets the sea's
+// hard far edge a quarter of the way down a phone. The cloud deck sits ~235 m up (the target is at 30 m), so the camera
+// must stay under ~200 m: higher, the coarse cloud slabs fill the frame (tried 24°/560 m and 19°/720 m, inside the
+// deck; 44°/900 m and 36°/800 m, above it, half the phone is cloud). Steep and close (32°, 320 m: 200 m up) looks
+// down over the mere, the falls and the fields with the sea fading into haze above the page's crop
+// (work/evidence/front-door/fd13/phone/). `--portrait-camera yaw,pitch,dist` (repeatable) tries other framings: the
+// first is portrait.webp, the others portrait-<yaw>-<pitch>-<dist>.webp beside it.
 const asked = args.flatMap((value, i) => (value === '--portrait-camera' ? [args[i + 1]] : []));
-const PORTRAITS = (asked.length ? asked : ['120,24,560']).map(text => String(text).split(',').map(Number));
+const PORTRAITS = (asked.length ? asked : ['120,32,320']).map(text => String(text).split(',').map(Number));
 if (PORTRAITS.some(camera => camera.length !== 3 || camera.some(value => !Number.isFinite(value)))) throw new Error('--portrait-camera takes yaw,pitch,dist');
 const portraitOnly = args.includes('--portrait-only');
 // The grand land's own engine view. grand-world is moving it to /-/grand-bench (and /-/grand becomes the live kingdom
@@ -143,11 +146,11 @@ try {
       const { context, tab } = await page(browser, width, height);
       const started = Date.now();
       await tab.goto(`${APP}${POSTER_PATH}?channel=tobi4s_&still=1&view=orbit&hour=${HOUR}&t=${TIME}&yaw=${yaw}${camera ? `&pitch=${camera.pitch}&dist=${camera.dist}` : ''}&tier=${POSTER_TIER}`, { waitUntil: 'domcontentloaded' });
-      await tab.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 120_000 });
+      await tab.waitForFunction(() => window.__chatdomReady === true, null, { timeout: POSTER_TIER === 'software' ? 240_000 : 120_000 });
       await sleep(2_500);
       // Kept as near-lossless WebP (the evidence stays small); scripts/public/site-pictures.mjs crops it for the page.
       const png = join(out, `${id}.png`), file = join(out, `${id}.webp`);
-      await tab.screenshot({ path: png });
+      await tab.screenshot({ path: png, timeout: 120_000 });
       execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', png, '-c:v', 'libwebp', '-quality', '94', '-compression_level', '6', file]);
       await rm(png);
       report.posters.push({ id, yaw, ...camera, width, height, seconds: (Date.now() - started) / 1000, file });

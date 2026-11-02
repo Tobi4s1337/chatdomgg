@@ -3,7 +3,9 @@
 // port, and runs hero-gpu.mjs against it with the build served on another capture port. The numbers it writes are
 // SwiftShader numbers: they prove the script runs end to end, never how fast the hero is.
 //
-//   node scripts/public/hero-gpu-rehearse.mjs --out /tmp/hero-gpu-rehearsal [--posters] [--timing]
+//   node scripts/public/hero-gpu-rehearse.mjs --out /tmp/hero-gpu-rehearsal [--posters] [--timing] [--lock-wait MIN]
+//
+// --lock-wait is how long to queue for the capture lock (default 20 minutes; the queue can hold a dozen captures).
 //
 // Build first (`node scripts/public/build.mjs --no-panel`). The hold is capped at five minutes.
 import { chromium } from '@playwright/test';
@@ -20,12 +22,15 @@ const free = port => new Promise(done => {
 });
 const HOLD_MS = 5 * 60_000;
 const passed = process.argv.slice(2);
+const waitAt = passed.indexOf('--lock-wait');
+const LOCK_WAIT_MIN = waitAt >= 0 ? Number(passed.splice(waitAt, 2)[1]) : 20;
+if (!(LOCK_WAIT_MIN > 0)) { console.error('hero-gpu rehearsal: --lock-wait takes minutes'); process.exit(2); }
 if (!passed.includes('--out')) passed.push('--out', '/tmp/hero-gpu-rehearsal');
 
 let release, browser, child;
 const finish = code => { child?.kill(); browser?.close().catch(() => undefined); release?.(); process.exit(code); };
 try {
-  release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(20 * 60_000) });
+  release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(LOCK_WAIT_MIN * 60_000) });
   setTimeout(() => { console.error('hero-gpu rehearsal: over its five-minute hold, stopped'); finish(124); }, HOLD_MS).unref();
   // Chosen once the lock is held: the queue can be long, and a port free before it may not be free after.
   const open = [];

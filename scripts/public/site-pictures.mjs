@@ -22,6 +22,9 @@ const evidence = join(root, 'work/evidence');
  * until they exist, the first captures from fd10. */
 const heroShots = join(root, 'work/evidence/front-door/fd13/gpu');
 const hero = (name, fallback) => (existsSync(join(heroShots, name)) ? join(heroShots, name) : fallback);
+/** The phone picture's own camera (yaw 120, pitch 32, 320 m: under the cloud deck, looking down over the mere with the
+ * sea's edge lost in the haze above the crop), first rendered off the lease; a GPU re-shoot above wins. */
+const phoneShot = join(root, 'work/evidence/front-door/fd13/phone/portrait-120-32-320.webp');
 
 const FULL = [1920, 1440, 960], FRAMED = [1280, 800], PANEL = [640, 400];
 /** id: source, crop [x, y, w, h] in source pixels, output widths, WebP quality. */
@@ -29,7 +32,7 @@ const PICTURES = [
   { id: 'hero-a', src: hero('hero-a.webp', `${gpu}/y120.webp`), crop: [0, 72, 1920, 1008], widths: FULL, quality: 72 },
   { id: 'hero-b', src: hero('hero-b.webp', `${gpu}/y90.webp`), crop: [0, 72, 1920, 1008], widths: FULL, quality: 72 },
   { id: 'hero-c', src: hero('hero-c.webp', `${gpu}/y150.webp`), crop: [0, 72, 1920, 1008], widths: FULL, quality: 72 },
-  { id: 'hero-phone', src: hero('portrait.webp', `${gpu}/portrait-a.webp`), crop: [0, 140, 780, 1548], widths: [780, 520], quality: 74 },
+  { id: 'hero-phone', src: hero('portrait.webp', existsSync(phoneShot) ? phoneShot : `${gpu}/portrait-a.webp`), crop: [0, 140, 780, 1548], widths: [780, 520], quality: 74 },
   { id: 'streets', src: `${stills}/1935-windows-haze.png`, crop: [12, 60, 1896, 940], widths: FULL, quality: 74 },
   { id: 'forge-a', src: `${stills}/0845-forge-crucible-pair.png`, crop: [8, 24, 944, 456], widths: [944, 640], quality: 80 },
   { id: 'forge-b', src: `${stills}/0845-forge-crucible-pair.png`, crop: [968, 24, 944, 456], widths: [944, 640], quality: 80 },

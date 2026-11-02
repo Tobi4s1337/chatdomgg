@@ -93,7 +93,8 @@ function startLivingHero(posters: PosterControl | null): void {
   const frames = hero?.querySelector<HTMLElement>('[data-hero-frames]');
   if (!hero || !frames || !posters || !liveLandAvailable()) return;
   const caption = hero.querySelector<HTMLElement>('.story-caption-hero');
-  const drawn = caption?.textContent ?? '';
+  // The caption's own nodes: the phone and the wide pictures were drawn on different days (site.css picks the date).
+  const drawn = caption ? [...caption.childNodes].map(node => node.cloneNode(true)) : [];
   const begin = async () => {
     const plan = chooseHeroPlan(readHeroEnvironment());
     hero.dataset.heroPlan = plan.kind === 'live' ? `live ${plan.tier}` : `still: ${plan.reason}`;
@@ -103,7 +104,8 @@ function startLivingHero(posters: PosterControl | null): void {
     await startLiveHero(hero, frames, posters, {
       tier: plan.tier, watch: plan.reason !== 'asked for the live land', motion: plan.tier !== 'software',
       onState: (state, detail) => {
-        if (caption) caption.textContent = state === 'live' ? `The land of ${HERO_CHANNEL} at dusk · drawn live in your browser` : drawn;
+        if (state === 'live') caption?.replaceChildren(`The land of ${HERO_CHANNEL} at dusk · drawn live in your browser`);
+        else caption?.replaceChildren(...drawn.map(node => node.cloneNode(true)));
         if (state === 'still' && detail) console.info(`The live land stepped back to its pictures: ${detail}.`);
       },
     });
