@@ -69,7 +69,11 @@ const glowVertex = /* glsl */ `
     #else
       vSpot = position.xy * 2.0;
       vec4 centre = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-      gl_Position = projectionMatrix * (centre + vec4(position.xy * length(instanceMatrix[0].xyz), 0.0, 0.0));
+      float nearScale = 1.0;
+      #ifdef NEAR_FROM
+        nearScale = smoothstep(NEAR_FROM, NEAR_TO, length(centre.xyz));
+      #endif
+      gl_Position = projectionMatrix * (centre + vec4(position.xy * length(instanceMatrix[0].xyz) * nearScale, 0.0, 0.0));
     #endif
   }
 `;
@@ -91,10 +95,12 @@ class Glows {
   private readonly matrix = new THREE.Matrix4();
   private readonly scratch = new THREE.Color();
   count = 0;
-  constructor(parent: THREE.Group, readonly capacity: number, flat: boolean, name: string) {
+  /** `near` (m): a camera-facing glow shrinks away between these distances from whichever eye draws it. */
+  constructor(parent: THREE.Group, readonly capacity: number, flat: boolean, name: string, near?: NearFade) {
     const geometry = new THREE.PlaneGeometry(1, 1);
     if (flat) geometry.rotateX(-Math.PI / 2);
-    this.material = new THREE.ShaderMaterial({ vertexShader: glowVertex, fragmentShader: glowFragment, defines: flat ? { FLAT: '' } : {},
+    this.material = new THREE.ShaderMaterial({ vertexShader: glowVertex, fragmentShader: glowFragment,
+      defines: { ...(flat ? { FLAT: '' } : {}), ...(near ? nearDefines(near) : {}) },
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false, side: THREE.DoubleSide });
     this.mesh = new THREE.InstancedMesh(geometry, this.material, capacity);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -117,6 +123,15 @@ class Glows {
   dispose(): void { this.mesh.removeFromParent(); this.mesh.geometry.dispose(); this.mesh.dispose(); this.material.dispose(); }
 }
 
+/**
+ * Lights that drift free of the column (sky lanterns) can rise straight past whichever eye draws them: the gate shot
+ * stands over the street, a walking guest stands in it. Within `[from, to]` metres of that eye they shrink away on the
+ * GPU, so a lantern never fills the lens as a giant block, whatever camera the scene picked.
+ */
+type NearFade = readonly [from: number, to: number];
+const nearDefines = ([from, to]: NearFade) => ({ NEAR_FROM: from.toFixed(2), NEAR_TO: to.toFixed(2) });
+export const RAID_SKY_NEAR: NearFade = [3, 8];
+
 /** Fire and lamp flames: small cubes of plain HDR light (they feed the bloom), coloured per instance. */
 class Cores {
   readonly mesh: THREE.InstancedMesh;
@@ -127,7 +142,17 @@ class Cores {
   private readonly scale = new THREE.Vector3();
   private readonly scratch = new THREE.Color();
   count = 0;
-  constructor(parent: THREE.Group, readonly capacity: number) {
+  constructor(parent: THREE.Group, readonly capacity: number, near?: NearFade) {
+    if (near) {
+      this.material.defines = nearDefines(near);
+      this.material.onBeforeCompile = shader => {
+        shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', /* glsl */ `
+          vec3 nearCentre = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+          transformed *= smoothstep(NEAR_FROM, NEAR_TO, distance(nearCentre, cameraPosition));
+          #include <project_vertex>`);
+      };
+      this.material.customProgramCacheKey = () => `raid-near-${near[0]}-${near[1]}`;
+    }
     this.mesh = new THREE.InstancedMesh(this.geometry, this.material, capacity);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
@@ -140,6 +165,14 @@ class Cores {
     this.mesh.setMatrixAt(this.count, this.matrix.compose(at, this.turn.setFromAxisAngle(UP, yaw), this.scale.set(size, size * tall, size)));
     this.mesh.setColorAt(this.count, this.scratch.copy(colour).multiplyScalar(strength));
     this.count++;
+  }
+  /**
+   * A flame or lamp going out. These cores are unlit and opaque, so darkening one leaves a black block in the air
+   * (a fading sky lantern read as a black cube); a fading light shrinks instead and stays warm until it is gone.
+   */
+  fade(at: THREE.Vector3, size: number, yaw: number, colour: THREE.Color, strength: number, fade: number, tall = 1): void {
+    const f = Math.max(0, Math.min(1, fade));
+    this.push(at, size * f, yaw, colour, strength * (0.8 + 0.2 * f), tall);
   }
   flush(): void {
     this.mesh.count = this.count; this.mesh.visible = this.count > 0;
@@ -201,8 +234,8 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
   const torchCores = new Cores(layer, RAID_VIEW_LIMITS.torchCores);
   const torchGlows = new Glows(layer, RAID_VIEW_LIMITS.torches, false, 'raid-torch-glows');
   const torchPools = new Glows(layer, RAID_VIEW_LIMITS.torches, true, 'raid-torch-pools');
-  const skyCores = new Cores(layer, RAID_VIEW_LIMITS.sky);
-  const skyGlows = new Glows(layer, RAID_VIEW_LIMITS.sky, false, 'raid-sky-glows');
+  const skyCores = new Cores(layer, RAID_VIEW_LIMITS.sky, RAID_SKY_NEAR);
+  const skyGlows = new Glows(layer, RAID_VIEW_LIMITS.sky, false, 'raid-sky-glows', RAID_SKY_NEAR);
   /** Torch sites per raid, chosen once from supported ground beside the actual street; never re-guessed per frame. */
   const avenues = new Map<string, { at: THREE.Vector3; pair: number }[]>();
   let torchSites: Vec3[] = [];
@@ -332,7 +365,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
       const phase = (((atMs / 1000 + k * 0.29 + (sign > 0 ? 0.13 : 0)) / 1.8) % 1 + 1) % 1;
       point.copy(coals).addScaledVector(UP, 0.3 + phase * 2.4);
       point.x += Math.sin(k * 2.1 + phase * 3) * 0.25; point.z += Math.cos(k * 1.3 + phase * 2.2) * 0.2;
-      cores.push(point, 0.05 * (1 - phase * 0.6), k, EMBER, 1.6 * (1 - phase) * Math.min(1, flame));
+      cores.fade(point, 0.05 * (1 - phase * 0.6), k, EMBER, 1.6, (1 - phase) * Math.min(1, flame));
     }
   }
 
@@ -410,7 +443,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
         .addScaledVector(spot.tangent, 0.12 * s).addScaledVector(UP, 2.4 + SKY.rise * s + 0.04 * s * s);
       const opacity = Math.min(1, age / 700) * Math.min(1, (SKY.life - age) / 3200);
       const flicker = 1 + 0.08 * Math.sin(atMs * 0.009 + j * 1.3 + index);
-      skyCores.push(point, 0.17, h * TAU, SKY_LANTERN, 1.35 * flicker * opacity, 1.45);
+      skyCores.fade(point, 0.17, h * TAU, SKY_LANTERN, 1.35 * flicker, opacity, 1.45);
       skyGlows.push(point, 1.15, SKY_GLOW, 0.3 * flicker * opacity);
       counts.skyLanterns++;
     }
@@ -527,7 +560,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
         // The two panes are authored in rack-local cells. Follow the complete fitted transform on bends.
         for (const x of [2, 5]) {
           point.copy(cells(x, 5.5, 2.5)).applyMatrix4(m);
-          cores.push(point, 0.105, index, LAMP, 1.5 * fade);
+          cores.fade(point, 0.105, index, LAMP, 1.5, fade);
         }
         point.copy(cells(3.5, 5.5, 2.5)).applyMatrix4(m);
         glows.push(point, 1.0, LAMP_GLOW, 0.22 * fade);
@@ -546,7 +579,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     // Its lantern, and the warm light it carries along the street.
     const [lx, ly, lz] = RAID_WAGON_CELLS.lantern, flicker = 1 + 0.06 * Math.sin(atMs * 0.011 + index * 1.9);
     point.copy(cells(lx - px, ly, lz - pz)).applyMatrix4(w);
-    cores.push(point, 0.11, index, LAMP, 1.7 * flicker * fade);
+    cores.fade(point, 0.11, index, LAMP, 1.7 * flicker, fade);
     glows.push(point, 1.5, LAMP_GLOW, 0.42 * flicker * fade);
     lightPools.push(b.copy(at).addScaledVector(s3.set(dx, 0, dz).normalize(), 1.3).addScaledVector(UP, 0.05), 3.6, LAMP_POOL, 0.16 * fade);
     return true;
