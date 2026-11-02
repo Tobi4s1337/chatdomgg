@@ -4,52 +4,21 @@ import { referenceServices } from './reference';
 import { assertRealmSchema, createRealmPool, describeStorageFailure,
   realmDatabaseConfig } from './persistence';
 import { INGRESS_ROUTE, ingressCredentials } from './ingress';
-import { RealmPanelGifts, RealmPanelService, mountRealmPanelRoutes } from './ingress/panel';
-import { ForgetGuard, RealmChatPrivacy, createQuietDisclosure, disclosedServices, mountChatPrivacyRoute } from './ingress/panel';
-import { createMonarchRoomChannel, createPostgresMonarchTitles, withMonarchArrival } from './monarch';
-import { RealmPanelSettings } from './ingress/panel/settings';
 import { HEALTH_ROUTE, READY_ROUTE } from './diagnostics';
 import { TenureEvidenceVerifier, tenureEvidenceKey } from './allocation';
 import { createDurableRealmBoot, mountEntryRoutes, mountRealmWatchRoutes } from './bootstrap';
 import { RealmEntryInfoSchema } from '@chatdom/shared/realm';
 import { join } from 'node:path';
 import { ForgeWriteGate, FileForgeApprovals } from './wiring';
-import { mountEveningRoutes } from './evening';
-import { RaidChatBridge } from './raid-gate/raid-chat-bridge';
-import { RaidChatPresentation } from './raid-gate/raid-chat-presentation';
-import { mountRaidChatRead } from './raid-gate/raid-chat-http';
-import { mountForgeQueueRoutes } from './forge-queue/http';
-import { forgeLedgerSource, mountForgeLedgerRoutes } from './forge-ledger/http';
+import { RealmEveningBridge, mountEveningRoutes } from './evening';
 import { createRealmCitizens } from './evening/citizens';
 import { createRealmCastle } from './evening/castle';
 import { attachEveningInteractions } from './evening/interactions';
 import { createServer as createPortReservation } from 'node:net';
 import { realmListenHost, realmListenPort } from './listen-port';
 import { ownRealmShutdown } from './lifecycle';
-import { composeRealmItems } from './items/compose';
-import { createItemRoomChannel } from './items/channel';
-import { createPostgresItemAdmission } from './items/entry';
-import { mountRaidShowRoutes } from './raid-gate/http';
-import { mountChatCommandRoute, realmChatCommands } from './raid-gate/chat-commands';
-import { RaidCrierAuthority } from './raid-gate/crier';
-import { mountRaidCrierRoutes } from './raid-gate/crier-http';
-import { RaidGuestAuthority } from './raid-gate/guests';
-import { createRaidGuestRuntime } from './raid-gate/guest-runtime';
-import { createRaidGuestSpawn } from './raid-gate/guest-spawn';
-import { createRealmForgeChat } from './wiring/forge-chat-runtime';
-import { createShelfRoomChannel, shelfHomes } from './items/shelf';
-import { itemCatalogue } from './items';
-import { createDurableFishingChannel } from './fishing/durable';
-import { fishingSpecies } from './fishing/content';
-import { installGatherStore, createPostgresGatherStore } from './games/store';
-import { installTavernReturns } from './games/return';
 import { RealmPortalArrivals, installPortalArrivals } from './portals/arrivals';
-import { RealmRoomTravel } from './raid-gate/room-travel';
-import { createRealmRoomDoor } from './raid-gate/room-door';
-import { createRealmPier } from './fishing/pier';
-import { mountPierRoutes } from './fishing/routes';
-import { Campfires, installCampfires, createPostgresFireStore, campfireChatCommands } from './campfire';
-import { createRealmLooks } from './look';
+import { createHomePlaces, createRealmLooks } from './look';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -68,8 +37,6 @@ async function serve() {
   const port = realmListenPort(process.env);
   // uWS permits SO_REUSEPORT. Two local builds on one port would split entry and sockets between worlds.
   const reservation = createPortReservation();
-  // A connection accepted during boot (a health probe, a browser retry) would hold close() open forever.
-  reservation.on('connection', socket => socket.destroy());
   await new Promise<void>((resolve, reject) => {
     reservation.once('error', () => reject(new Error(`Realm port ${port} is already in use; choose a free REALM_PORT.`)));
     reservation.listen({ port, host, exclusive: true }, resolve);
@@ -94,7 +61,6 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const config = realmDatabaseConfig();
   const pool = createRealmPool(config);
   try { await assertRealmSchema(pool); } catch (error) { await pool.end(); throw error; }
-  const itemFoundation = composeRealmItems(pool);
   const credentials = ingressCredentials();
   const gate = new ForgeWriteGate();
   const approvals = new FileForgeApprovals(join(foundedDirectory, 'forge-approvals'));
@@ -107,122 +73,47 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   }
   const castle = createRealmCastle({ origin, kingdomNames: names, safetyKey: evidenceKey });
   const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names, castle: castle.observe, evidenceKey });
-  const guestAuthority = new RaidGuestAuthority({ pool, origin, clock: Date.now });
-  const raidChat = new RaidChatPresentation({ origin, clock: Date.now });
-  const roomTravel = new RealmRoomTravel({ pool, origin, clock: Date.now });
-  const roomDoor = createRealmRoomDoor({ travel: roomTravel, rooms: { founded: async id => !!await boot.allocation.currentLayout(id), retain: id => boot.services.retain(id),
-    scene: id => { const prepared = boot.loader.current(id); return prepared ? { world: prepared.world, plan: prepared.scene.plan } : undefined; } } });
-  const raidGuests = createRaidGuestRuntime({ authority: guestAuthority, origin, marchers: roomTravel, citizens: input => citizens.observe(input), log: line => console.info(line),
-    chatPresented: (input, result) => raidChat.observe(input, result) });
-  // The grand land: bound to each founded receipt before it is public, baked in a niced child for a new plan.
-  const land = process.env.REALM_LAND_DIRECTORY ? await (await import('./land/realm')).openRealmLand(process.env.REALM_LAND_DIRECTORY, line => console.info(line)) : null;
-  const campfires = new Campfires({ store: createPostgresFireStore(pool) });
-  // Chat's `!sus` reaches the burning fire through the herald's chat-command registry.
-  const unregisterCampfireChat = realmChatCommands.register(campfireChatCommands(campfires));
   // Saved looks: GET/PUT /api/realm/looks/…, checked against verified records, worn live by walkers already in a room.
   const looks = createRealmLooks({ pool, origin, verifier, names, scene: kingdomId => boot.loader.current(kingdomId)?.scene,
     publicOrigin: process.env.REALM_PUBLIC_ORIGIN, log: line => console.info(line) });
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
-    ...(land ? { beforeFoundedPublication: land.beforePublication } : {}),
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
     repositoryOptions: gate.install({ origin, guards: [castle.guard] }), furnish: citizens.furnish,
     attach: kingdom => {
       const detachLooks = looks.attach(kingdom);
-      const detachGuests = raidGuests.attach(kingdom), detachDoor = roomDoor.attach(kingdom);
-      const clearRaidChat = () => raidChat.clear(kingdom.kingdomId), detachRaidChat = kingdom.onClosed(clearRaidChat);
       const detachEvening = evening.attach(kingdom);
-      const fire = campfires.fire(kingdom.kingdomId), detachLive = fire.bindLive(() => kingdom.current && kingdom.privateState.stream.liveUntil > Date.now());
       const detachInteractions = attachEveningInteractions(kingdom, { auth: boot.services.auth,
-        scene: () => boot.loader.current(kingdom.kingdomId)?.scene, campfire: fire.seats });
-      return () => { clearRaidChat(); detachRaidChat(); detachDoor(); detachGuests(); detachInteractions(); detachLive(); detachEvening(); detachLooks(); };
+        scene: () => boot.loader.current(kingdom.kingdomId)?.scene });
+      return () => { detachInteractions(); detachEvening(); detachLooks(); };
     },
   });
-  Object.assign(boot.services, { channels: [...(boot.services.channels ?? []), createItemRoomChannel(itemFoundation.items, createPostgresItemAdmission({ pool, origin, readiness: boot.readiness }))] });
-  Object.assign(boot.services, { auth: roomDoor.fence(boot.services.auth), prepareSpawn: createRaidGuestSpawn({ authority: guestAuthority, marchers: roomTravel, current: (kingdomId) => {
-    const held = boot.services.kingdoms.get(kingdomId), founded = boot.loader.current(kingdomId);
-    return held?.current && founded ? { world: held.world, layoutRevision: held.layoutRevision,
-      writerEpoch: held.writerEpoch, plan: founded.scene.plan } : undefined;
-  } }) });
-  // The keepsake shelf at home and the belt's order: homes and doors from the kingdom's own deeds and adopted plan.
-  Object.assign(boot.services, { channels: [...boot.services.channels!, createShelfRoomChannel({ items: itemFoundation.items,
-    admit: createPostgresItemAdmission({ pool, origin, readiness: boot.readiness }), homes: id => {
-      const kingdom = boot.services.kingdoms.get(id), plan = boot.loader.current(id)?.scene.plan;
-      return kingdom && plan ? shelfHomes(plan, kingdom.privateState.homes, kingdom.layoutRevision) : [];
-    } })] });
-  // The monarch: the verified broadcaster steps out at the castle gate, crowned with the title they chose (monarch/).
-  const monarchTitles = createPostgresMonarchTitles(pool, origin);
-  Object.assign(boot.services, { monarch: monarchTitles, channels: [...boot.services.channels!, createMonarchRoomChannel(monarchTitles)], prepareSpawn: withMonarchArrival(boot.services.prepareSpawn, kingdomId => {
-    const held = boot.services.kingdoms.get(kingdomId), founded = boot.loader.current(kingdomId);
-    return held?.current && founded ? { world: held.world, layoutRevision: held.layoutRevision, writerEpoch: held.writerEpoch, plan: founded.scene.plan } : undefined;
-  }) });
-  // Fishing opens only where its pier layer is drawn: REALM_PIER_FISHING=1 once the kingdom view mounts it.
-  const pierVisible = process.env.REALM_PIER_FISHING === '1';
-  const pierWhere = (id: string) => names.has(id) ? `${names.get(id)} pier` : 'the pier';
-  // Chat's `!fish`, the stream's pier feed and the public Almanac: the same pier, the same gate.
-  const pier = createRealmPier({ pool, origin, store: itemFoundation.store, items: itemFoundation.items, catalogue: itemCatalogue,
-    species: fishingSpecies, visible: () => pierVisible, scene: id => boot.loader.current(id)?.scene ?? null,
-    authority: id => boot.services.kingdoms.get(id) ?? null, where: pierWhere, kingdomName: id => names.get(id) ?? 'This kingdom' });
-  Object.assign(boot.services, { channels: [...boot.services.channels!, createDurableFishingChannel({ pool, origin, store: itemFoundation.store,
-    items: itemFoundation.items, catalogue: itemCatalogue, species: fishingSpecies, readiness: boot.readiness,
-    authority: id => boot.services.kingdoms.get(id) ?? null, scene: id => boot.loader.current(id)?.scene ?? null,
-    visible: () => pierVisible, where: pierWhere, pier })] });
   citizens.use(boot.allocation, boot.services);
-  land?.knowFounded(kingdomId => boot.allocation.currentLayout(kingdomId));
-  // Forgotten people are left out before the raid-guest guard and settlement see them.
-  const forgetGuard = new ForgetGuard(pool, origin);
-  boot.ingress.moments.useSettler(forgetGuard.settler(raidGuests.guardSettler(citizens)));
+  boot.ingress.moments.useSettler(citizens);
   castle.use(boot.allocation, boot.store);
-  const forgeChat = await createRealmForgeChat({ pool, origin, services: boot.services, founded: id => !!boot.loader.current(id)?.scene });
-  const evening = new RaidChatBridge({ origin, ingress: boot.ingress, gate, approvals, raidChat,
-    forgeChatObserver: forgeChat.observe,
-    current: kingdomId => boot.services.kingdoms.get(kingdomId)?.current === true,
-    forgeQueue: { directory: join(foundedDirectory, 'forge-queue') },
-    beforeObservation: input => forgetGuard.run(input, kept => raidGuests.observe(kept)),
-    ...(pierVisible ? { chatCommands: pier.chatCommands } : {}) });
+  const evening = new RealmEveningBridge({ origin, ingress: boot.ingress, gate, approvals,
+    beforeObservation: input => citizens.observe(input) });
   evening.use(boot.services);
   const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
   dock.use(boot.services);
-  installGatherStore(boot.services, createPostgresGatherStore(pool));
-  installTavernReturns(boot.services, kingdomId => boot.loader.current(kingdomId)?.scene);
-  installCampfires(boot.services, campfires);
   // Doors out of the kingdom (the tavern's) register their outside here; coming back stands you outside them.
   const doors = new RealmPortalArrivals(); installPortalArrivals(boot.services, doors);
-  const panel = new RealmPanelService({ settings: new RealmPanelSettings({ db: pool, services: boot.services, origin }), gifts: new RealmPanelGifts({ db: pool, services: boot.services, origin }), db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded, projection: true, guard: forgetGuard });
-  const chatPrivacy = new RealmChatPrivacy({ db: pool, origin, secret: credentials.herald, services: boot.services, allocation: boot.allocation, guard: forgetGuard });
-  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); mountRealmPanelRoutes(app, panel); mountChatPrivacyRoute(app, chatPrivacy); } });
-  const raidShow = mountRaidShowRoutes(transport.app, { pool, origin, credentials, clock: Date.now, moment: observation => boot.ingress.moments.acceptMoment(observation), walkers: raidGuests.walkerOf,
-    door: { transport: roomDoor.transport, secret: process.env.REALM_INTERNAL_SECRET } });
-  const chatCommands = mountChatCommandRoute(transport.app, { registry: realmChatCommands, origin, credentials, clock: Date.now });
-  const raidCrier = process.env.REALM_PUBLIC_ORIGIN ? mountRaidCrierRoutes(transport.app, { origin, credentials, authority: new RaidCrierAuthority({ pool, origin, publicOrigin: process.env.REALM_PUBLIC_ORIGIN, clock: Date.now }) }) : null;
+  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); } });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
-  mountRealmWatchRoutes(transport.app, { services: disclosedServices(boot.services, createQuietDisclosure({ db: pool, origin })), founded: boot.founded, loader: boot.loader });
-  const raidChatRead = mountRaidChatRead(transport.app, { origin, presentation: raidChat, current: kingdomId => boot.services.kingdoms.get(kingdomId)?.current === true });
-  forgeChat.mount(transport.app);
-  land?.mount(transport.app);
-  mountForgeQueueRoutes(transport.app, evening.line, { pool, origin, secureCookies: new URL(process.env.REALM_PUBLIC_ORIGIN ?? 'http://localhost:5190').protocol === 'https:' });
-  mountPierRoutes(transport.app, pier);
-  mountForgeLedgerRoutes(transport.app, forgeLedgerSource(boot.services));
-  looks.mount(transport.app);
+  mountRealmWatchRoutes(transport.app, boot);
+  // "Take your place" from the web game: the panel's claim, for the signed-in session's own person.
+  looks.mount(transport.app, { places: createHomePlaces({ db: pool, origin, services: boot.services, allocation: boot.allocation, citizens,
+    log: line => console.info(line) }) });
   ownRealmShutdown(server, transport, async () => {
-    pier.dispose();
-    itemFoundation.dispose();
-    dock.stop(); unregisterCampfireChat(); campfires.dispose();
-    await land?.stop();
-    raidChatRead.close();
-    await raidShow.close();
-    await chatCommands.close();
-    await raidCrier?.close();
-    try { await forgeChat.stop(); }
-    finally { try { await evening.stop(); } finally { try { await boot.stop(); } finally { await raidGuests.close(); await pool.end(); } } }
+    dock.stop();
+    try { await evening.stop(); }
+    finally { try { await boot.stop(); } finally { await pool.end(); } }
   });
   try {
     await boot.readiness.start();
-    await evening.start();
-    await forgeChat.start();
     await releasePort();
     await server.listen(port, host);
-  } catch (error) { pier.dispose(); itemFoundation.dispose(); dock.stop(); unregisterCampfireChat(); campfires.dispose(); raidChatRead.close(); await raidShow.close(); await chatCommands.close(); await raidCrier?.close(); await forgeChat.stop(); await evening.stop(); await boot.stop(); await raidGuests.close(); await pool.end(); throw error; }
+  } catch (error) { dock.stop(); await evening.stop(); await boot.stop(); await pool.end(); throw error; }
   console.info(`${simulated ? 'SIMULATED' : 'LIVE'} realm on ${port}: adopted durable Postgres kingdoms in schema "${config.schema}"; `
     + (boot.ingress.gate.configured ? `service ingress at POST ${INGRESS_ROUTE} (${Object.keys(credentials).join(', ')})` : 'service ingress closed (no REALM_INGRESS_*_SECRET)')
     + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}; current approved geometry only`);

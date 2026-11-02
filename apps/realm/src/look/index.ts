@@ -9,6 +9,7 @@ import { createRealmLookRecords, royalStandardColours } from './entitlements';
 import { mountLookRoutes } from './http';
 import type { LookOrigin } from './ports';
 import { PostgresLookRepository } from './postgres-repository';
+import type { HomePlaces } from './place';
 import { attachLookPresentation, type LookPresentationHost } from './presentation';
 import { createPostgresLookSessions, lookSessionCookie } from './session';
 import { LookStore, type LookStoreOptions, type WardrobeGrantInput } from './store';
@@ -21,6 +22,7 @@ export {
 export { PostgresLookRepository } from './postgres-repository';
 export { LookStore, LOOK_REASONS, LOOK_STORE_LIMITS, refusal, type LookRefusal, type LookSaveOutcome, type WardrobeGrantInput } from './store';
 export { mountLookRoutes } from './http';
+export { HOME_PLACE_REASONS, createHomePlaces, homePlaceOf, placeRefusal, type HomePlaceOutcome, type HomePlaces } from './place';
 export { attachLookPresentation, type LookPresentationHost, type LookPresentationSource } from './presentation';
 export { createPostgresLookSessions, csrfFor, lookSessionCookie, readCookie } from './session';
 export { createRealmLookRecords, entitlementsFrom, royalStandardColours, wholeMonths, ROYAL_STANDARD_PLACEMENT } from './entitlements';
@@ -84,7 +86,9 @@ export function createRealmLooks(input: {
   return {
     store,
     citizen,
-    mount: (app: App) => mountLookRoutes(app, { store, sessions, citizen, ...(input.log ? { log: input.log } : {}) }),
+    /** `places` turns on "Take your place" (`POST /api/realm/looks/place`); without it that route answers unavailable. */
+    mount: (app: App, extra: { readonly places?: HomePlaces } = {}) => mountLookRoutes(app, { store, sessions, citizen,
+      ...(extra.places ? { places: extra.places } : {}), ...(input.log ? { log: input.log } : {}) }),
     attach: (kingdom: LookPresentationHost) => attachLookPresentation(kingdom, store, input.log),
     stop: uninstall,
   };

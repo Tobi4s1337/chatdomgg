@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { KingdomIdSchema } from '@chatdom/shared';
 import type { ForgedSource, ForgedThing, PlayContext } from '../slots';
-import { CARD_WORDS, cardDate, cardView, citizenFactsOf, initialOf, loadCitizenFacts, loadForged } from './facts';
+import { CARD_WORDS, canTakePlace, cardDate, cardView, citizenFactsOf, initialOf, loadCitizenFacts, loadForged, takePlace, type CitizenFactsResult } from './facts';
 import { FIXTURE_KINGDOM, FIXTURE_PICTURE, cardFixtureFetcher, fixtureFacts } from './fixture';
 
 /*
@@ -112,5 +112,36 @@ describe('the forged shelf', () => {
     await loadForged({ id: 'spy', mine: async (c, s) => { seen = { ctx: c, signal: s }; return [thing('a', 1)]; } }, ctx, pageSignal);
     expect(seen).toEqual({ ctx, signal: pageSignal });
     expect(KingdomIdSchema.safeParse(ctx.kingdomId).success).toBe(true);
+  });
+});
+
+describe('taking your place', () => {
+  const session = { version: 1, status: 'authenticated', expiresAt: Date.now() + 60_000, resumeScope: 'r'.repeat(16), csrfToken: 'c'.repeat(43) };
+  const granted = { version: 1, ok: true, fresh: true, home: { kingdomId: FIXTURE_KINGDOM, plotId: 'plot-4', street: 'Lantern Row', place: 'Number 4 on Lantern Row' } };
+
+  it('is offered only to a signed-in citizen with no home here, never to the monarch at home', () => {
+    const empty: CitizenFactsResult = { kind: 'ready', facts: { picture: null, since: null, homes: [] } };
+    expect(canTakePlace(self, FIXTURE_KINGDOM, empty)).toBe(true);
+    expect(canTakePlace(self, FIXTURE_KINGDOM, { kind: 'ready', facts: fixtureFacts() })).toBe(false);
+    expect(canTakePlace(null, FIXTURE_KINGDOM, empty)).toBe(false);
+    expect(canTakePlace({ ...self!, personId: String(FIXTURE_KINGDOM) }, FIXTURE_KINGDOM, empty)).toBe(false);
+    expect(canTakePlace(self, FIXTURE_KINGDOM, { kind: 'unavailable' })).toBe(false);
+    expect(canTakePlace(self, FIXTURE_KINGDOM, null)).toBe(false);
+  });
+
+  it("posts with the session's CSRF token and gives the street, or the realm's own sentence", async () => {
+    const calls: { url: string; init: RequestInit | undefined }[] = [];
+    const fetcher = (reply: () => Response) => (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      return url === '/api/realm/session' ? json(200, session) : reply();
+    }) as typeof fetch;
+    const signal = new AbortController().signal;
+    expect(await takePlace(FIXTURE_KINGDOM, signal, fetcher(() => json(200, granted)))).toEqual({ kind: 'home', street: 'Lantern Row', place: 'Number 4 on Lantern Row' });
+    expect(calls[1]!.url).toBe(`/api/realm/looks/place?kingdom=${FIXTURE_KINGDOM}`);
+    expect(calls[1]!.init).toMatchObject({ method: 'POST', credentials: 'same-origin', headers: { 'x-csrf-token': session.csrfToken } });
+    const full = { version: 1, ok: false, code: 'kingdom-full', reason: 'Every home here is taken for now.' };
+    expect(await takePlace(FIXTURE_KINGDOM, signal, fetcher(() => json(409, full)))).toEqual({ kind: 'refused', reason: full.reason });
+    expect(await takePlace(FIXTURE_KINGDOM, signal, fetcher(() => new Response('<html>', { status: 502 })))).toEqual({ kind: 'refused', reason: CARD_WORDS.placeUnavailable });
+    expect(await takePlace(FIXTURE_KINGDOM, signal, (async () => json(200, { version: 1, status: 'anonymous' })) as typeof fetch)).toEqual({ kind: 'refused', reason: CARD_WORDS.anonymous });
   });
 });

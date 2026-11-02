@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { anvilMark, hearthMark } from '../ledger/marks';
 import { registeredForgedSource, type ForgedThing, type PlayContext } from '../slots';
-import { cardDate, cardView, loadCitizenFacts, loadForged, type CitizenFactsResult } from './facts';
+import { CARD_WORDS, canTakePlace, cardDate, cardView, loadCitizenFacts, loadForged, takePlace, type CitizenFactsResult } from './facts';
 import './card.css';
 
 /**
@@ -14,22 +14,40 @@ export function CardPage(props: {
   cue: (sound: 'wood' | 'brass' | 'parchment') => void;
   reducedMotion: () => boolean;
   load?: typeof loadCitizenFacts;
+  take?: typeof takePlace;
 }): JSX.Element {
   const [result, setResult] = createSignal<CitizenFactsResult | null>(null);
   const [forged, setForged] = createSignal<readonly ForgedThing[] | null>(null);
   const view = () => cardView(props.ctx.self, result());
+  /** "Take your place": idle, asking, or the realm's sentence (a welcome or why not). */
+  const [taking, setTaking] = createSignal(false);
+  const [placeLine, setPlaceLine] = createSignal<string | null>(null);
+  const controller = new AbortController();
+  onCleanup(() => controller.abort());
+  const load = () => (props.load ?? loadCitizenFacts)(props.ctx.kingdomId, controller.signal);
 
   onMount(() => {
-    const controller = new AbortController();
-    onCleanup(() => controller.abort());
-    const load = props.load ?? loadCitizenFacts;
-    load(props.ctx.kingdomId, controller.signal).then(next => {
+    load().then(next => {
       if (controller.signal.aborted) return;
       setResult(next);
       if (next.kind === 'ready') props.cue('wood');
     }, () => { if (!controller.signal.aborted) setResult({ kind: 'unavailable' }); });
     void loadForged(registeredForgedSource(), props.ctx, controller.signal).then(things => { if (!controller.signal.aborted) setForged(things); });
   });
+
+  const take = async () => {
+    if (taking()) return;
+    setTaking(true); setPlaceLine(null); props.cue('brass');
+    try {
+      const outcome = await (props.take ?? takePlace)(props.ctx.kingdomId, controller.signal);
+      if (controller.signal.aborted) return;
+      if (outcome.kind === 'refused') { setPlaceLine(outcome.reason); return; }
+      setPlaceLine(CARD_WORDS.welcome(outcome.place));
+      // The card is redrawn from the realm's own rolls, so the street shown is the deed's.
+      const next = await load().catch(() => null);
+      if (!controller.signal.aborted && next) { setResult(next); props.cue('parchment'); }
+    } catch { /* The page closed while asking. */ } finally { if (!controller.signal.aborted) setTaking(false); }
+  };
 
   return <div class="pl-card" data-state={view().state} data-reduced={props.reducedMotion() ? 'true' : undefined}>
     <article class="pl-card-plaque" aria-label={view().name ? `The citizen card of ${view().name}` : 'A citizen card'}>
@@ -58,6 +76,16 @@ export function CardPage(props: {
               <span class="pl-card-home-since"><span class="pl-card-home-since-word">granted</span> {keepDate(home.since)}</span>
             </li>}</For>
           </ul>
+        </div>
+      </Show>
+      <Show when={canTakePlace(props.ctx.self, props.ctx.kingdomId, result()) || placeLine()}>
+        <div class="pl-card-place">
+          <Show when={canTakePlace(props.ctx.self, props.ctx.kingdomId, result())}>
+            <button type="button" class="pl-action pl-card-take" disabled={taking()} aria-busy={taking() ? 'true' : undefined} onClick={() => void take()}>
+              {hearthMark()}<span>{taking() ? CARD_WORDS.taking : CARD_WORDS.take}</span>
+            </button>
+          </Show>
+          <Show when={placeLine()}>{line => <p class="pl-card-place-line" role="status" aria-live="polite">{line()}</p>}</Show>
         </div>
       </Show>
     </article>

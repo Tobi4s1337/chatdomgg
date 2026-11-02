@@ -215,3 +215,9 @@
   .pl-card-plaque, .pl-card-inlay, .pl-card-tag { border: 1px solid CanvasText; forced-color-adjust: auto; }
   .pl-card-name, .pl-card-initial { color: CanvasText; background: none; filter: none; }
 }
+
+/* ------------------------------------------------------------------ Take your place */
+.pl-card-place { display: grid; justify-items: start; gap: 10px; padding: 4px 8px 0; }
+.pl-card-take { margin-top: 14px; }
+.pl-card-take:disabled { cursor: progress; filter: saturate(.7) brightness(.92); transform: none; }
+.pl-card-place-line { color: var(--cd-cream); font-size: 15px; line-height: 1.4; max-width: 46ch; }

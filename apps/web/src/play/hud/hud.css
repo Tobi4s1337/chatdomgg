@@ -33,6 +33,8 @@
   margin: 0; text-align: center; font: italic var(--cd-type-body)/1.4 var(--cd-face-body); color: var(--cd-cream);
   text-shadow: 0 1px 2px #0b0716, 0 0 12px #0b0716cc; animation: pl-quiet 9s ease both; pointer-events: none; }
 @keyframes pl-quiet { 0% { opacity: 0; } 6%, 88% { opacity: 1; } 100% { opacity: 0; } }
+/* The first walk's one line about taking your place: above the world prompt, gone after ten seconds. */
+.pl-home-line { bottom: calc(26% + env(safe-area-inset-bottom)); animation-duration: 10s; }
 /* Under the slip while the browser lets the cursor drift: it stays as long as the slip does. */
 .pl-drift-line { bottom: calc(16% - 58px + env(safe-area-inset-bottom)); max-width: min(520px, calc(100% - 40px)); font-size: 16px; text-wrap: balance;
   text-shadow: 0 1px 2px #0b0716, 0 0 6px #0b0716, 0 0 16px #0b0716e6; animation: pl-fade-in .4s .3s ease-out both; }

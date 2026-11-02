@@ -638,6 +638,10 @@ function paintTown(g: G, layers: Layers, town: TownMap, style: MapStyle, P: Proj
   const forge = town.places.find(place => place.id === 'forge');
   if (forge && forge.at.every(Number.isFinite)) glyphs.push(anvil(g, P.x(forge.at[0]), P.y(forge.at[1]), (page ? 1.05 : .9) * k));
 
+  // 10b. The places the founded scene names by piece (the Tavern, the Pier): a small inked marker each.
+  const pieces = town.places.filter(place => (place.id === 'tavern' || place.id === 'pier') && place.at.every(Number.isFinite));
+  for (const place of pieces) glyphs.push(placeMark(g, P.x(place.at[0]), P.y(place.at[1]), (page ? 1.05 : .9) * k));
+
   // 11. The names: the places, then the streets along their lines (big map only), never over another word.
   const boxes: Box[] = [...glyphs];
   g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -659,6 +663,11 @@ function paintTown(g: G, layers: Layers, town: TownMap, style: MapStyle, P: Proj
     g.font = `${size}px ${FACE_LABEL}`; g.textAlign = 'left';
     word(g, forge.name, P.x(forge.at[0]) + 10 * k + g.measureText(forge.name).width / 2, P.y(forge.at[1]), size, 3 * k, INK, boxes);
     g.textAlign = 'center';
+  }
+  for (const place of pieces) {
+    const size = (page ? 13 : 11) * k;
+    g.font = `${size}px ${FACE_LABEL}`;
+    word(g, place.name, P.x(place.at[0]) + 8 * k + g.measureText(place.name).width / 2, P.y(place.at[1]), size, 3 * k, INK, boxes);
   }
   if (page) {
     const size = 13 * k;
@@ -750,6 +759,15 @@ function paintCastle(g: G, town: TownMap, P: Projector): Box {
 }
 
 /** The anvil glyph, about 15 px wide at k = 1; returns its box. */
+/** A place's marker: a small ink ring with a filled heart, like a pin on a paper map. */
+function placeMark(g: G, x: number, y: number, k: number): Box {
+  const r = 4.2 * k;
+  g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2);
+  g.fillStyle = WHITE; g.fill(); g.strokeStyle = INK; g.lineWidth = 1.6 * k; g.stroke();
+  g.beginPath(); g.arc(x, y, r * .45, 0, Math.PI * 2); g.fillStyle = INK; g.fill();
+  return { x0: x - r - 1, y0: y - r - 1, x1: x + r + 1, y1: y + r + 1 };
+}
+
 function anvil(g: G, x: number, y: number, k: number): Box {
   const u = k * 1.15;
   g.save(); g.translate(x, y);

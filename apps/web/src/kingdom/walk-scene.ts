@@ -29,7 +29,6 @@ import { createWalkerGround } from '../walk/ground';
 import { sampleFoundedTerrain } from '@chatdom/world/founded-collision';
 import type { PlaySettings } from '../play/slots';
 import '../play/providers';
-import { walkerGaze } from './grand-land/monarch/gaze';
 
 /** Other walkers' steps are heard within this many metres. */
 
@@ -195,7 +194,6 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         // The kingdom page always lends its hour; dusk is the page's own opening hour when a host lends none.
         hour: () => binding.play?.hour?.() ?? 19.5,
         kingdomName: binding.play?.kingdomName ?? '',
-        founded, world: currentWorld,
         audio: () => sound.audio?.() ?? null,
         overlayHost: host,
         ownHome: ownHomeInside,
@@ -252,7 +250,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
   const drawnHeights = new Map<string, number>();
   let lastDraw: number | null = null;
   try {
-    wayHome = createWayHomeRuntime({ plan: founded.plan, scene, groundAt: (x, z) => ground.drawnAt(x, z),
+    wayHome = createWayHomeRuntime({ plan: founded.plan, pieces: founded, scene, groundAt: (x, z) => ground.drawnAt(x, z),
       reducedMotion: () => sharedPlaySettings().current.reducedMotion,
       ownedPlotId: ownedPlot, inside: insideOwnHome,
       feet: () => { const self = controller.debug.self; return self ? [self.x, self.y, self.z] : null; },
@@ -346,8 +344,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         ...(pose.posture ? { posture: pose.posture } : {}),
         // The gait reads the drawn ground and floors, so no sole cuts a slope or a stair while standing or walking.
         ...gaitGround(pose.id),
-        opacity: detail * (pose.self ? play.selfHidden ? 0 : cameraHolds.size || controller.owner !== 'walking' ? 1 : controller.selfOpacity : 1), time: now / 1000, ...walkerGaze(pose) })), camera);
-
+        opacity: detail * (pose.self ? play.selfHidden ? 0 : cameraHolds.size || controller.owner !== 'walking' ? 1 : controller.selfOpacity : 1), time: now / 1000 })), camera);
       ground.retain(drawnHeights);
       const self = walkingPoses.find(pose => pose.self), state = client.room.state;
       const interaction = connection.session.snapshot().self;

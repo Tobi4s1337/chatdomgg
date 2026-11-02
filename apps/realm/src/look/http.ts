@@ -3,6 +3,7 @@ import { KingdomIdSchema, REALM_LOOK_ROUTES, RealmCitizenFactsSchema, type Kingd
 import type { CitizenFacts } from './citizen';
 import { canonicalJson } from '../persistence/codec';
 import type { LookSessions } from './ports';
+import { placeRefusal, type HomePlaceOutcome, type HomePlaces } from './place';
 import { sameSecret } from './session';
 import { LOOK_REASONS, refusal, type LookSaveOutcome, type LookStore } from './store';
 import { LOOK_LIMITS, isSavedLookToken, lookTokenOf } from './token';
@@ -13,7 +14,7 @@ type Headers = Readonly<Record<string, string>>;
 
 const STATUS: Readonly<Record<number, string>> = {
   200: '200 OK', 304: '304 Not Modified', 400: '400 Bad Request', 401: '401 Unauthorized', 403: '403 Forbidden', 404: '404 Not Found',
-  413: '413 Content Too Large', 422: '422 Unprocessable Content', 429: '429 Too Many Requests', 503: '503 Service Unavailable',
+  409: '409 Conflict', 413: '413 Content Too Large', 422: '422 Unprocessable Content', 429: '429 Too Many Requests', 503: '503 Service Unavailable',
 };
 const PRIVATE: Headers = { 'Cache-Control': 'no-store' };
 /** The panel and the card read recipes from other origins; nothing about a recipe is private. */
@@ -51,9 +52,11 @@ export function mountLookRoutes(app: App, input: {
   readonly sessions: LookSessions;
   /** The card's facts, added to `GET /me` when a kingdom is asked; a failure leaves them out and never fails the reply. */
   readonly citizen?: CitizenFacts;
+  /** "Take your place": `POST /api/realm/looks/place?kingdom=<id>`. Absent, the route answers unavailable. */
+  readonly places?: HomePlaces;
   readonly log?: (line: string) => void;
 }): void {
-  const { store, sessions, citizen } = input, log = input.log ?? (() => {});
+  const { store, sessions, citizen, places } = input, log = input.log ?? (() => {});
 
   /** The session's own facts, or null: they are a courtesy on the reply, so trouble reading them is only logged. */
   const factsOf = async (personId: PersonId, kingdomId: KingdomId | null): Promise<RealmCitizenFacts | null> => {
@@ -103,6 +106,24 @@ export function mountLookRoutes(app: App, input: {
       life.send(503, PRIVATE, { version: 1, status: 'unavailable', message: LOOK_REASONS.unavailable });
     });
   }
+
+  // The session's own person takes a place in one kingdom. No body: the kingdom is in the query, the person is the session's.
+  app.post(REALM_LOOK_ROUTES.place, (res, req) => {
+    const cookie = req.getHeader('cookie'), csrf = req.getHeader('x-csrf-token'), rawKingdom = req.getQuery('kingdom') ?? '';
+    const life = lifetime(res);
+    const answer = (outcome: HomePlaceOutcome) => life.send(outcome.status, outcome.status === 429 ? { ...PRIVATE, 'Retry-After': '5' } : PRIVATE, outcome.reply);
+    // A body is never read; draining it lets uWS finish the request cleanly.
+    res.onData(() => {});
+    void (async (): Promise<HomePlaceOutcome> => {
+      const session = await sessions.resolve(cookie);
+      if (!session) return placeRefusal('unauthenticated');
+      if (!csrf || !sameSecret(csrf, session.csrfToken)) return placeRefusal('forbidden');
+      const kingdom = KingdomIdSchema.safeParse(rawKingdom);
+      if (!kingdom.success) return placeRefusal('malformed');
+      if (!places) return placeRefusal('unavailable');
+      return places.take(session.personId, kingdom.data);
+    })().then(answer, error => { log(`take your place failed: ${(error as Error).name}`); answer(placeRefusal('unavailable')); });
+  });
 
   app.put(REALM_LOOK_ROUTES.mine, (res, req) => {
     const cookie = req.getHeader('cookie'), csrf = req.getHeader('x-csrf-token');

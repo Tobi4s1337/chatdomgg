@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, onMount, Show, type Accessor, type JSX } from 'solid-js';
+import { createEffect, createSignal, For, onCleanup, onMount, Show, type Accessor, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import '@chatdom/ui/kit.css';
 import '../ledger/ledger.css';
@@ -6,6 +6,7 @@ import './hud.css';
 import '../providers';
 import type { CursorView, PlayHost, PlayHud, WayHome } from '../host';
 import { actionBindings, availableHudPieces, onSlotsChanged, type ActionBinding, type HudPieceProvider, type HudRegion, type PlayContext, type PlaySettings } from '../slots';
+import { CARD_WORDS, canTakePlace, loadCitizenFacts } from '../card/facts';
 import { Keycap } from '../ledger/controls';
 import { keyName, readKeyLayout, type KeyLayout } from '../ledger/keys';
 import { LedgerBook, type LedgerPhase } from '../ledger/Ledger';
@@ -117,6 +118,23 @@ function HudView(props: { play: PlayHost; ledger: Ledger }): JSX.Element {
   // The minimap: on your feet in the world (or about to click back in), never over the ledger or on the stream.
   const minimap = () => !!play.map && !stream() && !ledgerShown();
 
+  // The first time a signed-in visitor with no home here walks, one quiet line says where to take their place.
+  const [homeless, setHomeless] = createSignal(false);
+  let askedHome = false, homelessTimer: ReturnType<typeof setTimeout> | undefined;
+  const homeAsk = new AbortController();
+  onCleanup(() => { homeAsk.abort(); clearTimeout(homelessTimer); });
+  createEffect(() => {
+    if (askedHome || !walking() || !play.ctx.self) return;
+    askedHome = true;
+    loadCitizenFacts(play.ctx.kingdomId, homeAsk.signal).then(result => {
+      if (homeAsk.signal.aborted || !canTakePlace(play.ctx.self, play.ctx.kingdomId, result)) return;
+      setHomeless(true);
+      homelessTimer = setTimeout(() => setHomeless(false), 10_000);
+    }, () => {});
+  });
+  // Opening the ledger is the answer to the line; it is not said again this visit.
+  onCleanup(props.ledger.subscribe(next => { if (next.open) setHomeless(false); }));
+
   const pageProps = { ledger: props.ledger, play, state, settings, cursor, layout, way, bindings };
   return <div class="pl-hud cd-kit" data-reduced={reduced() ? 'true' : undefined} data-cursor={cursor().state} data-ledger={ledgerShown() ? 'open' : undefined}>
     <For each={REGIONS}>{region => <Region region={region} ctx={play.ctx}>
@@ -142,6 +160,9 @@ function HudView(props: { play: PlayHost; ledger: Ledger }): JSX.Element {
     <Show when={calm()}>
       <p class="pl-walk-slip cd-slip" data-state={cursor().state} role="status">{mouseMark()}<span>Click to walk</span></p>
       <Show when={cursor().drifting}><p class="pl-quiet-line pl-drift-line" role="note">{DRIFT_LINE}</p></Show>
+    </Show>
+    <Show when={homeless() && walking()}>
+      <p class="pl-quiet-line pl-home-line" role="status">{CARD_WORDS.hudHomeless}</p>
     </Show>
     <Show when={unavailable() && !ledgerShown()}>
       <p class="pl-quiet-line" role="status">This window cannot hold the mouse. Open the kingdom in its own tab to walk.</p>
