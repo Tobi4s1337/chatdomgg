@@ -14,6 +14,7 @@ import { compileFoundedScene, foundedGroundAt } from '../founded-world/collision
 import { decodeFoundedScene } from '../founded-world/validate';
 import { grandKingdomLand } from '../grand/kingdom/ground';
 import { findTavernDoor } from './place-sites-tavern';
+import { pinnedCampfireSite } from './pinned-places';
 import { CAMPFIRE_SITE_FOOTPRINT, PLACE_SITE_BUDGET, placeSiteBounds, planPlaceSites, validatePlaceSite, type PlaceSiteContext } from './place-sites';
 
 const clearing: PlaceSite = { origin: [30, 0, 20], turn: 0, footprint: CAMPFIRE_SITE_FOOTPRINT };
@@ -168,6 +169,13 @@ it.runIf(Boolean(process.env.CHATDOM_PLACE_SITE_SCENE && process.env.CHATDOM_PLA
   const common = createKingdomLandInterface({ scene, ground: { layoutRevision: scene.layoutRevision, collisionRevision: scene.collisionRevision, sample: groundAt }, collision });
   expect(grandKingdomLand(scene, collision).places?.tavern).toEqual(common.places?.tavern);
   expect(common.places?.tavern).toEqual(tavern.anchor);
+  // The pinned Willowmere clearing is the planner's own first Wilds-edge answer and still validates as a pin.
+  if (scene.kingdomId === '129634568') {
+    expect(campfire.places.campfire).toEqual(pinnedCampfireSite(scene.kingdomId));
+    const pinned = planPlaceSites({ scene, collision, groundAt }, { pinned: pinnedCampfireSite(scene.kingdomId)! });
+    expect(pinned.places.campfire).toEqual(pinnedCampfireSite(scene.kingdomId));
+    expect(pinned.diagnostics).toEqual([]);
+  }
   expect(JSON.stringify(scene)).toBe(before);
   console.info(JSON.stringify({ doorMs, campfireMs, tavern: tavern.anchor?.position, campfire: campfire.places.campfire ?? null, diagnostics: campfire.diagnostics, work: campfire.work }));
 }, 60_000);

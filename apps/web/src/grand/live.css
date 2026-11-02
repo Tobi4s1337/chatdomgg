@@ -55,3 +55,7 @@
 }
 @media (prefers-reduced-motion: reduce) { .grand-live__engraving-ink { animation: none; stroke-dashoffset: 0; } .grand-live__progress span { transition: none; } }
 .grand-live button:disabled, .grand-live input:disabled { opacity: .5; cursor: default; }
+
+/* The parchment opening (kingdom/grand-land/opening) while the land opens; failures keep the paper veil. */
+.grand-live__opening { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.grand-live__opening:empty, .grand-live__opening.hidden { display: none; }

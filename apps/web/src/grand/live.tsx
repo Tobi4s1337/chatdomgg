@@ -1,6 +1,8 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { createGrandLiveController, type GrandLiveState } from './live-controller';
 import './live.css';
+import { mountOpeningLoader, type OpeningLoader } from '../kingdom/grand-land/opening/loader';
+import type { OpeningJournal } from '../kingdom/grand-land/opening/journal';
 
 const HOURS = [
   { label: 'Dawn', hour: 6.4 }, { label: 'Morning', hour: 9.5 },
@@ -23,8 +25,18 @@ export default function GrandLiveView() {
   const still = new URLSearchParams(window.location.search).get('still') === '1';
   let host!: HTMLDivElement;
   let controller: ReturnType<typeof createGrandLiveController> | undefined;
+  // The same parchment opening as the kingdom and the stream, fed only by this scene's real steps.
+  let openingHost: HTMLDivElement | undefined, opener: OpeningLoader | undefined;
+  const [opening, setOpening] = createSignal(false);
+  function follow(journal: OpeningJournal) {
+    if (!openingHost) return;
+    opener ??= mountOpeningLoader(openingHost, { variant: 'page', ...(state().title && state().title !== 'Your kingdom' ? { name: state().title } : {}),
+      onGone: () => { opener = undefined; setOpening(false); } });
+    setOpening(true); opener.follow(journal);
+  }
+  onCleanup(() => opener?.dispose());
   onMount(() => {
-    controller = createGrandLiveController({ host: () => host, onState: setState });
+    controller = createGrandLiveController({ host: () => host, onState: setState, onOpening: follow });
     controller.start();
   });
   onCleanup(() => controller?.dispose());
@@ -52,7 +64,8 @@ export default function GrandLiveView() {
             <button type="button" disabled={!ready()} classList={{ 'is-current': Math.abs(state().hour - item.hour) < 0.15 }} onClick={() => controller?.setHour(item.hour)}>{item.label}</button>
           }</For></div>
         </section>
-      <Show when={waiting() || failed()}>
+      <div class="grand-live__opening" classList={{ hidden: failed() }} ref={element => { openingHost = element; }} />
+      <Show when={failed() || waiting() && !opening()}>
         <section class="grand-live__veil" aria-live="polite">
           <div class="grand-live__paper">
             <div class="grand-live__ornament" aria-hidden="true">✦</div>

@@ -41,7 +41,7 @@ Unknown tavern producers need their own reviewed authored adapter; they receive 
 
 ## Clearing validation and growth
 
-Candidates come from a stable cardinal winding on square rings with half-widths of 24–96 m around the market. Every reserved home lot and every
+Candidates come first from the Wilds edge (18 m squares 1 m and 7 m inside the plan's edge, every 6 m, their front toward the town, nearest the market first), then from a stable cardinal winding on square rings with half-widths of 24–96 m around the market. Accepted sites are pinned per kingdom in `pinned-places.ts` (Willowmere: origin [253.2, 2, −10], turn 3). Every reserved home lot and every
 planned road is excluded, including unoccupied lots and currently inactive roads. Castle/court/market bounds
 and every solid placement envelope are excluded. Trees are never cleared. Conservative envelopes may reject
 a physically empty corner of an asset; false absence is preferable to moving someone else's property.

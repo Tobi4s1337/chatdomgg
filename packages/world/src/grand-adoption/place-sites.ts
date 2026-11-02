@@ -194,12 +194,29 @@ function makeSite(p: Prepared, door: Vec3, turn: CardinalTurn, footprint: readon
 function* campfireCandidates(p: Prepared): Generator<PlaceSite> {
   const square = p.context.scene.plan.market, node = p.context.scene.plan.nodes.find(n => n.id === square.nodeId);
   const centre = node?.position ?? [0, square.elevation, 0];
-  // Near-town edge clearings, bounded to 96 m. The entire square conservatively contains the 9 m ring.
+  // The Wilds edge first (spec 21: the clearing at the edge of the Wilds): squares just inside the plan's own edge,
+  // their front (local +Z) toward the town, nearest the market first, so the town's lights stay in sight. The
+  // inner fields between the quarters are the old near-town rings, bounded to 96 m. Each 18 m square
+  // conservatively contains the 9 m ring.
+  const [fw, fd] = CAMPFIRE_SITE_FOOTPRINT, b = p.context.scene.plan.bounds, edge: { front: Vec3; turn: CardinalTurn; d: number }[] = [];
+  for (const inset of EDGE_INSETS) for (const turn of TURNS) {
+    // Local -Z of each turn points out through one side: 0 → min Z, 1 → min X, 2 → max Z, 3 → max X.
+    const alongX = turn % 2 === 0, lo = (alongX ? b.minX : b.minZ) + fw / 2, hi = (alongX ? b.maxX : b.maxZ) - fw / 2;
+    const depth = inset + fd, line = turn === 0 ? b.minZ + depth : turn === 1 ? b.minX + depth : turn === 2 ? b.maxZ - depth : b.maxX - depth;
+    for (let along = lo; along <= hi + EPS; along += EDGE_STEP) {
+      const front: Vec3 = alongX ? [along, centre[1], line] : [line, centre[1], along];
+      edge.push({ front, turn, d: Math.hypot(front[0] - centre[0], front[2] - centre[2]) });
+    }
+  }
+  edge.sort((a, c) => a.d - c.d || a.turn - c.turn || a.front[0] - c.front[0] || a.front[2] - c.front[2]);
+  for (const item of edge) yield makeSite(p, item.front, item.turn, CAMPFIRE_SITE_FOOTPRINT);
   for (let radius = 24; radius <= 96; radius += 8) for (const turn of TURNS) for (let along = -radius; along < radius; along += 8) {
     const front = transformCardinalPoint(centre, turn, [along, 0, -radius + 9]);
     yield makeSite(p, front, turn, CAMPFIRE_SITE_FOOTPRINT);
   }
 }
+/** How far inside the plan's edge a Wilds-edge clearing may sit, metres, and its step along the edge. */
+const EDGE_INSETS = [1, 7] as const, EDGE_STEP = 6;
 function freezeSite(site: PlaceSite): PlaceSite {
   return Object.freeze({ origin: Object.freeze([...site.origin]) as Vec3, turn: site.turn,
     footprint: Object.freeze([...site.footprint]) as readonly [number, number] });
