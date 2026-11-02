@@ -587,6 +587,22 @@ the portrait hero at 390×844 transfers 4,293,080 and truthfully reports `initia
 The phone still needs payload work. All nine land-only canvas states were viewed; a continuous native GPU
 sequence must still judge the noticeable mid-fade treeline stippling. See `GW10-startup.md` for precise scope.
 
+## GW10 native baked-land picture — 2026-11-02
+
+The full native stream's current baked consumer has now produced a viewed golden-hour 1920×1080 canvas:
+`work/evidence/grand-world/gw10-native-canvas-golden@1920x1080.png`. Current public scene/recipe identity is unchanged.
+It shows the native homes/castle/Forge with high HDR post, full reflection and settled fields: 240 homes,
+38/38 required regions, 16 physical L0, zero generated columns and 3,967,107 initial land bytes.
+This is a synchronous framebuffer export after the real draw, excluding DOM labels/frame/loading UI.
+It does not replace the real-GPU or authenticated walking acceptance. Actual presence was offline, so there
+were no active citizen windows to validate. First-draw main/reflection/shadow counts exceed the high all-pass
+budgets (1,005 draws / 11,327,367 triangles with the initial cached-shadow update included).
+
+The additional dawn/noon/night captures stopped after three occupied-port failures before browser startup;
+no other owner's services were touched. The runner's ports are configurable but are not reserved by this lane.
+See `work/evidence/grand-world/GW10-native-canvas.md` for the viewed evidence, exact counters and remaining checks.
+No production renderer, contract, artifact or place anchor changed in this checkpoint.
+
 ## GW10 complete startup coverage and presentation — 2026-11-02
 
 `prepareHostedGrandLand` first installs the coarsest globally balanced coverage for every visible region and all
