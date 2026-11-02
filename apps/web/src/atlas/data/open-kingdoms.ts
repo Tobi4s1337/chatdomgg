@@ -10,6 +10,9 @@ import { readKingdoms, type OpenKingdom } from '@chatdom/ui/site';
 let open: Promise<readonly OpenKingdom[]> | null = null;
 const read = () => (open ??= readKingdoms().catch(() => []));
 
+/** The door's short list, read once per page; empty where the door is not served. */
+export const readOpenKingdoms = (): Promise<readonly OpenKingdom[]> => read();
+
 const key = (text: string) => text.trim().replace(/^@/, '').toLowerCase();
 
 export function matchOpenKingdom(list: readonly OpenKingdom[], query: string): OpenKingdom | null {
