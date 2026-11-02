@@ -15,6 +15,7 @@ type Refusal = { readonly status: 'refused'; readonly reason: RaidGuestRefusalRe
 export type RaidGuestArrivalResult = Refusal | { readonly status: 'accepted' | 'duplicate'; readonly guest: RaidGuestProjection; readonly stamp: RaidGuestStamp };
 export type RaidGuestChatResult = { readonly status: 'ignored'; readonly reason: RaidGuestRefusalReason }
   | { readonly status: 'accepted' | 'duplicate'; readonly guest: RaidGuestProjection | null; readonly stamp: RaidGuestStamp };
+export type RaidGuestPendingEntry = Refusal | { readonly status: 'pending'; readonly raidId: string; readonly expiresAt: number };
 export interface RaidGuestAuthorityOptions { readonly pool: SqlPool; readonly origin: 'live' | 'simulated'; readonly clock: () => number }
 export class RaidGuestError extends Error {
   constructor(readonly kind: 'invalid' | 'origin' | 'conflict' | 'storage', message: string) { super(message); this.name = 'RaidGuestError'; }
@@ -67,6 +68,42 @@ function readStamp(row: Row): RaidGuestStamp {
  */
 export class RaidGuestAuthority {
   constructor(readonly options: RaidGuestAuthorityOptions) {}
+
+  /**
+   * Server-only, read-only spawn eligibility. The entry binds the browser session, person and destination; its
+   * last intent BEFORE entry opened selects the witnessed raid. This grants no arrival, stamp or presentation.
+   * One SQL snapshot checks citizenship and session together; the room still rechecks its session after awaiting.
+   */
+  async pendingEntry(raw: unknown): Promise<RaidGuestPendingEntry> {
+    const input = this.parse(RaidGuestRoomReceiptSchema, raw); this.time(input.at);
+    return this.read(async client => {
+      const row = first(await client.query(`SELECT o.*, i.raid_id AS intent_raid_id, i.begun_ms,
+        floor(extract(epoch FROM e.opened_at) * 1000)::bigint AS opened_ms,
+        EXISTS (SELECT 1 FROM realm_deeds d WHERE d.origin = e.origin AND d.person_id = e.person_id
+          AND d.kingdom_id = e.kingdom_id AND d.status <> 'void') AS citizen_here
+        FROM realm_entries e JOIN realm_sessions s
+          ON s.session_id = e.session_id AND s.person_id = e.person_id AND s.origin = e.origin
+        JOIN realm_persons p ON p.person_id = e.person_id AND p.origin = e.origin
+        LEFT JOIN LATERAL (SELECT raid_id, begun_ms FROM realm_raid_guest_intents i
+          WHERE i.origin = e.origin AND i.session_id = e.session_id AND i.person_id = e.person_id
+            AND i.kingdom_id = e.kingdom_id AND i.begun_ms <= floor(extract(epoch FROM e.opened_at) * 1000)::bigint
+          ORDER BY sequence DESC LIMIT 1) i ON true
+        LEFT JOIN realm_raid_observations o ON o.origin = e.origin AND o.raid_id = i.raid_id
+          AND o.to_kingdom_id = e.kingdom_id AND o.direction = 'incoming'
+        WHERE e.entry_id = $1 AND e.person_id = $2 AND e.kingdom_id = $3 AND e.origin = $4
+          AND s.revoked_at IS NULL AND s.expires_at > greatest(now(), to_timestamp($5::double precision / 1000))`,
+      [input.entryId, input.personId, input.kingdomId, input.origin, this.now()]));
+      if (!row || integer(row.opened_ms) > input.at) return refused('entry');
+      if (row.citizen_here === true) return refused('citizen_here');
+      if (row.intent_raid_id === null) return refused('no_intent');
+      const raid = readRaid(row);
+      // An old invitation cannot capture every future ordinary entry on this browser session. A fresh ticket
+      // opened after its window is ordinary; an entry opened inside it must still fail if admission runs late.
+      if (integer(row.opened_ms) >= raid.observation.occurredAt + RAID_GUEST_WINDOW_MS) return refused('no_intent');
+      if (!this.within(raid, input.at) || !this.within(raid, this.now()) || input.at < integer(row.begun_ms)) return refused('expired');
+      return { status: 'pending', raidId: raid.raidId, expiresAt: raid.observation.occurredAt + RAID_GUEST_WINDOW_MS };
+    });
+  }
 
   async begin(raw: unknown): Promise<RaidGuestBeginReply> {
     const input = this.parse(RaidGuestBeginSchema, raw), now = this.now();

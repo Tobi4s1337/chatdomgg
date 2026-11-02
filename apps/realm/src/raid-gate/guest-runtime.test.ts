@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KingdomIdSchema, PersonIdSchema, PresenceInputSchema, starterCitizenLook, type PresenceInput } from '@chatdom/shared';
+import { KingdomIdSchema, PersonIdSchema, PresenceInputSchema, RAID_GUEST_VISUAL_LEASE_MS, starterCitizenLook, type PresenceInput } from '@chatdom/shared';
 import type { RealmPrincipal } from '@chatdom/shared/realm';
 import { RaidGuestRoomReceiptSchema } from '../../../api/src/raid-gate/guest-contracts';
 import type { DurableKingdom, RealmLifecycleListener } from '../persistence/kingdom';
@@ -42,13 +42,14 @@ function setup() {
   const runtime = createRaidGuestRuntime({ origin: 'live', authority, citizens, log, clock: Date.now });
   runtimes.push(runtime);
   const listeners = new Set<RealmLifecycleListener>();
-  const kingdom = { kingdomId, databaseNow: () => Date.now() + .75,
+  const presentRaidGuest = vi.fn();
+  const kingdom = { kingdomId, presentRaidGuest, databaseNow: () => Date.now() + .75,
     onLifecycle(listener: RealmLifecycleListener) { listeners.add(listener); return () => { listeners.delete(listener); }; } };
   const detach = runtime.attach(kingdom);
   const emit = (event: Parameters<RealmLifecycleListener>[0], who = principal(), time = Date.now()) => {
     for (const listener of listeners) listener(event, who, `SIMULATED-socket-${who.sessionId}`, time);
   };
-  return { runtime, authority, citizens, log, emit, detach, listeners, kingdom };
+  return { runtime, authority, citizens, log, emit, detach, listeners, kingdom, presentRaidGuest };
 }
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(at); });
@@ -181,6 +182,58 @@ describe('the actual raid guest lifecycle runtime', () => {
     await vi.advanceTimersByTimeAsync(30_000);
     expect(t.authority.present).not.toHaveBeenCalled();
     t.emit('join'); expect(t.authority.arrived).toHaveBeenCalledTimes(1);
+  });
+
+  it('publishes only an accepted actual arrival, never chat evidence or a refused intent', async () => {
+    const t = setup();
+    await t.runtime.observe(chat());
+    expect(t.presentRaidGuest).not.toHaveBeenCalled();
+    t.authority.arrived.mockResolvedValueOnce({ status: 'refused', reason: 'no_intent' });
+    t.emit('join'); await t.runtime.flush();
+    expect(t.presentRaidGuest).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ raidId }));
+    t.emit('join'); await t.runtime.flush();
+    expect(t.presentRaidGuest).toHaveBeenLastCalledWith(`SIMULATED-socket-${entry1}`, {
+      raidId, fromKingdomId: from.kingdomId, fromName: from.name, expiresAt: at + RAID_GUEST_VISUAL_LEASE_MS,
+    });
+  });
+
+  it.each(['leave', 'detach', 'replacement'] as const)('does not decorate a seat after delayed arrival and %s', async action => {
+    const t = setup(), held = deferred(arrival);
+    t.authority.arrived.mockImplementationOnce(() => held.promise);
+    t.emit('join'); await vi.advanceTimersByTimeAsync(0);
+    if (action === 'leave') t.emit('leave');
+    else if (action === 'detach') t.detach();
+    else t.emit('join');
+    t.presentRaidGuest.mockClear(); held.resolve(arrival); await t.runtime.flush();
+    expect(t.presentRaidGuest).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ raidId }));
+  });
+
+  it('refreshes only from the original accepted heartbeat receipt and clears a refused heartbeat', async () => {
+    const t = setup(), held = deferred<{ status: 'accepted' }>({ status: 'accepted' });
+    t.emit('join'); await t.runtime.flush();
+    t.authority.present.mockImplementationOnce(() => held.promise);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(1_000); held.resolve({ status: 'accepted' }); await t.runtime.flush();
+    expect(t.presentRaidGuest).toHaveBeenLastCalledWith(`SIMULATED-socket-${entry1}`,
+      expect.objectContaining({ expiresAt: at + 15_000 + RAID_GUEST_VISUAL_LEASE_MS }));
+    t.authority.present.mockResolvedValueOnce({ status: 'refused', reason: 'entry' });
+    await vi.advanceTimersByTimeAsync(14_000); await t.runtime.flush();
+    expect(t.presentRaidGuest).toHaveBeenLastCalledWith(`SIMULATED-socket-${entry1}`, null);
+  });
+
+  it('does not renew a duplicate arrival whose original receipt expired before the reply', async () => {
+    const t = setup(), held = deferred<RaidGuestArrivalResult>({ ...arrival, status: 'duplicate' });
+    t.authority.arrived.mockImplementationOnce(() => held.promise);
+    t.emit('join'); await vi.advanceTimersByTimeAsync(RAID_GUEST_VISUAL_LEASE_MS + 1);
+    held.resolve({ ...arrival, status: 'duplicate' }); await t.runtime.flush();
+    expect(t.presentRaidGuest).toHaveBeenLastCalledWith(`SIMULATED-socket-${entry1}`, null);
+  });
+
+  it('clears a visible mark on close', async () => {
+    const t = setup(); t.emit('join'); await t.runtime.flush();
+    expect(t.presentRaidGuest).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ raidId }));
+    await t.runtime.close();
+    expect(t.presentRaidGuest).toHaveBeenLastCalledWith(`SIMULATED-socket-${entry1}`, null);
   });
 
   it('bounds receipt work to four concurrent commits and drains the remaining actual join', async () => {

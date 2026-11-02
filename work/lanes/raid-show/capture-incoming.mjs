@@ -32,7 +32,9 @@ if (!process.argv.includes('--worker')) {
     const [width, height] = size.split('x').map(Number);
     const viewers = Number(argument('--viewers', '140')), at = Number(argument('--at', '12000'));
     if (![3, 140, 10000, 70000].includes(viewers) || !Number.isFinite(at) || at < 0 || at > 119000) throw new Error('Choose a specified raid scale and a valid beat time.');
-    const route = `/-/raid-gate?incoming=1&viewers=${viewers}&at=${at}`;
+    const scene = argument('--scene', 'incoming');
+    if (!['incoming', 'insignia'].includes(scene)) throw new Error('Choose incoming or insignia.');
+    const route = scene === 'insignia' ? '/-/raid-gate?guestInsignia=1' : `/-/raid-gate?incoming=1&viewers=${viewers}&at=${at}`;
     const page = await browser.newPage({ viewport: { width, height } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -48,7 +50,7 @@ if (!process.argv.includes('--worker')) {
     if (failure) throw new Error(failure);
     if (errors.length) throw new Error(errors.join('\n'));
     await page.evaluate(() => document.fonts.ready);
-    const file = argument('--out', `caravan-${viewers}@${size}.png`);
+    const file = argument('--out', scene === 'insignia' ? `guest-insignia@${size}.png` : `caravan-${viewers}@${size}.png`);
     if (!/^[a-z0-9@.-]+\.png$/.test(file)) throw new Error('Output must be a plain evidence PNG name.');
     const out = `work/evidence/raid-show/${file}`;
     await mkdir('work/evidence/raid-show', { recursive: true });
@@ -57,7 +59,7 @@ if (!process.argv.includes('--worker')) {
     await page.screenshot({ path: out, timeout: 90_000 });
     await writeFile(out.replace('.png', '.json'), JSON.stringify({ renderer: 'SwiftShader', performanceEvidence: false,
       route, size: [width, height], errors,
-      state: await page.evaluate(() => window.__chatdomRaidShow?.inspect()),
+      state: await page.evaluate(() => window.__chatdomRaidShow?.inspect() ?? window.__guestInsignia),
     }, null, 2));
     console.log(`Look at ${out}`);
   } finally {

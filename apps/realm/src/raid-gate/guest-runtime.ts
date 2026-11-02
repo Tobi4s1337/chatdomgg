@@ -1,8 +1,10 @@
-import type { PresenceInput } from '@chatdom/shared';
+import type { PresenceInput, RaidGuestVisualMark } from '@chatdom/shared';
 import type { DurableKingdom, RealmLifecycleListener } from '../persistence/kingdom';
-import type { RaidGuestRoomReceipt } from '../../../api/src/raid-gate/guest-contracts';
+import type { RaidGuestProjection, RaidGuestRoomReceipt } from '../../../api/src/raid-gate/guest-contracts';
+import { RaidGuestProjectionSchema } from '../../../api/src/raid-gate/guest-contracts';
 import type { RaidGuestAuthority } from './guests';
 import type { TownSettler } from '../moments/service';
+import { deriveRaidGuestVisualMark } from './guest-insignia';
 
 const MAX_PENDING = 1_024, WORKERS = 4, CHAT_BARRIER_MS = 5_000;
 type ReceiptJob = { kind: 'join' | 'leave' | 'present'; receipt: RaidGuestRoomReceipt; done: Promise<void>; finish(): void;
@@ -19,7 +21,11 @@ export interface RaidGuestRuntimeOptions {
 export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
   const pending = new Map<string, ReceiptJob>(), running = new Set<Promise<void>>();
   const subscriptions = new Set<() => void>();
-  const seats = new Map<string, { receipt: RaidGuestRoomReceipt; confirmed: boolean }>();
+  type Seat = { receipt: RaidGuestRoomReceipt; confirmed: boolean; guest?: RaidGuestProjection; publish(mark: RaidGuestVisualMark | null): void };
+  const seats = new Map<string, Seat>();
+  const dress = (seat: Seat, mark: RaidGuestVisualMark | null) => {
+    try { seat.publish(mark); } catch { options.log?.('Raid guest dress could not be updated; no new arrival was inferred.'); }
+  };
   const now = options.clock ?? Date.now;
   let stopping = false, closed = false, failures = 0, overflow = 0;
 
@@ -29,13 +35,20 @@ export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
       if (running.size >= WORKERS) break;
       if (job.running || job.retry) continue;
       job.running = true;
+      const expectedSeat = seats.get(job.receipt.entryId);
       const attempt = Promise.resolve().then(() => job.kind === 'join'
         ? options.authority.arrived(job.receipt) : job.kind === 'leave' ? options.authority.departed(job.receipt) : options.authority.present(job.receipt)).then(result => {
         const seat = seats.get(job.receipt.entryId);
-        if (job.kind === 'join' && seat) {
-          if (result.status === 'refused') seats.delete(job.receipt.entryId); else seat.confirmed = true;
+        // A DB result may arrive after leave/detach or a replacement seat. It cannot dress that later visitor.
+        if (seat && seat === expectedSeat) {
+          if (result.status === 'refused') { dress(seat, null); seats.delete(job.receipt.entryId); }
+          else if (job.kind === 'join' && 'guest' in result) {
+            seat.guest = RaidGuestProjectionSchema.parse(result.guest); seat.confirmed = true;
+            dress(seat, deriveRaidGuestVisualMark(seat.guest, job.receipt.at, Math.floor(now())));
+          } else if (job.kind === 'present' && seat.guest) {
+            dress(seat, deriveRaidGuestVisualMark(seat.guest, job.receipt.at, Math.floor(now())));
+          }
         }
-        if (job.kind === 'present' && result.status === 'refused') seats.delete(job.receipt.entryId);
         pending.delete(key); job.finish();
       }).catch(() => {
         failures++; job.attempts++;
@@ -59,11 +72,18 @@ export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
     pending.set(key, { kind, receipt, done, finish, running: false, attempts: 0 });
     pump();
   }
-  const queue: RealmLifecycleListener = (event, principal, _walkerId, at) => {
+  const queue = (event: Parameters<RealmLifecycleListener>[0], principal: Parameters<RealmLifecycleListener>[1],
+    at: number, publish: Seat['publish']) => {
     if (stopping || event !== 'join' && event !== 'leave' || principal.origin !== options.origin) return;
     const receipt: RaidGuestRoomReceipt = { version: 1, origin: principal.origin, entryId: principal.sessionId,
       personId: principal.personId, kingdomId: principal.kingdomId, at };
-    if (event === 'join') seats.set(receipt.entryId, { receipt, confirmed: false }); else seats.delete(receipt.entryId);
+    if (event === 'join') {
+      const previous = seats.get(receipt.entryId); if (previous) dress(previous, null);
+      seats.set(receipt.entryId, { receipt, confirmed: false, publish });
+    } else {
+      const previous = seats.get(receipt.entryId); if (previous) dress(previous, null);
+      seats.delete(receipt.entryId);
+    }
     enqueue(event, receipt);
   };
   // A dead process cannot renew these leases. Authentication rows never reconstruct a current walker.
@@ -81,7 +101,7 @@ export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
     } finally { if (timer) clearTimeout(timer); }
   }
   return {
-    attach(kingdom: Pick<DurableKingdom, 'onLifecycle'>): () => void {
+    attach(kingdom: Pick<DurableKingdom, 'onLifecycle'> & Partial<Pick<DurableKingdom, 'presentRaidGuest'>>): () => void {
       if (stopping) throw new Error('Raid guest callbacks are closed.');
       const entries = new Set<string>();
       let detached = false;
@@ -91,13 +111,13 @@ export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
           if (event === 'join') entries.add(principal.sessionId);
           else if (event === 'leave') entries.delete(principal.sessionId);
         }
-        queue(event, principal, walker, at);
+        queue(event, principal, at, mark => kingdom.presentRaidGuest?.(walker, mark));
       });
       const detach = () => {
         detached = true;
         subscriptions.delete(detach); off();
         // A retired room no longer witnesses presence, even when no explicit leave callback ran.
-        for (const entryId of entries) seats.delete(entryId);
+        for (const entryId of entries) { const seat = seats.get(entryId); if (seat) dress(seat, null); seats.delete(entryId); }
         entries.clear();
       };
       subscriptions.add(detach); return detach;
@@ -140,6 +160,7 @@ export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
       await Promise.allSettled([...running]);
       for (const job of pending.values()) job.finish();
       pending.clear();
+      for (const seat of seats.values()) dress(seat, null);
       seats.clear();
     },
   };

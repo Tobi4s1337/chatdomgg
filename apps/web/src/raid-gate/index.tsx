@@ -39,9 +39,11 @@ const WELCOME_HOST = { kingdomId: '41000002' as KingdomId, name: 'Fernhollow', s
 const RaidRoad = lazy(() => import('./road/RaidRoad'));
 const IncomingRaid = lazy(() => import('./incoming'));
 const NoticeBench = lazy(() => import('./entry/notice-bench'));
+const GuestInsigniaBench = lazy(() => import('./guest-insignia-bench'));
 
 export default function RaidGatePage() {
   const query = new URLSearchParams(location.search);
+  if (query.get('guestInsignia') === '1') return <GuestInsigniaBench />;
   if (query.get('entryNotice') === '1') return <NoticeBench />;
   if (query.get('incoming') === '1') return <IncomingRaid />;
   return <Show when={query.get('road') === '1' && query.get('bench') === 'simulated'} fallback={<RaidGateRoute />}><RaidRoad /></Show>;

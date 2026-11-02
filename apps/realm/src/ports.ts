@@ -1,4 +1,4 @@
-import type { KingdomId } from '@chatdom/shared';
+import type { KingdomId, RaidGuestVisualMark } from '@chatdom/shared';
 import type { RealmWalkerFrame, RealmWalkerPresentation } from '@chatdom/shared/realm';
 import type { CollisionWorld, PlayerState, RealmAuthenticator, RealmIntent, RealmPrincipal, RealmReceipt, RealmPublicDelivery, RealmTransientMessage, RealmPrivateMessage, RealmBootstrap } from '@chatdom/shared/realm';
 
@@ -17,6 +17,8 @@ export interface RealmRoomEffects {
   allowWalking(walkerId: string, allowed: boolean): void;
   /** Retained writer's verified home/look link. No browser-supplied identity or authority. */
   presentWalker?(walkerId: string, presentation: RealmWalkerPresentation): void;
+  /** Server-confirmed dress on an existing actual seat. Never an invitation or a wardrobe right. */
+  presentRaidGuest?(walkerId: string, mark: RaidGuestVisualMark | null): void;
   /** Atomic committed geometry/collision adoption. Positions cover every affected walker. */
   adoptWorld(world: CollisionWorld, layoutRevision: string, positions: ReadonlyMap<string, readonly [number, number, number]>): void;
 }
@@ -44,6 +46,19 @@ export interface RealmRoomHandle {
 }
 export interface RealmRoomServices {
   readonly auth: RealmAuthenticator;
+  /** Read-only admission preparation. Null keeps ordinary/owned-door entry. No seat or arrival is committed here. */
+  readonly prepareSpawn?: (principal: RealmPrincipal, context: RealmSpawnContext) => Promise<RealmSpawnPreparation | null>;
   /** Acquires the exclusive durable writer lease before returning. Rejects a second active writer. */
   open(kingdomId: KingdomId): Promise<RealmRoomHandle>;
+}
+
+export interface RealmSpawnContext {
+  readonly world: CollisionWorld; readonly layoutRevision: string; readonly writerEpoch: string;
+}
+export interface RealmSpawnPreparation {
+  /** At most 128 supported, clear candidates at the supplied geometry identity. Empty refuses admission. */
+  readonly positions: readonly (readonly [number, number, number])[];
+  readonly expiresAt: number;
+  /** Recheck the retained authority synchronously after all awaits, immediately before selecting and seating. */
+  current(): boolean;
 }

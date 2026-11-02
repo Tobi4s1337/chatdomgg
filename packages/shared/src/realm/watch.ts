@@ -3,6 +3,7 @@ import type { RealmBootstrap } from './messages';
 import { z } from 'zod';
 import { DisplayNameSchema, EpochMsSchema, KingdomIdSchema, TokenSchema, UIntSchema } from '../identity';
 import { CitizenLookIdSchema } from '../citizen-look';
+import { RaidGuestVisualMarkSchema } from '../raid-show';
 
 /** Actual walkers only; matches the current KingdomRoom capacity and 5 Hz public patch cadence. */
 export const REALM_WALKER_FRAME_LIMIT = 300;
@@ -14,6 +15,8 @@ export const RealmObservedWalkerSchema = z.strictObject({
   x: z.number().finite(), y: z.number().finite(), z: z.number().finite(),
   yaw: UIntSchema.max(255), distance: z.number().finite().nonnegative(), speed: z.number().finite().nonnegative(),
   placement: UIntSchema.max(0xffff_ffff),
+  /** Current visual lease on this admitted walker only; missing/null means no guest insignia. */
+  raidGuest: RaidGuestVisualMarkSchema.nullable().optional(),
 });
 export type RealmObservedWalker = z.infer<typeof RealmObservedWalkerSchema>;
 /** The existing public room lease, never a person/session id or a second world-space pose. */

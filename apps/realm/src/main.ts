@@ -23,6 +23,7 @@ import { RaidCrierAuthority } from './raid-gate/crier';
 import { mountRaidCrierRoutes } from './raid-gate/crier-http';
 import { RaidGuestAuthority } from './raid-gate/guests';
 import { createRaidGuestRuntime } from './raid-gate/guest-runtime';
+import { createRaidGuestSpawn } from './raid-gate/guest-spawn';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -77,7 +78,8 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   }
   const castle = createRealmCastle({ origin, kingdomNames: names, safetyKey: evidenceKey });
   const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names, castle: castle.observe, evidenceKey });
-  const raidGuests = createRaidGuestRuntime({ authority: new RaidGuestAuthority({ pool, origin, clock: Date.now }), origin, citizens: input => citizens.observe(input), log: line => console.info(line) });
+  const guestAuthority = new RaidGuestAuthority({ pool, origin, clock: Date.now });
+  const raidGuests = createRaidGuestRuntime({ authority: guestAuthority, origin, citizens: input => citizens.observe(input), log: line => console.info(line) });
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
@@ -90,6 +92,11 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
       return () => { detachGuests(); detachInteractions(); detachEvening(); };
     },
   });
+  Object.assign(boot.services, { prepareSpawn: createRaidGuestSpawn({ authority: guestAuthority, current: (kingdomId) => {
+    const held = boot.services.kingdoms.get(kingdomId), founded = boot.loader.current(kingdomId);
+    return held?.current && founded ? { world: held.world, layoutRevision: held.layoutRevision,
+      writerEpoch: held.writerEpoch, plan: founded.scene.plan } : undefined;
+  } }) });
   citizens.use(boot.allocation, boot.services);
   boot.ingress.moments.useSettler(raidGuests.guardSettler(citizens));
   castle.use(boot.allocation, boot.store);
