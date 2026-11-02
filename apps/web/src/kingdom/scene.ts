@@ -20,7 +20,7 @@ import { CitizenChatCueSchema, PRESENCE_LEASE_MS } from '@chatdom/shared';
 import { createSimulatedPresence, createHeraldPresence } from './presence-feed';
 import { loadTerrain } from './terrain-client';
 import { todayLandSurface } from './terrain-surface';
-import { grandRecipeFor } from './grand-land/recipes';
+import { grandRecipeFor, readServedLandRecipe } from './grand-land/recipes';
 import { foundedLandReceipt } from './grand-land/scene-receipt';
 import { probePublishedLand } from './grand-land/land-availability';
 import type { RealmFoundedManifest } from '@chatdom/shared/realm';
@@ -171,7 +171,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   let foundedCollision:CollisionWorld|undefined,foundedPlaced:readonly CollisionBox[]|undefined;
   // One compiled world per scene: dock sites, keepers, walkers and interactions all read the same installed geometry.
   const collisionOfFounded=()=>foundedCollision??=foundedPlaced?compileFoundedSceneWithSolids(options.founded!,foundedPlaced):compileFoundedScene(options.founded!);
-  const grandRecipe=options.founded?grandRecipeFor(String(options.founded.kingdomId)):undefined;
+  // A kingdom founded on its own world names its land through the realm's pinned recipe.
+  const grandRecipe=options.founded?grandRecipeFor(String(options.founded.kingdomId))??await readServedLandRecipe(String(options.founded.kingdomId),options.signal?{signal:options.signal}:{}):undefined;
   // A recipe alone does not move a kingdom onto the grand floor: the realm must serve a land published for this
   // exact receipt. Until it does (no land routes yet, a receipt not yet rebound after growth, offline) the kingdom
   // keeps today's land, which its homes, doors and walk already stand on. The public grand view stays fail-closed.

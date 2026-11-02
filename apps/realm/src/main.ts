@@ -48,7 +48,6 @@ import { createRealmRoomDoor } from './raid-gate/room-door';
 import { createRealmPier } from './fishing/pier';
 import { mountPierRoutes } from './fishing/routes';
 import { Campfires, installCampfires, createPostgresFireStore, campfireChatCommands } from './campfire';
-import { createRealmLooks } from './look';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -118,23 +117,19 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const campfires = new Campfires({ store: createPostgresFireStore(pool) });
   // Chat's `!sus` reaches the burning fire through the herald's chat-command registry.
   const unregisterCampfireChat = realmChatCommands.register(campfireChatCommands(campfires));
-  // Saved looks: GET/PUT /api/realm/looks/…, checked against verified records, worn live by walkers already in a room.
-  const looks = createRealmLooks({ pool, origin, verifier, names, scene: kingdomId => boot.loader.current(kingdomId)?.scene,
-    publicOrigin: process.env.REALM_PUBLIC_ORIGIN, log: line => console.info(line) });
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
     ...(land ? { beforeFoundedPublication: land.beforePublication } : {}),
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
     repositoryOptions: gate.install({ origin, guards: [castle.guard] }), furnish: citizens.furnish,
     attach: kingdom => {
-      const detachLooks = looks.attach(kingdom);
       const detachGuests = raidGuests.attach(kingdom), detachDoor = roomDoor.attach(kingdom);
       const clearRaidChat = () => raidChat.clear(kingdom.kingdomId), detachRaidChat = kingdom.onClosed(clearRaidChat);
       const detachEvening = evening.attach(kingdom);
       const fire = campfires.fire(kingdom.kingdomId), detachLive = fire.bindLive(() => kingdom.current && kingdom.privateState.stream.liveUntil > Date.now());
       const detachInteractions = attachEveningInteractions(kingdom, { auth: boot.services.auth,
         scene: () => boot.loader.current(kingdom.kingdomId)?.scene, campfire: fire.seats });
-      return () => { clearRaidChat(); detachRaidChat(); detachDoor(); detachGuests(); detachInteractions(); detachLive(); detachEvening(); detachLooks(); };
+      return () => { clearRaidChat(); detachRaidChat(); detachDoor(); detachGuests(); detachInteractions(); detachLive(); detachEvening(); };
     },
   });
   Object.assign(boot.services, { channels: [...(boot.services.channels ?? []), createItemRoomChannel(itemFoundation.items, createPostgresItemAdmission({ pool, origin, readiness: boot.readiness }))] });
@@ -161,6 +156,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     authority: id => boot.services.kingdoms.get(id) ?? null, scene: id => boot.loader.current(id)?.scene ?? null,
     visible: () => pierVisible, where: pierWhere, pier })] });
   citizens.use(boot.allocation, boot.services);
+  land?.knowFounded(kingdomId => boot.allocation.currentLayout(kingdomId));
   // Forgotten people are left out before the raid-guest guard and settlement see them.
   const forgetGuard = new ForgetGuard(pool, origin);
   boot.ingress.moments.useSettler(forgetGuard.settler(raidGuests.guardSettler(citizens)));
@@ -195,7 +191,6 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   mountForgeQueueRoutes(transport.app, evening.line, { pool, origin, secureCookies: new URL(process.env.REALM_PUBLIC_ORIGIN ?? 'http://localhost:5190').protocol === 'https:' });
   mountPierRoutes(transport.app, pier);
   mountForgeLedgerRoutes(transport.app, forgeLedgerSource(boot.services));
-  looks.mount(transport.app);
   ownRealmShutdown(server, transport, async () => {
     pier.dispose();
     itemFoundation.dispose();

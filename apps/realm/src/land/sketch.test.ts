@@ -9,8 +9,9 @@ describe('Genesis sketch recipes', () => {
     expect(recipes.map(recipe => recipe.seed.character)).toEqual(['coastal-harbour', 'river-valley', 'mountain-pass']);
     const hashes = await Promise.all(recipes.map(recipe => sha256Hex(utf8(canonicalSceneJson(recipe)))));
     expect(new Set(hashes).size).toBe(3);
-    // Recorded with the sketch bakes in work/evidence/grand-world/GW11.md; a changed generator input is a new hash.
-    expect(hashes.map(hash => hash.slice(0, 8))).toEqual(['972a725a', '042a265d', 'a15c1e23']);
+    // Each channel's own grand-land-2 world (GW13; the grand-land-1 sketches of GW11 were never served). A changed
+    // generator input is a new hash, so a pinned hash changing here means every stored sketch is a different land.
+    expect(hashes.map(hash => hash.slice(0, 8))).toEqual(['a2766d2e', '899c96f0', '917af010']);
     expect(() => genesisSketchRecipe('129634568', 'tobi4s_')).toThrow(/No observed Genesis facts/);
   });
 });
