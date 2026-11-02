@@ -1,6 +1,6 @@
 // Captures the Raid Gate's states at spec sizes (spec 23, Acceptance). Run from the repo root after `pnpm build`:
 //   node apps/web/src/raid-gate/capture.mjs [--only name,name]
-// Uses the shared capture lock, one Chromium at a time. Bench frames are SIMULATED and say so on screen.
+// Uses the shared capture lock, one Chromium at a time. Private fixtures retain simulated origins without visible provenance chips.
 import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
@@ -59,8 +59,8 @@ try {
       assert.equal(welcome?.view?.offers.filter(offer => offer.receipt !== null).length, frame.welcome.taken, `${frame.name}: gifts taken with a receipt`);
       assert.ok(await page.locator('.rg-welcome-stage').isVisible(), `${frame.name}: the welcome is staged`);
     }
-    const simulated = await page.getByText('SIMULATED', { exact: false }).count();
-    assert.ok(simulated > 0, `${frame.name}: SIMULATED must be visible`);
+    assert.equal(await page.getByText(/simulated/i).count(), 0, `${frame.name}: no visible provenance labels`);
+    assert.equal(await page.locator('[aria-label*="simulated" i], [title*="simulated" i]').count(), 0, `${frame.name}: no accessible provenance labels`);
     const clipped = await page.evaluate(() => {
       const board = document.querySelector('.rg-board')?.getBoundingClientRect();
       return board ? board.left < 0 || board.top < 0 || board.right > window.innerWidth || board.bottom > window.innerHeight : false;

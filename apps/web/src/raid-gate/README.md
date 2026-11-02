@@ -23,7 +23,7 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 | Controller | `controller.ts` | Deterministic under an injected clock; late replies ignored |
 | Gate board | `RaidGatePane.tsx`, `Seal.tsx`, `raid-gate.css` | Desktop dock, phone sheet |
 | Route `/-/raid-gate` | `index.tsx` | Unbound by default: "The gate is shut here" |
-| Bench `/-/raid-gate?bench=simulated` | `bench.ts` | The real application in the page; SIMULATED everywhere |
+| Bench `/-/raid-gate?bench=simulated` | `bench.ts` | The real application with private fixtures and internal simulated origins; no visible provenance chips |
 | Travel coordinator: reserve, prepare, commit once, reconcile, cancel, return, recover | `apps/realm/src/raid-gate/coordinator.ts` | Real; fenced whereabouts, arrival evidence, source released only after the destination's acknowledgment |
 | Travel records and their durable repository | `apps/realm/src/raid-gate/records.ts`, `postgres-repository.ts` | Travel, arrival, whereabouts; tables in `0011_realm_raid_gate.sql` |
 | March check for raid journeys | `createRaidMarchCheck` in `apps/api/src/raid-gate/application.ts` | Joined, landed, this raid, within five minutes |
@@ -165,7 +165,7 @@ One continuous journey from one gate to the other, at dusk: `/-/raid-gate?bench=
 | The arrival, in the world | `road/arrival-feed.ts` | When the column reaches the destination and its world wakes, the road hands the destination scene's `momentFeed` the witnessed raid as one SIMULATED `twitch.moment` raid fact: the kingdom's own raid arrival wakes its gate under the leaving kingdom's banner, lights the braziers, rolls the caravan in (sized by Twitch's count) and takes the gate shot. The welcome's words and the gate board sit over it; no figure is drawn on top |
 | The road on the Atlas | `../atlas/road/` | `openRoadAtlas` finds both holdings in the survey, plans one deterministic road (a sea lane when the lands differ), and draws it in ink as the column walks: pencilled ahead, trodden behind. The torch column is a mark, sized by the log of the travellers, never a roster; torches are pigment dabs (the Atlas has no night) |
 | Journey camera | `../atlas/road/shot.ts` | Rises out of the source drawing, rides close, pulls back to hold the whole road, closes in on arrival and dives into the destination |
-| The route | `road/RaidRoad.tsx`, `road/road.css` | The real gate application on the SIMULATED bench (`bench.ts` takes a `BenchCast`), both kingdoms' worlds at dusk, the map between them, the gate board while the gate acts; every surface says SIMULATED |
+| The route | `road/RaidRoad.tsx`, `road/road.css` | The real gate application on the SIMULATED bench (`bench.ts` takes a `BenchCast`), both kingdoms' worlds at dusk, the map between them, the gate board while the gate acts; fixtures remain private with internal simulated origins |
 | Captures | `road/capture.mjs` | `node apps/web/src/raid-gate/road/capture.mjs --only gate\|road\|welcome [--reduced]` after `pnpm build`: one still per lease of the shared capture lock. The presentation clock is frozen (`capture=1`) and seeked, and the page's `Date.now` is pinned to it, so the kingdoms' own moments are seeked too |
 
 What main binds for the live road:
@@ -184,3 +184,7 @@ What main binds for the live road:
    viewer's identity), the first carrying the source's banner, the rest a pennant and a torch lit through the light
    field, walking in from `placeAnchor('gate')` for an incoming raid, and out through it for a gate-party frame
    `{ phase: 'gather' | 'setout', marchers, progress }`, plus the gate anchor's screen point for the words.
+
+## Decisions
+
+- 2026-11-02: The 2026-11-01 founder decision 25 removes visible simulation labels, including private benches and accessibility text. Internal simulated origins, feed isolation and transport guards remain unchanged. Private fixtures remain on `/-/` routes.

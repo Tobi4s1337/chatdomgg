@@ -22,7 +22,6 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
     onCleanup(() => { stop(); window.clearInterval(timer); window.removeEventListener('keydown', keys); });
   });
   const s = snap;
-  const simulated = () => s().origin === 'simulated';
   const name = () => s().source.name;
 
   return <aside class="rg-pane" data-phase={s().journey ? 'journey' : s().phase} data-viewer={s().viewer ?? 'none'} aria-labelledby="rg-title">
@@ -146,7 +145,6 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
         </Switch>
         </Show>
       </div>
-      <Show when={simulated()}><p class="rg-simulated" title="Bench authority, walkers and Twitch answers; nothing reaches Twitch"><span class="rg-pip" />SIMULATED</p></Show>
     </div>
   </aside>;
 }

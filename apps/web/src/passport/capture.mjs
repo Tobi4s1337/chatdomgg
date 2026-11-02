@@ -21,7 +21,7 @@ const root = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${root}shots/passport`;
 const run = promisify(execFile);
 
-/** name, query, viewport. The bench header stays on: it is where the SIMULATED words live on the bench. */
+/** name, query, viewport. The bench header stays on for its reading controls; the 2026-11-01 founder decision 25 removes visible simulation labels. */
 const SHOTS = [
   ['none', { fixture: 'none', view: '1', layout: 'spread' }, [1440, 900]],
   ['few', { fixture: 'few', view: '1', layout: 'spread' }, [1440, 900]],
