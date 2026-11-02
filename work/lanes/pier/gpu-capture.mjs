@@ -45,8 +45,11 @@ class Cdp {
 }
 const pause = ms => new Promise(ready => setTimeout(ready, ms));
 
+// With a realm behind the page (CHATDOM_REALM_TARGET, --stream), every realm route goes to that realm through the
+// web app's own proxies and the read-only copy below stands aside.
+const realmBehind = !!process.env.CHATDOM_REALM_TARGET && has('stream');
 const server = await startPreview({ root: resolve(root, 'apps/web'), logLevel: 'error', build: { outDir: dist }, preview: { host: '127.0.0.1', port, strictPort: true },
-  plugins: [{ name: 'pier-read-only-copy', configurePreviewServer(host) {
+  plugins: realmBehind ? [] : [{ name: 'pier-read-only-copy', configurePreviewServer(host) {
     host.middlewares.use((request, response, next) => {
       if (request.url === `/api/realm/founded/${scene.kingdomId}`) { response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); response.end(JSON.stringify(receipt)); }
       else if (request.url === `/api/realm/founded/scenes/${sceneHash}`) { response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(bytes); }
@@ -83,17 +86,30 @@ try {
   const measurements = [];
 
   if (has('stream')) {
-    // The stream view's own director at dusk, over the realm's scene with the pier in it (PIER_FOUNDED_SCENE).
+    // The stream view at dusk over the realm's own scene, the pier installed in it. The director has no pier shot yet
+    // (pier SEAMS 3b), so each named pose frames the pier through the stream's capture pose (`__chatdomKingdom.pose`,
+    // evidence framing only); without poses the director's own shot is kept. --poses=name:ex,ey,ez,tx,ty,tz,fov;...
     const camera = arg('camera') ?? 'hero';
     const url = `http://localhost:${port}/stream?source=realm&kingdom=${scene.kingdomId}&hour=${hour}&camera=${camera}`;
     await send('Page.navigate', { url });
     let ready = false;
     for (let i = 0; i < 480 && !ready; i++) { ready = await evaluate('window.__chatdomReady === true', false).catch(() => false); if (!ready) await pause(250); }
-    await pause(Number(arg('settle') ?? 4000));
-    const path = resolve(output, `pi10-stream-${camera}-dusk@${width}x${height}.png`);
-    await capture(path);
-    measurements.push({ path: path.replace(root + '/', ''), url, ready, pierPieces: scene.placements.filter(piece => piece.id.startsWith('pier:')).length, renderer: await renderer() });
-    console.log(`${path.replace(root + '/', '')} ready=${ready}`);
+    const poses = (arg('poses') ?? '').split(';').filter(Boolean).map(entry => { const [name, numbers] = entry.split(':'); return { name, values: numbers.split(',').map(Number) }; });
+    const realmScene = realmBehind ? await evaluate('(() => { const s = window.__chatdomKingdom?.stats; return s ? { calls: s.drawCalls, triangles: s.triangles } : null; })()', false).catch(() => null) : null;
+    for (const pose of poses.length ? poses : [{ name: camera, values: null }]) {
+      if (pose.values) {
+        const [ex, ey, ez, tx, ty, tz, fov] = pose.values;
+        await evaluate(`window.__chatdomKingdom.pose([${ex},${ey},${ez}],[${tx},${ty},${tz}],${fov ?? 43})`, false);
+      }
+      await pause(Number(arg('settle') ?? 4000));
+      const path = resolve(output, `pi10-stream-${pose.name}-dusk@${width}x${height}.png`);
+      await capture(path);
+      const frame = await evaluate('(() => { const s = window.__chatdomKingdom?.stats; return s ? { calls: s.drawCalls, triangles: s.triangles, ready: s.ready } : null; })()', false).catch(() => null);
+      const manifest = realmBehind ? await fetch(`${process.env.CHATDOM_REALM_TARGET}/api/realm/founded/${scene.kingdomId}`).then(r => r.json()).catch(() => null) : receipt;
+      measurements.push({ path: path.replace(root + '/', ''), url, ready, pose: pose.values, realm: realmBehind, manifest, frame, renderer: await renderer() });
+      console.log(`${path.replace(root + '/', '')} ready=${ready} ${JSON.stringify(frame)}`);
+    }
+    if (realmScene) console.log(`scene before posing: ${JSON.stringify(realmScene)}`);
   } else if (has('fps')) {
     // Frame timing at the pier on the 5080, measured in this front tab: the play bench running live (not paused), the
     // second fisher fishing and the viewer's cast played by the bench's fair player, for ten seconds of real frames.
@@ -223,7 +239,7 @@ try {
   }
   if (measurements.length) {
     const name = resolve(output, `pi10-gpu-${has('stream') ? 'stream' : has('bag') ? 'bag' : 'play'}-${width}x${height}-stats.json`);
-    await writeFile(name, JSON.stringify({ capturedAt: new Date().toISOString(), receipt, browser: version.Browser, measurements }, null, 2) + '\n');
+    await writeFile(name, JSON.stringify({ capturedAt: new Date().toISOString(), receipt: realmBehind ? measurements[0]?.manifest ?? null : receipt, browser: version.Browser, measurements }, null, 2) + '\n');
   }
   console.log(`Held the GPU ${Math.round((Date.now() - started) / 1000)} s.`);
 } finally {

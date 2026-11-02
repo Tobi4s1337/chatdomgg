@@ -472,6 +472,16 @@ With the walk feature, grand-world's `registerKingdomLayer` (now on its branch) 
 camera and frame come with the walk. It stays the route for the stream view, where the pier draws from its public
 feed (PI11).
 
+**Update, 2 November afternoon: play's walk feature has landed on `lane/play`** (its PL10 checkpoint "walk features
+and crowd detail", `apps/web/src/play/slots.ts`) with the slot exactly as asked above: `registerWalkFeature`,
+`WalkFeatureProvider` and `WalkFeatureContext`. pier's slot module below, compiled against play's real `slots.ts` from that
+branch, type-checks clean. A deliberate mismatch (`kingdomName: number`) fails on `registerWalkFeature` as a negative
+control. Nothing on pier's side is left to change. When `lane/play` and `lane/pier` are on the same integration
+branch, the integrator adds the two files above (`apps/web/src/fishing/play-slot.ts` and the one import line in
+`apps/web/src/play/providers.ts`) and sets `REALM_PIER_FISHING=1` in the realm's environment. Those three lines together
+open fishing; none of them alone ships a half-mounted pier. pier cannot add them on its own branch, because `main`
+(this branch's base) has no `apps/web/src/play/slots.ts` yet.
+
 ### 3a. The lanterns on stream and for watchers, through grand-world's kingdom layers (PI10, 2 November)
 
 grand-world's `registerKingdomLayer` (its SEAMS "Pier anchors and kingdom layers", `apps/web/src/kingdom/scene.ts`
@@ -546,6 +556,12 @@ export interface KingdomLayerMount {
 // deck and its lanterns in the lower third and the head on the water. The stream's realm source also needs a live
 // realm watch behind the page; the lane's GPU lease serves only the bench, so the still waits for both.
 // needs: grand-world stream pier shot
+// Update, 2 November: the realm half is solved on pier's side (work/lanes/pier/e2e/stream-realm.sh serves the lane's
+// realm behind the leased stream page). The 1920x1080 stills at dusk are framed through the stream's capture pose, not a
+// director shot (work/evidence/pier/README.md, "The stream view with the pier in shot"). Their poses are a
+// starting frame for grand-world's pier shot: eye (254, 9, 246) to target (226, 0, 226) at 45 degrees on Willowmere's
+// pier root (238.25, 227.75), i.e. about 16 m behind the root along the deck and 18 m to its side, 9 m up, looking at
+// the middle of the walk. The ask for a director shot stands.
 
 // 4. The kingdom clock (decision 15): kingdomHour(serverTime: number): number, from grand-world when it exists.
 // 5. The water mood for the sky: pier exports kingdomWaterMood(kingdomId, serverTime); grand-world may adopt it.
