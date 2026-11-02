@@ -3,7 +3,7 @@ import type { Room } from '@colyseus/sdk';
 import { GatherFrameSchema, GatherInteriorSchema, GatherSelfSchema, TavernRoomState,
   type GatherFrame, type GatherInterior, type GatherSelf, type PongView, type GatherMove } from '@chatdom/shared';
 import { PLAYER_FIELDS, RealmJoinSchema, sanitizeRealmWalkInput,
-  type CollisionWorld, type PlayerState, type RealmWalkInput, type WalkInput } from '@chatdom/shared/realm';
+  type CollisionWorld, type PlayerState, type RealmWalkInput, type WalkInput, type RealmPrivateMessage } from '@chatdom/shared/realm';
 import { stepPlayer } from '@chatdom/world/movement';
 import { createRealmNetwork } from '../realm/transport';
 import type { RealmEntry, RealmWalkerPose } from '../realm/client';
@@ -17,6 +17,10 @@ export interface TavernClient extends WalkRealm {
   readonly self: GatherSelf;
   readonly tables: GatherFrame;
   readonly connected: boolean;
+  readonly ended: boolean;
+  readonly disconnects: number;
+  readonly reconnects: number;
+  readonly resumeStored: boolean;
   readonly predicted: Readonly<PlayerState>;
   readonly presentations: ReadonlyMap<string, PongPresentation>;
   subscribe(listener: () => void): () => void;
@@ -43,7 +47,11 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
   catch (error) { if (!saved) throw error; storage?.removeItem(key); room = await fresh(); }
   if (room.roomId !== `t:${entry.kingdomId}`) { void room.leave(); throw new Error('The door opened into another tavern.'); }
   const listeners = new Set<() => void>(), offs: (() => void)[] = [];
-  let disposed = false, connected = true, interior: GatherInterior | null = null;
+  let disposed = false, connected = true, ended = false, interior: GatherInterior | null = null;
+  let transportUp = true, resuming = false, resumeStateSeen = false, disconnects = 0, reconnects = 0;
+  const resumeParts = new Set<string>();
+  let checkResume = () => {};
+  const witnessed = (part: string) => { if (resuming) { resumeParts.add(part); checkResume(); } };
   let tables: GatherFrame = { at: 0, tables: [] }, self: GatherSelf = { table: null, seat: null }, frameReceivedAt = performance.now();
   const presentations = new Map<string, PongPresentation>();
   const notify = () => { for (const listener of listeners) listener(); };
@@ -65,19 +73,23 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
     const parsed = GatherInteriorSchema.safeParse(raw);
     if (!parsed.success) { protocolFailure(); return; }
     interior = parsed.data;
+    witnessed('interior'); notify();
   }), room.onMessage('tables', raw => {
     const parsed = GatherFrameSchema.safeParse(raw);
-    if (parsed.success) receive(parsed.data); else protocolFailure();
+    if (parsed.success) { receive(parsed.data); witnessed('tables'); } else protocolFailure();
   }), room.onMessage('self', raw => {
     const parsed = GatherSelfSchema.safeParse(raw);
     if (parsed.success) {
       self = parsed.data;
       for (const [table, presentation] of presentations) presentation.setSeat(self.table === table ? self.seat : null);
       notify();
+      witnessed('self');
     } else protocolFailure();
   }), room.onMessage('receipt', () => {}));
   // These are consumed by the interaction binding after scene admission; bootstrap repeats them when it mounts.
-  const earlyPrivate = room.onMessage('private', () => {}), earlyTransient = room.onMessage('transient', () => {});
+  const earlyPrivate = room.onMessage('private', (message: RealmPrivateMessage) => {
+    if (message.type === 'interaction' && message.requestId === null && message.writerEpoch === room.state.writerEpoch) witnessed('interaction');
+  }), earlyTransient = room.onMessage('transient', () => {});
   offs.push(earlyPrivate, earlyTransient);
   room.send('bootstrap');
   try {
@@ -100,23 +112,53 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
     query: bounds => installed.boxes.filter(box => box.min.every((n, axis) => n <= bounds.max[axis]!) && box.max.every((n, axis) => n >= bounds.min[axis]!)) };
   const predict = Predict.get(room, { name: 'tavern-walkers', mode: 'lerp', delay: 120 });
   predict.attachAll('walkers', { mode: 'lerp', fields: ['x', 'y', 'z', 'distance'], snap: 4 });
-  const input = room.input<RealmWalkInput>({ mode: 'reliable' }), walker = room.state.walkers.get(room.sessionId)!;
-  const reconciler = predict.reconciler(walker, { input, fields: [...PLAYER_FIELDS], smoothMs: 80,
+  const input = room.input<RealmWalkInput>({ mode: 'reliable' });
+  let walker = room.state.walkers.get(room.sessionId)!;
+  const makeReconciler = () => predict.reconciler(walker, { input, fields: [...PLAYER_FIELDS], smoothMs: 80,
     step: (ctx, state, command) => {
       if (command.placement === walker.placement && command.collisionRevision === world.revision) stepPlayer(state, command, ctx.dt, world);
     } });
-  const predicted = reconciler.state as Readonly<PlayerState>;
+  let reconciler = makeReconciler();
+  // The movement owner retains this handle even if a full reconnect replaces schema children.
+  const predicted: PlayerState = { ...reconciler.state };
   let placement = walker.placement, jumpDown = false, jump = false, lastSend = -Infinity, sequence = -1, match: string | null = null;
   const peerPlacements = new WeakMap([...room.state.walkers.values()].map(peer => [peer, peer.placement]));
   const clearInput = () => { jumpDown = false; jump = false; };
   const remember = () => { if (!disposed) storage?.setItem(key, room.reconnectionToken); };
-  const dropped = () => { connected = false; clearInput(); notify(); };
-  const rejoined = () => { connected = true; remember(); clearInput(); room.send('bootstrap'); notify(); };
-  room.onDrop(dropped); room.onLeave(dropped); room.onReconnect(rejoined); remember();
+  checkResume = () => {
+    if (!resuming || !transportUp || !resumeStateSeen || disposed || resumeParts.size !== 4 || !room.state.walkers.get(room.sessionId)) return;
+    if (room.state.kingdomId !== entry.kingdomId || room.state.collisionRevision !== installed.revision
+      || interior?.revision !== installed.revision || interior.layoutRevision !== installed.layoutRevision) { protocolFailure(); return; }
+    const current = room.state.walkers.get(room.sessionId)!;
+    if (walker !== current) { reconciler.dispose(); walker = current; reconciler = makeReconciler(); }
+    else reconciler.reset();
+    placement = walker.placement; Object.assign(predicted, reconciler.state);
+    resuming = false; connected = true; reconnects++; remember(); clearInput(); notify();
+  };
+  const dropped = () => {
+    if (transportUp) disconnects++;
+    transportUp = false; connected = false; resuming = true; resumeStateSeen = false; resumeParts.clear(); clearInput();
+    self = { table: null, seat: null, seatIndex: null, playerIndex: null };
+    for (const presentation of presentations.values()) presentation.setSeat(null);
+    notify();
+  };
+  const rejoined = () => {
+    transportUp = true; connected = false; resuming = true; resumeStateSeen = false; resumeParts.clear();
+    // The SDK rotates its token in JOIN's finally, after onReconnect listeners return.
+    queueMicrotask(() => { if (!disposed && !ended) remember(); });
+    clearInput(); room.send('bootstrap'); notify();
+  };
+  const left = () => { ended = true; storage?.removeItem(key); dropped(); };
+  const freshState = () => { if (resuming && transportUp) { resumeStateSeen = true; checkResume(); } };
+  room.onStateChange(freshState);
+  room.onDrop(dropped); room.onLeave(left); room.onReconnect(rejoined); remember();
   let request = 0;
   return {
     selfId: room.sessionId, room, interior: installed, world, predicted, presentations,
     get connected() { return !disposed && connected; }, get self() { return self; }, get tables() { return tables; },
+    get ended() { return ended; },
+    get disconnects() { return disconnects; }, get reconnects() { return reconnects; },
+    get resumeStored() { return !!storage && storage.getItem(key) === room.reconnectionToken; },
     clearInput,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     tick(now, sample: WalkInput): readonly RealmWalkerPose[] {
@@ -131,6 +173,7 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
         Object.assign(input.data, sample, { buttons: (sample.buttons & 1) | (jump ? 2 : 0), collisionRevision: world.revision, placement });
         sanitizeRealmWalkInput(input.data); input.send(); jump = false;
       }
+      Object.assign(predicted, reconciler.state);
       return [...room.state.walkers].map(([id, peer]) => ({ id, name: peer.name, look: peer.look, homeSlot: peer.homeSlot,
         x: predict.value(peer, 'x'), y: predict.value(peer, 'y'), z: predict.value(peer, 'z'),
         yaw: id === room.sessionId ? predicted.yaw : peer.yaw, distance: predict.value(peer, 'distance'),
@@ -164,7 +207,8 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
     },
     dispose() {
       if (disposed) return; disposed = true; connected = false;
-      offs.forEach(off => off()); room.onDrop.remove(dropped); room.onLeave.remove(dropped); room.onReconnect.remove(rejoined);
+      offs.forEach(off => off()); room.onDrop.remove(dropped); room.onLeave.remove(left); room.onReconnect.remove(rejoined);
+      room.onStateChange.remove(freshState);
       listeners.clear(); reconciler.dispose(); predict.dispose(); storage?.removeItem(key); void room.leave();
     },
   };

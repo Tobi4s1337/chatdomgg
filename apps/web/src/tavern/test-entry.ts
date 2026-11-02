@@ -12,7 +12,9 @@ export async function openLocalTestTavern(params: URLSearchParams) {
     return RealmJoinSchema.parse(await response.json());
   };
   const join = await ticket();
-  const client = await connectTavern(endpoint.toString().replace(/\/$/, ''), { kingdomId: join.kingdomId, resumeScope: crypto.randomUUID(), ticket: async () => join });
+  const client = await connectTavern(endpoint.toString().replace(/\/$/, ''), {
+    kingdomId: join.kingdomId, resumeScope: params.get('resumeScope') ?? crypto.randomUUID(), ticket: async () => join,
+  }, sessionStorage);
   if (client.room.state.origin !== 'simulated') { client.dispose(); throw new Error('This door does not admit test walkers.'); }
   return client;
 }

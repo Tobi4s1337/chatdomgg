@@ -44,15 +44,23 @@ gather does not edit play's files or implement a second generic transfer control
   the source. Table framing uses the same actual board as the miniatures and hides only the local seated body.
   `open(): Promise<TavernClient>` is supplied by the transfer owner; `requestInput(canvas, reason)` returns
   `GameInputLease` from `apps/web/src/games/input.ts` (`active`, `onKey`, `onPointer`, `release`). Integrated play
-  must keep its pointer locked when handing that lease to the game. The loopback inspection adapter currently
-  requires a canvas click to acquire pointer lock after the existing walk-camera release.
+  must keep its pointer locked when handing that lease to the game. The supplied canvas is a dedicated transparent
+  seated input surface over the existing rendered scene. It prevents the disabled walking look owner from
+  cancelling the game's lock; it adds no renderer or camera owner. The loopback adapter may require a fresh
+  canvas click when acquiring lock or restoring a connection.
 - The surface restores a retained chair's framing only after a fresh authoritative bootstrap. It does not
   recreate an abandoned local interaction. E/Esc and the HUD's stand action go through the existing interaction
   owner and server seat release. The carved game HUD is within the surface; moving it to play's HUD slot remains
   pending play's confirmed adapter. No `play-slot.ts` implementation is claimed.
-- The current Stones/Dice inspection controls are native buttons after the standalone walk camera releases
-  its pointer. Gather still needs to bind those actions to the supplied game lease before the destination can
-  satisfy integrated always-locked input. This is open GA10 work, not a request for play to build game controls.
+- All three games consume that lease. Stones uses mouse motion or arrows to select, click/Enter/Space to drop,
+  and 1–7 for a direct column. Dice uses click/R to roll and right-click/H to hold. Enter/Space also starts a
+  ready table. Pong uses mouse/A/D/arrows and Enter/Space to start. E/Esc remain with the interaction owner;
+  native controls remain available for touch and focus navigation. Held presses do not repeat across leases.
+- A dropped destination connection immediately retires its input lease. Re-entry waits for fresh room state,
+  interior, tables, self and matching-writer interaction bootstrap before restoring its retained chair and lease.
+  The rotated reconnect token is saved after the SDK's join handler and again after that barrier. Terminal leave
+  clears it and offers a fresh destination open through the supplied `open()`. That retry is destination recovery,
+  not a claimed source-room return. Play still owns the safe generic portal recovery path.
 
 The existing action/target contract has no generic portal action. Gather will add portal contracts only to its new
 `packages/shared/src/games.ts`; it will not widen `RealmIntentSchema` or existing target kinds silently.

@@ -13,7 +13,7 @@ export { connectTavern, type TavernClient } from './client';
 /** A room inspection route. No staged people or pretend games enter this surface. */
 export default function TavernBench() {
   const params = new URLSearchParams(location.search);
-  if (params.get('testWalker') === '1') return <TavernRoomSurface open={() => openLocalTestTavern(params)} requestInput={surface => requestBenchGameInput(surface)}
+  if (params.get('testWalker') === '1') return <TavernRoomSurface open={() => openLocalTestTavern(params)} requestInput={(surface, reason) => requestBenchGameInput(surface, reason)}
     {...(params.get('seat') ? { benchSeat: params.get('seat')! } : {})} />;
   const initial = params.get('view');
   const [framing, setFraming] = createSignal<TavernFraming>(initial === 'bar' || initial === 'table' ? initial : 'room');

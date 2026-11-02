@@ -29,6 +29,13 @@ does not show an invented match. The working room/seat transport is tested separ
   connection. It hides the local body at the board and draws actual peers and authoritative table miniatures.
 - The caller supplies `open()` and `requestInput(canvas, reason)`. The game consumes the supplied input lease;
   play still owns session transfer, the single active destination surface and the integrated pointer lock.
+- The lease receives a dedicated transparent input canvas, not another renderer. Walking releases its own
+  canvas without cancelling the seated lock. Stones consumes motion/arrows, click/Enter and direct 1–7;
+  Dice consumes click/R and right-click/H. Enter/Space starts a ready table. E/Esc still use the interaction
+  owner. The local adapter ignores held buttons inherited from a previous lease and filters typing and repeats.
+- Disconnect retires input immediately; fresh state and a complete matching-writer bootstrap gate chair
+  restoration. Rotated tokens persist in the caller's reconnect partition. Terminal leave clears the token and
+  offers a real fresh `open()` retry. A failed scene initialization is recreated on retry; a healthy scene is reused.
 - Pong predicts only the local paddle. The ball follows buffered public server snapshots. Network stalls hold the
   last witnessed path; a terminal server result appears immediately. The new public schemas never admit RNG or
   paddle targets. See `work/evidence/gather/ga10-pong.md` for the measured limits.
@@ -41,8 +48,12 @@ does not show an invented match. The working room/seat transport is tested separ
   publication. See `work/evidence/gather/ga10-turn-games.md` for failure and SQL evidence limits.
 
 GA10 remains open. Still required: play's generic portal transfer and safe return, approved exterior door anchors,
-full database-authenticated matches and portal evidence, durable result/tally integration, full browser restart/reconnect evidence,
+full database-authenticated matches and portal evidence, durable result/tally integration, remaining browser failure-path and database restart evidence,
 sound and real-GPU acceptance with eight walkers. See the lane PRD and `SEAMS.md`.
+
+`work/evidence/gather/ga10-input-recovery.md` records the locked controls, actual cut/reconnect and page-refresh
+proof, the packet-order regressions, and their limits. The controlled same-person replacement experiment is
+blocked after three failures; its skipped reproduction is not passing session-continuity evidence.
 
 The connected-browser checkpoint is demonstrated by `work/evidence/gather/ga10-pong-browser-match.json` and
 the two `ga10-pong-live` stills. One browser and two SDK clients completed a 1–7 match, with the same spectator
@@ -57,7 +68,7 @@ Run under `nice -n 10`:
 ```sh
 pnpm exec tsc -p work/lanes/gather/tsconfig.json
 pnpm exec eslint apps/realm/src/games apps/realm/src/server.ts apps/web/src/tavern apps/web/src/games packages/content/src/tavern packages/shared/src/games.ts
-pnpm exec vitest run apps/realm/src/games apps/web/src/games packages/content/src/tavern
+pnpm exec vitest run apps/realm/src/games apps/web/src/games apps/web/src/tavern packages/content/src/tavern
 pnpm --filter @chatdom/realm build
 pnpm --filter @chatdom/web build
 node apps/realm/src/games/bench.mjs
@@ -78,7 +89,13 @@ before stopping its services. Its browser route is `/-/tavern?testWalker=1&seat=
 its own `/live-realm-data` proxy. The route refuses non-loopback hosts/endpoints and non-test rooms. It cannot
 issue production entry tickets, alter a live actor, teleport a body or grant a chair.
 
-The turn-game harness follows the same path with native carved controls. The SQL check requires its pinned
+The turn-game harness follows the same path with native carved controls by default. Set `GATHER_INPUT=locked`
+to exercise real pointer lock, keys and mouse actions, and `GATHER_RECONNECT=1` to sever the browser socket,
+restore the chair and reload using the rotated token. The loopback-only entry uses sessionStorage with a stable
+test partition; it does not stand in for a production session issuer. Pong also accepts `GATHER_INPUT=locked`.
+Input and recovery evidence is recorded separately from the earlier native-control proofs.
+
+The SQL check requires its pinned
 external embedded engine under `/tmp` (installation is in the runner header). It executes the exact migration and
 production store and closes/reopens file-backed game checkpoints. It is not a pgwire, pool, multibackend or crash
 test. The eight opt-in native SQL tests require `GATHER_DATABASE_TESTS=1` and `DATABASE_URL`; they create and

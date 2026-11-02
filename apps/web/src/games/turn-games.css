@@ -7,6 +7,9 @@
 .gather-turn-hud .gather-turn-rules { margin: 7px 0 0; font-size: 13px; line-height: 1.2; color: var(--cd-cream-soft); }
 .gather-stone-columns { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
 .gather-stone-columns .cd-crest { min-width: 0; padding: 0; font: 19px var(--cd-face-story); }
+.gather-stone-columns .is-selected { border-color: var(--cd-brass-hi); box-shadow: inset 0 0 0 1px var(--cd-brass-hi), inset 0 -3px 0 #25170d55; color: var(--cd-cream); }
+.gather-turn-keys { margin: 6px 0 0; font-size: 12px; color: var(--cd-cream-soft); }
+.gather-turn-key { margin-left: 3px; }
 .gather-turn-hud button:disabled { opacity: .5; cursor: not-allowed; }
 .gather-dice-scores { display: flex; justify-content: center; gap: 4px; }
 .gather-dice-player { flex: 1 1 0; min-width: 0; padding: 4px 5px; border: 1px solid transparent; border-radius: 4px; background: var(--cd-wood-well); }
@@ -29,4 +32,7 @@
   .gather-turn-hud .gather-turn-message { margin: 2px 0 5px; }
   .gather-turn-hud .gather-turn-rules { margin-top: 5px; }
   .gather-turn-hud .gather-game-leave { min-height: 38px; padding: 5px 12px; }
+}
+@media (pointer: coarse) {
+  .gather-turn-keys, .gather-turn-key { display: none; }
 }

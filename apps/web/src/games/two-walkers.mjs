@@ -14,6 +14,8 @@ import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mj
 
 const repo = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${repo}/work/evidence/gather`;
+const lockedInput = process.env.GATHER_INPUT === 'locked';
+const imagePrefix = lockedInput ? 'ga10-pong-input' : 'ga10-pong-live';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (predicate, description, timeout = 30_000) => {
   const deadline = Date.now() + timeout;
@@ -56,16 +58,17 @@ try {
   report.ports = { realm: realmPort, web: webPort };
   loader = await createServer({ root: repo, configFile: false, appType: 'custom', logLevel: 'error', cacheDir: '/tmp/chatdom-gather/vite-harness-loader', optimizeDeps: { noDiscovery: true },
     server: { middlewareMode: true, hmr: false, ws: false } });
-  const [{ createRealmServer }, { referenceServices }, { starterCitizenLook, TavernRoomState }, { createTavernInterior }, { seatApproachDriver }] = await Promise.all([
+  const [{ createRealmServer }, { referenceServices }, { starterCitizenLook, TavernRoomState }, { createTavernInterior }, { seatApproachDriver }, { installGatherStore, MemoryGatherStore }] = await Promise.all([
     loader.ssrLoadModule('/apps/realm/src/server.ts'), loader.ssrLoadModule('/apps/realm/src/reference.ts'),
     loader.ssrLoadModule('/packages/shared/src/index.ts'), loader.ssrLoadModule('/apps/realm/src/games/interior.ts'),
-    loader.ssrLoadModule('/apps/web/src/games/walker.ts'),
+    loader.ssrLoadModule('/apps/web/src/games/walker.ts'), loader.ssrLoadModule('/apps/realm/src/games/store.ts'),
   ]);
   const base = referenceServices();
   const services = { ...base, auth: { ...base.auth, authenticate: async join => {
     const principal = await base.auth.authenticate(join);
     return { ...principal, look: starterCitizenLook(principal.personId) };
   } } };
+  installGatherStore(services, new MemoryGatherStore());
   const created = createRealmServer(services); realm = created.server;
   created.transport.app.post('/reference/session', response => response.writeHeader('Access-Control-Allow-Origin', '*')
     .writeHeader('Cache-Control', 'no-store').writeHeader('Content-Type', 'application/json').end(JSON.stringify(base.issue())));
@@ -129,7 +132,7 @@ try {
   catch (error) {
     console.error('[gather] seat diagnostic', JSON.stringify(await page.evaluate(() => ({ live: window.__chatdomTavernLive, error: window.__chatdomTavernError }))));
     await mkdir(output, { recursive: true });
-    for (const [width, height] of [[1440, 900], [390, 844]]) {
+    for (const [width, height] of lockedInput ? [] : [[1440, 900], [390, 844]]) {
       await page.setViewportSize({ width, height }); await sleep(800);
       const path = `${output}/ga10-walk-live@${width}x${height}.png`;
       await page.screenshot({ path }); console.error(`[gather] ${path}`);
@@ -150,7 +153,13 @@ try {
   });
   const measuredAt = Date.now();
   measurement = { sockets, measuredAt };
-  await page.getByRole('button', { name: 'Play Pong' }).click();
+  if (lockedInput) {
+    const gameCanvas = page.locator('canvas[data-gather-game-input]');
+    await gameCanvas.waitFor({ state: 'visible' });
+    await gameCanvas.click({ position: { x: 30, y: 30 } });
+    await page.waitForFunction(() => document.pointerLockElement?.matches('canvas[data-gather-game-input]'), null, { timeout: 10_000 });
+    await page.keyboard.press('Enter');
+  } else await page.getByRole('button', { name: 'Play Pong' }).click();
   await until(() => player.state.tables.tables.find(table => table.table === 'middle')?.pong, 'Pong start');
   const game = () => player.state.tables.tables.find(table => table.table === 'middle')?.pong;
   let sequence = 0;
@@ -161,23 +170,36 @@ try {
   } catch (error) {
     console.error('[gather] paddle diagnostic', JSON.stringify({ game: game(), live: await page.evaluate(() => window.__chatdomTavernLive) }));
     await mkdir(output, { recursive: true });
-    for (const [width, height] of [[1440, 900], [390, 844]]) {
+    for (const [width, height] of lockedInput ? [] : [[1440, 900], [390, 844]]) {
       await page.setViewportSize({ width, height }); await sleep(800);
-      const path = `${output}/ga10-pong-live@${width}x${height}.png`;
+      const path = `${output}/${imagePrefix}@${width}x${height}.png`;
       await page.screenshot({ path }); report.screenshots.push({ path, authorityPhase: game()?.phase, score: game()?.score }); console.log(`[gather] ${path} (${game()?.phase})`);
     }
     throw error;
   } finally { await page.keyboard.up('KeyD'); }
   assert.equal(await page.evaluate(() => window.__chatdomTavernLive?.seated), 'middle', 'game key keeps the physical chair');
   report.checks.push('Browser D input moves its server-confirmed paddle without standing.');
+  if (lockedInput) {
+    assert.equal(await page.evaluate(() => document.pointerLockElement?.matches('canvas[data-gather-game-input]')), true, 'game canvas retains pointer lock after walking look disables');
+    await page.mouse.move(700, 400);
+    await sleep(250);
+    const before = game().paddles[1], acknowledged = game().acknowledged[1];
+    await page.mouse.move(580, 400, { steps: 4 });
+    await until(() => game().acknowledged[1] > acknowledged && Math.abs(game().paddles[1] - before) > .05, 'mouse moves server-confirmed paddle', 10_000);
+    assert.equal(await page.evaluate(() => document.pointerLockElement?.matches('canvas[data-gather-game-input]')), true, 'game canvas retains pointer lock after mouse movement');
+    assert.equal(await page.evaluate(() => window.__chatdomTavernLive?.seated), 'middle');
+    report.checks.push('Dedicated game canvas retains pointer lock and real mouse movement changes the server-confirmed paddle while seated.');
+    report.mouse = { before, after: game().paddles[1], acknowledged: game().acknowledged[1] };
+  }
   await until(() => game()?.phase === 'rally', 'live rally');
   await mkdir(output, { recursive: true });
   for (const [width, height] of [[1440, 900], [390, 844]]) {
     await page.setViewportSize({ width, height });
     await sleep(800);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    const path = `${output}/ga10-pong-live@${width}x${height}.png`;
-    await page.screenshot({ path }); report.screenshots.push({ path, authorityPhase: game()?.phase, score: game()?.score }); console.log(`[gather] ${path} (${game()?.phase})`);
+    const path = `${output}/${imagePrefix}@${width}x${height}.png`;
+    const beforeCapture = { phase: game()?.phase, score: game()?.score };
+    await page.screenshot({ path }); report.screenshots.push({ path, authorityBeforeCapture: beforeCapture, authorityAfterCapture: { phase: game()?.phase, score: game()?.score }, note: 'The rendered frame may lag either authority sample.' }); console.log(`[gather] ${path} (${game()?.phase})`);
   }
   let lastScore = '';
   await until(() => {
@@ -192,6 +214,16 @@ try {
   assert.equal(errors.length, 0, `browser errors: ${errors.join('; ')}`);
   report.checks.push('A whole server-timed Pong match reached seven; the spectator received the same match and final score.');
   report.result = { score: final.score, winner: final.winner, reason: final.reason, roomId: player.room.roomId };
+  if (lockedInput) {
+    await page.keyboard.press('KeyE');
+    await page.waitForFunction(() => window.__chatdomTavernLive?.seated !== 'middle', null, { timeout: 10_000 });
+    await page.waitForFunction(() => window.__chatdomTavernLive?.interaction?.focus === 'tavern:middle:seat:2' && window.__chatdomTavernLive?.interaction?.action === 'tavern', null, { timeout: 10_000 });
+    await page.keyboard.press('KeyE');
+    await page.waitForFunction(() => window.__chatdomTavernLive?.seated === 'middle', null, { timeout: 10_000 });
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => window.__chatdomTavernLive?.seated !== 'middle', null, { timeout: 10_000 });
+    report.checks.push('E stands, E sits again at the same physical chair, and Escape stands.');
+  }
 } catch (error) {
   report.failure = error instanceof Error ? error.message : String(error);
   throw error;
@@ -208,7 +240,7 @@ try {
       if (final?.phase === 'finished') report.result = { score: final.score, winner: final.winner, reason: final.reason, match: final.match };
       if (watched?.phase === 'finished') report.spectatorResult = { score: watched.score, winner: watched.winner, reason: watched.reason, match: watched.match };
       await mkdir(output, { recursive: true });
-      await writeFile(`${output}/ga10-pong-browser-match.json`, `${JSON.stringify(report, null, 2)}\n`);
+      await writeFile(`${output}/${lockedInput ? 'ga10-pong-input' : 'ga10-pong-browser-match'}.json`, `${JSON.stringify(report, null, 2)}\n`);
       console.log(JSON.stringify(report, null, 2));
     }
   } finally {

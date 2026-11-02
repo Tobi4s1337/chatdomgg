@@ -92,6 +92,11 @@ The bar: every place and game is pleasant to watch without reading anything, fun
 
 ## Decisions
 
+- **2026-11-02 — Seated input and recovery.** The existing input lease owns a dedicated transparent seated
+  canvas, so releasing the walking canvas cannot unlock the game. All three games use that lease; Stones and
+  Dice support mouse actions as well as keys while the pointer stays locked. Fresh full-state and matching-writer
+  bootstrap messages gate retained-chair restoration. A terminal destination connection offers a real fresh open;
+  generic portal return remains play's responsibility. These are GA10 destination improvements, not portal acceptance.
 - **2026-11-02 — Turn tables and recovery.** Middle plays Pong, hearth plays two-to-four-player Hearth Dice,
   and the other three tables play Stones. The hearth has four reachable physical chairs. Dice grants thirty
   seconds per decision; expiry banks the current pot or passes an empty turn. Accepted moves and private RNG

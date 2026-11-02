@@ -37,9 +37,11 @@ const freePorts = async () => {
 };
 const kind = process.env.GATHER_GAME ?? 'stones';
 assert.ok(['stones', 'hearth-dice'].includes(kind));
+const locked = process.env.GATHER_INPUT === 'locked';
+const reconnect = locked && process.env.GATHER_RECONNECT === '1';
 const tableId = kind === 'stones' ? 'west' : 'hearth';
 const ownChair = kind === 'stones' ? 1 : 3, browserChair = ownChair + 1;
-const prefix = kind === 'stones' ? 'stones' : 'dice';
+const prefix = `${kind === 'stones' ? 'stones' : 'dice'}${locked ? '-locked' : ''}`;
 const report = { started: new Date().toISOString(), fixture: 'Temporary reference sessions with synthetic identities; memory only.',
   limitations: ['No kingdom-to-tavern transfer, Twitch identity, durable session, persistence or real-GPU performance is proven.',
     'Screenshots use SwiftShader; no frame-rate claim.'], checks: [], scores: [], revisions: [], screenshots: [] };
@@ -61,10 +63,11 @@ try {
   report.ports = { realm: realmPort, web: webPort };
   loader = await createServer({ root: repo, configFile: false, appType: 'custom', logLevel: 'error', cacheDir: '/tmp/chatdom-gather/vite-harness-loader', optimizeDeps: { noDiscovery: true },
     server: { middlewareMode: true, hmr: false, ws: false } });
-  const [{ createRealmServer }, { referenceServices }, { starterCitizenLook, TavernRoomState }, { createTavernInterior }, { seatApproachDriver }, { installGatherStore, MemoryGatherStore }] = await Promise.all([
+  const [{ createRealmServer }, { referenceServices }, { starterCitizenLook, TavernRoomState }, { createTavernInterior }, { seatApproachDriver }, { installGatherStore, MemoryGatherStore }, { severWalker }, { tickStones }] = await Promise.all([
     loader.ssrLoadModule('/apps/realm/src/server.ts'), loader.ssrLoadModule('/apps/realm/src/reference.ts'),
     loader.ssrLoadModule('/packages/shared/src/index.ts'), loader.ssrLoadModule('/apps/realm/src/games/interior.ts'),
     loader.ssrLoadModule('/apps/web/src/games/walker.ts'), loader.ssrLoadModule('/apps/realm/src/games/store.ts'),
+    loader.ssrLoadModule('/apps/realm/src/auth/reconnect-harness.ts'), loader.ssrLoadModule('/apps/realm/src/games/stones.ts'),
   ]);
   const base = referenceServices();
   const services = { ...base, auth: { ...base.auth, authenticate: async join => {
@@ -120,7 +123,7 @@ try {
   page.on('console', message => { if (message.type() === 'error' && !message.location().url.endsWith('/favicon.ico')) errors.push(message.text()); });
   page.on('requestfailed', request => console.error(`[gather] request failed ${request.url()}: ${request.failure()?.errorText}`));
   page.on('response', response => { if (response.status() >= 400) console.error(`[gather] HTTP ${response.status()} ${response.url()}`); });
-  await page.goto(`http://127.0.0.1:${webPort}/-/tavern?testWalker=1&seat=tavern:${tableId}:seat:${browserChair}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://127.0.0.1:${webPort}/-/tavern?testWalker=1&seat=tavern:${tableId}:seat:${browserChair}${reconnect ? `&resumeScope=ga10-locked-browser-session-scope-${Date.now()}` : ''}`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__chatdomReady || window.__chatdomTavernError, null, { timeout: 90_000 });
   const setupError = await page.evaluate(() => window.__chatdomTavernError);
   assert.equal(setupError, undefined, `browser admission failed: ${setupError}`);
@@ -146,6 +149,7 @@ try {
   await until(() => player.state.tables.tables.find(table => table.table === tableId) && [...player.state.tables.tables.find(table => table.table === tableId).seats, ...(player.state.tables.tables.find(table => table.table === tableId).extraSeats ?? [])].filter(Boolean).length === 2, 'two occupied chairs');
   await until(() => spectator.room.state.walkers.size === 3, 'third observer sees three walkers');
   report.checks.push('Browser walker walked and sat at the opposite chair; a third SDK walker saw all three in one room.');
+  console.log('[gather] initial seated');
   const game = () => player.state.tables.tables.find(t => t.table === tableId)?.[kind === 'stones' ? 'stones' : 'dice'];
   const watched = () => spectator.state.tables.tables.find(t => t.table === tableId)?.[kind === 'stones' ? 'stones' : 'dice'];
   const sockets = [player, spectator].map(({ room }) => {
@@ -156,21 +160,118 @@ try {
     return counts;
   });
   measurement = { sockets, measuredAt: Date.now() };
-  await page.getByRole('button', { name: kind === 'stones' ? 'Play Stones' : 'Play Hearth Dice' }).click();
+  const canvas = page.locator('canvas[data-gather-game-input]');
+  const assertLocked = async () => assert.equal(await page.evaluate(() => document.pointerLockElement === document.querySelector('canvas[data-gather-game-input]')), true, 'canvas retains pointer lock');
+  if (locked) {
+    await canvas.click({ position: { x: 10, y: 10 } });
+    await page.waitForFunction(() => document.pointerLockElement === document.querySelector('canvas[data-gather-game-input]'));
+    await page.keyboard.press('Enter');
+    await assertLocked();
+  } else await page.getByRole('button', { name: kind === 'stones' ? 'Play Stones' : 'Play Hearth Dice' }).click();
   await until(() => game()?.phase === 'playing', 'match starts');
   if (kind === 'hearth-dice') assert.equal(game().scores.length, 2, 'sparse physical chairs map to two players');
-  let moves = 0, captured = false, browserMoves = 0;
+  let clockCaughtUp = false;
+  if (reconnect) {
+    const browserId = [...spectator.room.state.walkers.keys()].find(id => id !== player.room.sessionId && id !== spectator.room.sessionId);
+    assert.ok(browserId, 'browser walker is visible to SDK');
+    const walker = spectator.room.state.walkers.get(browserId);
+    const identity = { name: walker.name, look: JSON.stringify(walker.look) };
+    const before = structuredClone(game());
+    const beforeSeat = structuredClone(player.state.tables.tables.find(t => t.table === tableId).seats);
+    const initialDrops = await page.evaluate(() => window.__chatdomTavernLive?.disconnects ?? 0);
+    const initialReconnects = await page.evaluate(() => window.__chatdomTavernLive?.reconnects ?? 0);
+    assert.equal(severWalker(player.room.roomId, browserId), true, 'server severed real browser socket');
+    await page.waitForFunction(n => (window.__chatdomTavernLive?.disconnects ?? 0) > n, initialDrops, { timeout: 15000 });
+    console.log('[gather] cut witnessed');
+    await page.waitForFunction(({ table, count }) => window.__chatdomTavernLive?.connected && window.__chatdomTavernLive?.seated === table
+      && window.__chatdomTavernLive?.reconnects > count, { table: tableId, count: initialReconnects }, { timeout: 30000 });
+    console.log('[gather] reconnect bootstrap complete');
+    await until(() => spectator.room.state.walkers.has(browserId) && spectator.room.state.walkers.size === 3, 'same three walkers after reconnect');
+    assert.equal(spectator.room.state.walkers.get(browserId).name, identity.name);
+    assert.equal(JSON.stringify(spectator.room.state.walkers.get(browserId).look), identity.look);
+    assert.deepEqual(player.state.tables.tables.find(t => t.table === tableId).seats, beforeSeat);
+    assert.equal(game().match, before.match); assert.equal(game().revision, before.revision); assert.equal(game().deadline, before.deadline);
+    assert.equal(await page.evaluate(() => window.__chatdomTavernLive?.resumeStored), true, 'rotated resume token is stored');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    try {
+      const reloadReady = table => window.__chatdomTavernError || (window.__chatdomTavernLive?.connected
+        && window.__chatdomTavernLive?.seated === table && window.__chatdomTavernLive?.resumeStored);
+      try { await page.waitForFunction(reloadReady, tableId, { timeout: 15000 }); }
+      catch {
+        console.log('[gather] reload 15s diagnostic', JSON.stringify(await page.evaluate(() => ({ live: window.__chatdomTavernLive, error: window.__chatdomTavernError, ready: window.__chatdomReady }))));
+        await page.waitForFunction(reloadReady, tableId, { timeout: 75000 });
+      }
+      assert.equal(await page.evaluate(() => window.__chatdomTavernError), undefined, 'reload entry succeeds');
+    } catch (error) {
+      report.reloadDiagnostic = await page.evaluate(() => ({ live: window.__chatdomTavernLive, error: window.__chatdomTavernError, ready: window.__chatdomReady }));
+      console.error('[gather] reload diagnostic', JSON.stringify(report.reloadDiagnostic));
+      throw error;
+    }
+    console.log('[gather] reload bootstrap complete');
+    await until(() => spectator.room.state.walkers.has(browserId) && spectator.room.state.walkers.size === 3, 'same walkers after reload');
+    assert.equal(spectator.room.state.walkers.get(browserId).name, identity.name);
+    assert.equal(JSON.stringify(spectator.room.state.walkers.get(browserId).look), identity.look);
+    assert.deepEqual(player.state.tables.tables.find(t => t.table === tableId).seats, beforeSeat);
+    const expectedAfterReload = structuredClone(before);
+    tickStones(expectedAfterReload, player.state.tables.at);
+    assert.deepEqual(game(), expectedAfterReload, 'reload preserves state except lawful clock catch-up');
+    clockCaughtUp = expectedAfterReload.revision !== before.revision;
+    if (clockCaughtUp) report.checks.push('The live Stones deadline expired during reload; public timeout catch-up matched tickStones.');
+    await page.getByRole('region', { name: 'Stones table' }).waitFor();
+    await canvas.click({ position: { x: 10, y: 10 } });
+    await page.waitForFunction(() => document.pointerLockElement === document.querySelector('canvas[data-gather-game-input]'));
+    await assertLocked();
+    console.log('[gather] relocked after reload');
+    report.checks.push('Server severed browser socket; reconnect and page reload restored the same SDK walker, identity, chair, match, revision and deadline using the rotated resume token.');
+  }
+  let moves = 0, captured = false, browserMoves = 0, mouseRolls = 0, mouseHolds = 0;
   while (game().phase === 'playing' && moves < 200) {
     const current = game(), revision = current.revision;
     const action = kind === 'stones' ? 'drop' : current.pot >= 10 || current.scores[current.turn] + current.pot >= 50 ? 'hold' : 'roll';
     if (current.turn === 0) {
       player.room.send('move', { action, table: tableId, match: current.match, revision, id: `walker-${moves}`, ...(action === 'drop' ? { column: 0 } : {}) });
     } else {
+      await page.waitForFunction(({ tableId, kind, revision }) => {
+        const table = window.__chatdomTavernLive?.tables?.find(t => t.table === tableId);
+        const local = kind === 'stones' ? table?.stones : table?.dice;
+        return local?.revision === revision && local.turn === 1 && window.__chatdomTavernLive?.seated === tableId;
+      }, { tableId, kind, revision }, { timeout: 15000 });
+      await page.getByRole('status').filter({ hasText: 'Your turn' }).waitFor({ timeout: 15000 });
+      if (game()?.revision !== revision) continue;
+      if (locked) {
+        if (kind === 'stones') {
+          const beforePosition = spectator.room.state.walkers.get([...spectator.room.state.walkers.keys()].find(id => id !== player.room.sessionId && id !== spectator.room.sessionId));
+          const position = [beforePosition.x, beforePosition.z];
+          if (browserMoves === 0) {
+            await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft');
+            await page.waitForFunction(() => window.__chatdomTavernLive?.column === 1, null, { timeout: 5000 });
+          }
+          assert.equal(await page.evaluate(() => window.__chatdomTavernLive?.seated), tableId);
+          const afterPosition = spectator.room.state.walkers.get([...spectator.room.state.walkers.keys()].find(id => id !== player.room.sessionId && id !== spectator.room.sessionId));
+          assert.deepEqual([afterPosition.x, afterPosition.z], position, 'arrow did not walk');
+          if (browserMoves === 0) await page.keyboard.press('Enter');
+          else if (browserMoves === 1) await page.mouse.click(12, 12);
+          else await page.keyboard.press('Digit2');
+        } else if (browserMoves === 0) await page.keyboard.press(action === 'roll' ? 'KeyR' : 'KeyH');
+        else if ((action === 'roll' && !mouseRolls) || (action === 'hold' && !mouseHolds)) {
+          await page.mouse.click(12, 12, { button: action === 'roll' ? 'left' : 'right' });
+          if (action === 'roll') mouseRolls++; else mouseHolds++;
+        } else await page.keyboard.press(action === 'roll' ? 'KeyR' : 'KeyH');
+        await assertLocked();
+      } else {
       const label = kind === 'stones' ? 'Drop stone in column 2' : action === 'roll' ? 'Roll' : 'Hold';
       await page.getByRole('button', { name: label, exact: true }).click({ timeout: 15_000 });
+      }
       browserMoves++;
     }
     await until(() => game()?.revision > revision, `accepted ${action} revision ${revision}`, 15_000);
+    if (locked && current.turn !== 0 && kind === 'hearth-dice') {
+      assert.equal(game().revision, revision + 1, 'browser move advances exactly once');
+      assert.ok(action === 'roll' ? ['roll', 'bust'].includes(game().last) : game().last === 'hold', 'browser action was accepted, not a timeout');
+    }
+    if (locked && current.turn !== 0 && kind === 'stones') {
+      assert.equal(game().board.filter((cell, index) => index % 7 === 1 && cell !== 0).length, current.board.filter((cell, index) => index % 7 === 1 && cell !== 0).length + 1, 'SDK confirms browser drop in column 2');
+    }
     moves++;
     if (!captured && moves >= 2 && game().phase === 'playing') {
       await mkdir(output, { recursive: true });
@@ -180,20 +281,33 @@ try {
         const path = `${output}/ga10-${prefix}-live@${width}x${height}.png`;
         await page.screenshot({ path }); report.screenshots.push({ path, revision: game().revision }); console.log(`[gather] ${path}`);
       }
+      if (locked) {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        if (!await page.evaluate(() => document.pointerLockElement === document.querySelector('canvas[data-gather-game-input]')))
+          await canvas.click({ position: { x: 10, y: 10 } });
+        await page.waitForFunction(() => document.pointerLockElement === document.querySelector('canvas[data-gather-game-input]'));
+      }
       captured = true;
     }
   }
-  assert.ok(browserMoves > 0, 'browser acted through actual controls');
+  assert.ok(browserMoves >= (locked ? 2 : 1), 'browser acted through actual controls, including locked mouse');
   assert.equal(game().phase, 'finished', 'match completed within 200 moves');
   await until(() => watched()?.phase === 'finished' && watched().revision === game().revision, 'spectator final');
   assert.deepEqual(watched(), game(), 'spectator sees same public final');
   if (kind === 'stones') {
-    assert.equal(moves, 7); assert.equal(game().winner, 0); assert.equal(game().reason, 'four');
+    if (!clockCaughtUp) { assert.equal(moves, 7); assert.equal(game().winner, 0); }
+    assert.equal(game().reason, 'four');
   } else {
     assert.equal(game().reason, 'fifty'); assert.ok(game().scores[game().winner] >= 50);
   }
+  if (locked) {
+    await page.keyboard.press('KeyE');
+    await page.waitForFunction(() => window.__chatdomTavernLive?.seated === null, null, { timeout: 15000 });
+    report.checks.push('Game keys retained pointer lock; E released the chair.');
+  }
   assert.equal(errors.length, 0, `browser errors: ${errors.join('; ')}`);
   report.checks.push(`Completed ${kind} with ${moves} accepted moves including ${browserMoves} browser actions; spectator received the same final state.`);
+  if (locked && kind === 'hearth-dice') report.mouseActions = { rolls: mouseRolls, holds: mouseHolds };
   report.result = structuredClone(game());
 } catch (error) {
   report.failure = error instanceof Error ? error.stack : String(error);
