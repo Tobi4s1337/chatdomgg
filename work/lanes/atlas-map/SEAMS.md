@@ -36,7 +36,7 @@ export interface AtlasMountOptions {
   signal?: AbortSignal;
 }
 
-export interface AtlasView { x: number; y: number; scale: number; selected: string | null; mapId: string }
+export interface AtlasView { x: number; y: number; scale: number; selected: string | null; mapId: string; found?: string[] }
 
 export type AtlasReadyState = 'map' | 'still' | 'failed';
 
@@ -585,3 +585,20 @@ git apply work/lanes/atlas-map/gateway-visitor-address.integrator.patch   # own 
     streamers' capitals, none enterable; the search field is the only way to a kingdom and on a laptop it appears only
     once the live paint settles (about 3 s after the ready flag under SwiftShader; to be timed on the 5080). A visible
     founded kingdom (or a "Walk into Willowmere" way) on the cold map is the missing piece.
+
+## Found channels stay drawn, and the founded kingdoms — 2 Nov, AM15 (additive; nothing to change on the host)
+
+- `AtlasView` gains one optional field, `found?: string[]`: the channel IDs this visitor found this session that the
+  survey does not hold (at most 24; only digits). `handle.view()` includes it when there are any; `mountAtlas(el,
+  { view })` and `handle.restore(view)` accept it and draw each one again only after the Atlas register answers for
+  it (so a withheld or hidden channel never comes back). A host that stores the view as before needs no change; a
+  view without the field behaves exactly as before.
+- The explore map reads the site's own public door list, `GET /api/public/door` (front-door's route, already public
+  and same-origin; `{ mode, kingdoms: [{ kingdomId, name, login }] }`), once per page, to draw a found channel that
+  founded a kingdom as that kingdom (its arms on a hamlet, the kingdom's name, "Enter <name>" first on its card, to
+  `/?walk=1&kingdom=<id>`). Only `mode: 'live'` names kingdoms; a missing door, an error or `simulated` names none.
+  Please keep the route's shape; a new field is fine.
+- The map's way in ("Walk into a kingdom" on the title plate) and a waiting card's "Visit <name>" lead to the door's
+  **first** kingdom, so the door's order is the map's choice of where newcomers walk in. A first visit to the map
+  reads one caption, remembered in local storage as `chatdom:atlas:opening:v1`; a host embedding explore mode
+  shows it too, once per browser. Nothing on the map asks for sign-in: the walk page does, at the gate.

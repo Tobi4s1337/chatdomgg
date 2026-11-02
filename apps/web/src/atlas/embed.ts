@@ -22,7 +22,11 @@ export interface AtlasMountOptions {
   signal?: AbortSignal;
   slots?: { footer?: AtlasFooterSlot };
 }
-export interface AtlasView { x: number; y: number; scale: number; selected: string | null; mapId: string }
+export interface AtlasView {
+  x: number; y: number; scale: number; selected: string | null; mapId: string;
+  /** Channel IDs found this session that the survey does not hold, drawn at their places (optional, additive). */
+  found?: string[];
+}
 export type AtlasReadyState = 'map' | 'still' | 'failed';
 export interface AtlasHandle {
   readonly mode: AtlasMode;

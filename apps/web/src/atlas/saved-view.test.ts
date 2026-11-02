@@ -6,7 +6,13 @@ const view = { x: 1200.5, y: -340.25, scale: 0.42, selected: '141981764', mapId:
 
 describe('savedView', () => {
   it('returns the camera and selection of a view from the same map', () => {
-    expect(savedView(view, 'world-abc')).toEqual({ camera: { x: 1200.5, y: -340.25, scale: 0.42 }, selected: '141981764' });
+    expect(savedView(view, 'world-abc')).toEqual({ camera: { x: 1200.5, y: -340.25, scale: 0.42 }, selected: '141981764', found: [] });
+  });
+
+  it('carries the channels found this session as IDs alone, dropping anything else', () => {
+    expect(savedView({ ...view, found: ['129634568', '5'] }, 'world-abc')?.found).toEqual(['129634568', '5']);
+    expect(savedView({ ...view, found: ['129634568', 'waiting:1', 7, '<img>', '129634568'] }, 'world-abc')?.found).toEqual(['129634568']);
+    expect(savedView({ ...view, found: 'x' }, 'world-abc')?.found).toEqual([]);
   });
 
   it('keeps a view without a selection', () => {

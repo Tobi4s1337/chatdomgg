@@ -8,7 +8,8 @@ import { formatCount, formatTime, tierBand, TIER_NAMES, watchUrl } from './forma
 import { LIVE_CLASS_NAMES } from './live-line';
 import { ChannelFaceSeal } from './Face';
 import { doorHolding, type DoorHolding } from '../data/holding';
-import { RegisterFacts, ShareButton, WatchLink, type RegisterState } from './Register';
+import { EnterKingdom, RegisterFacts, ShareButton, WatchLink, type RegisterState } from './Register';
+import type { FoundedKingdom } from '../data/kingdoms';
 
 export type NamesState = 'loading' | 'ready' | 'failed';
 
@@ -38,6 +39,8 @@ export function Card(props: {
   ledger?: (() => JSX.Element | null) | undefined;
   /** Only on the signed-in broadcaster's own card: the line that hides it. */
   owner?: (() => JSX.Element | null) | undefined;
+  /** The kingdom this holding's channel founded in Chatdom, when the site's door names it: its way in leads. */
+  kingdom?: FoundedKingdom | null;
 }) {
   let closeButton: HTMLButtonElement | undefined;
   const region = () => props.world.regions[props.settler.region];
@@ -46,7 +49,7 @@ export function Card(props: {
   const showLogin = () => props.name !== null && props.login !== null && props.name.toLowerCase() !== props.login;
   const title = () => props.name ?? `Unnamed ${TIER_NAMES[props.settler.tierRank]!.toLowerCase()}`;
   // A named, shown holding has a door. Reading the name keeps it in step with a refreshed or expired name.
-  const door = () => (props.name !== null && props.login !== null ? doorHolding(props.settler, props.world) : null);
+  const door = () => (!props.kingdom && props.name !== null && props.login !== null ? doorHolding(props.settler, props.world) : null);
   const enter = (event: MouseEvent, holding: DoorHolding) => {
     if (!props.onEnter || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
@@ -72,20 +75,24 @@ export function Card(props: {
   onCleanup(() => window.removeEventListener('keydown', onKey));
 
   return (
-    <section class="atlas-card atlas-card-with-actions" aria-labelledby="atlas-card-title" data-tier={props.settler.tier}>
+    <section class="atlas-card atlas-card-with-actions" aria-labelledby="atlas-card-title" data-tier={props.settler.tier} data-kind={props.kingdom ? 'kingdom' : 'holding'}>
       <button ref={(element) => (closeButton = element)} class="atlas-card-close" type="button" on:click={() => props.onClose()} aria-label="Close card">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" /></svg>
       </button>
       <header class="atlas-card-head">
         <ChannelFaceSeal channelId={props.settler.id} name={props.name} portrait={props.name && props.register.status === 'ready' && props.register.reply.channel.id === props.settler.id ? props.register.reply.portrait : null} />
         <div class="atlas-card-names">
-          <p class="atlas-card-status">{holdingStatus(props.world)}</p>
+          <p class="atlas-card-status">{props.kingdom ? 'A Chatdom kingdom' : holdingStatus(props.world)}</p>
           <h2 id="atlas-card-title" dir="auto" classList={{ 'atlas-card-unnamed': props.name === null }}>{title()}</h2>
           <Show when={showLogin()}><p class="atlas-card-login">{props.settler.login}</p></Show>
         </div>
       </header>
+      <Show when={props.kingdom}>{(kingdom) => <EnterKingdom kingdom={kingdom()} />}</Show>
       <div class="atlas-card-scroll" tabindex="0" aria-label="Holding details">
       <dl class="atlas-card-facts">
+        <Show when={props.kingdom}>
+          {(kingdom) => <div data-atlas-kingdom="true"><dt>Kingdom</dt><dd dir="auto">{kingdom().name}</dd></div>}
+        </Show>
         <div><dt>Holding</dt><dd>{TIER_NAMES[props.settler.tierRank]} <span class="atlas-quiet">· {tierBand(props.world.tiers.minAverage, props.settler.tierRank)}</span></dd></div>
         <Show when={region()}>
           {(r) => (

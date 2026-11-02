@@ -1,4 +1,4 @@
-import { GRAPHITE, INK, VERMILION, VERMILION_DEEP, rgba } from './theme';
+import { GRAPHITE, INK, LAND, VERMILION, VERMILION_DEEP, rgba } from './theme';
 
 /**
  * The painted marks of the live layer, drawn once into canvases: watercolour blots for the wash, the pennants of the
@@ -183,16 +183,20 @@ export function standardImage(liveClass: number, variant: number, pixelRatio: nu
  * The pencil flag of a small live channel (class 5, or a dab): a graphite staff and a small notched flag holding a
  * touch of the same wash. Pencil, not ink: it has no land yet.
  */
-export function pencilFlagImage(pixelRatio: number): StandardImage {
-  const width = 13;
-  const height = PENCIL_STAFF + 2;
+export function pencilFlagImage(pixelRatio: number, options: { scale?: number; live?: boolean } = {}): StandardImage {
+  const k = options.scale ?? 1;
+  const live = options.live ?? true;
+  const base = PENCIL_STAFF + 2;
+  const width = Math.ceil(13 * k);
+  const height = Math.ceil(base * k);
   const [canvas, ctx] = canvasFor(width, height, pixelRatio);
+  ctx.scale(k, k);
   const x = 2.5;
   ctx.strokeStyle = rgba(GRAPHITE, 0.9);
   ctx.lineWidth = 0.85;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(x, height - 0.5);
+  ctx.moveTo(x, base - 0.5);
   ctx.lineTo(x, 1.2);
   ctx.stroke();
   ctx.beginPath();
@@ -202,22 +206,23 @@ export function pencilFlagImage(pixelRatio: number): StandardImage {
   ctx.lineTo(x + 8.4, 6.6);
   ctx.lineTo(x, 7);
   ctx.closePath();
-  // A touch of wash inside a graphite outline, with two strokes of hatching: drawn, not yet inked.
-  ctx.fillStyle = rgba(VERMILION, 0.3);
+  // A touch of wash inside a graphite outline, with two strokes of hatching: drawn, not yet inked. Off the air it
+  // keeps the paper's own colour under the hatching.
+  ctx.fillStyle = live ? rgba(VERMILION, 0.3) : rgba(LAND, 0.92);
   ctx.fill();
   ctx.save();
   ctx.clip();
   ctx.strokeStyle = rgba(GRAPHITE, 0.55);
   ctx.lineWidth = 0.5;
-  for (let k = 0; k < 4; k++) {
+  for (let hatch = 0; hatch < 4; hatch++) {
     ctx.beginPath();
-    ctx.moveTo(x + k * 2.6 - 1, 7.4);
-    ctx.lineTo(x + k * 2.6 + 4, 1);
+    ctx.moveTo(x + hatch * 2.6 - 1, 7.4);
+    ctx.lineTo(x + hatch * 2.6 + 4, 1);
     ctx.stroke();
   }
   ctx.restore();
   ctx.strokeStyle = rgba(GRAPHITE, 0.95);
   ctx.lineWidth = 0.75;
   ctx.stroke();
-  return { canvas, width, height, anchorX: x / width, anchorY: 1 };
+  return { canvas, width, height, anchorX: (x * k) / width, anchorY: 1 };
 }
