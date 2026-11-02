@@ -105,3 +105,15 @@ the redeploy (e218c7c5, with this lane's first fixes), headless at both sizes an
 - For LA11: the raid chat feed polls every 750 ms per open kingdom view (`kingdom/moments/raid-chat.ts`); with 50
   visitors that is ~67 requests a second to the realm. Measure it in the load run.
 
+
+## Session 5 (2 Nov, 20:10–)
+
+- Review point: the gate's name read (`gateName`) now returns a tagged result (`named` with the approved name,
+  `missing` for the realm's 404, `unknown` when it cannot say), so a kingdom whose approved name is "nowhere" (or
+  "missing", "lost") keeps its name instead of turning the gate into "This road leads nowhere." (`gate.test.ts`).
+- Live check at 20:15: chatdom.io still answers `404 /api/atlas/me` (the deploy carrying session 4's owner API patch
+  has not happened yet); `/api/realm/entry/129634568` and `/api/public/door` answer 200.
+- The RTX 5080 lease was held from 19:54 by the teaser recording (Tobias's call); this session queued 45 minutes
+  (20:17–21:02) to still `/?walk=1&kingdom=129634568` with Tobias's session at both sizes and did not get it. The
+  script it would have run is two `chatdom-pc shot … --no-ready --settle 25` calls (the gate sets no ready flag), to
+  `gpu/walk-signed@1440x900.png` and `gpu/walk-signed@390x844.png`; that is the first thing next session.

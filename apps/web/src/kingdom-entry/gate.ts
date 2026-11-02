@@ -18,14 +18,18 @@ export function gateKingdom(search: string): string | null {
 }
 
 /**
- * What the realm's entry read tells the gate: the kingdom's approved name, `nowhere` when no kingdom at this address
- * is open to visitors (404: a stale or mistyped link), or null when it cannot say just now.
+ * What the realm's entry read told the gate. `named` carries the kingdom's approved name (any name, even one that
+ * reads like a state); `missing` means no kingdom at this address is open to visitors (404: a stale or mistyped link);
+ * `unknown` means it cannot say just now, and the gate reads well without a name.
  */
-export function gateName(kingdomId: string, status: number, body: unknown): string | null | 'nowhere' {
-  if (status === 404) return 'nowhere';
-  if (status < 200 || status > 299) return null;
+export type GateNaming = { kind: 'named'; name: string } | { kind: 'missing' } | { kind: 'unknown' };
+
+/** Reads the realm's entry answer for this gate's kingdom (see `GateNaming`). */
+export function gateName(kingdomId: string, status: number, body: unknown): GateNaming {
+  if (status === 404) return { kind: 'missing' };
+  if (status < 200 || status > 299) return { kind: 'unknown' };
   const info = RealmEntryInfoSchema.safeParse(body);
-  return info.success && info.data.kingdomId === kingdomId ? info.data.name : null;
+  return info.success && info.data.kingdomId === kingdomId ? { kind: 'named', name: info.data.name } : { kind: 'unknown' };
 }
 
 /** What the gate says in each state: a heading, what happened, and what to do next, in the kingdom's voice. */
