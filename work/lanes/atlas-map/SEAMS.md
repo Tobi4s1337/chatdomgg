@@ -327,6 +327,11 @@ context line, the `atlas-owner` case is unchanged and still sits between `dock` 
 `2949613a` without the launch merge, the previous version is `git show
 f803a214:work/lanes/atlas-map/atlas-owner-api.integrator.patch`.
 
+*Checked (2 Nov, 19:17 local):* the launch merge is committed (`0f3173f8`) and `lane/integrator` `da04caad` has
+merged this lane; the current patch file applies there as it is (`git apply --check` on the clean integrator
+worktree). The deployed Atlas service (`worktrees/atlas-live`, `fcfe6d47`) already carries the owner log and the
+private hide endpoints, so steps 2 and 3 below are env lines only, with no rebuild of the Atlas service.
+
 To make the hide flow real on chatdom.io, in this order:
 
 1. Integrator: `git apply work/lanes/atlas-map/atlas-owner-api.integrator.patch`, its own commit
