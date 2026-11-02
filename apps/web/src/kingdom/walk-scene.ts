@@ -19,6 +19,7 @@ import type { PlayBuildEntry, PlayVolume } from '../play/host';
 import { wayHomeFrom } from '../play/way-home';
 import { placeCameraAt, provideObservedWalkerHands } from '../play/slots';
 import { withRegisteredPlaces } from '../play/places';
+import { bindPortalSource, type PortalSource } from '../play/portals';
 import { mountPlayHud } from '../play';
 import { sharedPlaySettings } from '../play/settings';
 import { createWalkerGround } from '../walk/ground';
@@ -46,6 +47,11 @@ export interface KingdomWalkBinding {
   readonly interactionPlaces?: InteractionPlaces;
   /** The play layer's facts the entry knows: whether the stream is live, and where building really opens. */
   readonly play?: { readonly live?: () => boolean; readonly build?: PlayBuildEntry };
+  /**
+   * The entry's way through doors into rooms of their own (the tavern): its session, its transport, leaving this room
+   * and joining it again at a door. Without it no door opens (play/portal.ts).
+   */
+  readonly portal?: Pick<PortalSource, 'entry' | 'endpoint' | 'title' | 'leave' | 'rejoin'>;
 }
 
 /** Building in a founded kingdom opens with the street; until then the ledger says so in one honest line. */
@@ -100,9 +106,9 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
     pose: (id, pose) => { if (pose) toolPoses.set(id, pose); else toolPoses.delete(id); },
   });
   let play: PlaySession;
+  const self = { personId: client.selfId, get publicName() { return selfWalker()?.name ?? ''; }, get lookToken() { return selfWalker()?.look ?? ''; } };
   try {
-    play = createPlaySession({ host, controller, kingdomId: binding.manifest.kingdomId,
-      self: { personId: client.selfId, get publicName() { return selfWalker()?.name ?? ''; }, get lookToken() { return selfWalker()?.look ?? ''; } },
+    play = createPlaySession({ host, controller, kingdomId: binding.manifest.kingdomId, self,
       live: binding.play?.live ?? (() => false),
       wayHome() {
         const self = controller.debug.self;
@@ -133,6 +139,11 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
       },
     });
   } catch (error) { stopHands(); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); figures.dispose(); throw error; }
+  // A door stands you up first, so no seat is held in a room you have left, and lets the mouse go before the room goes.
+  const portal = binding.portal;
+  const stopPortal = portal ? bindPortalSource({ kingdomId: binding.manifest.kingdomId, self, entry: portal.entry, endpoint: portal.endpoint,
+    title: portal.title, rejoin: arrival => portal.rejoin(arrival),
+    leave: async () => { if (interactions.debug.held) interactions.leave(); controller.release(); await portal.leave(); } }) : () => {};
   // While the mouse is captured its position is frozen where the lock began: a click uses what the centre of the
   // view highlights, never a pick at that stale point. The first click only captures (the walk takes it first).
   // The ledger's volumes apply live once the kingdom's sound offers them (asked of the sound's owner in play's progress).
@@ -310,7 +321,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
       return labels;
     },
     play,
-    dispose() { stopHands(); stopVolumes(); canvas.removeEventListener('contextmenu', lockedMenu); host.removeEventListener('pointerdown', lockedPress, { capture: true }); host.removeEventListener('pointerup', lockedPress, { capture: true }); play.dispose(); document.removeEventListener('visibilitychange', resetFootsteps); window.removeEventListener('blur', resetFootsteps); client.room.onLeave.remove(left); client.room.onDrop.remove(left); client.room.onReconnect.remove(reconnected); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); figures.dispose(); },
+    dispose() { stopPortal(); stopHands(); stopVolumes(); canvas.removeEventListener('contextmenu', lockedMenu); host.removeEventListener('pointerdown', lockedPress, { capture: true }); host.removeEventListener('pointerup', lockedPress, { capture: true }); play.dispose(); document.removeEventListener('visibilitychange', resetFootsteps); window.removeEventListener('blur', resetFootsteps); client.room.onLeave.remove(left); client.room.onDrop.remove(left); client.room.onReconnect.remove(reconnected); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); figures.dispose(); },
   };
 }
 
