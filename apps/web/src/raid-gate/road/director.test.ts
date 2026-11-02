@@ -45,4 +45,21 @@ describe('the raid road director', () => {
     const mid = mapFrame(momentAt(facts, T, ride.start + ride.length / 2));
     expect(mid.travel).toBeCloseTo(0.5, 6);
   });
+
+  it('ends a road to waiting land at its place on the map, and comes home when asked', () => {
+    const facts: RoadFacts = { ...none, departedAt: 8, mapReadyAt: 3, land: 'waiting' };
+    const ride = schedule(facts, T).find(span => span.act === 'ride')!;
+    const rideEnd = ride.start + ride.length;
+    expect(momentAt(facts, T, rideEnd + 40)).toMatchObject({ act: 'land', holding: false });
+    expect(schedule(facts, T).map(span => span.act)).toEqual(['gather', 'setout', 'rise', 'ride', 'land']);
+    expect(mapFrame(momentAt(facts, T, rideEnd + 1))).toMatchObject({ travel: 1, wake: 0, marching: false });
+    expect(momentAt({ ...facts, homeAt: rideEnd + 9 }, T, rideEnd + 9.1).act).toBe('home');
+  });
+
+  it('comes home from a founded welcome only once the return is told', () => {
+    const facts: RoadFacts = { departedAt: 8, mapReadyAt: 3, arrivedAt: 12, welcomedAt: 12 };
+    const welcome = schedule(facts, T).find(span => span.act === 'welcome')!;
+    expect(momentAt(facts, T, welcome.start + 60).act).toBe('welcome');
+    expect(momentAt({ ...facts, homeAt: welcome.start + 9 }, T, welcome.start + 9.2).act).toBe('home');
+  });
 });

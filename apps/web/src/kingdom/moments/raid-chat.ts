@@ -1,4 +1,4 @@
-import { raidShotClearOf } from './raid-shot-clear';
+import { raidShotClearOf, sceneTreeCrowns } from './raid-shot-clear';
 import type * as THREE from 'three';
 import type { VoxelRenderState } from '@chatdom/render';
 import { parseRaidChatFrame, parseRaidGuestVisualMark, parseRaidPartyFrame, type KingdomId, type RaidChatFeed, type RaidChatFrame, type RaidPartyPublicFeed, type RaidPartyPublicFrame } from '@chatdom/shared';
@@ -90,7 +90,7 @@ export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, si
   const detachPennants = mountKingdomRaidPennants({ view, feed, kingdomId, signal, clock, canvas, camera,
     ...(plan ? { plan } : {}), ...(ground ? { ground } : {}), ...(support ? { support } : {}), ...(pennantVisible ? { visible: pennantVisible } : {}), ...(pennantReading ? { reading: pennantReading } : {}) });
   view.setRaidChatGround(plan && ground ? raidChatGroundOf(plan, ground, support) : undefined);
-  view.setRaidShotClear(plan && ground ? raidShotClearOf(plan, ground) : undefined);
+  view.setRaidShotClear(plan && ground ? raidShotClearOf(plan, ground, party ? sceneTreeCrowns(party.scene) : undefined) : undefined);
   view.setRaidApproachGround(plan && ground ? raidApproachGroundOf(plan, ground, support) : undefined);
   const detachParty = party ? mountRaidParty() : () => {};
   /** The real marchers at the gate: the realm's public frame, checked here, drawn by the view with the town's people. */
