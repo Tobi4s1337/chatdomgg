@@ -125,3 +125,26 @@ it("never tells an onlooker another person's identity, session, item or proof", 
     expect(text, secret).not.toContain(secret);
   p.own.dispose(); p.watcher.dispose(); p.staged.dispose();
 });
+
+it('sends one strike per cast: a second press on the dip reels and never throws the fish back', async () => {
+  const p = pier();
+  const room = p.staged.room('100'), sent: string[] = [];
+  const counted = { onMessage: room.onMessage.bind(room), send(type: string, payload: unknown) { sent.push((payload as { type: string }).type); room.send(type, payload); } };
+  p.own.dispose();
+  const own = createFishingController({ link: fishingLink(counted), selfWalkerId: 'juniper-seat', now: () => Date.now() });
+  const events: FishingEvent[] = []; own.subscribe(event => events.push(event));
+  own.sync(); await settle(); own.take(); await settle();
+  own.press(); await advance(700); own.release(); await settle();
+  for (let i = 0; i < 300 && own.state().cast?.phase !== 'bite'; i++) await advance(50);
+  expect(own.state().cast?.phase).toBe('bite');
+  // A double click: the second press crosses the strike before its answer arrives.
+  own.press(); own.release(); own.press(); await advance(100);
+  own.press(); await advance(50);
+  expect(sent.filter(type => type === 'pier.strike')).toHaveLength(1);
+  expect(own.state().cast?.phase).toBe('fighting');
+  expect(events.some(event => event.kind === 'ended')).toBe(false);
+  await fight(own);
+  for (let i = 0; i < 40 && !events.some(event => event.kind === 'kept'); i++) await advance(50);
+  expect(events.some(event => event.kind === 'kept')).toBe(true);
+  own.dispose(); p.watcher.dispose(); p.staged.dispose();
+});

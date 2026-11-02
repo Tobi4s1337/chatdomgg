@@ -4,10 +4,15 @@ import {
   GAUGE, arcPath, containFit, polar, firstInLine, quantize, snapHalf, strained, tagSummary, tagTimeline, tensionColour, tensionWord, tickPath,
   noteDuration, WORLD_TAG_FADE_MS, worldTagLeaving, type TensionWord, type TagPoolEntry,
 } from './logic';
+import type { FishingUiTimers } from './stepped';
 import type { CatchTag, FishingBeat, FishingFight, FishingPrompt, FishingUi, FishingUiOptions, WorldTag } from './types';
 
 /** Review-only staging: the bench holds the tag on screen and can skip every animation. */
-export interface FishingUiStaging { readonly hold?: boolean; readonly still?: boolean }
+export interface FishingUiStaging {
+  readonly hold?: boolean; readonly still?: boolean;
+  /** A recording runs the tag's beats on the stage's own clock instead of the window's. */
+  readonly timers?: FishingUiTimers;
+}
 
 const SVG = 'http://www.w3.org/2000/svg';
 let mounts = 0;
@@ -180,6 +185,8 @@ const typedOm = (): boolean => typeof CSSTranslate === 'function' && typeof CSST
 
 export function mountFishingUiStaged(host: HTMLElement, options: FishingUiOptions, staging: FishingUiStaging = {}): FishingUi {
   const id = `pier-ui-${(mounts += 1)}`;
+  const setTimer = staging.timers ? staging.timers.set : (run: () => void, ms: number) => window.setTimeout(run, ms);
+  const clearTimer = staging.timers ? staging.timers.clear : (timer: number) => window.clearTimeout(timer);
   const beat = (value: FishingBeat): void => { try { options.onBeat?.(value); } catch (error) { console.error('A pier sound cue failed.', error); } };
   const restorePosition = getComputedStyle(host).position === 'static';
   if (restorePosition) host.style.position = 'relative';
@@ -299,19 +306,19 @@ export function mountFishingUiStaged(host: HTMLElement, options: FishingUiOption
     if (disposed) return;
     const text = message.trim();
     if (!text) return;
-    window.clearTimeout(noteTimer);
+    clearTimer(noteTimer);
     noteNode.dataset.tone = tone;
     noteText.textContent = text;
     noteNode.dataset.shown = 'true';
-    if (!staging.hold) noteTimer = window.setTimeout(() => { noteNode.dataset.shown = 'false'; }, noteDuration(text));
+    if (!staging.hold) noteTimer = setTimer(() => { noteNode.dataset.shown = 'false'; }, noteDuration(text));
   }
 
   /* ---- the catch tag ---- */
   let current: LiveTag | null = null, tagCount = 0;
   const leaving = new Set<LiveTag>();
 
-  function clearTimers(live: LiveTag): void { for (const timer of live.timers) window.clearTimeout(timer); live.timers.length = 0; }
-  function later(live: LiveTag, ms: number, run: () => void): void { live.timers.push(window.setTimeout(run, ms)); }
+  function clearTimers(live: LiveTag): void { for (const timer of live.timers) clearTimer(timer); live.timers.length = 0; }
+  function later(live: LiveTag, ms: number, run: () => void): void { live.timers.push(setTimer(run, ms)); }
 
   function slideOut(live: LiveTag, fast: boolean): void {
     if (live.state === 'out') return;
@@ -334,6 +341,8 @@ export function mountFishingUiStaged(host: HTMLElement, options: FishingUiOption
   function caught(tag: CatchTag): void {
     if (disposed) return;
     if (current) slideOut(current, true);
+    // The tag is the answer to "the kingdom is keeping your catch": the waiting note gives way to it.
+    clearTimer(noteTimer); noteNode.dataset.shown = 'false';
     const reduced = reducedMotion(), timeline = tagTimeline(tag.personalFirst, tag.kingdomFirst, reduced);
     const shape = options.compact ? 'lay' : 'hang';
 
@@ -493,7 +502,7 @@ export function mountFishingUiStaged(host: HTMLElement, options: FishingUiOption
     if (disposed) return;
     disposed = true;
     window.removeEventListener('keydown', onKey);
-    window.clearTimeout(noteTimer);
+    clearTimer(noteTimer);
     if (current) clearTimers(current);
     for (const live of leaving) clearTimers(live);
     leaving.clear();

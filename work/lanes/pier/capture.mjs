@@ -49,7 +49,7 @@ class Cdp {
 const pause = ms => new Promise(ready => setTimeout(ready, ms));
 let cdp, browser, preview;
 try {
-  preview = await startPreview({ root: resolve(root, 'apps/web'), preview: { host: '127.0.0.1', port: previewPort, strictPort: true },
+  preview = await startPreview({ root: resolve(root, 'apps/web'), build: { outDir: process.env.PIER_PLAY_DIST ?? '/tmp/chatdom-pier-play-dist' }, preview: { host: '127.0.0.1', port: previewPort, strictPort: true },
     plugins: [{ name: 'pier-read-only-copy', configurePreviewServer(host) {
       host.middlewares.use((request, response, next) => {
         if (request.url === `/api/realm/founded/${scene.kingdomId}`) { response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); response.end(JSON.stringify(receipt)); }
@@ -83,7 +83,7 @@ try {
       } finally { await page.close(); }
       return;
     }
-    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
+    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank', background: false });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
     const send = (method, params = {}) => cdp.send(method, params, sessionId);
     const evaluate = async (expression, awaitPromise = false) => { const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text); return r.result.value; };
@@ -91,6 +91,7 @@ try {
       await send('Page.enable'); await send('Runtime.enable');
       await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
       await cdp.send('Target.activateTarget', { targetId });
+      await send('Page.bringToFront');
       const window = await cdp.send('Browser.getWindowForTarget', { targetId });
       if (window.bounds.windowState === 'minimized') await cdp.send('Browser.setWindowBounds', { windowId: window.windowId, bounds: { windowState: 'normal' } });
       await send('Page.navigate', { url });

@@ -25,12 +25,16 @@ export interface PlayStageOptions {
   readonly onGrant?: Parameters<typeof createStagedPier>[0]['onGrant'];
   /** Joins the person's controller to the HUD around the stage (belt, bag). */
   readonly attach?: (controller: FishingController) => void;
+  /** Told the stage clock (ms) on every drawn frame; a recording runs the overlay's timers on it. */
+  readonly onClock?: (clock: number) => void;
 }
 
 export interface PlayStage {
   readonly controller: FishingController;
   readonly layer: PierLayer;
   frame(): void;
+  /** Seconds since the stage opened, on its own (pausable, steppable) clock: the water and sky move with it. */
+  seconds(): number;
   /** Review handles: a paused clock that can be stepped, and a fair automatic player. */
   readonly debug: {
     pause(paused: boolean): void; advance(ms: number, drawEvery?: number): Promise<void>; auto(on: boolean): void; mood(value: FishingMood | null): void;
@@ -99,8 +103,10 @@ export async function createPlayStage(options: PlayStageOptions): Promise<PlaySt
   const eye = new THREE.Vector3(), look = new THREE.Vector3();
   const head = local(0, site.walk + 2);
   let tick = 0, stepped = 0;
+  const opened = clock;
   return {
     controller, layer,
+    seconds: () => (clock - opened) / 1000,
     frame() {
       const real = performance.now(), dt = Math.min(100, real - last); last = real;
       if (!paused) clock += dt;
@@ -139,6 +145,7 @@ export async function createPlayStage(options: PlayStageOptions): Promise<PlaySt
         time: clock / 1000, lookPitch: walker.self ? -.2 : -.12, ...(walker.self && view === 'first' ? { opacity: 0 } : {}) });
       bodies.update(samples, camera, clock);
       layer.update(clock / 1000);
+      options.onClock?.(clock);
     },
     debug: {
       pause(value) { paused = value; },

@@ -172,7 +172,7 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
       for (const person of people.values()) if (person.rod && person.selectedId
         && room.person(person.owner)?.walkerId === person.walkerId) rods.push({ walkerId: person.walkerId, model: 'tool:rod.willow' });
       privateSend(from, { type: 'pier.state', id, at, revision: installation?.revision ?? room.world().revision,
-        site: installation?.site ?? null, rack: installation?.rack ?? null,
+        site: installation?.site ?? null, rack: installation?.rack ?? null, ...(installation?.lights ? { lights: installation.lights } : {}),
         water: installation ? { hour: kingdomFishingHour(at), mood: kingdomWaterMood(room.kingdomId, at) } : null,
         casts: publicCasts(), rods, self: { rod: fisher.rod, cast: ownCast(fisher.owner), pendingCastId: fisher.pendingCastId } });
     };

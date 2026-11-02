@@ -22,6 +22,8 @@ export interface FishingControllerState {
   readonly ready: boolean;
   readonly site: FishingPierSite | null;
   readonly rack: Vec3 | null;
+  /** The pier's lantern glass, as the realm placed it. */
+  readonly lights: readonly Vec3[];
   readonly water: { readonly hour: number; readonly mood: FishingMood } | null;
   readonly revision: number;
   /** Server time minus local time, from the latest state answer. */
@@ -63,10 +65,10 @@ export function createFishingController(options: FishingControllerOptions) {
   const now = options.now ?? (() => performance.now()), schedule = options.schedule ?? defaultSchedule;
   const listeners = new Set<(event: FishingEvent) => void>();
   let state: FishingControllerState = {
-    ready: false, site: null, rack: null, water: null, revision: 0, offset: 0, casts: new Map(), rods: new Set(),
+    ready: false, site: null, rack: null, lights: [], water: null, revision: 0, offset: 0, casts: new Map(), rods: new Set(),
     rod: null, cast: null, pendingCastId: null, input: 'idle', drawStartedAt: null, reelChangedAt: 0, busy: false,
   };
-  let closed = false, takeWaiting = false, seq = 0, drawId: string | null = null, earlyStrike: string | null = null, takeId: string | null = null, releaseQueued = false, drawSentAt = 0;
+  let closed = false, takeWaiting = false, seq = 0, drawId: string | null = null, earlyStrike: string | null = null, struck: string | null = null, takeId: string | null = null, releaseQueued = false, drawSentAt = 0;
   let reelWanted = false, reelSent = false, reelSentAt = -Infinity, cancelReel: (() => void) | null = null, cancelRelease: (() => void) | null = null;
   const requests = new Set<string>();
   const set = (patch: Partial<FishingControllerState>) => { state = { ...state, ...patch }; };
@@ -129,7 +131,7 @@ export function createFishingController(options: FishingControllerOptions) {
     switch (reply.type) {
       case 'pier.state': {
         const casts = new Map(reply.casts.map(cast => [cast.walkerId, cast]));
-        set({ ready: true, site: reply.site, rack: reply.rack, water: reply.water, revision: reply.revision, offset: reply.at - now(),
+        set({ ready: true, site: reply.site, rack: reply.rack, lights: reply.lights ?? [], water: reply.water, revision: reply.revision, offset: reply.at - now(),
           casts, rods: new Set(reply.rods.map(rod => rod.walkerId)), rod: reply.self.rod, pendingCastId: reply.self.pendingCastId, busy: false });
         adoptCast(reply.self.cast);
         if (reply.self.pendingCastId && !reply.self.cast) note('A catch is still waiting to be kept.');
@@ -245,8 +247,12 @@ export function createFishingController(options: FishingControllerOptions) {
         set({ input: 'drawing', drawStartedAt: drawSentAt });
         return;
       }
+      // One strike per cast. Once it is on its way, every later press is the reel (the room agrees), so a double
+      // click or a press crossing the strike's own answer never throws the fish back.
+      if (struck === cast.id) { reel(true); return; }
       if (cast.phase === 'flying' || cast.phase === 'waiting' || cast.phase === 'bite') {
         // Striking before the dip is honest: the server says the hook came back empty.
+        struck = cast.id;
         send('strike', id => ({ type: 'pier.strike', id, castId: cast.id, seq: nextSeq() }));
         if (cast.phase !== 'bite') earlyStrike = cast.id;
         if (cast.phase === 'bite') { reelWanted = true; reelSent = true; reelSentAt = now(); set({ input: 'reeling', reelChangedAt: now() }); }

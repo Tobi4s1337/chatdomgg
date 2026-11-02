@@ -124,6 +124,8 @@ export interface FishingCaughtFish { readonly speciesId: string; readonly length
 export type FishingPrivateReply =
   | { readonly type: 'pier.state'; readonly id: string; readonly at: number; readonly revision: number;
       readonly site: FishingPierSite | null; readonly rack: Vec3 | null;
+      /** The pier's lantern glass, in world metres, so a walker's view lights them without reading the founded plan. */
+      readonly lights?: readonly Vec3[];
       readonly water: { readonly hour: number; readonly mood: FishingMood } | null;
       readonly casts: readonly FishingPublicCast[]; readonly rods: readonly FishingPublicRod[];
       readonly self: { readonly rod: ItemRecord | null; readonly cast: FishingOwnerCast | null; readonly pendingCastId: string | null } }

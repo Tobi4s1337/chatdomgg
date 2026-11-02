@@ -56,7 +56,7 @@ async function fixture(query: URLSearchParams): Promise<{ plan: SettlementPlan; 
 }
 
 /** Dev-only review surface. It never opens a walking session, grants an item or writes a kingdom. */
-export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearchParams, stage?: Pick<PlayStageOptions, 'hud' | 'sound' | 'ui' | 'portrait' | 'onGrant' | 'attach'>): Promise<PierBench> {
+export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearchParams, stage?: Pick<PlayStageOptions, 'hud' | 'sound' | 'ui' | 'portrait' | 'onGrant' | 'attach' | 'onClock'>): Promise<PierBench> {
   if (query.get('view') === 'fish') return mountFishBench(canvas, query);
   if (query.get('view') === 'asset') return mountPierAssetBench(canvas, query);
   W.__chatdomReady = false;
@@ -173,9 +173,10 @@ export async function mountPierBench(canvas: HTMLCanvasElement, query: URLSearch
       fog.density = grade.fogDensity;
     }
     if (!play) { camera.updateProjectionMatrix(); camera.lookAt(target); camera.updateMatrixWorld(); }
-    atmosphere.update(hour, 30, camera, beacon, 0);
+    const time = play ? 30 + play.seconds() : 30;
+    atmosphere.update(hour, time, camera, beacon, 0);
     if (!asset) {
-      water.update({ time: 30, environment: grade, camera, sources });
+      water.update({ time, environment: grade, camera, sources });
       water.reflect({ renderer, scene, camera, frame: ++frame, exclusions: atmosphere.reflectionExclusions });
     }
     renderer.render(scene, camera);

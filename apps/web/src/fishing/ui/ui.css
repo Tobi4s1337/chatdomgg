@@ -157,7 +157,7 @@
   animation: pier-tag-in-hang .54s both;
 }
 .pier-tag[data-shape='lay'] {
-  left: 0; right: 0; margin-inline: auto; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: min(372px, calc(100% - 28px));
+  left: 0; right: 0; margin-inline: auto; bottom: calc(var(--pier-dock) + 8px); width: min(372px, calc(100% - 28px));
   transform-origin: 17px 50%; transform: rotate(-1.5deg);
   animation: pier-tag-in-lay .54s both;
 }
@@ -290,7 +290,8 @@
 .pier-tag-first-words { font: var(--cd-type-small)/1.15 var(--cd-face-label); letter-spacing: .07em; color: var(--cd-ink-alarm); opacity: 0; }
 .pier-tag-first[data-stamped='true'] .pier-tag-first-words { opacity: 1; transition: opacity .3s ease .08s; }
 
-.pier-tag[data-shape='lay'] .pier-tag-words[data-stamp='true']::before { width: 74px; height: 58px; margin-right: -4px; }
+/* The narrow stamp sits wholly inside its reserved corner (top -6 + 72 = 66 = the spacer), so the rule and lore clear it. */
+.pier-tag[data-shape='lay'] .pier-tag-words[data-stamp='true']::before { width: 74px; height: 66px; margin-right: -4px; }
 .pier-tag[data-shape='lay'] .pier-tag-name { font-size: 20px; }
 .pier-tag[data-shape='lay'] .pier-tag-measure { font-size: var(--cd-type-body); margin-top: 3px !important; }
 .pier-tag[data-shape='lay'] .pier-tag-rule { margin: 6px 0 5px; }
@@ -305,7 +306,7 @@
   position: absolute; top: -14px; right: -10px; width: 96px; height: 96px; overflow: visible; opacity: 0;
   mix-blend-mode: multiply; transform: rotate(-12deg); transform-origin: 50% 50%;
 }
-.pier-tag[data-shape='lay'] .pier-stamp { top: -8px; right: -8px; width: 88px; height: 88px; }
+.pier-tag[data-shape='lay'] .pier-stamp { top: -6px; right: -4px; width: 72px; height: 72px; }
 .pier-stamp-ink { fill: #2c3c6a; stroke: #2c3c6a; }
 .pier-stamp-ink text { stroke: none; }
 .pier-stamp-small { font: italic 14px var(--cd-face-body); }

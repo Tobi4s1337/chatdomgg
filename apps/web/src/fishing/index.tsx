@@ -5,6 +5,7 @@ import { mountBagBench } from '../bag/bench';
 import { mountPlayHud, type PlayHud } from './play-hud';
 import { mountPierSoundBench } from './sound/bench';
 import { mountFishingUiBench } from './ui/bench';
+import { createSteppedTimers } from './ui/stepped';
 import './register-items';
 
 export default function PierReview() {
@@ -20,8 +21,11 @@ export default function PierReview() {
     if (view === 'ui') { unmount = mountFishingUiBench(hud, query); return; }
     if (view === 'bag') { unmount = mountBagBench(hud, query); return; }
     if (view === 'sound') { unmount = mountPierSoundBench(hud); return; }
-    if (playing) play = mountPlayHud(hud, { personId: '1001', kingdomName: 'Willowmere', hold: query.get('hold') === '1' });
-    void mountPierBench(canvas, query, play ? { hud, ui: play.ui, sound: play.sound, portrait: play.portrait, onGrant: play.onGrant, attach: play.attach } : undefined).then(bench => {
+    // A recording (`clip=1`) runs the overlay's beats on the stage's paused, stepped clock, frame by frame.
+    const timers = playing && query.get('clip') === '1' ? createSteppedTimers() : undefined;
+    if (playing) play = mountPlayHud(hud, { personId: '1001', kingdomName: 'Willowmere', hold: query.get('hold') === '1', ...(timers ? { timers } : {}) });
+    void mountPierBench(canvas, query, play ? { hud, ui: play.ui, sound: play.sound, portrait: play.portrait, onGrant: play.onGrant, attach: play.attach,
+      ...(timers ? { onClock: timers.at } : {}) } : undefined).then(bench => {
       if (ended) bench.dispose(); else { host = bench; (window as PierBenchWindow).__chatdomPier = bench; }
     }).catch(fail);
   });

@@ -5,18 +5,20 @@ import { createStagedItemLink } from '../bag/staged';
 import type { FishingController } from './controller';
 import { createPierSound } from './sound';
 import { mountFishingUiStaged } from './ui/mount';
+import type { FishingUiTimers } from './ui/stepped';
 
 /**
  * Everything around the staged pier on the review bench: the overlay, the pier's sound through the kingdom's own
  * audio, the belt and the bag over the same records the staged room grants. The kingdom view wires the same pieces
  * to the realm's item channel.
  */
-export function mountPlayHud(hud: HTMLElement, options: { readonly personId: string; readonly kingdomName: string; /** Review stills: the tag and notes stay up. */ readonly hold?: boolean }) {
+export function mountPlayHud(hud: HTMLElement, options: { readonly personId: string; readonly kingdomName: string; /** Review stills: the tag and notes stay up. */ readonly hold?: boolean;
+  /** A recording steps the overlay on the stage's clock. */ readonly timers?: FishingUiTimers }) {
   const compact = hud.clientWidth < 640;
   const audio = createKingdomAudio();
   const sound = createPierSound(() => kingdomAudioHost(audio));
   const ui = mountFishingUiStaged(hud, { compact, kingdomName: options.kingdomName, onBeat: beat => sound.cue(beat === 'dismiss' ? 'tag' : beat, { intensity: beat === 'dismiss' ? .25 : .5 }) },
-    { hold: !!options.hold });
+    { hold: !!options.hold, ...(options.timers ? { timers: options.timers } : {}) });
   const items = createStagedItemLink();
   const store = createBagStore(items, { personId: options.personId });
   const surface: BagSound = kind => { audio.cue('wood', { ui: kind }); };

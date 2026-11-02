@@ -414,6 +414,64 @@ pier's fallbacks until each lands:
 What pier guarantees play: pier never moves the camera, never takes pointer lock itself, releases every cursor lease it
 takes, consumes the primary button only while its tool is equipped, and draws nothing in the stream view's HUD.
 
+### 2a. Play's slots landed; one more is asked: a walk feature (PI10, 2 November)
+
+Play's PL10 landed every slot of section 2 (`registerHeldTool`, `equipTool`, the `bottom-centre` region,
+`registerActionBinding`, `registerWorldPrompt`, `observedWalkerHand`/`observedWalkerPose`; play SEAMS B1a). pier's
+production composition is `apps/web/src/fishing/play-composition.ts`: `registerPierInPlay(slots)` registers the rod
+(held tool `rod`), the belt (HUD piece `hotbar`, `bottom-centre`), the bag (ledger page `bag`, order 25, and key
+`KeyB`), `hotbar.1` (`Digit1`) and the rack's "Take a willow rod" prompt (`pier.rack`). Its slot shapes are written out
+by shape and checked against play's real `slots.ts` (from `lane/integrator`): play's module plus the one slot below is
+accepted as is, and play's `ToolContext` is accepted as the rod's context.
+
+The gap: the room, scene and camera reach a slot only through `ToolContext`, while the rod is in the hand. The pier must
+also run without a rod in hand: other fishers' rods, lines, floats and catches, the rack prompt and its take, the
+belt and the bag all read the room. So pier asks play for one additive slot:
+
+```ts
+// apps/web/src/play/slots.ts (additive)
+/** A feature that lives for the whole walk of a kingdom: mounted once the room has placed you, disposed as you leave. */
+export interface WalkFeatureContext extends Omit<ToolContext, 'holdPose'> {
+  /** Your walker id in the room (its session id), or null before it has placed you. */
+  selfWalkerId(): string | null;
+  /** Everyone play draws, you included: feet in world metres, yaw in radians (0 faces +Z), approved name. */
+  walkers(): readonly { readonly id: string; readonly position: Vec3; readonly yaw: number; readonly self: boolean; readonly name: string }[];
+  /** The scene's hour, 0..24. */
+  hour(): number;
+  /** The kingdom's approved name; empty when it has none. */
+  readonly kingdomName: string;
+  /** A full-window, pointer-transparent layer over the world, under the HUD pieces. */
+  readonly overlay: HTMLElement;
+  /** The kingdom's own audio (the walk's `KingdomAudio`) at the world volume, once a gesture has unlocked it. */
+  audio(): KingdomAudio | null;
+  /** Each drawn frame, before the render: seconds since the last frame, and `performance.now()`. */
+  onFrame(listener: (dt: number, now: number) => void): () => void;
+}
+export interface WalkFeatureProvider { readonly id: string; mount(ctx: WalkFeatureContext): () => void }
+export function registerWalkFeature(provider: WalkFeatureProvider): () => void;
+```
+
+Once it lands, the integrator adds pier's slot module and its one import line (play's convention):
+
+```ts
+// apps/web/src/fishing/play-slot.ts (new, pier's folder)
+import * as slots from '../play/slots';
+import { registerPierInPlay } from './play-composition';
+registerPierInPlay(slots);
+
+// apps/web/src/play/providers.ts
+import '../fishing/play-slot';
+```
+
+and turns the realm's gate on (`REALM_PIER_FISHING=1` in the realm's environment; SEAMS 5d). Until then the pier's
+planks, lanterns, rack, book and board stand in every kingdom as founded placements, and nothing of fishing is
+offered: no half-mounted prompt, rod or belt ships. `needs: play walk feature slot` and
+`needs: integrator pier play-slot and REALM_PIER_FISHING once the walk feature lands`.
+
+With the walk feature, grand-world's `registerKingdomLayer` (now on its branch) is not needed for walking: the scene,
+camera and frame come with the walk. It stays the route for the stream view, where the pier draws from its public
+feed (PI11).
+
 ## 3. What pier asks of grand-world (grand-world provides; pier mounts)
 
 Owner: grand-world (`apps/web/src/kingdom/scene.ts`, the land, the water surface, the stream director,
@@ -450,6 +508,11 @@ export interface KingdomLayerMount {
 
 // 3. Director attention for a moment at the pier on stream.
 // requestAttention({ id, at: Vec3, radius: number, seconds: number, priority: 'first' | 'rare' }): void
+// 3b. A held pier shot in the stream director (PI10's 1920x1080 stream still needs it): StreamParams.camera gains
+// 'pier', framed from the shore on the founded pier's site (land.piers[0] or the placement `pier:lake:deck`), the
+// deck and its lanterns in the lower third and the head on the water. The stream's realm source also needs a live
+// realm watch behind the page; the lane's GPU lease serves only the bench, so the still waits for both.
+// needs: grand-world stream pier shot
 
 // 4. The kingdom clock (decision 15): kingdomHour(serverTime: number): number, from grand-world when it exists.
 // 5. The water mood for the sky: pier exports kingdomWaterMood(kingdomId, serverTime); grand-world may adopt it.
@@ -712,6 +775,39 @@ pieces.push(...pierFurnishings(plan, pieces));   // from '../fishing/site'; pure
   `chatCommands` to `RealmEveningBridge`, pass `channels` to the room services, and mount the pier routes.
 - Migration `0017_realm_pier.sql`: items, item events, grant keys, keepsake numbers, catches, Almanac firsts. Storied
   item rows refuse deletion in the database.
+
+### 5e. Realm core fixes the own-stack run asks for (integrator; pier does not edit these files)
+
+The PI10 own-stack run (`work/lanes/pier/e2e/README.md`, "Findings") hit three realm-core faults that have nothing to
+do with fishing but make a cold kingdom slow or impossible to join. Each patch is small and stands alone.
+
+1. `needs: integrator kingdom room sets its id before opening`. In `apps/realm/src/kingdom-room.ts` `onCreate`, a slow
+   `services.open` makes Colyseus refuse the late `roomId` ("can only be overridden upon room creation"), and the hold
+   the open took is never released, so every later join answers 409 until a restart. Patch:
+   ```ts
+   const kingdomId = KingdomIdSchema.parse(options.kingdomId);
+   this.roomId = kingdomRoomId(kingdomId);          // known before the await; set it first
+   this.handle = await services.open(kingdomId);
+   try {
+     /* the rest of onCreate, unchanged */
+   } catch (error) { await this.handle.dispose().catch(() => {}); throw error; }
+   ```
+2. `needs: integrator realm port reservation drops early connections`. In `apps/realm/src/main.ts` `serve()`, a TCP
+   connection accepted by the bare reservation server during boot (a health probe, a browser retry) keeps
+   `reservation.close()` pending forever, so the realm never listens. Patch, one line after
+   `const reservation = createPortReservation();`:
+   ```ts
+   reservation.on('connection', socket => socket.destroy());
+   ```
+3. `needs: integrator compile the founded world outside the writer lease`. `apps/realm/src/founded/provider.ts`
+   `stage()` assembles the scene and runs `createFoundedWorld` (the collision compile and spawn anchors) inside the 15 s
+   writer lease `DurableKingdom.open` holds. On a busy host that blocks the event loop for 19–100 s and the open fails
+   with "The writer lease … is no longer held". The fix is to memoise the compiled world by geometry digest in
+   `loader.prepare()` (before `repository.acquire`), so the leased section only binds an already compiled world; or to
+   compile in chunks that yield. The pier's own share of the compile is about 0.5 s (`pierFurnishings`).
+
+Fallback until they land: none is needed for production correctness; the own-stack check seats a walker first and
+retries the join (recorded under `recoveries` in its JSON).
 
 ## 6. Other lanes
 

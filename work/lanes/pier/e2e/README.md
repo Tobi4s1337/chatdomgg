@@ -139,6 +139,10 @@ The stack contains no mocks:
   later by `ended missed`. The controller should send one strike per cast (`apps/web/src/fishing/controller.ts`
   `press()`), and the server could treat a repeated strike on its own fighting cast as a reel. The run records every
   request it sends (`catch.fisherRequests`), so the double strike can be seen.
+  **Fixed on 2 November:** the controller now sends one strike per cast and turns later presses into the reel, and
+  the room treats a strike on its own hooked fish as a reel edge (nothing while landing). Both are tested
+  (`controller.test.ts`, `cast.test.ts`). The three realm-core findings above are written up as integrator asks
+  with exact patches in SEAMS 5e.
 
 ## Files
 
