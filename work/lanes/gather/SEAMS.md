@@ -107,6 +107,17 @@ gather does not edit play's files or implement a second generic transfer control
     currentWorld`). The patch is written out in `work/lanes/gather/patches/play-walk-founded.patch`: three files,
     eight lines, additive. It applies cleanly and type-checks on `lane/play` `f57fb85e`. Without it the door is never
     offered (no guessed door). Gather does not write into play's files.
+  - **Proven in a browser on the merged tree (2026-11-02).** `with-play.mjs` + `door-journey.mjs`: play's real
+    `KingdomEntry` with the door patch, walk feature, transfer and curtain; gather's destination; one browser walker
+    from the street door into the tavern and back to the return anchor facing out. Never in both rooms, with one name
+    and one look (`work/evidence/gather/ga10-journey.md`). Two fixes on gather's side: the door now enters after the
+    walk's frame, never inside it (going in inside the frame tore the walk out from under the kingdom's frame), and
+    the destination surface imports its own styles.
+  - **Asked of play (seen in that run):** (1) the curtain lifts on `returning → idle` while the entry is still
+    rebuilding the kingdom. "Opening the castle gate" shows for about 17 s under SwiftShader before the walk places
+    its camera. Hold the curtain until the kingdom's walk is ready again. (2) Back on the anchor facing out, the walk
+    camera's boom reaches back through the doorway into the exterior's hollow, so dark wood fills the top half of the
+    first frame. Start the boom in front, or ease it round, for an arrival through a door.
   - `apps/web/src/tavern/play-portal.test.ts` checks the join with play's real `createPortalTransfer`, and
     `play-door.test.ts` the door feature in play's real keeper and slots. Both find play's files on disk at run time
     (a build-time glob was hidden by vitest's module cache) and skip until they are on the branch. Against `lane/play`
@@ -266,6 +277,18 @@ production transport or dependency file is changed here. This is a host-isolatio
   further out, reached on supported feet, facing out. Without the argument it behaves as before.
 - Socket tests bind their own loopback address through `games/test-socket.ts` (`127.0.0.10`), since the lane
   ports on 127.0.0.1 are usually held by other lanes.
+- **Merging with play's door arrivals (2026-11-02, the resolution written out).** `lane/play` also changes
+  `kingdom-room.ts` `onJoin` (its `doorArrival` from `apps/realm/src/portals/arrivals.ts`, read from the join's
+  optional `arrive`) and `main.ts` (`RealmPortalArrivals`). The merged file is play's version plus
+  `work/lanes/gather/patches/with-play-kingdom-room.patch` and `with-play-main.patch`. Both mechanisms stay, and the
+  order is: a resumed seat, then gather's tavern return, then play's door arrival, then the gate. Gather's record is
+  always read when not resuming, so it is spent either way. Gather does **not** register a `tavern` finder with
+  play's `RealmPortalArrivals`. The tavern room itself knows the person left the tavern, and the return spaces people
+  coming out together, which a finder (`{ kingdomId, portal, world }`, with no person and no walkers) cannot do.
+  Play's arrivals stay for future doors and still need their own `onLeave` patch. With both installed, play's entry
+  sends `arrive: { portal }`, play's lookup finds no tavern finder and returns null, and gather's return places the
+  walker. `apps/web/src/games/with-play.mjs` assembles exactly this merge in `/tmp`; it typechecks, and the
+  browser journey passes on it (`work/evidence/gather/ga10-journey.md`).
 
 ## 5. Read routes (gather offers; panel-window, play and the future bag read)
 
