@@ -5,8 +5,8 @@ import { resolve } from 'node:path';
 import { clearTimeout } from 'node:timers';
 
 const mode = process.argv[2], port = Number(process.env.FORGE_WISH_PROOF_PORT ?? '5173');
-if (!['prepare', 'pilot', 'twenty'].includes(mode) || process.env.REALM_DATABASE_SCHEMA !== 'realm_forge_wish') {
-  throw new Error('Use prepare|pilot|twenty with REALM_DATABASE_SCHEMA=realm_forge_wish and privately loaded DATABASE_URL.');
+if (!['prepare', 'pilot', 'twenty', 'stress'].includes(mode) || process.env.REALM_DATABASE_SCHEMA !== 'realm_forge_wish') {
+  throw new Error('Use prepare|pilot|twenty|stress with REALM_DATABASE_SCHEMA=realm_forge_wish and privately loaded DATABASE_URL.');
 }
 if (!Number.isInteger(port) || port < 5170 || port > 5189 || port === 5187) throw new Error('The proof needs an allowed lane port.');
 // Under the realm tree so external native/service modules resolve from its existing dependencies.
@@ -23,7 +23,7 @@ const child = spawn(process.execPath, [resolve(outDir, 'proof.mjs'), mode, Strin
 const stop = () => { child.kill('SIGTERM'); };
 process.once('SIGTERM', stop); process.once('SIGINT', stop);
 // Twenty real wishes, two at a time, need longer than one pilot.
-const deadline = setTimeout(stop, (mode === 'twenty' ? 45 : 10) * 60_000);
+const deadline = setTimeout(stop, (mode === 'twenty' || mode === 'stress' ? 45 : 10) * 60_000);
 try {
   child.once('error', () => { process.exitCode = 1; });
   await new Promise(resolve => child.once('close', code => { process.exitCode = code ?? 1; resolve(); }));

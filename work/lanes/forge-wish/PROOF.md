@@ -41,3 +41,15 @@ The forced realm shutdown ceiling remains five seconds, and abrupt kernel/proces
 This is a private integration harness. It supplies no product bypass, sign-in UI, real citizen identity or real chat
 permission. It proves neither the walk's wish box nor rendered ritual timing. It does not run or replace the frozen
 twenty, count toward its three-run allowance, or prove stored-sheet repeatability. Those remain FW10 acceptance work.
+
+## Twenty and stress (FW10)
+
+`proof.mjs twenty` sends the frozen twenty (`apps/codex/src/fixtures/fw10-wishes.ts`) through the same served realm,
+one simulated citizen and home per wish, at most two in flight, with real model calls; it counts toward the frozen
+set's three-run allowance. `proof.mjs stress` is the same composition with controlled answers in place of model calls
+(1.5 to 4 s each): it reproduces writer contention without spending real wishes and never counts as a run.
+The chat witness is resent like Herald resends it (same observation id, up to four sends) and a failed witness is
+recorded per wish instead of ending the run. Both modes write `twenty.json` (fixture ids, outcomes, timings, quality),
+`landed.png` (contact sheet of landed pieces), `operations.jsonl` (word-free authority notes and run faults from the
+bridge's `forgeLog`) and `realm.log` (the realm's own operational lines) into the private run directory, all mode 0600.
+A failed run records only a SQLSTATE or Node error code and an application message that names no host, user or address.

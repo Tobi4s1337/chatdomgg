@@ -32,7 +32,7 @@ function pass(image: boolean, subject: ForgeWishSubject = { motif: 'sleeping-dra
 }
 
 /** Controlled SIMULATED repository; the production bridge, coordinator, gates and registry run unchanged. */
-async function fixture(royal = false, options: { forgeChatObserver?: ForgeChatObserver } = {}) {
+async function fixture(royal = false, { writerHold, ...options }: { forgeChatObserver?: ForgeChatObserver; evidenceWaitMs?: number; writerHold?: () => string | null } = {}) {
   const now = Date.now(), blueprint = createHearthHome('house', 0), gate = new ForgeWriteGate();
   const ownerId = royal ? PersonIdSchema.parse(kingdomId) : personId;
   const guards = gate.install({ origin: 'simulated' as const }).guards;
@@ -89,7 +89,7 @@ async function fixture(royal = false, options: { forgeChatObserver?: ForgeChatOb
       title: 'SIMULATED Dreamkeeper', plaque: 'SIMULATED warm dreams above the hearth.' })) };
   const ingress = { gate: new IngressGate({ herald: 'h'.repeat(32) }, 'simulated'), accept: vi.fn(async () => ({ http: 202 as const, body: { version: 1 as const, status: 'accepted' as const } })) };
   const bridge = new RealmEveningBridge({ origin: 'simulated', ingress, gate, approvals: new FileForgeApprovals(directory), providers, ...options });
-  const services = createDurableRealmServices({ repository, outbox, auth: { authenticate: async () => { throw new Error('No test entry'); }, current: async () => false },
+  const services = createDurableRealmServices({ repository, outbox, ...(writerHold ? { hold: writerHold } : {}), auth: { authenticate: async () => { throw new Error('No test entry'); }, current: async () => false },
     attach: kingdom => bridge.attach(kingdom), kingdom: () => ({ world: REFERENCE_WORLD, layoutRevision: home.layoutRevision, spawn: () => [0, 0, 6] }) });
   bridge.use(services);
   const hold = await services.retain(kingdomId); cleanups.push(() => hold.release()); cleanups.push(() => bridge.stop());
@@ -125,6 +125,23 @@ it('uses one held writer and real coordinator; stages are transient, audited att
   expect(f.privateReply).toHaveBeenCalledTimes(1);
 });
 
+it('asks the writer again when it turned an approved commit away unstarted, and lands the piece for one coal', async () => {
+  // While the writer lands another maker's piece, a queued commit can be refused before it starts (nothing written).
+  let busy: string | null = null;
+  const f = await fixture(false, { writerHold: () => busy });
+  vi.mocked(f.providers.judgeResult).mockImplementation(async () => {
+    busy = 'SIMULATED writer landing another piece';
+    setTimeout(() => { busy = null; }, 400);
+    return pass(true);
+  });
+  expect(await f.bridge.run(f.command)).toMatchObject({ kind: 'committed' });
+  expect(f.kingdom.commands.refused.held).toBeGreaterThan(0);
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(1);
+  expect(f.facts.some(fact => fact.body.type === 'forge.release')).toBe(false);
+  expect(f.state().coals[personId]).toBe(0);
+  expect(f.privateReply).toHaveBeenCalledExactlyOnceWith(personId, expect.objectContaining({ receipt: expect.objectContaining({ status: 'committed' }) }));
+});
+
 it('sends the closest-shape explanation only to the maker after a real durable commit', async () => {
   const f = await fixture();
   const draft = await f.providers.draft({ words: f.command.words, family: 'hearth', availableSockets: [] });
@@ -152,6 +169,29 @@ it('waits for accepted online/chat ingress to drain before deciding whether the 
   expect(f.kingdom.loadIngress).toHaveBeenCalled();
   expect(f.privateReply).toHaveBeenCalledExactlyOnceWith(personId, expect.objectContaining({ receipt: expect.objectContaining({ status: 'committed' }) }));
   expect(f.state().coals[personId]).toBe(0);
+});
+
+it('lets a wish wait while a busy writer has not yet committed its chat witness, and names the cause when it never does', async () => {
+  // Each look at the ingress checkpoint costs the writer several seconds of (simulated) clock, as a scene rebuild does.
+  let clock = 0;
+  const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+  try {
+    const late = await fixture(), loadIngress = late.kingdom.loadIngress.bind(late.kingdom);
+    let looks = 0;
+    // Three empty looks cost six seconds: longer than the old five-second bound, well inside the writer's lease.
+    vi.spyOn(late.kingdom, 'loadIngress').mockImplementation(async () => { clock += 2_000; return ++looks <= 3 ? null : loadIngress(); });
+    expect(await late.bridge.run(late.command)).toMatchObject({ kind: 'committed' });
+    expect(looks).toBeGreaterThan(3);
+
+    now.mockRestore();
+    const never = await fixture(false, { evidenceWaitMs: 200 });
+    vi.spyOn(never.kingdom, 'loadIngress').mockImplementation(async () => null);
+    expect(await never.bridge.run(never.command)).toMatchObject({ kind: 'cold', privateMessage: expect.stringContaining('could not hear your wish in chat') });
+    expect(never.privateReply).toHaveBeenCalledExactlyOnceWith(personId, expect.objectContaining({ receipt: expect.objectContaining({ status: 'unavailable',
+      message: expect.stringContaining('Nothing was spent') }) }));
+    expect(never.providers.judgeWords).not.toHaveBeenCalled();
+    expect(never.state().coals[personId]).toBe(1);
+  } finally { now.mockRestore(); }
 });
 
 it('explains a fresh offline wish privately without a model call or coal spent', async () => {

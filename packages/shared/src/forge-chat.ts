@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { EpochMsSchema, KingdomIdSchema, TokenSchema, type KingdomId, type PersonId } from './identity';
+import { FORGE_WISH_WORDS_MAX } from './forge-words';
 
 /** The Forge's optional chat grant is separate from the openid-only sign-in grant. */
 export const FORGE_CHAT_SCOPE = 'user:write:chat' as const;
@@ -11,8 +12,8 @@ export const FORGE_CHAT_ROUTES = {
   revoke: '/api/realm/forge/chat/revoke',
 } as const;
 export const FORGE_CHAT_LIMITS = {
-  /** Matches the existing Herald/Forge intake. Never silently truncate a longer wish. */
-  words: 240,
+  /** Matches the Herald/Forge intake. Never silently truncate a longer wish. */
+  words: FORGE_WISH_WORDS_MAX,
   bodyBytes: 4096,
   stateTtlMs: 10 * 60_000,
   /** Detailed receipt retention; an expired request keeps a durable no-resend tombstone. */

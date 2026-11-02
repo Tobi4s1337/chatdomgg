@@ -1,6 +1,6 @@
 import { REALM_CASTLE_SLOT, castleHostId, forgeHostForPerson, ownedForgeHost, ownedHostProfile } from '@chatdom/shared/realm';
 import type { RealmCapability, RealmDecision, RealmDecisionContext, RealmDomainCommand, RealmFact, RealmForgeReservation, RealmPrivateState, RealmPublicMessage } from '@chatdom/shared/realm';
-import { ForgeDraftSchema, HomeTierSchema, TokenSchema, kingdomForBroadcaster, type KingdomId } from '@chatdom/shared';
+import { FORGE_WISH_WORDS_MAX, ForgeDraftSchema, HomeTierSchema, TokenSchema, kingdomForBroadcaster, type KingdomId } from '@chatdom/shared';
 import { createGrowthState, projectGrowthScene } from '../growth';
 import { growRealmFact } from './growth';
 
@@ -131,7 +131,7 @@ export function decideRealm(s: RealmPrivateState, c: RealmDomainCommand, ctx: Re
       const h = ownedForgeHost(s, r.homeId)!;
       if (!ForgeDraftSchema.safeParse(c.attachment.draft).success) return reject('conflict');
       if (h.revision !== c.expectedRevision || h.digest !== c.expectedHomeDigest
-        || !c.approvalReceipt || !c.creation.words.trim() || c.creation.words.length > 240
+        || !c.approvalReceipt || !c.creation.words.trim() || c.creation.words.length > FORGE_WISH_WORDS_MAX
         || c.attachment.kingdomId !== s.kingdomId || c.attachment.provenance.source !== s.origin || own(s.attachments, c.attachment.id)
         || (c.attachment.hostProfile ?? 'street-home') !== ownedHostProfile(h)
         || c.attachment.slot !== h.slot || c.attachment.hostId !== h.blueprint.id || c.attachment.family !== h.family

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CitizenChatCueSchema } from '../citizen-chat';
 import { EpochMsSchema, KingdomIdSchema, PersonIdSchema, TokenSchema, UIntSchema } from '../identity';
+import { FORGE_WISH_WORDS_MAX } from '../forge-words';
 
 /** Private service-only route. Browser callers never supply identity, slot bindings or a caller lease. */
 export const REALM_HERALD_ROUTE = '/internal/realm/herald' as const;
@@ -21,7 +22,7 @@ export const RealmHeraldChatSchema = z.strictObject({
 
 export const RealmHeraldForgeCommandSchema = z.strictObject({
   kingdomId: KingdomIdSchema, personId: PersonIdSchema, messageId: TokenSchema,
-  slot: UIntSchema.max(65534), words: z.string().trim().min(1).max(240), observedAt: EpochMsSchema,
+  slot: UIntSchema.max(65534), words: z.string().trim().min(1).max(FORGE_WISH_WORDS_MAX), observedAt: EpochMsSchema,
 });
 
 /** Wishes are transient private work, not domain commands, stored chat, approvals or coal grants. */

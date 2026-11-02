@@ -8,6 +8,7 @@ import { renderForgeContactSheet } from '../contact-sheet';
 import { FORGE_CERTIFICATE_FAMILIES, forgeMotifCertificate } from '../certificates';
 import { createKingdomForgeApplication } from './application';
 import { bindForgeCandidate } from './candidate';
+import { deferForgeAuthority } from './defer';
 import type {
   ForgeActivity, ForgeAttachment, ForgeReservation, KingdomForgeAudit, KingdomForgeAuthority, KingdomForgeCommand,
 } from './ports';
@@ -198,6 +199,44 @@ describe('the kingdom Forge application', () => {
     expect(await running).toMatchObject({ kind });
   });
 
+  it('asks a busy writer again when it turned a reserve or commit away unstarted, and lands the piece once', async () => {
+    // While the writer lands another maker's piece, the realm can refuse a queued step unstarted (nothing written).
+    const f = fixture();
+    const reserve = vi.mocked(f.authority.reserve).getMockImplementation()!;
+    const commit = vi.mocked(f.authority.commit).getMockImplementation()!;
+    vi.mocked(f.authority.reserve).mockImplementationOnce(async () => deferForgeAuthority({ kind: 'cold' as const }, 'unavailable'));
+    vi.mocked(f.authority.reserve).mockImplementation(reserve);
+    vi.mocked(f.authority.commit)
+      .mockImplementationOnce(async () => deferForgeAuthority({ kind: 'cold' as const }, 'unavailable'))
+      .mockImplementationOnce(async () => deferForgeAuthority({ kind: 'cold' as const }, 'unavailable'))
+      .mockImplementation(commit);
+    expect(await f.run(command, f.lease)).toMatchObject({ kind: 'committed' });
+    expect(f.authority.reserve).toHaveBeenCalledTimes(2);
+    expect(f.authority.commit).toHaveBeenCalledTimes(3);
+    // Every ask carries the one attempt identity, so the realm cannot reserve or attach twice.
+    const attempts = vi.mocked(f.authority.commit).mock.calls.map(([input]) => [input.attemptId, input.reservationId]);
+    expect(new Set(attempts.map(pair => pair.join(':'))).size).toBe(1);
+    expect(f.coals).toBe(0);
+    expect(f.authority.release).not.toHaveBeenCalled();
+    expect(f.publicEvents.filter(event => event.type === 'committed')).toHaveLength(1);
+
+    // A final cold, a busy anvil or a cancelled caller is never asked again.
+    const final = fixture();
+    vi.mocked(final.authority.commit).mockImplementation(async () => ({ kind: 'cold' as const }));
+    expect(await final.run(command, final.lease)).toMatchObject({ kind: 'cold' });
+    expect(final.authority.commit).toHaveBeenCalledTimes(1);
+    expect(final.coals).toBe(1);
+    const busy = fixture();
+    vi.mocked(busy.authority.reserve).mockImplementation(async () => deferForgeAuthority({ kind: 'held' as const }, 'capacity'));
+    expect(await busy.run(command, busy.lease)).toMatchObject({ kind: 'held' });
+    expect(busy.authority.reserve).toHaveBeenCalledTimes(1);
+    const gone = fixture();
+    vi.mocked(gone.authority.commit).mockImplementation(async () => { gone.invalidate(); return deferForgeAuthority({ kind: 'cold' as const }, 'unavailable'); });
+    expect(await gone.run(command, gone.lease)).toMatchObject({ kind: 'cold' });
+    expect(gone.authority.commit).toHaveBeenCalledTimes(1);
+    expect(gone.coals).toBe(1);
+  });
+
   it('emits no ending when reserve fails, validation fails before a stage, or every stage publication throws', async () => {
     const denied = fixture();
     vi.mocked(denied.authority.reserve).mockResolvedValue({ kind: 'held' });
@@ -348,7 +387,8 @@ describe('the kingdom Forge application', () => {
       });
       vi.mocked(timedOut.authority.release).mockImplementation(async () => new Promise(() => {}));
       const waiting = timedOut.run(command, timedOut.lease);
-      await vi.advanceTimersByTimeAsync(10_001);
+      // The reservation window (20 s, longer than the writer's own queue wait) plus the release budget (5 s).
+      await vi.advanceTimersByTimeAsync(25_001);
       expect(await waiting).toMatchObject({ kind: 'recovery-needed' });
       expect(lateLease?.signal.aborted).toBe(true);
       expect(lateLease?.current()).toBe(false);

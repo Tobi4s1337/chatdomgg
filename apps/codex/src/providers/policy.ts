@@ -1,5 +1,5 @@
 /** Versioned independently of prompts: records can be replayed against this question set. */
-export const FORGE_JUDGE_POLICY_VERSION = 'house-part-safety-quality-2026-11-02-v7';
+export const FORGE_JUDGE_POLICY_VERSION = 'house-part-safety-quality-2026-11-02-v8';
 export const FORGE_JUDGE_THRESHOLDS = { passBelow: 0.12, refuseAbove: 0.85 } as const;
 
 export const FORGE_FLOOR = `Chatdom is a storybook fantasy kingdom shown on Twitch to audiences aged 13 and up.
@@ -148,7 +148,9 @@ export function scoreForgeMeasure(measure: ForgeQualityMeasure): ForgeQualitySco
 /** Exact only when both readings name the plan's motif, it is certified readable and any named slot is kept. */
 export function forgeMeasureDetailMatch(measure: ForgeQualityMeasure): ForgeDetailMatch {
   const agreed = agreedForgeWishSubject(measure);
-  if (agreed.motif === 'disputed' || agreed.slot === 'disputed') return 'unclear';
+  // "No house part named" and "the plan's own part" are both kept by the piece: that slot split is not a dispute (v8).
+  const slotKept = [measure.words.slot, measure.result.slot].every(slot => slot === 'none' || slot === measure.plan.kind);
+  if (agreed.motif === 'disputed' || (agreed.slot === 'disputed' && !slotKept)) return 'unclear';
   if (agreed.motif !== measure.plan.motif) return 'adapted';
   // A slot this home lacks is a fit adaptation, told privately as such; it does not make the subject inexact.
   if (forgeMeasureSlotMissed(measure) && measure.slotAvailable) return 'adapted';

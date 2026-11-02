@@ -1,16 +1,21 @@
 import { createHash } from 'node:crypto';
 import { CitizenChatCueSchema, PRESENCE_LEASE_MS, type CitizenChatCue, type ForgeChatObservation, type ForgeChatObserver, type KingdomId, type PresenceInput } from '@chatdom/shared';
 import { REALM_CASTLE_SLOT, RealmHeraldEnvelopeSchema, RealmHeraldForgeCommandSchema, type KingdomForgeCommand, type KingdomForgeLease, type KingdomForgeOutcome, type RealmHeraldChat, type RealmPrivateMessage } from '@chatdom/shared/realm';
-import { createKingdomForgeApplication, type KingdomForgeResult } from '../../../codex/src/kingdom-forge/application';
+import { createKingdomForgeApplication, type KingdomForgeFault, type KingdomForgeResult } from '../../../codex/src/kingdom-forge/application';
 import { createForgeProviders, type ForgeProviders } from '../../../codex/src/providers';
 import { decodeIngressCheckpoint, presenceEpoch, presencePerson, type IngressReply, type RealmIngress } from '../ingress';
 import type { DurableKingdom, DurableRealmServices } from '../persistence';
-import { createForgeAuthority, forgeMessageKey, type FileForgeApprovals, type ForgeWriteGate } from '../wiring';
+import { createForgeAuthority, forgeMessageKey, type FileForgeApprovals, type ForgeWriteGate, type RealmWiringLog } from '../wiring';
 import { forgeDeliveryMessage } from '../../../codex/src/wish-decision';
 
 const MAX_PENDING = 32;
 const RUN_LEASE_MS = 600_000;
-const EVIDENCE_WAIT_MS = 5_000;
+/**
+ * How long a wish waits for its own chat message to be committed as presence. The writer may be busy landing another
+ * piece (its scene rebuild takes seconds on a loaded host); nothing is reserved or spent while the wish waits.
+ */
+const EVIDENCE_WAIT_MS = 30_000;
+const UNHEARD = 'The forge could not hear your wish in chat just now. Nothing was spent; your coal stays yours. Please say it again.';
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
 export interface RealmEveningOptions {
@@ -26,6 +31,10 @@ export interface RealmEveningOptions {
   readonly beforeObservation?: (input: PresenceInput) => Promise<void>;
   /** Owner-only chat progress. Failure cannot undo, refuse or repeat an authoritative Forge run. */
   readonly forgeChatObserver?: ForgeChatObserver;
+  /** Private operational codes from the authority and the run (never words, people or drafts). */
+  /** How long a wish waits for its chat witness to commit; defaults to EVIDENCE_WAIT_MS. Tests shorten it. */
+  readonly evidenceWaitMs?: number;
+  readonly forgeLog?: (event: RealmWiringLog | (KingdomForgeFault & { readonly kind: 'forge-fault'; readonly kingdomId: KingdomId })) => void;
 }
 
 type Application = ReturnType<typeof createKingdomForgeApplication>;
@@ -74,9 +83,10 @@ export class RealmEveningBridge {
         if (hold.kingdom !== kingdom || !kingdom.current) { await hold.release(); return null; }
         return hold;
       },
-    }, { gate: this.options.gate, approvals: this.options.approvals });
+    }, { gate: this.options.gate, approvals: this.options.approvals }, event => this.options.forgeLog?.(event));
     const run = createKingdomForgeApplication({ authority, providers: this.providers,
       now: () => kingdom.databaseNow(), record: audit => this.options.approvals.record(audit),
+      fault: fault => this.options.forgeLog?.({ kind: 'forge-fault', kingdomId: kingdom.kingdomId, ...fault }),
       publish: event => {
         // The committed event has already been persisted and queued by the authority. Re-emitting it
         // here would race the delivery cursor and repeat the reveal after reconnect.
@@ -130,7 +140,12 @@ export class RealmEveningBridge {
         if (!baseCurrent()) return { kind: 'canceled' };
         // Ingress acknowledges durable acceptance before the writer drains its inbox. Wait for actual
         // committed chat evidence, rather than racing a stream/home decision against queued Herald input.
-        if (!await this.witnessed(kingdom, command, baseCurrent)) return { kind: 'cold' };
+        if (!await this.witnessed(kingdom, command, baseCurrent)) {
+          if (!baseCurrent()) return { kind: 'canceled' };
+          const unheard: KingdomForgeResult = { kind: 'cold', privateMessage: UNHEARD };
+          this.privateOutcome(kingdom, command, unheard);
+          return unheard;
+        }
         if (!baseCurrent()) return { kind: 'canceled' };
         if (kingdom.privateState.stream.sessionId === null || kingdom.privateState.stream.liveUntil <= kingdom.databaseNow()) {
           const offline: KingdomForgeResult = { kind: 'cold', privateMessage: 'The forge fire rests while the stream is offline. Bring your wish when the kingdom wakes; your coal stays yours.' };
@@ -312,7 +327,7 @@ export class RealmEveningBridge {
   }
 
   private async witnessed(kingdom: DurableKingdom, command: KingdomForgeCommand, current: () => boolean): Promise<boolean> {
-    const until = performance.now() + EVIDENCE_WAIT_MS;
+    const until = performance.now() + (this.options.evidenceWaitMs ?? EVIDENCE_WAIT_MS);
     while (current() && performance.now() < until) {
       const checkpoint = await kingdom.loadIngress();
       if (checkpoint) {

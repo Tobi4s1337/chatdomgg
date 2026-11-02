@@ -1,7 +1,7 @@
 import { HousePartPlanSchema, ForgeStyleKitSchema, type HousePartPlan } from '@chatdom/shared';
 import { STYLES, type StyleKey } from '@chatdom/content/materials';
-/** New work remains on one until every persisted scene/growth path resolves the saved revision. */
-export const CURRENT_FORGE_STYLE_KIT_REVISION = 1;
+/** New work uses revision two; every persisted scene and growth path resolves each part's saved revision. */
+export const CURRENT_FORGE_STYLE_KIT_REVISION = 2;
 export function forgeStyleKit(family:StyleKey,revision:number=CURRENT_FORGE_STYLE_KIT_REVISION){
   if(revision!==1&&revision!==2)throw new Error('Unregistered Forge style kit revision.');
   return ForgeStyleKitSchema.parse({version:1,id:`${family}-native`,styleId:STYLES[family].id,family,revision});

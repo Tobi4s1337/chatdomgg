@@ -197,7 +197,8 @@ describe('private Forge command handoff', () => {
     r.live('simulated-stream-3'); await r.settle();
     r.say(PEOPLE.wren,'after-live',wish('!forge a moon lantern')); await r.settle(); expect(calls).toHaveLength(5);
     r.socket().close(); await r.settle(); expect(calls[4]!.lease.signal.aborted).toBe(true);
-    for (const text of ['hello !forge a dragon','!forge','!forge '+ 'x'.repeat(241)]) expect(extractForgeWords({message:{text}})).toBeNull();
+    for (const text of ['hello !forge a dragon','!forge','!forge '+ 'x'.repeat(494)]) expect(extractForgeWords({message:{text}})).toBeNull();
+    expect(extractForgeWords({message:{text:'!forge '+ 'x'.repeat(493)}})).toBe('x'.repeat(493));
   });
 });
 
