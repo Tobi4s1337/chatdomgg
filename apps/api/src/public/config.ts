@@ -1,5 +1,5 @@
 import { isAbsolute, resolve } from 'node:path';
-import { parseTarget, type ProxyTarget } from './proxy';
+import { parseTarget, parseTrustedProxies, type ProxyTarget, type TrustedProxies } from './proxy';
 
 /** One kingdom the front door offers, by its Twitch channel id and login (for "Watch on Twitch"). */
 export interface DoorKingdom { readonly kingdomId: string; readonly login: string }
@@ -17,6 +17,8 @@ export interface PublicConfig {
   readonly extension: { readonly clientId: string; readonly secret: string } | null;
   /** Whether search engines may list the site (`PUBLIC_INDEXING`, closed unless set to open). See ./site.ts. */
   readonly indexing: 'closed' | 'open';
+  /** The host's TLS proxy (PUBLIC_TRUSTED_PROXIES), whose X-Forwarded-For names the visitor; null trusts nobody. */
+  readonly trustedProxies: TrustedProxies | null;
 }
 
 const KINGDOM = /^([1-9][0-9]{0,31}):([a-z0-9_]{1,25})$/;
@@ -59,6 +61,7 @@ export function readPublicConfig(env: Record<string, string | undefined>, repoRo
     optional: { herald: optional('PUBLIC_HERALD_TARGET', '/presence-data'), map: optional('PUBLIC_MAP_TARGET', '/map-data'), forge: optional('PUBLIC_FORGE_TARGET', '/forge-data') },
     extension: clientId ? { clientId, secret } : null,
     indexing,
+    trustedProxies: parseTrustedProxies('PUBLIC_TRUSTED_PROXIES', env.PUBLIC_TRUSTED_PROXIES),
   };
 }
 

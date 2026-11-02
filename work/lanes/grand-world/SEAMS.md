@@ -959,3 +959,10 @@ Run in the deployed checkout (lane/integrator with this checkpoint merged). Noth
 
 Still open for the integrator (unchanged): the Chronicle's historical scenes do not pass through the founded store, so
 replaying an old receipt shows today's land unless that exact receipt was published (`publish-cli`).
+
+## from launch
+
+- 2 Nov (LA10): `/stream` without a kingdom showed "Choose a kingdom" calmly but logged
+  `console.error('The stream kingdom could not open', …)` on every load. The refusal is now a `StreamRefusal`
+  (`apps/web/src/stream/mount.ts`), which the mount still turns into the failed phase but does not log; every other
+  failure still logs. Test in `mount.test.ts`.

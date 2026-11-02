@@ -499,3 +499,21 @@ git apply work/lanes/atlas-map/gateway-visitor-address.integrator.patch   # own 
 # ops/bin/public: export PUBLIC_TRUSTED_PROXIES=172.17.0.0/16   (Traefik's docker bridge; the gateway listens on 172.17.0.1)
 # restart the public window, then the serve loop as ATLAS_LOOKUPS_PER_CLIENT_MINUTE=6 atlas-live.sh serve (6 per visitor)
 ```
+
+## from launch
+
+- 2 Nov (LA10): `needs: integrator/atlas-map: land the Atlas owner API.` On chatdom.io every Atlas load in explore mode
+  logs a console error (`404 /api/atlas/me?preview=…`): nothing serves the route, because
+  `work/lanes/atlas-map/atlas-owner-api.patch` was never applied, and it no longer applies to `lane/integrator`
+  (`git apply --check`: `apps/api/src/main.ts:44` and `apps/api/src/public/routes.ts:8` drifted). Rebase the patch
+  and land it, with its operator settings (`ATLAS_PRIVATE_URL`, `ATLAS_INGEST_TOKEN`), so a signed-out visitor
+  gets `{version:1,status:'anonymous'}` instead of a 404.
+- 2 Nov (LA10): a waiting card whose login is one of the kingdoms the front door opens (`/api/public/door`) now says
+  "Founded · <name>", offers **Enter <name>** (`/kingdom/<id>`) and replaces the pencil note with "<name> is founded
+  and open to visit. The map draws its land with the Atlas's next edition." Before, tobi4s_'s card (found by the
+  public lookup since the Atlas service was rebuilt) said "Waiting · no land of its own" with no way in.
+  (`apps/web/src/atlas/ui/Register.tsx`, `WaitingCard`.)
+- 2 Nov (LA10): `gateway-visitor-address.integrator.patch` is applied on `lane/launch` (tests pass) and goes to
+  `lane/integrator` with the launch merge. On this host Traefik reaches the gateway from `172.18.0.4` (bridge
+  `172.18.0.0/16`), not from docker0, so the setting is `PUBLIC_TRUSTED_PROXIES=172.18.0.0/16` (launch `SEAMS.md`,
+  `deploy: 3`).

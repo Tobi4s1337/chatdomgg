@@ -83,6 +83,14 @@ const steps = {
     await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 120_000 }).catch(() => {});
     await page.waitForTimeout(4000);
   },
+  async gate(page) {
+    await page.goto(`${target}/?walk=1&kingdom=${KINGDOM}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(12000);
+  },
+  async choose(page) {
+    await page.goto(`${target}/stream`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(2500);
+  },
   async legal(page) {
     await page.goto(`${target}/privacy`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(500);
@@ -117,8 +125,9 @@ try {
       entry.title = await page.title().catch(() => '');
       entry.url = page.url();
       entry.seconds = Math.round((Date.now() - started) / 100) / 10;
-      await page.screenshot({ path: join(out, `${name}@${width}x${height}.png`) }).catch(error => entry.notes.push(`no still: ${error.message}`));
+      await page.screenshot({ path: join(out, `${name}@${width}x${height}.png`), timeout: 90_000 }).catch(error => entry.notes.push(`no still: ${error.message}`));
       report.push(entry);
+      await writeFile(join(out, 'walk.json'), `${JSON.stringify(report, null, 2)}\n`);
       console.log(`${name}@${width}x${height}: ${entry.seconds}s console=${entry.console.length} errors=${entry.errors.length} requests=${entry.requests.length} words=${entry.words.length} ${entry.notes.join(' | ')}`);
       await context.close();
     }

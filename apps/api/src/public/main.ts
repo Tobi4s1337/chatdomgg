@@ -158,13 +158,13 @@ async function route(request: IncomingMessage, response: ServerResponse) {
     case 'dock':
       if (!await (await import('../dock')).handleDock(request, response, { pool, config: auth })) unavailableJson(response, 404, 'No such route');
       return;
-    case 'realm': proxyHttp(config.realm.target, request, response, config.proto); return;
+    case 'realm': proxyHttp(config.realm.target, request, response, config.proto, config.trustedProxies); return;
     case 'panel': await panel(request, response, url.pathname); return;
     case 'door-data': await doorData(response); return;
     case 'optional': {
       const upstream = optionalTargets[target.service];
       // Herald, Surveyor and the Forge already mount their own public prefixes. Only the realm mount is stripped.
-      if (upstream) proxyHttp({ name: upstream.name, host: upstream.host, port: upstream.port }, request, response, config.proto);
+      if (upstream) proxyHttp({ name: upstream.name, host: upstream.host, port: upstream.port }, request, response, config.proto, config.trustedProxies);
       else unavailableJson(response, 503, 'This part of Chatdom is not running on this host.');
       return;
     }
@@ -194,7 +194,7 @@ server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', 'http://public.invalid');
     request.url = `${url.pathname}${url.search}`;
     // Only the realm's rooms accept sockets; anything else is closed at once.
-    if (isRealmSocket(url.pathname)) proxyUpgrade(config.realm.target, request, socket, head, config.proto);
+    if (isRealmSocket(url.pathname)) proxyUpgrade(config.realm.target, request, socket, head, config.proto, config.trustedProxies);
     else socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
   } catch { socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); }
 });

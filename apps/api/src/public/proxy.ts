@@ -1,5 +1,5 @@
 import { Agent, request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http';
-import { connect, type Socket } from 'node:net';
+import { connect, isIP, type Socket } from 'node:net';
 import type { Duplex } from 'node:stream';
 
 /** A loopback service behind the public origin. `strip` removes the public prefix before forwarding. */
@@ -27,6 +27,58 @@ function forwardedPath(target: ProxyTarget, url: string): string {
   return rest.startsWith('/') ? rest : `/${rest}`;
 }
 
+/** Whether a peer is the host's own TLS proxy, whose `X-Forwarded-For` entry for the visitor is believed. */
+export type TrustedProxies = (address: string) => boolean;
+
+const plain = (address: string) => address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
+function ipv4(address: string): number | null {
+  if (isIP(address) !== 4) return null;
+  return address.split('.').reduce((value, part) => value * 256 + Number(part), 0);
+}
+
+/**
+ * Reads a comma-separated list of IPv4 ranges (`172.17.0.0/16`) and single addresses (IPv4 or IPv6). An empty value
+ * trusts nobody. Errors name the setting, never its value.
+ */
+export function parseTrustedProxies(name: string, value: string | undefined): TrustedProxies | null {
+  const items = (value ?? '').split(',').map(item => item.trim()).filter(Boolean);
+  if (!items.length) return null;
+  const ranges: { base: number; mask: number }[] = [];
+  const exact = new Set<string>();
+  for (const item of items) {
+    const [address = '', bits, extra] = item.split('/');
+    if (extra !== undefined) throw new Error(`${name} must list IPv4 ranges or single addresses, comma separated`);
+    if (bits === undefined && isIP(address)) { exact.add(plain(address).toLowerCase()); continue; }
+    const base = ipv4(address), prefix = Number(bits);
+    if (base === null || !/^\d{1,2}$/.test(bits ?? '') || prefix > 32) throw new Error(`${name} must list IPv4 ranges or single addresses, comma separated`);
+    const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+    ranges.push({ base: (base & mask) >>> 0, mask });
+  }
+  return address => {
+    const bare = plain(address).toLowerCase();
+    if (exact.has(bare)) return true;
+    const value = ipv4(bare);
+    return value !== null && ranges.some(range => ((value & range.mask) >>> 0) === range.base);
+  };
+}
+
+/**
+ * The visitor's address. A peer that is not a trusted proxy is the visitor. Behind a trusted proxy, the visitor is
+ * the right-most `X-Forwarded-For` entry that is not itself a trusted proxy: entries to its left were written by the
+ * browser and are never believed. A malformed or missing entry falls back to the peer.
+ */
+export function clientAddress(source: IncomingHttpHeaders, peer: string | undefined, trusted?: TrustedProxies | null): string | undefined {
+  if (!peer || !trusted || !trusted(peer)) return peer;
+  const raw = source['x-forwarded-for'];
+  const entries = (Array.isArray(raw) ? raw.join(',') : raw ?? '').split(',').map(entry => entry.trim()).filter(Boolean);
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = plain(entries[index]!);
+    if (!isIP(entry)) return peer;
+    if (!trusted(entry)) return entry;
+  }
+  return peer;
+}
+
 /**
  * Headers for the upstream request. The browser's own `X-Forwarded-*` claims are discarded and replaced with what
  * this process saw, so a visitor can never pose as another address or scheme.
@@ -50,10 +102,10 @@ function unavailable(response: ServerResponse) {
 }
 
 /** Forwards one HTTP request (including long-lived SSE) and streams the answer back unbuffered. */
-export function proxyHttp(target: ProxyTarget, request: IncomingMessage, response: ServerResponse, publicProto: string): void {
+export function proxyHttp(target: ProxyTarget, request: IncomingMessage, response: ServerResponse, publicProto: string, trusted?: TrustedProxies | null): void {
   const upstream = httpRequest({
     host: target.host, port: target.port, method: request.method, path: forwardedPath(target, request.url ?? '/'),
-    headers: upstreamHeaders(request.headers, request.socket.remoteAddress, publicProto), agent,
+    headers: upstreamHeaders(request.headers, clientAddress(request.headers, request.socket.remoteAddress, trusted), publicProto), agent,
   }, reply => {
     const headers: Record<string, string | string[]> = {};
     for (const [name, value] of Object.entries(reply.headers)) if (value !== undefined && !HOP.has(name)) headers[name] = value;
@@ -72,14 +124,14 @@ export function proxyHttp(target: ProxyTarget, request: IncomingMessage, respons
  * Hands a WebSocket upgrade to the target over a raw socket: the request head is rewritten (prefix, forwarded
  * headers), then bytes flow both ways untouched. Colyseus frames, compression and close codes pass as they are.
  */
-export function proxyUpgrade(target: ProxyTarget, request: IncomingMessage, socket: Duplex, head: Buffer, publicProto: string): void {
+export function proxyUpgrade(target: ProxyTarget, request: IncomingMessage, socket: Duplex, head: Buffer, publicProto: string, trusted?: TrustedProxies | null): void {
   const upstream: Socket = connect({ host: target.host, port: target.port });
   const fail = () => { if (!socket.destroyed) socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); upstream.destroy(); };
   upstream.setNoDelay(true);
   upstream.once('error', fail);
   upstream.once('connect', () => {
     upstream.removeListener('error', fail);
-    const headers = upstreamHeaders(request.headers, request.socket.remoteAddress, publicProto);
+    const headers = upstreamHeaders(request.headers, clientAddress(request.headers, request.socket.remoteAddress, trusted), publicProto);
     const lines = [`${request.method ?? 'GET'} ${forwardedPath(target, request.url ?? '/')} HTTP/1.1`];
     for (const [name, value] of Object.entries(headers)) for (const item of Array.isArray(value) ? value : [value]) lines.push(`${name}: ${item}`);
     lines.push('Connection: Upgrade', `Upgrade: ${String(request.headers.upgrade ?? 'websocket')}`);

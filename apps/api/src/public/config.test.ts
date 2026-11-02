@@ -26,6 +26,7 @@ describe('the public server settings', () => {
     });
     expect(config.optional).toEqual({ herald: null, map: null, forge: null });
     expect(config.extension).toBeNull();
+    expect(config.trustedProxies).toBeNull();
   });
 
   it('takes the host, port and web root it is given, resolving relative roots against the repo', () => {
@@ -94,6 +95,13 @@ describe('the public server settings', () => {
     expect(read({ PUBLIC_INDEXING: 'closed' }).indexing).toBe('closed');
     expect(read({ PUBLIC_INDEXING: ' open ' }).indexing).toBe('open');
     for (const value of ['yes', 'OPEN', '1', 'index-secret']) refuses({ ...BASE, PUBLIC_INDEXING: value }, value, /PUBLIC_INDEXING must be closed or open/);
+  });
+
+  it('believes X-Forwarded-For only from the proxies it is told to trust', () => {
+    const trusted = read({ PUBLIC_TRUSTED_PROXIES: '172.17.0.0/16' }).trustedProxies!;
+    expect(trusted('172.17.0.2')).toBe(true);
+    expect(trusted('203.0.113.9')).toBe(false);
+    refuses({ ...BASE, PUBLIC_TRUSTED_PROXIES: 'traefik.internal' }, 'traefik.internal', /PUBLIC_TRUSTED_PROXIES must list/);
   });
 });
 
