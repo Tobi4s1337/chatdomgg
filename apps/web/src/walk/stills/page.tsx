@@ -6,6 +6,7 @@
  * Query: still=<name> (see STILLS) · realm=<realm origin>. `window.__chatdomReady` is true only once the named still
  * is staged and settled. `window.__chatdomStills.stage(name)` restages without a reload (the SwiftShader runner).
  */
+import { subscribeSpeech } from '../labels/bus';
 import { render } from 'solid-js/web';
 import { createComponent } from 'solid-js';
 import '../../style.css';
@@ -69,6 +70,14 @@ const endpoint = query.get('realm') ?? '';
 let kingdomReady = false, staged = false;
 Object.defineProperty(page, '__chatdomReady', { configurable: true, get: () => kingdomReady && staged, set: value => { kingdomReady = !!value; } });
 
+// Anything that fails while the page sets up (a refused ticket, a scene that will not load) ends the run at once
+// instead of leaving the runner waiting out its timeout under the shared capture lock.
+const stagePending = async () => { throw new Error('Stills: the page failed while setting up'); };
+addEventListener('unhandledrejection', event => {
+  page.__chatdomStills ??= { stage: stagePending, current: null, error: null, facts: null };
+  page.__chatdomStills.error ??= String(event.reason?.message ?? event.reason);
+});
+
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(test: () => boolean, ms: number, what: string | (() => string)) {
   const end = performance.now() + ms;
@@ -99,7 +108,16 @@ const presenceFeed: PresenceFeed = { label: 'SIMULATED', subscribe(receive) {
 } };
 const chatListeners = new Set<Parameters<RealmChatFeed['subscribe']>[0]>();
 const chatFeed: RealmChatFeed = { subscribe(receive) { chatListeners.add(receive); return () => { chatListeners.delete(receive); }; } };
-let chatting = false, chatRound = 0;
+let chatting = false, chatRound = 0, heard = 0;
+// What the scene publishes for the label layer: the last frame that carried any line (for a failed still's message).
+let published = 0, lastLines = '';
+let speechCanvas: HTMLCanvasElement | null = null, lastAt = 0;
+const ownership = () => { const layer = document.querySelector('.walk-people-labels'), canvas = speechCanvas;
+  return JSON.stringify({ layers: document.querySelectorAll('.walk-people-labels').length, canvases: document.querySelectorAll('canvas').length,
+    connected: canvas?.isConnected, sameParent: !!layer && canvas?.parentElement === layer.parentElement, visibility: canvas?.style.visibility,
+    canvasParent: canvas?.parentElement?.className, layerParent: layer?.parentElement?.className, age: Math.round(performance.now() - lastAt) }); };
+subscribeSpeech((canvas, frame) => { speechCanvas = canvas; lastAt = frame.at; published++; if (frame.speech.length) lastLines = JSON.stringify(frame.speech.map(line => ({ slot: line.slot, from: line.from,
+  d: line.distance?.toFixed(1), v: line.visibility, x: line.x?.toFixed(0), y: line.y?.toFixed(0) }))); });
 const speak = () => {
   if (!chatting) return;
   chatRound++;
@@ -107,7 +125,7 @@ const speak = () => {
     const at = Date.now();
     const cue = { version: 1, id: `stills-${chatRound}-${slot}`, kingdomId: WORLD_FIXTURE_KINGDOM, epoch, origin: 'simulated', slot,
       asOf: at, expiresAt: at + 9_000, parts: [{ kind: 'text', text: LINES[index % LINES.length]! }] };
-    for (const receive of chatListeners) receive({ type: 'chat', cue } as never);
+    for (const receive of chatListeners) { receive({ type: 'chat', cue } as never); heard++; }
   });
 };
 setInterval(speak, 4_000);
@@ -116,7 +134,7 @@ setInterval(speak, 4_000);
 const settings = sharedPlaySettings(), before = settings.current.view;
 addEventListener('pagehide', () => settings.set({ view: before }));
 
-render(() => createComponent(Kingdom, { founded, presenceFeed, chatFeed }), document.getElementById('root')!);
+render(() => createComponent(Kingdom, { founded, presenceFeed, chatFeed, kingdomName: info.land === 'hamlet' ? 'Brackenfold' : 'Willowmere' }), document.getElementById('root')!);
 await until(() => kingdomReady && !!page.__chatdomKingdom?.stats.ready, 300_000, 'the kingdom opening');
 
 const ticket = async () => (await fetch(`${endpoint}/reference/session`, { method: 'POST' })).json();
@@ -175,13 +193,19 @@ async function stage(name: string) {
   // The boom eases, the drawn ground settles and bubbles rise; then the lighting must have settled too.
   await sleep(3_500);
   await until(() => page.__chatdomKingdom!.stats.fieldSettled !== false, 120_000, 'the lighting settling');
+  // A chat still waits for a bubble to rise and ease fully in, never shooting in the gap between two lines. Under a
+  // loaded software renderer a frame can stall for seconds and the label layer rightly lets the lines go, so the wait
+  // is soft: it records what it saw (with why, in the facts) and the still is taken either way.
+  let bubbleWait: string | null = null;
+  if (chatting) await until(() => [...document.querySelectorAll<HTMLElement>('.is-speech')].some(bubble => Number(getComputedStyle(bubble).opacity) > .95),
+    30_000, '').catch(() => { bubbleWait = `no bubble within 30 s: heard ${heard}, speech frames ${published}, ownership ${ownership()}, last lines ${lastLines || 'none'}`; });
   const stats = page.__chatdomKingdom!.stats;
   page.__chatdomStills!.facts = { activeWindows: stats.activeWindows, citizens: stats.citizens, person: page.__chatdomWalk?.person,
-    boom: page.__chatdomWalk?.camera.distance, bubbles: document.querySelectorAll('.is-speech').length };
+    boom: page.__chatdomWalk?.camera.distance, bubbles: document.querySelectorAll('.is-speech').length, ...(bubbleWait ? { bubbleWait } : {}) };
   page.__chatdomStills!.current = name;
   staged = true;
 }
 
-page.__chatdomStills = { stage, current: null, error: null, facts: null };
+page.__chatdomStills = { stage, current: null, error: page.__chatdomStills?.error ?? null, facts: null };
 const first = query.get('still');
 if (first) await stage(first).catch(error => { page.__chatdomStills!.error = String(error?.message ?? error); throw error; });

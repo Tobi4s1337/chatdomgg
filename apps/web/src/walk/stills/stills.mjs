@@ -2,7 +2,9 @@
 // floor, a dusk street with bubbles over lit homes and only walkers in it, and the hamlet. The real kingdom page on a
 // stills fixture (fixture.ts) with full production collision and a memory-only realm this script owns.
 //
-//   SwiftShader, under the shared capture lock, one page per land restaged in place:
+//   SwiftShader, under the shared capture lock, ONE still per lock hold (the shared capture guard stops anything that
+//   holds the lock for 12 minutes, and opening the kingdom in software takes several): several names run one after
+//   another, each in its own process that takes the lock, opens the page, shoots and releases it before the next.
 //     node apps/web/src/walk/stills/stills.mjs [--land town|hamlet] [--only third,first] [--out shots/play/stills]
 //   Real GPU, inside the lease (web on 5192, realm on 5191, each still a fresh load through `chatdom-pc shot`):
 //     chatdom-pc-lease -- node apps/web/src/walk/stills/stills.mjs --target pc [--land town|hamlet]
@@ -28,6 +30,16 @@ if (!['town', 'hamlet'].includes(values.land)) throw new Error('--land is town o
 const repo = fileURLToPath(new URL('../../../../../', import.meta.url));
 const ALL = values.land === 'hamlet' ? ['dusk', 'third'] : ['third', 'first', 'dusk', 'slope-before', 'slope-after', 'stairs-before', 'stairs-after', 'floor-before', 'floor-after'];
 const names = values.only ? values.only.split(',') : ALL;
+if (!pc && names.length > 1) {
+  // One still per lock hold: run each in its own process and let the queue serve the other lanes in between.
+  let failed = 0;
+  for (const name of names) {
+    const args = [fileURLToPath(import.meta.url), '--land', values.land, '--only', name, '--out', values.out, '--size', values.size];
+    const code = await new Promise(resolve => spawn(process.execPath, args, { stdio: 'inherit' }).once('exit', resolve));
+    if (code !== 0) failed++;
+  }
+  process.exit(failed ? 1 : 0);
+}
 const report = { land: values.land, target: values.target, width, height, stills: [], errors: [] };
 const stamp = name => `${values.out}/${values.land}-${name}${pc ? '-gpu' : ''}@${width}x${height}`;
 
@@ -120,7 +132,7 @@ try {
   process.exitCode = 1;
   console.error(report.failure);
 } finally {
-  await writeFile(`${values.out}/${values.land}${pc ? '-gpu' : ''}.json`, JSON.stringify(report, null, 2)).catch(() => {});
+  await writeFile(`${values.out}/${values.land}${pc ? '-gpu' : `-${names[0]}`}.json`, JSON.stringify(report, null, 2)).catch(() => {});
   await browser?.close().catch(() => {});
   await web?.close().catch(() => {});
   await realm?.gracefullyShutdown(false).catch(() => {});

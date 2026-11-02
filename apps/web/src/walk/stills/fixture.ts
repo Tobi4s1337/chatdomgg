@@ -61,7 +61,8 @@ function buildScene(land: StillsLand) {
   }
   props.forEach((prop, index) => add(`stills:prop:${index}`, prop));
   createCastleContent(plan.castle).buildings.forEach(castle => add(`stills:castle:${castle.id}`, castle));
-  const scene: RealmFoundedScene = { version: 1, kingdomId: (land === 'hamlet' ? '999000003' : '999000001') as RealmFoundedScene['kingdomId'], origin: 'simulated',
+  // Both lands are the reference realm's one kingdom: its sign-in, writer and sessions only know that id.
+  const scene: RealmFoundedScene = { version: 1, kingdomId: '999000001' as RealmFoundedScene['kingdomId'], origin: 'simulated',
     layoutRevision: plan.revision, collisionRevision: 1, plan, materials: MATERIALS, assets: [...assets.values()], placements };
   return { plan, scene };
 }
@@ -80,11 +81,25 @@ function standAt(world: CollisionWorld, x: number, z: number, near: number): num
 const clearAround = (world: CollisionWorld, x: number, y: number, z: number, r: number) =>
   [[r, 0], [-r, 0], [0, r], [0, -r]].every(([dx, dz]) => !embeddedSolids({ x: x + dx!, y: y + .05, z: z + dz! }, world).length);
 
-/** A low camera beside the feet, across the slope or the step edge, looking at the soles. */
-function closeCamera(feet: Vec3, across: number): NonNullable<StillSpot['close']> {
-  // Along the contour (the slope runs across the picture) and a little above, so the ground in front never hides the feet.
-  const side = across + Math.PI / 2, d = 2.1;
-  return { eye: [feet[0] + Math.sin(side) * d, feet[1] + .85, feet[2] + Math.cos(side) * d], target: [feet[0], feet[1] + .12, feet[2]], fov: 32 };
+/** True when nothing solid stands on the line from the eye most of the way to the feet. */
+function sightClear(world: CollisionWorld, eye: Vec3, target: Vec3): boolean {
+  for (let t = 0; t <= .9; t += .03) {
+    const p = [0, 1, 2].map(i => eye[i]! + (target[i]! - eye[i]!) * t);
+    if (world.query({ min: [p[0]! - .01, p[1]! - .01, p[2]! - .01], max: [p[0]! + .01, p[1]! + .01, p[2]! + .01] }).length) return false;
+  }
+  return true;
+}
+
+/**
+ * A low camera beside the feet, across the slope or the step edge, looking at the soles. It tries the two sides
+ * across first (so a slope or a run of steps reads in profile), then along, and takes the first with a clear line.
+ */
+function closeCamera(world: CollisionWorld, feet: Vec3, across: number, rise = .85, d = 2.1): NonNullable<StillSpot['close']> {
+  const target: Vec3 = [feet[0], feet[1] + .12, feet[2]];
+  const at = (side: number): Vec3 => [feet[0] + Math.sin(side) * d, feet[1] + rise, feet[2] + Math.cos(side) * d];
+  const sides = [across + Math.PI / 2, across - Math.PI / 2, across + Math.PI, across];
+  const side = sides.find(side => sightClear(world, at(side), target)) ?? sides[0]!;
+  return { eye: at(side), target, fov: 32 };
 }
 
 export function createStillsFixture(land: StillsLand = 'town'): StillsFixture {
@@ -97,7 +112,11 @@ export function createStillsFixture(land: StillsLand = 'town'): StillsFixture {
   const cx = corners.reduce((sum, [x]) => sum + x, 0) / corners.length, cz = corners.reduce((sum, [, z]) => sum + z, 0) / corners.length;
   const spots: Record<'street' | 'slope' | 'stairs' | 'floor', StillSpot | null> = { street: null, slope: null, stairs: null, floor: null };
   let slopeScore = 0, stairScore = 0, floorScore = 0, streetScore = Infinity;
-  const reach = land === 'hamlet' ? 40 : 60;
+  const reach = land === 'hamlet' ? 70 : 60;
+  // The town's street stands near its market. A hamlet's homes sit far out from its market, beyond bubble range, so
+  // its street stands in the open nearest a cluster of six homes, whose lit windows and bubbles the dusk still shows.
+  const homesAt = plan.homes.map(home => [home.position[0], home.position[2]] as const);
+  const nearHomes = (px: number, pz: number) => homesAt.map(([hx, hz]) => Math.hypot(hx - px, hz - pz)).sort((a, b) => a - b);
   for (let z = cz - reach; z <= cz + reach; z += .5) for (let x = cx - reach; x <= cx + reach; x += .5) {
     const px = x + .25, pz = z + .25, drawn = terrainHeight(plan, px, pz);
     const y = standAt(world, px, pz, drawn);
@@ -109,10 +128,12 @@ export function createStillsFixture(land: StillsLand = 'town'): StillsFixture {
       const gz = (terrainHeight(plan, px, pz + 1) - terrainHeight(plan, px, pz - 1)) / 2;
       const grade = Math.hypot(gx, gz);
       const score = grade < .55 && clearAround(world, px, y, pz, 1.5) ? grade * (.1 + Math.abs(lift)) : 0;
-      if (score > slopeScore) { slopeScore = score; spots.slope = { feet: [px, y, pz], heading: Math.atan2(gx, gz), gap: lift, close: closeCamera([px, drawn, pz], Math.atan2(gx, gz)) }; }
+      if (score > slopeScore) { slopeScore = score; spots.slope = { feet: [px, y, pz], heading: Math.atan2(gx, gz), gap: lift, close: closeCamera(world, [px, drawn, pz], Math.atan2(gx, gz)) }; }
       // The street: flat open ground near the market with room around it for the others.
-      if (grade < .08 && distance > 6 && distance < streetScore && clearAround(world, px, y, pz, 3)) {
-        streetScore = distance;
+      const homes = land === 'hamlet' && grade < .08 ? nearHomes(px, pz) : null;
+      const measure = homes ? homes[5]! : distance, open = homes ? homes[0]! > 8 : distance > 6;
+      if (grade < .08 && open && measure < streetScore && clearAround(world, px, y, pz, 3)) {
+        streetScore = measure;
         spots.street = { feet: [px, y, pz], heading: Math.atan2(cx - px, cz - pz) + Math.PI, gap: lift };
       }
     }
@@ -125,14 +146,14 @@ export function createStillsFixture(land: StillsLand = 'town'): StillsFixture {
       const up = next - y, down = y - back;
       if (up >= .12 && up <= .55 && down >= .12 && down <= .55) {
         const score = 1 / (1 + distance);
-        if (score > stairScore) { stairScore = score; const across = Math.atan2(dx, dz); spots.stairs = { feet: [px, y, pz], heading: across, gap: lift, close: closeCamera([px, y, pz], across) }; }
+        if (score > stairScore) { stairScore = score; const across = Math.atan2(dx, dz); spots.stairs = { feet: [px, y, pz], heading: across, gap: lift, close: closeCamera(world, [px, y, pz], across, .35, 2.2) }; }
       }
     }
     // A raised floor: flat around the feet, well above the drawn ground, with room to stand.
     const flat = [[.5, 0], [-.5, 0], [0, .5], [0, -.5]].every(([dx, dz]) => standAt(world, px + dx!, pz + dz!, y) === y);
     if (flat && lift >= .35 && clearAround(world, px, y, pz, .6)) {
       const score = 1 / (1 + distance);
-      if (score > floorScore) { floorScore = score; spots.floor = { feet: [px, y, pz], heading: 0, gap: lift, close: closeCamera([px, y, pz], 0) }; }
+      if (score > floorScore) { floorScore = score; spots.floor = { feet: [px, y, pz], heading: 0, gap: lift, close: closeCamera(world, [px, y, pz], 0, .5, 2) }; }
     }
   }
   if (!spots.street) throw new Error(`The ${land} has no open street spot near its market`);

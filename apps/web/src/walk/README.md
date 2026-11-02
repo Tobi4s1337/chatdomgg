@@ -360,7 +360,7 @@ world through realm wiring; the separate reference court remains a labelled diag
 ### PL10 stills (`stills/`)
 
 ```sh
-node apps/web/src/walk/stills/stills.mjs [--land town|hamlet] [--only third,first]      # SwiftShader, capture lock
+node apps/web/src/walk/stills/stills.mjs [--land town|hamlet] [--only third,first]      # SwiftShader, one still per lock hold
 chatdom-pc-lease -- node apps/web/src/walk/stills/stills.mjs --target pc [--land town]  # real GPU, web 5192, realm 5191
 ```
 
@@ -370,8 +370,12 @@ differ most, a stair tread and a raised floor) with a memory realm the script ow
 still from `?still=` and sets `__chatdomReady` only once it has settled, so `chatdom-pc shot`, which can only open a
 URL, takes the same pictures: `third`, `first`, `dusk` (bubbles over lit homes, only walkers in the street) and
 `<slope|stairs|floor>-<before|after>` (the "before" binds the walk with `drawnGround: false`, bodies at the physics
-height). The hamlet is nine people: three walking and six chatting from home. Settings the page changes (first or
-third person) are put back when it closes. Dev only: never a route, never built.
+height). The hamlet is nine people: three walking and six chatting from home; its street stands in the open nearest a
+cluster of six homes, because a hamlet's homes sit beyond bubble range of its market. The sole close-up camera is
+chosen in the collision (low beside the feet, on the first side with a clear sight line). A chat still waits for a
+bubble to ease fully in, and a page that fails while setting up ends the run at once, so nothing waits out a timeout
+under the capture lock. Settings the page changes (first or third person) are put back when it closes. Dev only:
+never a route, never built.
 
 ## WC07 founder finish (main, 2026-10-31)
 
@@ -468,3 +472,14 @@ main's authority and projection seams, plus actual town and stream captures at t
 
 `node apps/web/src/walk/check-integration.mjs` applies the recorded six-file consumer patch entirely in memory
 and typechecks it with the current workspace. It writes no main-owned source and does not replace runtime review.
+
+## Running the tests
+
+Every walk, play, kingdom-walk and gait test runs in Node; none needs a DOM. jsdom is not a dependency of this
+workspace (it is in no lockfile), and from `apps/web` vitest reads `vite.config.ts`, where the Solid plugin
+defaults the environment to jsdom. So name the environment, or use the root config:
+
+```
+nice -n 10 pnpm --filter @chatdom/web exec vitest run --environment node src/walk src/play
+nice -n 10 pnpm exec vitest run apps/web/src/walk apps/web/src/play   # from the repo root
+```
