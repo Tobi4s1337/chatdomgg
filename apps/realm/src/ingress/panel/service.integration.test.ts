@@ -202,7 +202,7 @@ describe.runIf(enabled)('panel realm door against isolated development Postgres'
     expect(await allocation.deedIn(kingdomId, personId)).toMatchObject({ status: 'pending' });
     names.set(kingdomId, 'SIMULATED Panel Kingdom');
     expect(await panel.claim(authorization, { kingdomId, personId, name: 'SIMULATED Pending' })).toMatchObject({ http: 200, body: { status: 'deed' } });
-    const broken = new RealmPanelService({ db: { query: async () => { throw new Error('SIMULATED unavailable storage'); } }, origin, secret, allocation, citizens, services });
+    const broken = new RealmPanelService({ db: { query: async () => { throw new Error('SIMULATED unavailable storage'); }, connect: async () => { throw new Error('SIMULATED unavailable storage'); } }, origin, secret, allocation, citizens, services });
     expect(await broken.kingdom(authorization, { kingdomId })).toMatchObject({ http: 503, body: { status: 'unavailable' } });
     expect(await broken.pledge(authorization, { kingdomId, personId })).toMatchObject({ http: 503, body: { status: 'unavailable' } });
   });

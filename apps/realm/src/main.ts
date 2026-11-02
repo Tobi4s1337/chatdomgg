@@ -5,6 +5,7 @@ import { assertRealmSchema, createRealmPool, describeStorageFailure,
   realmDatabaseConfig } from './persistence';
 import { INGRESS_ROUTE, ingressCredentials } from './ingress';
 import { RealmPanelGifts, RealmPanelService, mountRealmPanelRoutes } from './ingress/panel';
+import { ForgetGuard, RealmChatPrivacy, createQuietDisclosure, disclosedServices, mountChatPrivacyRoute } from './ingress/panel';
 import { RealmPanelSettings } from './ingress/panel/settings';
 import { HEALTH_ROUTE, READY_ROUTE } from './diagnostics';
 import { TenureEvidenceVerifier, tenureEvidenceKey } from './allocation';
@@ -126,13 +127,15 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     authority: id => boot.services.kingdoms.get(id) ?? null, scene: id => boot.loader.current(id)?.scene ?? null,
     visible: () => pierVisible, where: id => names.has(id) ? `${names.get(id)} pier` : 'the pier' })] });
   citizens.use(boot.allocation, boot.services);
-  boot.ingress.moments.useSettler(raidGuests.guardSettler(citizens));
+  // Forgotten people are left out before the raid-guest guard and settlement see them.
+  const forgetGuard = new ForgetGuard(pool, origin);
+  boot.ingress.moments.useSettler(forgetGuard.settler(raidGuests.guardSettler(citizens)));
   castle.use(boot.allocation, boot.store);
   const forgeChat = await createRealmForgeChat({ pool, origin, services: boot.services, founded: id => !!boot.loader.current(id)?.scene });
   const evening = new RaidChatBridge({ origin, ingress: boot.ingress, gate, approvals, raidChat,
     forgeChatObserver: forgeChat.observe,
     current: kingdomId => boot.services.kingdoms.get(kingdomId)?.current === true,
-    beforeObservation: input => raidGuests.observe(input) });
+    beforeObservation: input => forgetGuard.run(input, kept => raidGuests.observe(kept)) });
   evening.use(boot.services);
   const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
   dock.use(boot.services);
@@ -140,13 +143,14 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   installTavernReturns(boot.services, kingdomId => boot.loader.current(kingdomId)?.scene);
   // Doors out of the kingdom (the tavern's) register their outside here; coming back stands you outside them.
   const doors = new RealmPortalArrivals(); installPortalArrivals(boot.services, doors);
-  const panel = new RealmPanelService({ settings: new RealmPanelSettings({ db: pool, services: boot.services, origin }), gifts: new RealmPanelGifts({ db: pool, services: boot.services, origin }), db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded });
-  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); mountRealmPanelRoutes(app, panel); } });
+  const panel = new RealmPanelService({ settings: new RealmPanelSettings({ db: pool, services: boot.services, origin }), gifts: new RealmPanelGifts({ db: pool, services: boot.services, origin }), db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded, projection: true, guard: forgetGuard });
+  const chatPrivacy = new RealmChatPrivacy({ db: pool, origin, secret: credentials.herald, services: boot.services, allocation: boot.allocation, guard: forgetGuard });
+  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); mountRealmPanelRoutes(app, panel); mountChatPrivacyRoute(app, chatPrivacy); } });
   const raidShow = mountRaidShowRoutes(transport.app, { pool, origin, credentials, clock: Date.now, moment: observation => boot.ingress.moments.acceptMoment(observation) });
   const chatCommands = mountChatCommandRoute(transport.app, { registry: realmChatCommands, origin, credentials, clock: Date.now });
   const raidCrier = process.env.REALM_PUBLIC_ORIGIN ? mountRaidCrierRoutes(transport.app, { origin, credentials, authority: new RaidCrierAuthority({ pool, origin, publicOrigin: process.env.REALM_PUBLIC_ORIGIN, clock: Date.now }) }) : null;
   mountEntryRoutes(transport.app, boot.founded, origin, names);
-  mountRealmWatchRoutes(transport.app, boot);
+  mountRealmWatchRoutes(transport.app, { services: disclosedServices(boot.services, createQuietDisclosure({ db: pool, origin })), founded: boot.founded, loader: boot.loader });
   const raidChatRead = mountRaidChatRead(transport.app, { origin, presentation: raidChat, current: kingdomId => boot.services.kingdoms.get(kingdomId)?.current === true });
   forgeChat.mount(transport.app);
   ownRealmShutdown(server, transport, async () => {

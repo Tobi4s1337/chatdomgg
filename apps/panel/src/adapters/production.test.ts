@@ -41,7 +41,7 @@ function backend() {
     if (fail) throw new TypeError('offline');
     const path = new URL(String(input)).pathname;
     if (path.endsWith('/picture')) return new Response(new Blob(['webp'], { type: 'image/webp' }), painting ? { headers: { 'x-chatdom-revision': painting } } : {});
-    const body = path.endsWith('/reading') ? reading : path.endsWith('/kingdom') ? kingdom : path.endsWith('/light') ? light : path.endsWith('/pledge') ? { status: 'pledged', band: 'A handful of tents' } : path.endsWith('/privacy') ? { version: 1, status: 'privacy', quiet: false, projection: 'pending', forgetAvailable: true } : path.endsWith('/quiet') ? { version: 1, status: 'quiet', quiet: JSON.parse(String(init?.body)).quiet, projection: 'pending', forgetAvailable: true } : path.endsWith('/forget') ? { version: 1, status: 'forgotten', erased: ['home', 'presence'] } : { status: 'accepted', lit: false };
+    const body = path.endsWith('/reading') ? reading : path.endsWith('/kingdom') ? kingdom : path.endsWith('/light') ? light : path.endsWith('/pledge') ? { status: 'pledged', band: 'A handful of tents' } : path.endsWith('/privacy') ? { version: 1, status: 'privacy', quiet: false, projection: 'pending', forgetAvailable: true } : path.endsWith('/quiet') ? { version: 1, status: 'quiet', quiet: JSON.parse(String(init?.body)).quiet, projection: 'pending', forgetAvailable: true } : path.endsWith('/forget') ? { version: 1, status: 'forgotten', erased: ['light', 'name', 'observations'], retained: ['homes'], kingdoms: 1 } : { status: 'accepted', lit: false };
     expect(init?.signal?.aborted).toBe(false);
     return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
   });
@@ -354,16 +354,69 @@ describe('verified panel transport', () => {
     adapter.dispose(); await vi.advanceTimersByTimeAsync(65_000); expect(calls(server, '/presence')).toHaveLength(5);
   });
 
-  it('handles the future forget-success protocol without reading or observing until a new gesture', async () => {
+  it('after forget, neither reads nor observes until a new Take your place', async () => {
     const { server, adapter } = mount(); await settle();
     expect(adapter.get().privacy).toEqual({ kind: 'ready', quiet: false, projection: 'pending', forgetAvailable: true });
     adapter.requestQuiet?.(true); expect(adapter.get().privacy).toEqual({ kind: 'pending', quiet: false, projection: 'pending', forgetAvailable: true }); await settle();
     expect(adapter.get().privacy).toEqual({ kind: 'ready', quiet: true, projection: 'pending', forgetAvailable: true }); expect(adapter.get().home.kind).toBe('citizen');
     adapter.requestForget?.(); await settle();
-    expect(adapter.get().privacy).toEqual({ kind: 'forgotten', erased: ['home', 'presence'] }); expect(adapter.get().home.kind).toBe('unknown');
+    expect(adapter.get().privacy).toEqual({ kind: 'forgotten', erased: ['light', 'name', 'observations'], retained: ['homes'] }); expect(adapter.get().home.kind).toBe('unknown');
+    expect(adapter.get().kingdom?.name).toBe('Lanternmere');
     const reads = calls(server, '/reading').length, presence = calls(server, '/presence').length;
     await vi.advanceTimersByTimeAsync(120_000); expect(calls(server, '/reading')).toHaveLength(reads); expect(calls(server, '/presence')).toHaveLength(presence);
     adapter.requestLight('named'); await settle(); expect(calls(server, '/light')).toHaveLength(1); expect(calls(server, '/reading').length).toBeGreaterThan(reads);
+  });
+
+  it('refuses a forget reply with kinds the realm never sends', async () => {
+    const helper = standIn(), server = backend();
+    const send: typeof fetch = (input, init) => String(input).endsWith('/forget')
+      ? Promise.resolve(new Response(JSON.stringify({ version: 1, status: 'forgotten', erased: ['light', '<b>everything</b>'], retained: [] }))) : server.send(input, init);
+    const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: send })); await settle();
+    adapter.requestForget?.(); await settle(); expect(adapter.get().privacy).toEqual({ kind: 'unavailable' });
+  });
+
+  it('stops at once when the realm remembers a forget, even after a reload, until Take your place', async () => {
+    const helper = standIn(), server = backend(); let presence = 0;
+    const send: typeof fetch = (input, init) => {
+      if (!String(input).endsWith('/presence')) return server.send(input, init);
+      presence++; return Promise.resolve(new Response(JSON.stringify({ version: 1, status: 'forgotten', lit: false })));
+    };
+    const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: send })); await settle();
+    expect(presence).toBe(1); expect(adapter.get().light.kind).toBe('ready'); expect(adapter.get().home.kind).toBe('unknown');
+    await vi.advanceTimersByTimeAsync(180_000); helper.playing(false); helper.playing(true); await settle(); expect(presence).toBe(1);
+    adapter.requestLight('named'); await settle(); expect(calls(server, '/light')).toHaveLength(1);
+  });
+
+  it('says the window stays dark, and offers no light, while the realm cannot lift a forget hold', async () => {
+    // Reload after forget: the realm remembers it and says a new tap cannot relight yet.
+    const helper = standIn(), server = backend(); let presence = 0;
+    const send: typeof fetch = (input, init) => {
+      if (!String(input).endsWith('/presence')) return server.send(input, init);
+      presence++; return Promise.resolve(new Response(JSON.stringify({ version: 1, status: 'forgotten', lit: false, renewal: 'pending' })));
+    };
+    const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: send })); await settle();
+    expect(adapter.get().light).toEqual({ kind: 'forgotten' });
+    expect(adapter.get().home).toMatchObject({ kind: 'unknown', reason: expect.stringContaining('stays dark') });
+    adapter.requestLight('named'); await settle(); expect(calls(server, '/light')).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(180_000); expect(presence).toBe(1);
+
+    // Forget from the panel itself, on a realm that says the same.
+    const second = standIn(), other = backend();
+    const forgetSend: typeof fetch = (input, init) => String(input).endsWith('/forget')
+      ? Promise.resolve(new Response(JSON.stringify({ version: 1, status: 'forgotten', erased: ['light'], retained: ['homes'], kingdoms: 1, renewal: 'pending' }))) : other.send(input, init);
+    const forgetting = track(createProductionAdapter(second.bridge, { backend: BACKEND, fetch: forgetSend })); await settle();
+    forgetting.requestForget?.(); await settle();
+    expect(forgetting.get().privacy).toEqual({ kind: 'forgotten', erased: ['light'], retained: ['homes'], renewal: 'pending' });
+    expect(forgetting.get().light).toEqual({ kind: 'forgotten' });
+
+    // A tap that the realm answers with its home but a standing hold: dark at once, and nothing is observed after.
+    const third = standIn(), plain = backend();
+    plain.light({ version: 1, status: 'deed', lit: false, forgotten: true, renewal: 'pending' });
+    const tapping = track(createProductionAdapter(third.bridge, { backend: BACKEND, fetch: plain.send })); await settle();
+    const before = calls(plain, '/presence').length;
+    tapping.requestLight('named'); await settle();
+    expect(tapping.get().light).toEqual({ kind: 'forgotten' });
+    await vi.advanceTimersByTimeAsync(180_000); expect(calls(plain, '/presence')).toHaveLength(before);
   });
 
   it('does not claim a privacy change while its response is pending or rejected', async () => {

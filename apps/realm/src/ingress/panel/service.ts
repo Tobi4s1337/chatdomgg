@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { KingdomIdSchema, PersonIdSchema, TokenSchema, type HomeTier, type KingdomId, type KingdomPresenceFrame, type PersonId } from '@chatdom/shared';
 import { projectPresence } from '@chatdom/world';
@@ -13,7 +12,7 @@ import type { DurableKingdom, DurableRealmServices, RealmDatabase } from '../../
 import { RealmRecoveryError } from '../../persistence/database';
 import { decodeIngressCheckpoint, presencePerson } from '../codec';
 import { IngressGate, INGRESS_SECRET_MIN } from '../gate';
-import { personPrivacy, setPersonQuiet, forgetPerson, type RealmForgetAuthority, type PersonPrivacy } from './privacy';
+import { forgetPerson, forgotten, personPrivacy, renewalState, renewConsent, setPersonQuiet, withheld, type ForgetAnswer, type ForgetGuard, type PersonPrivacy, type Renewal } from './privacy';
 import type { RealmPanelGifts, PanelGiftReply } from './gifts';
 import type { PanelGiftFact, PanelSettings } from '../../../../../packages/shared/src/panel';
 import { readPanelSettings, type RealmPanelSettings, type PanelSettingsBody } from './settings';
@@ -55,19 +54,20 @@ export type PanelPublicEvent = { readonly at: number; readonly cursor: number } 
   | { readonly type: 'moment'; readonly fact: TwitchMomentFact });
 export type PanelDoorBody = PanelClaimResult | PanelKingdomResult | PanelGiftReply['body'] | PanelSettingsBody | PanelMirrorBody
   | ({ readonly version: 1; readonly status: 'privacy' | 'quiet' } & PersonPrivacy)
-  | { readonly version: 1; readonly status: 'forgotten'; readonly operationId: string; readonly erased: readonly string[]; readonly retained: readonly string[] }
-  | { readonly version: 1; readonly status: 'pending'; readonly operationId: string }
+  | ({ readonly version: 1 } & ForgetAnswer)
   | { readonly version: 1; readonly status: 'unfounded'; readonly pledges: PanelPledgeBand; readonly settings: PanelSettings; readonly settingsRevision: string }
   | { readonly version: 1; readonly status: 'pledged'; readonly band: PanelPledgeBand }
-  | { readonly version: 1; readonly status: 'presence'; readonly lit: boolean; readonly stream: 'live' | 'resting'; readonly held: boolean;
+  | { readonly version: 1; readonly status: 'presence'; readonly lit: boolean; readonly stream: 'live' | 'resting'; readonly held: boolean; readonly forgotten?: true;
+    /** Present only with `forgotten`: whether taking their place again can light the window. */ readonly renewal?: Renewal;
     /** The person's own public window, only while it is lit: the panel finds it in the painting. */ readonly slot?: number }
   | { readonly version: 1; readonly status: 'refused' | 'unavailable'; readonly message: string };
 export interface PanelDoorReply { readonly http: 200 | 400 | 401 | 503; readonly body: PanelDoorBody }
 export interface RealmPanelOptions {
   readonly settings?: RealmPanelSettings;
   readonly gifts?: RealmPanelGifts;
-  readonly forgetAuthority?: RealmForgetAuthority;
-  readonly db: Pick<RealmDatabase, 'query'>;
+  /** True when the realm's public watch honours quiet (`createQuietDisclosure`); the panel then says so. */
+  readonly projection?: boolean;
+  readonly db: Pick<RealmDatabase, 'query' | 'connect'>;
   readonly origin: 'live' | 'simulated';
   readonly secret: string | undefined;
   readonly services: Pick<DurableRealmServices, 'retain'>;
@@ -77,6 +77,8 @@ export interface RealmPanelOptions {
   readonly castle?: (kingdom: DurableKingdom, personId: PersonId, name: string) => Promise<void>;
   readonly loader?: Pick<ReturnType<typeof createFoundedWorldLoader>, 'current'>;
   readonly founded?: Pick<ReturnType<typeof createFoundedReader>, 'manifest' | 'scene'>;
+  /** First-chat settlement seen through forget's note; forget waits for what it already began. */
+  readonly guard?: Pick<ForgetGuard, 'close' | 'settled'>;
 }
 
 /** Trusted API door. Identity and the provider-approved public name come from its verified Extension JWT and Helix. */
@@ -87,6 +89,7 @@ export class RealmPanelService {
     this.gate = new IngressGate(options.secret ? { panel: options.secret } : {}, options.origin);
   }
   authenticate(authorization: string): boolean { return this.gate.authenticate(authorization) === 'panel'; }
+  private get composed() { return { projection: this.options.projection === true, forget: true }; }
 
   async settings(authorization: string, raw: unknown): Promise<PanelDoorReply> {
     if (!this.authenticate(authorization)) return unauthorized();
@@ -146,6 +149,9 @@ export class RealmPanelService {
         const kingdom = hold.kingdom;
         this.assertCurrent(kingdom);
         if (await this.held(kingdom, personId)) return ok({ version: 1, status: 'held' });
+        // Taking your place after "Forget me" is the fresh consent that lifts the forget hold here.
+        await renewConsent(this.options.db, kingdom, personId);
+        this.assertCurrent(kingdom);
         // The castle is already the broadcaster's seat. It must never enter street allocation or the cap.
         if (String(kingdomId) === String(personId)) {
           // `citizens.settle` excludes the monarch before its provider-name write. The existing keep guard needs
@@ -194,7 +200,7 @@ export class RealmPanelService {
     if (!this.authenticate(authorization)) return unauthorized();
     const request = PersonRequest.safeParse(raw);
     if (!request.success) return invalid();
-    try { return ok({ version: 1, status: 'privacy', ...await personPrivacy(this.options.db, this.options.origin, request.data.personId, !!this.options.forgetAuthority) }); }
+    try { return ok({ version: 1, status: 'privacy', ...await personPrivacy(this.options.db, this.options.origin, request.data.personId, this.composed) }); }
     catch { return unavailable(); }
   }
 
@@ -204,7 +210,7 @@ export class RealmPanelService {
     if (!request.success) return invalid();
     try {
       await setPersonQuiet(this.options.db, this.options.origin, request.data.personId, request.data.quiet);
-      return ok({ version: 1, status: 'quiet', ...await personPrivacy(this.options.db, this.options.origin, request.data.personId, !!this.options.forgetAuthority) });
+      return ok({ version: 1, status: 'quiet', ...await personPrivacy(this.options.db, this.options.origin, request.data.personId, this.composed) });
     } catch { return unavailable(); }
   }
 
@@ -213,11 +219,9 @@ export class RealmPanelService {
     const request = ForgetRequest.safeParse(raw);
     if (!request.success) return invalid();
     try {
-      const answer = await forgetPerson(this.options.forgetAuthority, { personId: request.data.personId,
-        requestedFromKingdomId: request.data.kingdomId, origin: this.options.origin, requestId: randomUUID() });
-      if (answer.status === 'unavailable') return { http: 503, body: { version: 1, status: 'unavailable', message: 'Forgetting is not connected yet. Nothing was erased.' } };
-      return answer.status === 'pending' ? ok({ version: 1, status: 'pending', operationId: answer.operationId }) : ok({ version: 1, ...answer });
-    } catch { return unavailable(); }
+      // Every kingdom of this origin, not just the channel the panel is open on: forget is about the person.
+      return ok({ version: 1, ...await forgetPerson(this.options, { personId: request.data.personId }) });
+    } catch { return { http: 503, body: { version: 1, status: 'unavailable', message: 'The kingdom could not forget you just now. Try again; it is safe to repeat.' } }; }
   }
 
   async presence(authorization: string, raw: unknown): Promise<PanelDoorReply> {
@@ -244,7 +248,12 @@ export class RealmPanelService {
         this.assertCurrent(kingdom);
         const lit = !held && stream === 'live' && slot !== undefined && !!projected?.windows[0]?.present
           && !!frame?.windows.some(window => window.slot === slot && window.present);
-        return ok({ version: 1, status: 'presence', lit, stream, held, ...(lit && slot !== undefined ? { slot } : {}) });
+        // Someone who asked to be forgotten is never observed here again until they take their place here. Where no
+        // forget hold stands (a kingdom they first came to afterwards), taking their place can always light the window.
+        const forgetHold = !!checkpoint && forgotten(checkpoint.presence, personId);
+        const gone = forgetHold || await withheld(this.options.db, kingdom, personId);
+        this.assertCurrent(kingdom);
+        return ok({ version: 1, status: 'presence', lit, stream, held, ...(gone ? { forgotten: true, renewal: forgetHold ? renewalState() : 'applied' } : {}), ...(lit && slot !== undefined ? { slot } : {}) });
       } finally { await hold.release(); }
     } catch { return unavailable(); }
   }
@@ -339,8 +348,10 @@ export class RealmPanelService {
     if (kingdom.privateState.rights[personId]?.blocked) return true;
     return this.restricted(await this.readPresence(kingdom), personId, kingdom.databaseNow());
   }
+  /** Moderation only. A forget hold is the person's own choice, lifted by taking their place again. */
   private restricted(checkpoint: ReturnType<typeof decodeIngressCheckpoint> | null, personId: PersonId, now: number): boolean {
-    const restriction = checkpoint && presencePerson(checkpoint.presence, personId)?.restriction;
+    if (!checkpoint || forgotten(checkpoint.presence, personId)) return false;
+    const restriction = presencePerson(checkpoint.presence, personId)?.restriction;
     return !!restriction && (restriction.until === null || restriction.until > now);
   }
   private async readPresence(kingdom: DurableKingdom): Promise<ReturnType<typeof decodeIngressCheckpoint> | null> {

@@ -77,6 +77,8 @@ export type Light =
   | { readonly kind: 'lit'; readonly choice: LightChoice; readonly as: 'citizen' | 'guest' | 'castle'; readonly by: 'simulation' | 'realm' }
   /** A private moderation hold; no public accusation is shown. */
   | { readonly kind: 'held' }
+  /** The viewer asked to be forgotten, and the realm cannot lift that hold with a new tap yet. */
+  | { readonly kind: 'forgotten' }
   /** Waiting land, with a private pledge outside the three-home cap. */
   | { readonly kind: 'unfounded'; readonly pledged: boolean; readonly band: string | null }
   /** The stream is resting: no window is lit from the panel until it returns. */
@@ -341,8 +343,18 @@ export type Entry = { readonly kind: 'gate'; readonly path: string } | { readonl
 
 export type Privacy =
   | { readonly kind: 'loading' | 'unavailable' }
-  | { readonly kind: 'ready' | 'pending'; readonly quiet: boolean; readonly projection?: 'pending' | 'applied'; readonly forgetAvailable?: boolean }
-  | { readonly kind: 'forgotten'; readonly erased: readonly string[] };
+  | { readonly kind: 'ready' | 'pending'; readonly quiet: boolean; readonly projection?: 'pending' | 'applied'; readonly forgetAvailable?: boolean; readonly renewal?: Renewal }
+  /** What the realm erased and what it kept, as the realm's own kinds; the panel words them. */
+  | { readonly kind: 'forgotten'; readonly erased: readonly ForgottenKind[]; readonly retained: readonly RetainedKind[]; readonly renewal?: Renewal };
+/**
+ * Whether taking your place after "Forget me" can light the window again, as the realm says. `pending` means the
+ * forget hold stays for now: the panel says the window stays dark instead of offering a light it cannot give.
+ */
+export type Renewal = 'applied' | 'pending';
+export const FORGOTTEN_KINDS = ['light', 'name', 'quiet', 'pledges', 'observations'] as const;
+export const RETAINED_KINDS = ['homes', 'nights', 'gifts'] as const;
+export type ForgottenKind = typeof FORGOTTEN_KINDS[number];
+export type RetainedKind = typeof RETAINED_KINDS[number];
 
 export interface PanelSnapshot {
   readonly gifts?: PanelGiftShelf;

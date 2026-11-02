@@ -55,9 +55,41 @@ edits only its own folder, so the integrator carries a change to another lane's 
 adds tables and never alters existing ones.
 
 **needs: from main and the integrator:**
-- `needs: integrator` The quiet hook. The stream's public name projection must honour a person's quiet flag: their
-  window still lights, but their name stays off the stream. Write the exact patch against the presence projection when
-  PW11 reaches it.
+- Done in PW11 (2026-11-02), inside the lane: the quiet projection. `main.ts` (one composition line) gives the public
+  watch route `disclosedServices(boot.services, createQuietDisclosure(…))` from the lane's `ingress/panel/disclosure.ts`.
+  Its `retain` returns the kingdom seen through quiet. `bootstrap/watch.ts` is unchanged.
+- `needs: main` Renewed consent after forget. `restore` gains an optional `consent: 'renewed'` in
+  `packages/shared/src/presence.ts`, and the reducer in `packages/world/src/presence.ts` lets it lift only a forget
+  hold. The change is additive and comes with a reducer test. The exact patch is in `PW11-RENEW-NEEDS.patch`
+  (dry-run clean). Until it lands, the lane reports `renewal: 'pending'` and the panel says the window stays dark
+  after forget.
+- `needs: main` + `needs: grand-world` Walker labels under quiet. `RealmObservedWalker.name` becomes nullable, and
+  the stream's walker track draws no label for a nameless walker. Until it lands, the lane's redaction leaves a quiet
+  walker (and their seat) out of the stream's walker frame, so their name never reaches the stream; they still walk in
+  the kingdom. Once the schema accepts a nameless walker, the same redaction lets them walk on the stream unlabelled,
+  by itself. The exact patch is in `PW11-WALKER-NEEDS.patch` (dry-run clean).
+- `needs: raid-show` The Herald parses `!chatdom quiet`, `!chatdom quiet off` and `!chatdom forget`. It posts
+  `{ version: 1, kingdomId, personId, command }` with the Herald secret to `POST /internal/realm/chat/privacy`, and
+  passes the realm's `reply` line to a chat sender. The sender posts without an @-mention, and in development only
+  to twitch.tv/tobi4s_. The exact patch is in `PW11-HERALD-NEEDS.patch` (dry-run clean).
+- Done in PW11 (2026-11-02), inside the lane, and the one exception to "never alters existing ones": migration
+  `0012f_realm_panel_forgotten.sql` adds `realm_panel_forgotten` (one row per person and origin) and
+  `realm_panel_returned` (kingdoms they took their place in again since), with two triggers on main's tables:
+  - `BEFORE INSERT` on `realm_ingress_inbox` stores an observation without the entry of anyone forgotten in its origin
+    who has not returned to that kingdom. It changes no column or existing row, leaves the digest and every other
+    person as sent, and does nothing while nobody is forgotten. Every ingress source and realm process stores through
+    that insert.
+  - `BEFORE INSERT OR UPDATE` on `realm_citizen_names` skips (never refuses) the name write of a forgotten person who
+    has returned nowhere since.
+  - Both take one shared advisory lock (`realm_panel_forget_barrier`); forget takes it exclusively once after its note
+    commits, so it waits out writes that checked before the note.
+  `ingress/inbox.ts` and `evening/citizens.ts` are unchanged. If main would rather own these rules in
+  `PostgresIngressInbox.accept` and the citizens' name write, the triggers are the exact rules to move, and the lane's
+  tests in `privacy.integration.test.ts` cover them either way.
+- Done in PW11, `main.ts` composition: `ForgetGuard` (lane, `ingress/panel/privacy.ts`) wraps first-chat settlement
+  (`beforeObservation`) and the moments' settler (`useSettler`), so neither makes a home or a name for a forgotten
+  person, and is handed to the panel and chat doors so forget waits for settlement already under way. Two changed
+  lines and one added line; `evening/` and `moments/` are unchanged.
 - `needs: integrator` Production configuration. `REALM_INGRESS_PANEL_SECRET` must be set in the realm's environment and
   in the gateway's environment, if it is not already. Never print it.
 - `needs: founding owner` (D02, not in this round) Turning pledges into tents. When a streamer founds live, each

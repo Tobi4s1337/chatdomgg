@@ -1,0 +1,126 @@
+diff -ruN a/apps/herald/src/ingest/ingest.ts b/apps/herald/src/ingest/ingest.ts
+--- a/apps/herald/src/ingest/ingest.ts
++++ b/apps/herald/src/ingest/ingest.ts
+@@ -13,6 +13,7 @@
+ import { TtlMap } from './ttl';
+ import { extractForgeWords, ForgeCommandHandoff, type ForgeCommandApplication } from '../forge/commands';
+ import { speechParts, type RealmDeliverySink } from '../realm-delivery/sink';
++import { privacyCommand, type PrivacyCommandSink } from '../privacy/commands';
+ 
+ /** Twitch redelivers within minutes; ten minutes of keys covers a reconnect handover and its resends. */
+ export const DEDUPE_TTL_MS = 600_000;
+@@ -99,6 +100,8 @@
+ 
+ export interface IngestOptions {
+   readonly realm?: RealmDeliverySink;
++  /** `!chatdom quiet`, `!chatdom quiet off` and `!chatdom forget`, for the verified chatter only. */
++  readonly privacy?: PrivacyCommandSink;
+   readonly source: PresenceSource;
+   readonly conduitId: string;
+   readonly clientId: string;
+@@ -303,6 +306,13 @@
+       this.#counters.notCovered++;
+       return;
+     }
++    const privacy = privacyCommand(raw);
++    if (privacy) {
++      // A privacy command is never chat: it does not light, settle, speak or credit the person who sent it.
++      if (this.#options.privacy) void this.#options.privacy({ kingdomId: this.kingdomId, personId: PersonIdSchema.parse(event.chatter_user_id),
++        messageId: event.message_id, command: privacy }).catch(() => undefined);
++      return;
++    }
+     if (this.#pending.size >= PENDING_LIMIT) {
+       this.#counters.pendingOverflow++;
+       return;
+diff -ruN a/apps/herald/src/ingest/runtime.ts b/apps/herald/src/ingest/runtime.ts
+--- a/apps/herald/src/ingest/runtime.ts
++++ b/apps/herald/src/ingest/runtime.ts
+@@ -54,6 +54,7 @@
+   readonly stream?: IngestOptions['stream'];
+   readonly forge?: IngestOptions['forge'];
+   readonly realm?: IngestOptions['realm'];
++  readonly privacy?: IngestOptions['privacy'];
+   /**
+    * Reads current state again (Get Streams, Chatters) whenever coverage is restored. Twitch does not replay
+    * a gap, so the source publishes again only after this has settled.
+@@ -147,6 +148,7 @@
+       ...(options.stream ? { stream: options.stream } : {}),
+       ...(options.forge ? { forge: options.forge } : {}),
+       ...(options.realm ? { realm: options.realm } : {}),
++      ...(options.privacy ? { privacy: options.privacy } : {}),
+       ...(options.now ? { now: options.now } : {}),
+     });
+   }
+diff -ruN a/apps/herald/src/privacy/commands.ts b/apps/herald/src/privacy/commands.ts
+--- a/apps/herald/src/privacy/commands.ts
++++ b/apps/herald/src/privacy/commands.ts
+@@ -0,0 +1,41 @@
++import type { KingdomId, PersonId } from '@chatdom/shared';
++
++/** The realm's Herald-only door for a chatter's own privacy (`apps/realm/src/ingress/panel/chat.ts`). */
++export const REALM_CHAT_PRIVACY_PATH = '/internal/realm/chat/privacy';
++export type PrivacyCommand = 'quiet' | 'quiet-off' | 'forget';
++export interface PrivacyRequest { readonly kingdomId: KingdomId; readonly personId: PersonId; readonly messageId: string; readonly command: PrivacyCommand }
++export type PrivacyCommandSink = (input: PrivacyRequest) => Promise<void>;
++
++/** Exact commands only; anything else is ordinary chat. Called after ChatIngest has checked the event, the author and the coverage. */
++export function privacyCommand(raw: unknown): PrivacyCommand | null {
++  const text = (raw as { message?: { text?: unknown } } | null)?.message?.text;
++  if (typeof text !== 'string' || text.length > 40) return null;
++  const words = text.trim().toLowerCase().split(/\s+/).join(' ');
++  return words === '!chatdom quiet' ? 'quiet' : words === '!chatdom quiet off' ? 'quiet-off' : words === '!chatdom forget' ? 'forget' : null;
++}
++
++/**
++ * Posts the verified chatter's own command and hands the realm's reply line to the chat sender. One request per
++ * message, never retried: forget is safe to repeat, so the person can simply send it again. `reply` posts without an
++ * @-mention, and in development only to the team's own channel.
++ */
++export function createPrivacyClient(options: { readonly realmUrl: string; readonly secret: string; readonly reply: (input: PrivacyRequest, line: string) => Promise<void> }): PrivacyCommandSink {
++  const endpoint = new URL(REALM_CHAT_PRIVACY_PATH, options.realmUrl);
++  if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname))) throw new Error('The privacy door needs HTTPS or loopback.');
++  let inFlight = 0;
++  return async input => {
++    if (inFlight >= 32) return;
++    inFlight++;
++    try {
++      let line = 'That did not reach the kingdom just now. It is safe to send it again.';
++      try {
++        const response = await fetch(endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8_000),
++          headers: { Authorization: `Bearer ${options.secret}`, 'Content-Type': 'application/json' },
++          body: JSON.stringify({ version: 1, kingdomId: input.kingdomId, personId: input.personId, command: input.command }) });
++        const body = await response.json() as { reply?: unknown };
++        if (response.ok && typeof body.reply === 'string' && body.reply.length > 0 && body.reply.length <= 300) line = body.reply;
++      } catch { /* The fallback line says to send it again. */ }
++      await options.reply(input, line);
++    } finally { inFlight--; }
++  };
++}
+diff -ruN a/apps/herald/src/source/live.ts b/apps/herald/src/source/live.ts
+--- a/apps/herald/src/source/live.ts
++++ b/apps/herald/src/source/live.ts
+@@ -13,6 +13,7 @@
+ import { startPresenceServer, type PresenceServer, type SourceHost, type UnstartedHealth } from './server';
+ import { PresenceSource } from './source';
+ import type { RealmDelivery } from '../realm-delivery/delivery';
++import type { PrivacyCommandSink } from '../privacy/commands';
+ import { RealmMomentObservationSchema } from '@chatdom/shared/realm';
+ import { streamNotice } from '../ingest/spectacles';
+ import { providerToken } from '../twitch-moments/credit';
+@@ -46,6 +47,8 @@
+   /** Main's trusted Forge application. Omitted until its own authority and judging path is connected. */
+   readonly forge?: ForgeCommandSink;
+   readonly realm?: RealmDelivery;
++  /** The chat privacy commands; omitted until a chat sender for the reply line is composed. */
++  readonly privacy?: PrivacyCommandSink;
+   /**
+    * Where Twitch is. Production uses the real endpoints; the acceptance suite runs this same composition
+    * against SIMULATED local fakes, so nothing in between is a test-only path.
+@@ -151,6 +154,7 @@
+       admin: new EventSubAdmin(helix.session), authority, source: live, log: line => print(`  ${line}`),
+       ...(options.forge ? { forge: {run:options.forge, broadcast:observed.tracker} } : {}),
+       ...(options.realm ? { realm: options.realm } : {}),
++      ...(options.privacy ? { privacy: options.privacy } : {}),
+       ...(options.twitch?.socketFactory ? { socketFactory: options.twitch.socketFactory } : {}),
+       ...(options.twitch?.eventsubUrl ? { url: options.twitch.eventsubUrl } : {}),
+       ...(options.twitch?.random ? { random: options.twitch.random } : {}),

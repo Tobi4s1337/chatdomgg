@@ -7,7 +7,7 @@ import { createPanelSound } from './sound';
 import { GiftShelf } from './gifts/GiftShelf';
 import { windowViewCrop, type WindowViewCrop } from './window-view';
 import { createDissolve } from './dissolve';
-import type { Home, PanelAdapter, PanelSnapshot, PassportSource, Privacy } from './model';
+import type { ForgottenKind, Home, PanelAdapter, PanelSnapshot, PassportSource, Privacy, RetainedKind } from './model';
 import './panel.css';
 import './places.css';
 import './window.css';
@@ -17,40 +17,57 @@ type Reading = PanelSnapshot & { readonly kingdomLights?: number | null; readonl
 const cardOf = (home: Home) => (home.kind === 'citizen' || home.kind === 'guest' || home.kind === 'known') && home.card
   ? { card: home.card, passport: home.passport } : null;
 
+/** The realm's own kinds, in the words the person reads. */
+const ERASED_WORDS: Record<ForgottenKind, string> = {
+  light: 'your light', name: 'your Twitch name', quiet: 'your stream setting', pledges: 'your tent pledges', observations: 'the record of when you were here',
+};
+const RETAINED_WORDS: Record<RetainedKind, string> = {
+  homes: 'your homes, which wait for you', nights: 'the nights your light counted, as times only', gifts: 'receipts for gifts you gave, which Twitch requires',
+};
+const sentence = (items: readonly string[]) => items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+
 function PrivacySettings(props: { privacy: Privacy | undefined; onClose: () => void; onRetry: () => void; onQuiet: (quiet: boolean) => void; onForget: () => void }) {
   const [confirmForget, setConfirmForget] = createSignal(false);
   const settings = () => {
     const privacy = props.privacy;
     return privacy?.kind === 'ready' || privacy?.kind === 'pending' ? privacy : null;
   };
-  const status = () => {
-    const privacy = props.privacy;
-    if (privacy?.kind === 'forgotten') return `Forgotten: ${privacy.erased.join(', ')}.`;
-    if (privacy?.kind === 'loading') return 'Opening your settings…';
-    return 'Your settings are out of reach. Please try again later.';
-  };
+  const gone = () => { const privacy = props.privacy; return privacy?.kind === 'forgotten' ? privacy : null; };
+  const status = () => props.privacy?.kind === 'loading' ? 'Opening your settings…' : 'Your settings are out of reach. Please try again later.';
   return <div class="cw-privacy">
     <button class="cw-back" onClick={props.onClose}>‹ Back to You</button>
     <div class="cw-privacy-content">
-      <h2>Your privacy</h2>
-      <Show when={settings()} fallback={<>
-        <p role="status">{status()}</p>
-        <Show when={props.privacy?.kind === 'unavailable'}><button class="cw-privacy-row" onClick={props.onRetry}>Try again <span>›</span></button></Show>
+      <Show when={gone()} fallback={<>
+        <h2>Your privacy</h2>
+        <Show when={settings()} fallback={<>
+          <p role="status">{status()}</p>
+          <Show when={props.privacy?.kind === 'unavailable'}><button class="cw-privacy-row" onClick={props.onRetry}>Try again <span>›</span></button></Show>
+        </>}>
+          {privacy => <>
+            <Show when={!confirmForget()}><p>Your card and home stay yours, whatever you choose here.</p></Show>
+            <button class="cw-privacy-row" disabled={privacy().kind === 'pending'} aria-pressed={privacy().quiet} onClick={() => { if (privacy().kind === 'ready') props.onQuiet(!privacy().quiet); }}>
+              <span>Keep my name off the stream</span><strong>{privacy().kind === 'pending' ? 'Saving…' : privacy().quiet ? 'On' : 'Off'}</strong>
+            </button>
+            <Show when={privacy().kind === 'ready' && privacy().quiet && !confirmForget()}><p class="cw-privacy-note" role="status">{privacy().projection === 'applied'
+              ? 'Your window still lights. The stream shows it without your name.' : 'Saved. The stream has not taken it up yet.'}</p></Show>
+            <Show when={privacy().forgetAvailable === true} fallback={<div class="cw-privacy-unavailable"><strong>Forget me</strong><p>Forgetting is out of reach just now.</p></div>}>
+              <Show when={!confirmForget()} fallback={<div class="cw-confirm" role="group" aria-label="Forget me" ref={element => queueMicrotask(() => element.scrollIntoView?.({ block: 'nearest' }))}>
+                <p><strong>Forget you in every kingdom?</strong> Your light goes out, and your name and the record of when you were here are erased. {privacy().renewal === 'pending' ? 'Your homes stay yours, but your window stays dark.' : 'Your homes wait if you take your place again.'}</p>
+                <button class="cw-primary" disabled={privacy().kind === 'pending'} onClick={props.onForget}>{privacy().kind === 'pending' ? 'Forgetting…' : 'Yes, forget me'}</button>
+                <button class="cw-back" disabled={privacy().kind === 'pending'} onClick={() => setConfirmForget(false)}>Keep me</button>
+              </div>}><button class="cw-privacy-row" disabled={privacy().kind === 'pending'} onClick={() => setConfirmForget(true)}><span>Forget me</span><span>›</span></button></Show>
+            </Show>
+          </>}
+        </Show>
       </>}>
-        {privacy => <>
-          <p>Your card and home stay yours. This setting concerns your name on stream.</p>
-          <button class="cw-privacy-row" disabled={privacy().kind === 'pending'} aria-pressed={privacy().quiet} onClick={() => { if (privacy().kind === 'ready') props.onQuiet(!privacy().quiet); }}>
-            <span>Keep my name off the stream</span><strong>{privacy().kind === 'pending' ? 'Saving…' : privacy().quiet ? 'On' : 'Off'}</strong>
-          </button>
-          <Show when={privacy().kind === 'ready' && privacy().projection === 'pending'}><p class="cw-privacy-note" role="status">{privacy().quiet ? 'Preference saved; stream update pending.' : 'Stream name hiding is not connected yet.'}</p></Show>
-          <Show when={privacy().forgetAvailable === true} fallback={<div class="cw-privacy-unavailable"><strong>Forget me</strong><p>Forgetting is not connected yet.</p></div>}>
-            <Show when={!confirmForget()} fallback={<div class="cw-confirm">
-              <p>Forget your Twitch-derived records across Chatdom’s kingdoms? You can take your place again later.</p>
-              <button class="cw-primary" disabled={privacy().kind === 'pending'} onClick={props.onForget}>Yes, forget me</button>
-              <button class="cw-back" onClick={() => setConfirmForget(false)}>Keep my records</button>
-            </div>}><button class="cw-privacy-row" disabled={privacy().kind === 'pending'} onClick={() => setConfirmForget(true)}>Forget me <span>›</span></button></Show>
+        {forgotten => <div class="cw-forgotten" role="status">
+          <h2>Forgotten</h2>
+          <Show when={forgotten().erased.length} fallback={<p>There was nothing of yours to forget.</p>}>
+            <p><strong>Erased:</strong> {sentence(forgotten().erased.map(kind => ERASED_WORDS[kind]))}.</p>
           </Show>
-        </>}
+          <Show when={forgotten().retained.length}><p><strong>Kept:</strong> {sentence(forgotten().retained.map(kind => RETAINED_WORDS[kind]))}.</p></Show>
+          <p class="cw-privacy-note">{forgotten().renewal === 'pending' ? 'Nothing more is noted. Your window stays dark.' : 'Nothing more is noted until you take your place again.'}</p>
+        </div>}
       </Show>
     </div>
   </div>;
@@ -117,6 +134,7 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
       case 'lit': return 'Your window is lit';
       case 'resting': return 'Your window is resting';
       case 'held': return 'Your window is quiet';
+      case 'forgotten': return 'Your window stays dark';
       case 'unfounded': return light.pledged ? 'Your tent waits' : null;
       case 'pending': return light.step === 'sharing' ? 'Waiting for Twitch…' : 'Lighting your window…';
       case 'logged-out': return 'Log in to Twitch to take your place';

@@ -3,7 +3,7 @@ import { PANEL_ROUTES, readPanelReading, type PanelCardWire, type PanelReading }
 import { createGiftTransport } from '../gifts/transport';
 import type { HelperBridge, HelperStatus } from '../helper';
 import { passportExtensionTransport } from '../passport/transport';
-import { ALL_SECTIONS, type CitizenCard, type Connection, type Home, type Light, type PanelAdapter, type PanelSnapshot, type PassportSource, type Picture, type Privacy } from '../model';
+import { ALL_SECTIONS, FORGOTTEN_KINDS, RETAINED_KINDS, type CitizenCard, type Connection, type Home, type Light, type PanelAdapter, type PanelSnapshot, type PassportSource, type Picture, type Privacy, type Renewal } from '../model';
 import type { PanelSettings } from '../../../../packages/shared/src/panel';
 import { parsePanelSettings } from '../settings/schema';
 
@@ -111,6 +111,12 @@ function kingdomWire(value: unknown): KingdomWire | null {
   return value as unknown as KingdomWire;
 }
 
+const renewalOf = (value: unknown): Renewal | undefined => value === 'applied' || value === 'pending' ? value : undefined;
+const readyPrivacy = (answer: Record<string, unknown>, quiet: boolean): Privacy => {
+  const renewal = renewalOf(answer.renewal);
+  return { kind: 'ready', quiet, projection: answer.projection === 'applied' ? 'applied' : 'pending', forgetAvailable: answer.forgetAvailable === true, ...(renewal ? { renewal } : {}) };
+};
+
 export function createProductionAdapter(helper: HelperBridge, options: ProductionOptions = {}): PanelAdapter {
   const backend = options.backend ?? null;
   const send = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
@@ -132,6 +138,11 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
   let retry = RETRY_MS, readingBusy = false, readingAgain = false, kingdomBusy = false, actionBusy = false, presenceBusy = false;
   let refreshQueued = false, refreshPending = false;
   let epoch = 0, presenceGeneration = 0, presenceSent = false, forgotten = false;
+  /** What the realm said about taking your place again after forget; only `pending` changes what the panel offers. */
+  let forgottenRenewal: Renewal | undefined;
+  const darkAfterForget = () => forgotten && forgottenRenewal === 'pending';
+  /** The kingdom's own public name, kept for the header when forget clears the viewer's reading. */
+  let keptKingdom: PanelReading['kingdom'] | null = null;
   let privacy: Privacy = { kind: 'loading' };
   let presenceTimer: ReturnType<typeof setTimeout> | undefined, presenceRetry = RETRY_MS;
   const visible = () => !disposed && helper.visible?.() !== false && (typeof document === 'undefined' || !document.hidden);
@@ -150,7 +161,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
   const currentLight = (): Light => {
     const status = helper.status();
     if (status.kind !== 'authorized' || !status.loggedIn) return lightFor(status);
-    if (forgotten) return { kind: 'ready' };
+    if (forgotten) return darkAfterForget() ? { kind: 'forgotten' } : { kind: 'ready' };
     if (!status.shared && light?.kind !== 'pending' && light?.kind !== 'refused') return lightFor(status);
     if (light?.kind === 'pending' || light?.kind === 'held' || light?.kind === 'refused') return light;
     if (kingdomLost) return kingdomAt ? { kind: 'out-of-reach', asOf: timeWords(kingdomAt) } : { kind: 'unavailable', twitch: 'shared' };
@@ -167,7 +178,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     return own ? { ...picture, mark: { x: own[1] / 10_000, y: own[2] / 10_000 } } : picture;
   };
   const snapshotFor = (): PanelSnapshot => {
-    const status = helper.status(), current = currentReading(), realm = current?.kingdom ?? null;
+    const status = helper.status(), current = currentReading(), realm = current?.kingdom ?? (forgotten ? keptKingdom : null);
     const connection = kingdomLost ? kingdomAt ? { kind: 'lost' as const, asOf: timeWords(kingdomAt) } : { kind: 'kingdom-unavailable' as const } : connectionFor(status, patient, reading, Boolean(backend));
     return {
       source: { kind: 'production', label: null }, connection, gifts: gifts.get(), ...(shared() ? { privacy } : {}),
@@ -177,7 +188,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       stream: kingdom?.stream ?? 'unknown', kingdomLights: kingdom?.lights ?? null, moment: kingdom?.moment ?? null,
       picture: markedPicture(), light: currentLight(),
       tonight: { kind: 'unavailable', reason: 'Tonight’s chronicle is not reaching the panel yet.' },
-      home: forgotten ? { kind: 'unknown', reason: 'Your records were forgotten. Take your place to begin again.' } : homeFor(status, reading, passport),
+      home: forgotten ? { kind: 'unknown', reason: darkAfterForget() ? 'Your records were forgotten. Your window stays dark.' : 'Your records were forgotten. Take your place to begin again.' } : homeFor(status, reading, passport),
       tavern: { kind: 'unavailable', reason: 'Walk into the kingdom to visit the tavern.' },
       forge: { kind: 'unavailable', reason: 'Walk into the kingdom to visit the forge.' },
       act: null, shelf: { kind: 'hidden' }, entry: realm ? { kind: 'gate', path: realm.walk } : { kind: 'none' }, sections: ALL_SECTIONS,
@@ -268,6 +279,8 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       const answer = await json('/api/panel/v1/presence');
       if (version !== epoch || generation !== presenceGeneration || !shared() || !active()) return;
       if (object(answer) && answer.status === 'held') { confirm('held', false); refresh(); return; }
+      // The realm remembers this person asked to be forgotten here: stop at once and wait for Take your place.
+      if (object(answer) && answer.status === 'forgotten') { forgotten = true; forgottenRenewal = renewalOf(answer.renewal); stop(); claimed = null; light = null; refresh(); return; }
       if (!object(answer) || answer.status !== 'accepted' || typeof answer.lit !== 'boolean') throw new Error('unreadable');
       presenceRetry = RETRY_MS;
       if (answer.lit) {
@@ -312,7 +325,10 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       const answer = kingdom.status === 'unfounded' ? await json('/api/panel/v1/pledge') : await json('/api/panel/v1/light', { observe: active() && kingdom.stream === 'live' });
       if (version !== epoch || !shared() || !visible()) return;
       if (object(answer) && answer.status === 'pledged' && words(answer.band, 120)) light = { kind: 'unfounded', pledged: true, band: answer.band };
-      else {
+      else if (object(answer) && answer.forgotten === true && answer.lit === false) {
+        // The home answered, but the realm keeps this person's forget hold: nothing is observed, the window stays dark.
+        forgotten = true; forgottenRenewal = renewalOf(answer.renewal); stop(); claimed = null; light = null; void poll(); refresh(); return;
+      } else {
         if (!object(answer) || !['deed', 'guest', 'castle', 'unfounded', 'held', 'unavailable'].includes(String(answer.status)) || typeof answer.lit !== 'boolean') throw new Error('unreadable');
         confirm(answer.status as Claim, answer.lit, ownSlotOf(answer));
         presenceSent = false;
@@ -328,7 +344,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       const answer = await json('/api/panel/v1/privacy');
       if (version !== epoch || forgotten || !shared()) return;
       if (!object(answer) || answer.version !== 1 || answer.status !== 'privacy' || typeof answer.quiet !== 'boolean') throw new Error('unreadable');
-      privacy = { kind: 'ready', quiet: answer.quiet, projection: answer.projection === 'applied' ? 'applied' : 'pending', forgetAvailable: answer.forgetAvailable === true };
+      privacy = readyPrivacy(answer, answer.quiet);
     } catch { if (version === epoch && !forgotten) privacy = { kind: 'unavailable' }; }
     refresh();
   };
@@ -343,11 +359,12 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       if (!object(answer) || answer.version !== 1) throw new Error('unreadable');
       if (kind === 'quiet') {
         if (answer.status !== 'quiet' || typeof answer.quiet !== 'boolean') throw new Error('unreadable');
-        privacy = { kind: 'ready', quiet: answer.quiet, projection: answer.projection === 'applied' ? 'applied' : 'pending', forgetAvailable: answer.forgetAvailable === true };
+        privacy = readyPrivacy(answer, answer.quiet);
       } else {
-        if (answer.status !== 'forgotten' || !Array.isArray(answer.erased) || !answer.erased.every((item: unknown) => words(item, 120))) throw new Error('unreadable');
-        forgotten = true; stop(); reading = { kind: 'none' }; claimed = null; light = null;
-        privacy = { kind: 'forgotten', erased: answer.erased as string[] };
+        const erased = kinds(answer.erased, FORGOTTEN_KINDS), retained = kinds(answer.retained, RETAINED_KINDS);
+        if (answer.status !== 'forgotten' || !erased || !retained) throw new Error('unreadable');
+        forgotten = true; forgottenRenewal = renewalOf(answer.renewal); stop(); keptKingdom = currentReading()?.kingdom ?? null; reading = { kind: 'none' }; claimed = null; light = null;
+        privacy = { kind: 'forgotten', erased, retained, ...(forgottenRenewal ? { renewal: forgottenRenewal } : {}) };
         void poll();
       }
     } catch { if (version === epoch) privacy = { kind: 'unavailable' }; }
@@ -413,7 +430,8 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     requestLight() {
       const status = helper.status();
       if (!backend || !visible() || status.kind !== 'authorized' || !status.loggedIn || actionBusy || queued || !kingdom) return;
-      if (status.shared) { forgotten = false; privacy = { kind: 'loading' }; void claim(); return; }
+      if (darkAfterForget()) return;
+      if (status.shared) { forgotten = false; forgottenRenewal = undefined; privacy = { kind: 'loading' }; void claim(); return; }
       queued = { token: helper.token(), authorization: helper.authorization?.() };
       light = { kind: 'pending', choice: 'named', step: 'sharing' }; refresh();
       if (!helper.requestIdShare()) { queued = null; light = { kind: 'refused' }; refresh(); }
@@ -434,4 +452,10 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       forgetPictures();
     },
   };
+}
+
+/** Only the realm's own known kinds, each at most once; anything else makes the reply unreadable. */
+function kinds<T extends string>(value: unknown, known: readonly T[]): T[] | null {
+  if (!Array.isArray(value) || value.length > known.length || new Set(value).size !== value.length) return null;
+  return value.every((item): item is T => typeof item === 'string' && (known as readonly string[]).includes(item)) ? value : null;
 }
