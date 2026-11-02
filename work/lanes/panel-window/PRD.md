@@ -274,7 +274,7 @@ without a code change.
   - A real test-mode gift in Hosted Test is the first item on PW13's checklist. Until it has happened, say plainly that
     C04's purchase bar is still open.
 
-- [ ] **PW13 — Switched on the moment the extension exists.**
+- [x] **PW13 — Switched on the moment the extension exists.**
   *Outcome.* The panel works without a code change once two values are set:
   - `TWITCH_EXTENSION_CLIENT_ID`
   - `TWITCH_EXTENSION_SECRET`

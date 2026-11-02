@@ -28,10 +28,9 @@ import { RealmTransport } from '../../../../realm/src/server';
 import { createPanelAuthority } from '../../public/panel/reading';
 import { createTwitchUsers } from '../../public/panel/twitch-users';
 import { createPanelHttp } from '../http';
+import { readPublicConfig } from '../../public/config';
 import { PanelPictures } from '../pictures';
 import { createPanelGifts } from './index';
-import { createPanelBroadcaster } from '../broadcast';
-import { createPanelConfigurationPublisher } from '../configuration-publisher';
 // @ts-expect-error The shared capture guard is a Node-only JavaScript utility.
 import { acquireCaptureLock } from '../../../../../packages/testing/capture-lock.mjs';
 // The development-only Helper is JavaScript and is never part of the Extension build.
@@ -39,7 +38,9 @@ import { acquireCaptureLock } from '../../../../../packages/testing/capture-lock
 import { HELPER_URL, helperSource, sign, signTransactionReceipt } from '../../../../panel/harness/helper.mjs';
 
 const enabled = process.env.REALM_DATABASE_TESTS === '1' && process.env.PANEL_BROWSER_TESTS === '1';
-const origin = 'simulated' as const;
+// The production gateway enables PubSub and the Configuration Service only for a live realm; this disposable schema
+// is a live realm of its own, so the switch-on rehearsal runs the exact gates the gateway runs.
+const origin = 'live' as const;
 const extensionId = 'panelbrowser';
 const kingdomId = KingdomIdSchema.parse('978100001');
 const giver = PersonIdSchema.parse('978100002'), witness = PersonIdSchema.parse('978100003');
@@ -64,12 +65,18 @@ type HarnessWindow = Window & { __panelHarness: Harness };
 async function availablePorts(count: number): Promise<number[]> {
   const ports: number[] = [];
   for (let port = 5170; port <= 5186 && ports.length < count; port++) {
-    const probe = createServer();
-    const free = await new Promise<boolean>(done => {
-      probe.once('error', () => done(false));
-      probe.listen({ port, host: '127.0.0.1', exclusive: true }, () => done(true));
-    });
-    if (free) { ports.push(port); await new Promise<void>((done, reject) => probe.close(error => error ? reject(error) : done())); }
+    // A port held on the wildcard address belongs to someone else, even when loopback would still bind.
+    let free = true;
+    for (const host of ['0.0.0.0', '127.0.0.1']) {
+      const probe = createServer();
+      free = await new Promise<boolean>(done => {
+        probe.once('error', () => done(false));
+        probe.listen({ port, host, exclusive: true }, () => done(true));
+      });
+      if (free) await new Promise<void>((done, reject) => probe.close(error => error ? reject(error) : done()));
+      else break;
+    }
+    if (free) ports.push(port);
   }
   if (ports.length !== count) throw new Error('Three free panel test ports in 5170–5186 are required.');
   return ports;
@@ -100,13 +107,10 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
   let releaseCapture: (() => Promise<void>) | undefined;
   let apiOrigin: string, panelOrigin: string, realmOrigin: string;
   let giftLedger: RealmPanelGifts;
-  let broadcaster: ReturnType<typeof createPanelBroadcaster> | undefined;
-  let publisher: ReturnType<typeof createPanelConfigurationPublisher> | undefined;
   let configurationContent: string | undefined;
   let configurationPuts = 0, configurationGets = 0;
   let releaseConfigurationGet: (() => void) | undefined;
   let configurationGetGate: Promise<void> | undefined;
-  let composeApi: (broadcast?: ReturnType<typeof createPanelBroadcaster>) => ReturnType<typeof createPanelHttp>;
   let realmCall: (path: string, body: unknown) => Promise<Record<string, unknown>>;
   const openPages = new Set<Page>();
   const broadcasts: { at: number; message: string; factId: string | null }[] = [];
@@ -237,11 +241,10 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     };
     const users = createTwitchUsers({ clientId: extensionId, clientSecret }, provider);
     const realmDb = db, pictureDirectory = join(directory, 'pictures');
-    composeApi = broadcast => createPanelHttp({ authority: createPanelAuthority({ pool: realmDb, origin, publicOrigin: panelOrigin, users, kingdomName: async id => kingdomNames.get(KingdomIdSchema.parse(id)) ?? null }),
+    panelHttp = createPanelHttp({ authority: createPanelAuthority({ pool: realmDb, origin, publicOrigin: panelOrigin, users, kingdomName: async id => kingdomNames.get(KingdomIdSchema.parse(id)) ?? null }),
       origin, extension: { clientId: extensionId, secret: extensionSecret }, extraOrigins: [panelOrigin] },
     { realmOrigin, panelSecret, painterSecret: null, pictures: new PanelPictures(pictureDirectory), users,
-      gifts: createPanelGifts({ extensionId, extensionSecret, extensionClientSecret: clientSecret, realm: realmCall, fetch: provider }), ...(broadcast ? { broadcast } : {}), ...(publisher ? { configurationPublisher: publisher } : {}) });
-    panelHttp = composeApi();
+      gifts: createPanelGifts({ extensionId, extensionSecret, extensionClientSecret: clientSecret, realm: realmCall, fetch: provider }) });
     api = createServer((request, response) => { void panelHttp!(request, response, new URL(request.url!, apiOrigin).pathname).catch(() => { if (!response.headersSent) response.writeHead(500); response.end(); }); });
     await listen(api, apiPort!);
     vite = await createViteServer({ configFile: resolve('apps/panel/vite.config.ts'),
@@ -263,8 +266,6 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     await Promise.all([attempt(() => vite?.close()), attempt(() => close(api))]);
     await attempt(() => panelHttp?.dispose());
     releaseConfigurationGet?.();
-    await attempt(() => publisher?.dispose());
-    await attempt(() => broadcaster?.dispose());
     await attempt(() => { if (realmListening) realm?.shutdown(); });
     await attempt(() => ingress?.stop());
     if (services) await Promise.all([...services.kingdoms.values()].map(kingdom => attempt(() => kingdom.dispose())));
@@ -397,15 +398,66 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     expect(escapedRequests).toEqual([]); expect(pageErrors.length).toBe(0);
   }, 60_000);
 
-  it('rehearses read, join, light, broadcaster settings and a PubSub gift in two actual panels', async () => {
+  it('switches on from configuration values alone, then walks read, join, light, settings and a PubSub gift in two actual panels', async () => {
     await publishLive();
     panelHttp!.dispose();
-    broadcaster = createPanelBroadcaster({ extensionId, extensionSecret, ownerId,
-      read: channelId => realmCall('/internal/realm/panel/kingdom', { kingdomId: channelId }), fetch: provider });
-    publisher = createPanelConfigurationPublisher({ extensionId, extensionSecret, ownerId, realm: realmCall, enabled: true, fetch: provider, pollMs: 100 });
-    panelHttp = composeApi(broadcaster);
-    publisher.start();
-    broadcaster.start();
+    // The switch-on: the gateway's own config reader and production composition, with no supplied services. Only
+    // Twitch's two remote hosts are substituted at the fetch boundary; loopback realm calls stay real.
+    const settingNames = ['TWITCH_EXTENSION_CLIENT_ID', 'TWITCH_EXTENSION_SECRET', 'TWITCH_EXTENSION_OWNER_ID', 'TWITCH_EXTENSION_CLIENT_SECRET',
+      'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET', 'REALM_INGRESS_PANEL_SECRET', 'PUBLIC_REALM_TARGET', 'PANEL_STILL_DIRECTORY',
+      'PANEL_DISABLE_BROADCAST', 'PANEL_DISABLE_CONFIGURATION', 'PANEL_BITS_EVENTSUB_SECRET'] as const;
+    const previous = Object.fromEntries(settingNames.map(name => [name, process.env[name]]));
+    const nativeFetch = globalThis.fetch;
+    globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const target = new URL(input instanceof Request ? input.url : String(input));
+      return ['https://api.twitch.tv', 'https://id.twitch.tv'].includes(target.origin) ? provider(input, init) : nativeFetch(input, init);
+    }) as typeof fetch;
+    const gateway = () => {
+      const config = readPublicConfig({ ...process.env, PUBLIC_KINGDOMS: `${kingdomId}:kitehaven` }, resolve('.'));
+      return createPanelHttp({ authority: createPanelAuthority({ pool: db!, origin, publicOrigin: panelOrigin, users: createTwitchUsers({ clientId: extensionId, clientSecret }, provider),
+        kingdomName: async id => (KingdomIdSchema.parse(id) === kingdomId ? 'Kitehaven' : null) }), origin, extension: config.extension, extraOrigins: [panelOrigin] });
+    };
+    const health = async () => {
+      const reply = await nativeFetch(`${apiOrigin}/api/panel/v1/health`);
+      return { http: reply.status, text: await reply.text() };
+    };
+    try {
+      for (const name of settingNames) delete process.env[name];
+      process.env.PUBLIC_REALM_TARGET = realmOrigin; process.env.REALM_INGRESS_PANEL_SECRET = panelSecret;
+      process.env.PANEL_STILL_DIRECTORY = join(directory!, 'pictures');
+      panelHttp = gateway();
+      // Before: every missing value is named plainly, never with a value or a stack trace.
+      const off = await health();
+      expect(off.http).toBe(503);
+      expect(JSON.parse(off.text)).toMatchObject({ status: 'unavailable', missing: ['TWITCH_EXTENSION_CLIENT_ID', 'TWITCH_EXTENSION_SECRET'],
+        broadcast: { status: 'unavailable', missing: expect.arrayContaining(['TWITCH_EXTENSION_OWNER_ID']) },
+        configuration: { status: 'unavailable' }, gifts: { status: 'unavailable' } });
+      expect(off.text).not.toMatch(/\bat \w|Error:|stack/);
+      expect((await nativeFetch(`${apiOrigin}/api/panel/v1/kingdom`, { method: 'POST', headers: { authorization: `Bearer ${sign(extensionSecret, { exp: Math.floor(Date.now() / 1000) + 60, channel_id: kingdomId, opaque_user_id: `U${newcomer}`, user_id: newcomer, role: 'viewer', is_unlinked: false })}`, 'content-type': 'application/json' }, body: '{}' })).status).toBe(503);
+      panelHttp.dispose();
+
+      // Switched on: the values Tobias drops in, and nothing else changes.
+      Object.assign(process.env, { TWITCH_EXTENSION_CLIENT_ID: extensionId, TWITCH_EXTENSION_SECRET: extensionSecret, TWITCH_EXTENSION_OWNER_ID: ownerId,
+        TWITCH_EXTENSION_CLIENT_SECRET: clientSecret, TWITCH_CLIENT_ID: extensionId, TWITCH_CLIENT_SECRET: clientSecret });
+      panelHttp = gateway();
+      const on = await health();
+      expect(on.http).toBe(200);
+      expect(JSON.parse(on.text)).toEqual({ version: 1, status: 'ready', missing: [], broadcast: { status: 'configured', missing: [] },
+        configuration: { status: 'configured', missing: [] }, gifts: { status: 'configured', missing: [] } });
+      for (const secret of [extensionSecret, clientSecret, panelSecret]) expect(off.text + on.text).not.toContain(secret);
+      // CORS answers the extension's own origin and nothing else.
+      const extensionOrigin = `https://${extensionId}.ext-twitch.tv`;
+      const preflight = await nativeFetch(`${apiOrigin}/api/panel/v1/kingdom`, { method: 'OPTIONS', headers: { origin: extensionOrigin, 'access-control-request-method': 'POST' } });
+      expect(preflight.status).toBe(204); expect(preflight.headers.get('access-control-allow-origin')).toBe(extensionOrigin);
+      expect((await nativeFetch(`${apiOrigin}/api/panel/v1/kingdom`, { method: 'OPTIONS', headers: { origin: 'https://elsewhere.ext-twitch.tv', 'access-control-request-method': 'POST' } })).status).toBe(403);
+      await switchedOnWalk();
+    } finally {
+      globalThis.fetch = nativeFetch;
+      for (const name of settingNames) { if (previous[name] === undefined) delete process.env[name]; else process.env[name] = previous[name]; }
+    }
+  }, 240_000);
+
+  async function switchedOnWalk() {
     const before = await counts();
     expect((await db!.query('SELECT 1 FROM realm_deeds WHERE kingdom_id = $1 AND person_id = $2', [kingdomId, newcomer])).rowCount).toBe(0);
     const first = await openPanel(newcomer);
@@ -509,6 +561,6 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
       for (const privateValue of [transactionId, receipt, extensionSecret, panelSecret, clientSecret, providerToken, newcomer]) expect([exposed, ...requestUrls, ...consoleMessages, ...pageErrors].some(text => text.includes(privateValue))).toBe(false);
     }
     expect(escapedRequests).toEqual([]); expect(pageErrors.length).toBe(0);
-  }, 180_000);
+  }
 
 });

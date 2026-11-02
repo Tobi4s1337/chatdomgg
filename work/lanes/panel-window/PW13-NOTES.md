@@ -1,68 +1,73 @@
-# PW13 checkpoint — 2 November 2026
+# PW13: switched on the moment the extension exists (2 November 2026)
 
-PW13 remains unticked. The Configuration Service ordering gap was closed in the previous checkpoint. This checkpoint prepares the exact shared Passport handoff and enforces the complete mobile asset budget without changing the remaining acceptance bars. Earlier goal boxes also remain unticked. No Twitch writes, console actions, deployment or push occurred.
+## What works when the values are set
 
-## Current packaging checkpoint
+- **The values.** `TWITCH_EXTENSION_CLIENT_ID` and `TWITCH_EXTENSION_SECRET` switch on token verification, CORS for the
+  extension's own origin, reading, join, light, presence, privacy and the config pages. `TWITCH_EXTENSION_OWNER_ID`
+  adds Extension PubSub and Configuration Service publication, because Twitch's external JWT must name the owner.
+  `TWITCH_EXTENSION_CLIENT_SECRET` adds gift reconciliation and the product and webhook tools. Every value is an
+  environment value, with no code change. `/api/panel/v1/health` names each missing value in a plain list, never a
+  value and never a stack trace. The decision is in `PW13-CONTRACT.md`.
+- **PubSub.** A bounded `{version:1,type:'panel.refresh'}` broadcast per channel, at most one a second. Open panels
+  re-read the verified API. The five-second poll stays as the fallback.
+- **The Configuration Service.** The realm owns the preferences: tabs, about eight gifts and one band each. Twitch holds
+  a published copy, written by a durable server outbox and verified by GET. Config shows Saved only after verification,
+  and while waiting it shows "Saved in the kingdom; waiting for Twitch to confirm." with "Check Twitch again". Live Config's
+  Hide pauses panel gifts at the realm writer, and paid gifts that are still pending wait until Resume.
+- **The tools.** `apps/panel/scripts/register-products.mjs` registers the 60 SKUs, and `subscribe-bits.mjs` subscribes the
+  `extension.bits_transaction.create` webhook. Both plan offline, `--inspect`, and write only with `--apply`.
+  `node scripts/public/extension.mjs` builds the zip. `deploy/public/EXTENSION-STEPS.md` covers Bits, the hosted
+  Configuration Service, Request Identity Link, the image domain allowlist for the paintings, and mobile.
 
-Unused simulation props and PassportSource metadata were removed inside `apps/panel`. The actual build, scoped TypeScript, changed-file lint and 40 focused adapter/card/transport checks pass. The strict actual-worktree zip still correctly fails on the shared Passport strings. No shared owner file was edited.
+## The switch-on rehearsal
 
-The exact owner and companion patches are `PW13-PASSPORT-NEEDS.patch` and `PW13-PASSPORT-PANEL.patch`. The isolated full-panel candidate passes 52 schema/reader/session/pages/transport checks and strict types, and produces a 17-file, 482 KiB zip. The zip checker now follows all local module and CSS dependencies, including fonts and textures; its three regression tests pass. Complete candidate graph totals are 888,934 bytes Panel, 888,919 Mobile, 635,866 Config and 635,871 Live Config, all below 1 MB. The previous direct-link figures understated download size. See `PW13-PASSPORT-PATCH.md` for the exact handoff, commands, evidence and limits.
+`apps/api/src/panel/gifts/browser.integration.test.ts`, second case. It runs on a disposable `panel_window_test_*`
+schema with the real realm code on its own port. It uses a generated client ID, secret, owner and OAuth secret, and
+substitutes only Twitch's two remote hosts at the fetch boundary:
 
-This third PW13 turn again invoked the complete GPU batch with `--wait 30 --max 10`; it returned exit 3, disconnected Chrome, with no queued lease job or services. Shared contention is not a PW11 blocker. The single permitted fallback, `work/evidence/panel-window/PW13/passport-live-candidate@318x496.png`, was inspected at native size; the warm book, stamp and footer fit without horizontal overflow. It is a candidate layout fixture only. Own candidate Vite 5182, browser and capture lock were released.
+1. It composes the API exactly as the gateway does: `readPublicConfig` from the environment, then `createPanelHttp`
+   with no supplied services.
+2. With no extension values set, health answers 503 and names `TWITCH_EXTENSION_CLIENT_ID` and `TWITCH_EXTENSION_SECRET`
+   (and the owner ID under broadcast and configuration), with no values and no stack. The kingdom route refuses with 503.
+3. After the values are set, with no code change, health reports ready, with broadcast, configuration and gifts all
+   configured. CORS answers the extension's origin and refuses another.
+4. Two real panels in Chrome through the Helper mock, with real HS256 tokens. The test reads the kingdom, then runs
+   **Take your place**. Light is confirmed by the realm (an installed deed and a committed `panel` observation).
+   It then saves the broadcaster's tabs and bands through Config. Saved appears only after Twitch's GET is verified,
+   and the published content equals the realm reading. Next it runs Hide and Resume in Live Config. Finally it makes a
+   gift with a signed receipt. Its moment reaches the second panel over PubSub in 114 ms locally, while that panel's
+   polling clock is paused. Database counts rise by exactly one, and no token, receipt, secret or ID reaches the DOM,
+   storage, a URL or a log.
 
-blocked: the same actual-worktree shared Passport zip rejection and disconnected GPU requirement remain after three consecutive PW13 goal turns. The concrete patch and all useful scoped packaging work are now reviewable. There is no later goal to select. Resume PW13 after owner application/capture recovery, also resolving the pending registration-owner and Tier 1 founding seams; all goal boxes stay unticked. Hosted Test has not run.
-
-## Current implementation
-
-Config and Live Config now use a server-owned published copy. A broadcaster save commits preferences and its outbox obligation in the same realm transaction. Hide gates gifts immediately through the existing realm writer fence; pending paid obligations survive. The browser never calls Helper configuration set. It polls authenticated `configuration-sync` and shows Saved only for a verified publication matching the exact current revision, preferences and connection. Pending changes remain visible and can be checked again without another save. Unsaved edits cannot be confirmed by checking an older publication.
-
-The new `0012e_realm_panel_mirror.sql` stores one coalesced obligation per channel and an origin binding/quota row. Startup activates the trusted Extension Client ID with a durable generation. Same-client replicas share it; changing Client IDs makes old channels eligible without reopening Config, and old workers remain fenced even if the deployment later returns to their former Client ID. The active deployment configuration is trusted authority: deliberately restarting obsolete configuration can activate its old ID again. One realm origin serves one active Extension.
-
-At most two claims run across all replicas. Claims last 30 seconds; every permit and completion requires the current binding generation and fresh claim ID. Dirty preferences and deployment rebinding precede routine audits, oldest-first within each class. No writer or database row lock spans external HTTP. The shared SQL quota conservatively spaces all configuration GET/PUT requests by at least 3,100 ms. Failure backoff grows from 6.5 seconds to five minutes. Each HTTP fetch plus response stream has a hard five-second local deadline, even if an injected transport ignores abort. Public content is bounded to 3,072 UTF-8 bytes; provider JSON to 8,192 bytes.
-
-The worker signs owner JWTs, GETs Twitch's segment, PUTs only when needed, then verifies by GET. Unknown versions, wrong channels, oversized responses and mismatched readback stay pending. A successful audit is scheduled again after 60 seconds; verification evidence also expires after 60 seconds if the worker stops. Audit and repair latency includes backlog and provider recovery. A database fence cannot prevent an already-dispatched old HTTP write: the demonstrated guarantee is eventual convergence after delayed requests settle, not cross-service atomicity or a fixed repair deadline.
-
-Routine same-identity Twitch authorization refresh now retains unsaved edits and their original expected revision. Identity/role changes clear the form; stale requests cannot replace it. Product enumeration runs independently, so a hung Helper lookup cannot block settings or Live Hide. The strict settings parser also now rejects array-valued bands instead of coercing them to strings.
-
-## Previous Configuration checkpoint verification
-
-- The backend's 33 focused checks passed across settings, mirror SQL, publication and authentication. After the final priority correction, all eight mirror SQL checks passed, including a newer actual CAS save ahead of an overdue verified audit.
-- A broader five-file realm regression run passed 40/40: settings, mirror, gifts, service and internal HTTP. It uses disposable `panel_window_test_*` development schemas, real Postgres, existing allocation/writer/ingress and durable paid-gift paths. Its seven-test mirror suite preceded the additional priority case above; these counts are not additive.
-- The client, Helper and production adapters passed 56 focused checks. Two parser regressions passed separately. The independent review also ran 45 focused checks and found no remaining P1/P2 after the corrections; the final priority test was then reviewed separately.
-- The final HTTP suite passed 7/7. The real-stack browser suite passed 2/2 with signed Helper tokens, a real realm/API and an explicit fake Twitch provider. It proves join/light, selected bands, actual server-side Configuration Service PUT/GET, no premature Saved while verification GET is held, Hide/Resume, draft retention on refresh, clearing after identity change, and working Hide despite never-resolving product enumeration. The witness's polling clock is paused for the PubSub phase; relay-to-caption was 172 ms locally. The separate PW12 test retains real polling. This is not live Twitch latency or production effect proof.
-- The held-old-PUT test does not merely replace a fixture value between ticks: it times out an unresolved PUT, publishes and verifies a newer revision, releases the old request so it overwrites the remote value, then demonstrates audit repair and a latest-revision acknowledgement.
-- Final scoped TypeScript and changed-file ESLint checks passed. Panel, realm and public API SSR builds passed. The realm was rebuilt after the final SQL priority change. Existing content dynamic-import warnings are unchanged. No root suite or `pnpm verify` ran.
-- The frozen additive migrations were applied only to the lane's `panel_window` development schema: `0012d` and `0012e`. No applied migration was rewritten. The final browser used realm 5170, API 5171 and panel 5172; all were stopped and its disposable schema removed. Parent Vite 5182 was also stopped.
-
-Browser reproduction:
-
-```sh
-REALM_DATABASE_TESTS=1 PANEL_BROWSER_TESTS=1 node \
-  --env-file=/tmp/panel-window-realm.env node_modules/vitest/vitest.mjs run --no-fsModuleCache \
-  apps/api/src/panel/gifts/browser.integration.test.ts
-```
-
-## Previous Configuration visual and packaging evidence
-
-The previous Configuration checkpoint’s single permitted SwiftShader fallback is `work/evidence/panel-window/PW13/config-pending@318x496.png`, inspected at native size. Its 41 visible words exclude decorative glyphs. The pending notice and Check Twitch again button are readable in the wood/parchment composition; targets meet 44 px and there is no horizontal overflow. Config intentionally scrolls as a document. This is a fixture layout, not proof of real Twitch storage. Lower controls, Live Config and the mobile matrix still require GPU review. The earlier `config@318x496.png` remains historical evidence, not a replacement for that matrix.
-
-The full batch used `--wait 30 --max 10` and returned exit 3 immediately because GPU Chrome was disconnected. It created no live queued job or leased services. Shared lease contention is not a PW11 blocker. The batch includes PW11's street/painter/privacy sequence, PW12 gift states, and Config, pending Config, bands and Live Config at both sizes:
+The gift's world effect is supplied by an explicit, test-only effect authority. That is not a production effect,
+and it is not Hosted Test.
 
 ```sh
-chatdom-pc-lease --wait 30 --max 10 -- node \
-  --env-file=/root/.config/chatdom/atlas.env --env-file=/tmp/panel-window-realm.env \
-  apps/panel/scripts/pw12-capture.mjs
+REALM_DATABASE_TESTS=1 PANEL_BROWSER_TESTS=1 node --env-file=/tmp/panel-window-realm.env \
+  node_modules/vitest/vitest.mjs run --no-fsModuleCache apps/api/src/panel/gifts/browser.integration.test.ts
 ```
 
-These are static views, so no fps run or GPU performance claim is needed. Do not restart an already queued command. Capture services remain realm 5172, gateway 5191 and panel/harness 5192, with PW11 selecting additional free 5170–5186 ports.
+Result: 2 of 2 passed, twice. The second run came after the port probe learned to skip ports held on the wildcard
+address: the first run had bound 127.0.0.1:5175 beside someone else's wildcard listener.
 
-`node scripts/public/extension.mjs` rebuilt assets but correctly failed its strict simulation-string guard in the shared Passport viewer/window chunks. No uploadable zip is accepted. The local asset graph, including referenced fonts and textures, is Panel 901,655 bytes; Mobile 901,640; Config 634,649; Live Config 634,654. Twitch's remote Helper and API payloads are outside those local-byte totals.
+## Evidence
 
-## Remaining acceptance
+- Real-GPU stills (RTX 5080, one lease) in `work/evidence/panel-window/PW13/`: `config`, `config-gift-bands`,
+  `config-pending` and `live-config` at 318×496 and 390×844. I looked at all of them. They show one wood and parchment
+  object, with no horizontal overflow and no target under 44 px. The capture's backend answers are layout fixtures; the
+  rehearsal above proves behaviour. Word counts of the first view at 318×496, counted from the stills: Config 41, pending 41, Live Config 46. Config is
+  a dashboard page and scrolls as a document. On the phone, Live Config leaves its lower half as bare wood, which I
+  judged acceptable for a dashboard page.
+- The zip: `node scripts/public/extension.mjs` passes every hosted-asset check: 17 files, 495 KB, and a first load
+  of 914 KB for panel and mobile and 631 KB for the config pages. There are no fixtures, simulation strings or three.js.
+  The allowlists are URL Fetching, Image Domains and Panel URLs, all `https://chatdom.io`.
+- Mobile (C06): the same three tabs, thumb-first, from PW10 to PW12, with real-GPU stills at 390×844 in the PW10–PW12
+  evidence folders, under 1 MB.
 
-- The extension owner identity cannot be bootstrapped from the two specified credential values. Health names `TWITCH_EXTENSION_OWNER_ID`; the original two-value outcome is still unmet. A request for the actual registration owner is pending; no destination-channel identity was guessed.
-- Main/Herald must supply the real founding entry with Tier 1 consent. The exact grants patch remains unapplied outside this lane. Main/front-door must review and apply the exact live-only Passport handoff before the actual worktree packaging can pass. See `PW13-NEEDS.md`.
-- Full GPU stills, real Twitch mobile evidence and the existing production effects seams remain open. New credentials, preferences and products never fabricate effect readiness.
-- Hosted Test has not run and C04's real purchase bar remains open. `HOSTED-TEST.md` has 15 steps and ends with the first real test-mode gift; local receipts and a test-only atomic effect dispatch do not satisfy that purchase bar.
+## Open, outside this lane or with Tobias
 
-Next remains PW13 after the recorded external seams change. The ordered mirror request is resolved and the packaging fix is demonstrated in an isolated candidate; this checkpoint is not lane completion. See `PW13-CONTRACT.md` and `references/configuration-outbox.md` for the design and its source study.
+- Hosted Test has **not run** this round. `HOSTED-TEST.md` is Tobias's 15-step checklist, ending with the first real
+  test-mode gift. C04's purchase bar stays open until then.
+- The "Found your kingdom" link waits on a real founding OAuth entry, and Herald's grants patch narrows the first
+  connection to the six Tier 1 scopes (`PW13-NEEDS.md`).
+- Production gift effects: `PW12-NEEDS.md`.
