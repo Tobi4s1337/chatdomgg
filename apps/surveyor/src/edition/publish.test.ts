@@ -402,6 +402,8 @@ describe('Edition I staged on a temp data directory', () => {
     expect(readClaims(stageDir).map((c) => [c.kingdomId, c.cause, c.language, c.facts])).toEqual([
       [SIGNED, 'signed-in', 'de', 'survey'], [SIGNED, 'founded', 'de', 'survey'], [UNSEEN, 'signed-in', 'ja', 'twitch'],
     ]);
+    // A channel the survey never saw is named by the lookup, so its holding carries its name on the map.
+    expect(readClaims(stageDir).map((c) => [c.login, c.name])).toEqual([[undefined, undefined], [undefined, undefined], ['fixture_98', 'Fixture 98']]);
     await service.close();
 
     // A restarted service still knows what it recorded; without any source of facts it asks the producer to retry.

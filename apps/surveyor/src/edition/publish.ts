@@ -87,7 +87,14 @@ export interface PublicationInput {
   /** The night's survey: the revision of the ledger's last night. */
   manifest: SnapshotManifest;
   channels: readonly ChannelObservation[];
+  /**
+   * Names of holdings the night's survey did not observe (raided channels under the sweep's floor, claims), from the
+   * answers Twitch gave for them. The survey's own name always wins.
+   */
+  arrived?: ReadonlyMap<string, ArrivedName>;
 }
+
+export interface ArrivedName { login: string; name: string; factsAt: number }
 
 /** Pure and deterministic: the same edition, ledger prefix and survey always give byte-identical files. */
 export function buildEditionPublication(input: PublicationInput): PreviewFiles {
@@ -193,16 +200,21 @@ export function buildEditionPublication(input: PublicationInput): PreviewFiles {
   const worldBytes = json(previewWorld);
   files.set('world.json', worldBytes);
 
-  const named = rows.filter((row) => !tombstoned.has(row.id) && channels.has(row.id)).sort((a, b) => compareIds(a.id, b.id));
+  const nameOf = (kingdomId: KingdomId): ArrivedName | null => {
+    const channel = channels.get(kingdomId);
+    if (channel) return { login: channel.login, name: channel.displayName, factsAt: channel.factsAt };
+    return input.arrived?.get(kingdomId) ?? null;
+  };
+  const named = rows.filter((row) => !tombstoned.has(row.id) && nameOf(row.id) !== null).sort((a, b) => compareIds(a.id, b.id));
   const names: PreviewNames = PreviewNamesSchema.parse({
     version: 1,
     kind: `${PREVIEW_KIND}-names`,
     preview: id,
     revision: manifest.revision,
     ids: named.map((row) => row.id),
-    logins: named.map((row) => channels.get(row.id)!.login),
-    names: named.map((row) => channels.get(row.id)!.displayName),
-    factsAt: named.map((row) => channels.get(row.id)!.factsAt),
+    logins: named.map((row) => nameOf(row.id)!.login),
+    names: named.map((row) => nameOf(row.id)!.name),
+    factsAt: named.map((row) => nameOf(row.id)!.factsAt),
     tombstoned: [...tombstoned].sort(compareIds),
   });
   const namesBytes = json(names);

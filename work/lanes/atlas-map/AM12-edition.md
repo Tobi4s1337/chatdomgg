@@ -69,10 +69,11 @@ published night was drawn from, because search and cards read its register.
   that case the claim gets the nearest free slot. A road drawn to a waiting channel therefore ends on its holding
   once it is granted. Claims settle at the next survey night, not instantly: one writer, one ledger, one place where
   land is decided.
-- **Three causes create land:** a witnessed raid from a settled kingdom into an observed stream, a `signed-in` claim
-  and a `founded` claim. Raids come from the survey's own recorder (with each revision) and from raid-show's witnessed
-  feed in the road ledger, read-only. Simulations and pair aggregates never grant land. A raid into a channel the
-  survey never saw (under 5 viewers) grants nothing; a claim for one does, on the facts the claim recorded.
+- **Three causes create land:** a witnessed raid from a settled kingdom into a stream, a `signed-in` claim and a
+  `founded` claim. Raids come from the survey's own recorder (with each revision) and from raid-show's witnessed feed
+  in the road ledger, read-only. Simulations and pair aggregates never grant land. A raid into a channel the survey
+  never saw (under 5 viewers) grants land on the facts Twitch gives settlement for it (see *Raid arrivals*); a claim
+  for one does, on the facts the claim recorded.
 - **Hamlets are drawn at their holding tier.** A granted hamlet stays a hamlet in the files; its average is a fact,
   not a size. The browser gives hamlets the village zoom band and a quiet 3 px dot.
 - **Tombstoned land is drawn bare, never reassigned.** That covers hidden (withheld), gone and abandoned holdings.
@@ -96,6 +97,51 @@ published night was drawn from, because search and cards read its register.
   `{kind, edition, revision, taxonomySha256, issuedAt, issuedBy}`, an authorization not dated in the future, no
   existing `ed-1`, and a readable withheld list. A refusal is logged in `ledger/foundings.ndjson` and writes nothing
   else.
+
+## Raid arrivals
+
+Most raids end in a stream the survey observed. Some end in one no sweep ever listed, because it had fewer than five
+viewers. Settlement cannot place such a channel from the survey, so it asks Twitch first, and grants the land on the
+answer. The rule is the same as for any raid: a hamlet at the channel's pencil place, so the road keeps its end.
+
+1. Before a new night is settled, `settleWithArrivals` lists the channels to ask about. A channel is listed when a raid
+   from a settled, untombstoned kingdom went into it after the founding, and the night's survey did not observe it.
+   It must also hold no land, not be withheld, and have no answer yet. Each channel is asked about once, for its
+   earliest raid. At most 5,000 are asked a night.
+2. They are asked in batches of a hundred through the service's own public lookup (Get Users, then Get Channel
+   Information). That is two Helix reads per batch, inside the lookup's 60-a-minute budget and 200-point reserve. The
+   whole check stops after 5 minutes, or at the first refusal.
+3. Each answer is appended to `claims/raid-arrivals.ndjson` and fsynced before the night reads it. `found` records
+   the login, display name, broadcaster language and current game, plus the raid that asked. `absent` records that
+   Twitch has no such user (deleted or suspended). Only settlement writes this file, under the data directory's
+   lock.
+4. The night grants a `found` channel on its facts: the realm the map and search already give it, through the same
+   visibility gate as everyone (withheld and gambling streams get nothing). It is granted as a hamlet at its pencil
+   place, or at the nearest free slot if a grant earlier that night took it.
+5. A raid whose answer could not be had tonight (no credentials, budget, Twitch down) is asked again at the next
+   night, while the survey still holds the raid. Its answer then carries the raid, so the land is granted on that
+   night. An `absent` channel is asked again only after a newer raid into it.
+6. The publication names such a holding from its answer (`names.json`). The survey's own name always wins. A claim's
+   Twitch lookup now records `login` and `name` too, for the same purpose. Only answers recorded by the time the
+   night's head was acknowledged count, so `atlas:check` rebuilds the publication byte for byte however the logs grow.
+   Search and cards find the holding as mapped land with its name, on its holding (`average` and first-seen are
+   unknown and shown as such).
+
+Without Twitch credentials the night still settles; those raids wait, and `atlas:settle` says so on its summary line.
+
+Real data, measured on 2 Nov. The rehearsal bench was replayed to night 2, and night 3
+(`obs-20261102T065304Z-3e480ce03a59`) was then settled in memory. Nothing was written to the bench.
+`work/evidence/atlas-map/am12-raid-arrivals.json` has the numbers.
+
+- 54 channels were asked about: 34 from tonight's window and 20 from earlier nights of the edition. That took one
+  batch, two Helix reads and 12.6 s, token included.
+- Twitch found 53 and reported 1 as gone.
+- Without the answers the night granted 1,090 holdings by raid; with them, 1,143. 51 of the 53 new hamlets stand
+  exactly at their pencil place; 2 took the nearest free slot. Nothing moved.
+- At today's volume this is 7 to 34 channels a six-hour night: one batch.
+
+Found on the way: the card reply's schema still capped the holding tier at 3, so a card for any hamlet holding failed
+to build. It now accepts 4, as the browser already did.
 
 ## Claims endpoint (private)
 
@@ -171,11 +217,14 @@ the window and the two reviews, writing nothing but the refusal line
 The live service (127.0.0.1:5193, its own worktree) runs code from before this lane's merge. Adoption:
 
 1. Merge, then rebuild the surveyor in the live worktree (`vite build`). Restart the service the usual way, with its
-   Twitch env file, `ATLAS_INGEST_PORT`, `ATLAS_INGEST_TOKEN` and `ATLAS_FOUNDER_PUBLIC_KEY` set.
+   Twitch env file, `ATLAS_INGEST_PORT`, `ATLAS_INGEST_TOKEN` and `ATLAS_FOUNDER_PUBLIC_KEY` set. The 6-hourly
+   `atlas:import` job also needs the Twitch env file (`TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`). Its settle step uses
+   it for raid arrivals; without it, raids into streams under the sweep wait.
 2. **Founded on this host:** nothing to copy. Go to step 4.
 3. **Founded on another host** (for example a bench that was later signed for real): copy the founding revision
    (`revisions/<obs-id>/`, if the host doesn't have it) and `editions/ed-1/` (all six files) into the live
-   `ATLAS_DATA_DIR`. Compare `sha256sum editions/ed-1/*` with the founding host. Never copy a bench's rehearsal
+   `ATLAS_DATA_DIR`. If that host already settled later nights, copy `claims/` (`claims.ndjson` and
+   `raid-arrivals.ndjson`) too: the publications name holdings from them. Compare `sha256sum editions/ed-1/*` with the founding host. Never copy a bench's rehearsal
    edition: the service refuses it.
 4. `pnpm --filter @chatdom/surveyor atlas:publish`. It writes the publication of the current head and the pointer,
    and prints the content address. That address must equal the one printed at founding. The command is idempotent.
@@ -186,7 +235,7 @@ The live service (127.0.0.1:5193, its own worktree) runs code from before this l
 7. Claims: point front-door's session authority and Genesis at `http://127.0.0.1:$ATLAS_INGEST_PORT/v1/claims`, using
    the same bearer token as the road ingest.
 
-What never to do: delete or edit anything under `editions/ed-1/` (verification refuses a changed ledger and every
+What never to do: delete or edit anything under `editions/ed-1/` or `claims/` (verification refuses a changed ledger and every
 later night with it); found again; set `ATLAS_REHEARSAL=1` on the live service.
 
 ## Rehearsal on real data (2 Nov)
@@ -255,6 +304,25 @@ and the pair `am12-phone-pair.png`. Script: `apps/web/src/atlas/checks/edition-s
       their pencil place, and the waiting channel's place is unchanged.
     - Search answers are identical across service restarts and across the night.
     - Publishing again is idempotent.
+- `apps/surveyor/src/edition/arrivals.test.ts` (new, 10 tests):
+  - Without an answer the raided stream waits. With one it is granted its pencil place in the realm of its own
+    language, and nobody moves.
+  - Withheld and gambling streams get nothing, and neither does a raid from hidden land.
+  - A raid from an earlier night is granted when its answer arrives, and only on that night.
+  - The publication names the holding from the answer; the survey's name wins.
+  - Who is asked: once per channel, earliest raid first. Never a known, owned or withheld channel, nor a raid from
+    land that is not settled. Answered channels are not asked again; a gone channel is asked again after a newer
+    raid. At most 5,000 a night.
+  - Batches of a hundred, found and gone answers, a stop at the first refusal and at the deadline.
+  - The durable log, its torn tail, and the first answer per channel up to a night.
+  - Through the real import and settle commands on a staged edition:
+    - Twitch down: the night settles and nothing is granted.
+    - The next night, Twitch answers. The raided stream gets its hamlet at its pencil place under its own name, as
+      mapped land in search and on its card. The gone one gets nothing.
+    - Nobody moved, and `checkPublication` passes.
+    - Answered channels are not asked again.
+- `twitch-lookup.test.ts`: a batch of IDs in two public reads, unknown IDs reported as absent, no live state, no cache,
+  and the reserve.
 - `edition.test.ts`: the names gate, `byClaim` in every summary, and "claim before Edition I" in the tamper test.
   The founding command is still refused below the window and without an authorization.
 - Web: 699 Atlas tests, including the new `ui/edition.test.ts` for the seal, card, still and notice wording on a

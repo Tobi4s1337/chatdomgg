@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { checkDataDir } from './check';
 import { dataDirFrom, founderKeyPemFrom, importConfigFrom, ingestConfigFrom, liveConfigFrom, serveConfigFrom } from './config';
 import { founderKey } from './edition/authorization';
-import { checkPublication, prepareFounding, rehearsalAllowed, runAuthorize, runFound, runPublish, runRehearsal, runSettle, runStage } from './edition/commands';
+import { checkPublication, prepareFounding, rehearsalAllowed, runAuthorize, runFound, runPublish, runRehearsal, runSettle, runStage, settleWithArrivals } from './edition/commands';
+import { twitchLookupFromEnv } from './directory/twitch-lookup';
 import { EditionNumberSchema } from './edition/schema';
 import { listEditions, verifyEditionDir } from './edition/store';
 import { asAtlasError } from './errors';
@@ -56,6 +57,30 @@ function printSettle(result: ReturnType<typeof runSettle>): void {
   else {
     const s = result.summary;
     console.log(`atlas:settle ${result.edition} ← ${result.revision}: ${n(s.settled)} settled (${n(s.byRaid)} by raid, ${n(s.byClaim)} by claim, ${n(s.outer)} on the Outer Isles), ${n(s.tombstones)} tombstones, ${n(s.restores)} restored, ${n(s.deferred)} deferred; ${n(result.settlers)} holdings; published ${result.publication}`);
+    const a = result.arrivals;
+    if (a && a.asked) {
+      const why = a.reason === 'disabled' ? ' (no Twitch credentials: TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET)' : a.reason ? ` (lookup ${a.reason})` : '';
+      console.log(`  raided streams the survey never saw: ${n(a.asked)} checked with Twitch, ${n(a.found)} found, ${n(a.absent)} gone, ${n(a.unanswered)} wait for the next night${why}; ${n(s.byRaidArrival)} granted land tonight`);
+    }
+  }
+}
+
+/** A settle run that first checks raided streams the survey never saw with Twitch (public reads, budgeted). */
+async function settleChecked(dataDir: string): Promise<ReturnType<typeof runSettle>> {
+  const lookup = twitchLookupFromEnv();
+  try {
+    return await withLockAsync(dataDir, () => settleWithArrivals(dataDir, founderKeyPemFrom(process.env), Date.now, lookup));
+  } finally {
+    lookup.close();
+  }
+}
+
+async function withLockAsync<T>(dataDir: string, run: () => Promise<T>): Promise<T> {
+  const release = acquireLock(dataDir);
+  try {
+    return await run();
+  } finally {
+    release();
   }
 }
 
@@ -110,7 +135,7 @@ async function main(argv: string[]): Promise<number> {
     // waits on a separate job. Settling founds nothing; an edition exists only through atlas:found.
     if (listEditions(config.dataDir).length) {
       try {
-        printSettle(withLock(config.dataDir, () => runSettle(config.dataDir, founderKeyPemFrom(process.env), Date.now())));
+        printSettle(await settleChecked(config.dataDir));
       } catch (error) {
         const failure = asAtlasError(error, 'check');
         console.error(`atlas:settle after the import failed [${failure.code}] ${failure.message}; the map keeps its last published night`);
@@ -179,7 +204,7 @@ async function main(argv: string[]): Promise<number> {
   }
   if (command === 'settle') {
     const dataDir = dataDirFrom(process.env);
-    printSettle(withLock(dataDir, () => runSettle(dataDir, founderKeyPemFrom(process.env), Date.now())));
+    printSettle(await settleChecked(dataDir));
     return 0;
   }
   if (command === 'publish') {

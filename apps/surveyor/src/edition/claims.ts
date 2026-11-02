@@ -1,7 +1,7 @@
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, truncateSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { AtlasRaidSchema, EpochMsSchema, KingdomIdSchema, type AtlasRaid } from '@chatdom/shared';
+import { AtlasRaidSchema, DisplayNameSchema, EpochMsSchema, KingdomIdSchema, TwitchLoginSchema, type AtlasRaid } from '@chatdom/shared';
 import { compareIds } from '../export/project';
 import { GameIdSchema } from '../export/schema';
 
@@ -41,6 +41,9 @@ export const ClaimSchema = z.strictObject({
   categories: z.array(z.strictObject({ gameId: GameIdSchema, minutes: z.number().int().min(1) })).max(8),
   /** Where those facts came from: the survey, or the service's own public Twitch lookup. */
   facts: z.enum(['survey', 'twitch']),
+  /** From the Twitch lookup: names the holding on the map while the survey never observes the channel. */
+  login: TwitchLoginSchema.optional(),
+  name: DisplayNameSchema.optional(),
 });
 export type Claim = z.infer<typeof ClaimSchema>;
 

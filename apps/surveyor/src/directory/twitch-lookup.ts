@@ -16,6 +16,12 @@ export interface TwitchLookup {
   lookup(query: string): Promise<TwitchChannelFacts[]>;
   /** Whether this normalized query can be answered without spending an upstream request. */
   cached?(query: string): boolean;
+  /**
+   * Facts for up to a hundred channel IDs in two Helix calls (users, then channel information), without live state:
+   * what settlement needs to place a raided channel the survey never saw. IDs Twitch does not return as users are
+   * `absent` (deleted or suspended). Throws LookupUnavailable like `lookup`.
+   */
+  channels?(ids: readonly string[]): Promise<{ found: TwitchChannelFacts[]; absent: string[] }>;
   close(): void;
 }
 export class LookupUnavailable extends Error {
@@ -51,7 +57,8 @@ interface Cached { until: number; facts: TwitchChannelFacts[] }
 /** Public reads only. No credentials, provider error bodies or OAuth response can escape this boundary. */
 export function createTwitchLookup(options: TwitchLookupOptions = {}): TwitchLookup {
   if (!options.clientId || !options.clientSecret) return {
-    lookup: async () => { throw new LookupUnavailable('disabled'); }, cached: () => false, close: () => {},
+    lookup: async () => { throw new LookupUnavailable('disabled'); }, cached: () => false,
+    channels: async () => { throw new LookupUnavailable('disabled'); }, close: () => {},
   };
   const now = options.now ?? Date.now;
   const random = options.random ?? Math.random;
@@ -175,7 +182,33 @@ export function createTwitchLookup(options: TwitchLookupOptions = {}): TwitchLoo
     put(query, facts, exact && !exactFound ? HOUR : DAY);
     return facts;
   }
+  async function channelsById(raw: readonly string[]): Promise<{ found: TwitchChannelFacts[]; absent: string[] }> {
+    if (closed) throw new LookupUnavailable('disabled');
+    const ids = [...new Set(raw)].filter(value => TwitchIdSchema.safeParse(value).success).slice(0, 100);
+    if (!ids.length) return { found: [], absent: [] };
+    const deadline = now() + 9_000;
+    const users = (await call('users', ids.map(value => ['id', value] as const), Users, deadline)).data;
+    const present = new Set(users.map(user => user.id));
+    const absent = ids.filter(value => !present.has(value));
+    if (!users.length) return { found: [], absent };
+    const channels = (await call('channels', users.map(user => ['broadcaster_id', user.id] as const), Channels, deadline)).data;
+    // As in a single lookup, a partial channel-information reply is not proof that anyone disappeared.
+    if (users.some(user => !channels.some(channel => channel.broadcaster_id === user.id))) {
+      backoff();
+      throw new LookupUnavailable('upstream', retry(cooldown));
+    }
+    const fetchedAt = now();
+    const found = users.map(user => {
+      const channel = channels.find(value => value.broadcaster_id === user.id)!;
+      const portrait = AvatarUrlSchema.safeParse(user.profile_image_url);
+      return { id: user.id, login: user.login, name: user.display_name, avatarUrl: portrait.success ? portrait.data : null,
+        language: channel.broadcaster_language || 'other', gameId: channel.game_id || null, game: channel.game_name || null,
+        title: channel.title || null, live: false, viewers: null, startedAt: null, fetchedAt };
+    });
+    return { found, absent };
+  }
   return {
+    channels: channelsById,
     cached(raw) {
       if (closed) return false;
       const hit = cache.get(raw.trim().toLowerCase());

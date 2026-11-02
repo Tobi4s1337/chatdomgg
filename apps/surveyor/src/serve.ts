@@ -10,7 +10,7 @@ import { nameFreshUntil, withheldReader } from './policy/visibility';
 import { PREVIEW_KIND, PreviewIdSchema, PreviewWorldSchema, ServedNamesSchema, type PreviewNames } from './preview/schema';
 import { previewDir, readPreviewManifest, readPreviewNames } from './preview/store';
 import { publishedPath, readPublished } from './edition/publish';
-import { appendClaim, claimKeys, ClaimRequestSchema, readClaims, type Claim } from './edition/claims';
+import { appendClaim, claimKeys, ClaimRequestSchema, ClaimSchema, readClaims, type Claim } from './edition/claims';
 import { layout, readCurrent, readManifest } from './store/revisions';
 import { LIVE_FILES, liveRoot, liveTargetDir, readFrame, readLiveManifest, readLiveState } from './live/store';
 import { DirectoryFallback } from './directory/fallback';
@@ -814,7 +814,7 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
     if (claimed.has(key)) return receipt('duplicate');
     const pointer = current()?.preview;
     const register = pointer ? await directory((JSON.parse(pointer) as { id: string }).id)?.catch(() => null) ?? null : null;
-    let facts: Pick<Claim, 'language' | 'categories' | 'facts'> | null = null;
+    let facts: Pick<Claim, 'language' | 'categories' | 'facts' | 'login' | 'name'> | null = null;
     const surveyed = register?.knows(request.kingdomId) ? register.facts(request.kingdomId) : null;
     if (surveyed?.language) facts = { language: surveyed.language, categories: [], facts: 'survey' };
     else if (twitch) {
@@ -822,6 +822,9 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
         const found = (await twitch.lookup(`id:${request.kingdomId}`)).find((channel) => channel.id === request.kingdomId);
         if (!found) return invalid(res, 'unknown-channel');
         facts = { language: found.language || 'other', categories: found.gameId ? [{ gameId: found.gameId, minutes: 1 }] : [], facts: 'twitch' };
+        // Names the holding on the map if the survey never observes the channel; checked as the log will read it.
+        const named = ClaimSchema.shape.login.safeParse(found.login).success && ClaimSchema.shape.name.safeParse(found.name).success;
+        if (named) facts = { ...facts, login: found.login, name: found.name };
       } catch {
         facts = null;
       }

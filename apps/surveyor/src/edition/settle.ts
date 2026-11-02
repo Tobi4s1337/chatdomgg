@@ -11,8 +11,9 @@ import type { LedgerEvent, LedgerState, Tombstone } from './ledger';
 import { PencilPlaces, type PencilRegionPlaces } from '../cartography/pencil-place';
 import { dabHash } from '../live/frame';
 import { realmResolver } from '../live/target';
-import type { AtlasRaid } from '@chatdom/shared';
+import type { AtlasRaid, KingdomId } from '@chatdom/shared';
 import { claimOrder, type Claim } from './claims';
+import { raidOrder, type FoundArrival, type RaidRef } from './arrivals';
 
 /**
  * Nightly settlement of one edition (Spec 01 R3, R5): new kingdoms receive land in their realm without anything
@@ -221,11 +222,23 @@ export interface NightInput {
   claims?: readonly Claim[];
   /** Witnessed raids from the road ledger beyond the survey's own (raid-show's authority). */
   roadRaids?: readonly AtlasRaid[];
+  /**
+   * Twitch's answers for raided channels the survey never saw, checked for this night or earlier (`foundArrivals`):
+   * the facts their land is granted on. An answer checked for this very night also carries its raid, so a raid whose
+   * check failed on an earlier night is granted once the answer arrives.
+   */
+  arrivals?: ReadonlyMap<string, FoundArrival>;
 }
 
 export interface NightResult {
   events: LedgerEvent[];
-  summary: { settled: number; byRaid: number; byClaim: number; outer: number; tombstones: number; restores: number; deferred: number; unseenRaidTargets: number };
+  summary: {
+    settled: number; byRaid: number; byClaim: number; outer: number; tombstones: number; restores: number; deferred: number;
+    /** Of `byRaid`, raided channels the survey never saw, granted on the facts Twitch gave for them. */
+    byRaidArrival: number;
+    /** Raided channels the survey never saw and Twitch has not (yet) answered for: nothing granted tonight. */
+    unseenRaidTargets: number;
+  };
 }
 
 /**
@@ -374,34 +387,52 @@ export function settleNight(input: NightInput): NightResult {
     }
   }
 
-  // Land by raid (Edition I): a raid from a settled kingdom grants an observed small target the slot at its pencil
-  // place, so the road keeps its end. Raids come from the survey's recorder and from raid-show's witnessed feed in
-  // the road ledger; the same raid seen twice grants once. A target the sweep never saw (under five viewers) is
-  // reached at the edge of known land and gets nothing.
+  // Land by raid (Edition I): a raid from a settled kingdom grants its small target the slot at its pencil place, so
+  // the road keeps its end. Raids come from the survey's recorder and from raid-show's witnessed feed in the road
+  // ledger; the same raid seen twice grants once. A target the sweep observed is placed on the survey's facts; one
+  // it never saw (under five viewers) on the facts Twitch gave settlement for it (raid arrivals), and waits for them
+  // when there are none yet.
   let byRaid = 0;
+  let byRaidArrival = 0;
   const unseen = new Set<string>();
   if (landByClaim) {
     const since = state.lastNight?.asOf ?? 0;
     const until = Math.max(manifest.source.database.openedAt, ...(input.roadRaids ?? []).map((raid) => raid.observedAt));
-    const raids = [...input.raidObservations.map((observation) => observation.raid), ...(input.roadRaids ?? [])]
-      .filter((raid) => raid.observedAt > since && raid.observedAt <= until)
-      .sort((a, b) => a.observedAt - b.observedAt || compareIds(a.toKingdomId, b.toKingdomId) || compareIds(a.fromKingdomId, b.fromKingdomId));
+    const raids: RaidRef[] = [...input.raidObservations.map((observation) => observation.raid), ...(input.roadRaids ?? [])]
+      .filter((raid) => raid.observedAt > since && raid.observedAt <= until);
+    // A raid whose target was checked for tonight after an earlier night could not get an answer.
+    for (const arrival of input.arrivals?.values() ?? []) {
+      if (arrival.night === manifest.asOf && arrival.raid.observedAt <= since) raids.push({ ...arrival.raid, toKingdomId: arrival.kingdomId });
+    }
+    raids.sort(raidOrder);
     for (const raid of raids) {
       const from = state.owners.get(raid.fromKingdomId);
       // A hidden or gone kingdom's raids grant nothing, including one tombstoned this very night.
       if (from === undefined || silenced.has(raid.fromKingdomId)) continue;
-      const target = channelById.get(raid.toKingdomId);
-      if (!target) {
-        if (!state.owners.has(raid.toKingdomId) && !granted.has(raid.toKingdomId)) unseen.add(raid.toKingdomId);
+      const target = channelById.get(raid.toKingdomId as KingdomId);
+      if (target) {
+        if (!eligible(target)) continue;
+        if (claimGrant({ kingdomId: target.kingdomId, language: target.language, categories: target.categories }, 'hamlet', 'raid')) byRaid++;
         continue;
       }
-      if (!eligible(target)) continue;
-      if (claimGrant({ kingdomId: target.kingdomId, language: target.language, categories: target.categories }, 'hamlet', 'raid')) byRaid++;
+      const id = raid.toKingdomId as KingdomId;
+      if (state.owners.has(id) || granted.has(id)) continue;
+      const arrival = input.arrivals?.get(id);
+      if (!arrival) {
+        unseen.add(id);
+        continue;
+      }
+      // The one visibility gate, on the facts Twitch gave: withheld and gambling channels are never granted land.
+      if (publicVisibility({ kingdomId: id, categories: arrival.categories, goneAt: null, stream: null }, input.withheld) !== 'public') continue;
+      if (claimGrant({ kingdomId: id, language: arrival.language, categories: arrival.categories }, 'hamlet', 'raid')) {
+        byRaid++;
+        byRaidArrival++;
+      }
     }
   }
 
   events.push({ kind: 'night', revision, asOf: manifest.asOf, settled, byRaid, outer, tombstones, restores, deferred });
-  return { events, summary: { settled, byRaid, byClaim, outer, tombstones, restores, deferred, unseenRaidTargets: unseen.size } };
+  return { events, summary: { settled, byRaid, byClaim, outer, tombstones, restores, deferred, byRaidArrival, unseenRaidTargets: unseen.size } };
 }
 
 /**

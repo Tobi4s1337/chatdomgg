@@ -16,7 +16,10 @@ import { editionContext, hideWithheld, settleNight, type NightResult } from './s
 import { acknowledgeHead, appendFoundingLog, appendSettlement, listEditions, readEditionFiles, writeNewEdition } from './store';
 import { currentNamesText, namesRefOf } from '../cartography/names-ref';
 import { readClaims, witnessedRoadRaids } from './claims';
-import { buildEditionPublication, editionAddress, ledgerPrefix, readPublished, writePublication } from './publish';
+import { appendArrivals, arrivalsToCheck, checkArrivals, foundArrivals, readArrivals, type ArrivalCheck, type RaidRef } from './arrivals';
+import type { AtlasRaid } from '@chatdom/shared';
+import type { TwitchLookup } from '../directory/twitch-lookup';
+import { buildEditionPublication, editionAddress, ledgerPrefix, readPublished, writePublication, type ArrivedName } from './publish';
 import { previewDir, verifyPreviewDir } from '../preview/store';
 import { verifyEdition, type EditionFiles, type EditionReport } from './verify';
 
@@ -145,7 +148,7 @@ export function prepareFounding(dataDir: string, number: EditionNumber, now: num
 
 export type SettleResult =
   | { outcome: 'no-edition' }
-  | { outcome: 'settled'; edition: string; revision: string; summary: NightResult['summary']; settlers: number; publication: string }
+  | { outcome: 'settled'; edition: string; revision: string; summary: NightResult['summary']; settlers: number; publication: string; arrivals?: ArrivalCheck['summary'] }
   | { outcome: 'moderated'; edition: string; revision: string; hidden: number; settlers: number; publication: string }
   | { outcome: 'up-to-date'; edition: string; revision: string; publication: string };
 
@@ -155,17 +158,18 @@ function readVerifiedEdition(dataDir: string, id: string, key: ReturnType<typeof
   return { files, report: verifyEdition(files, key, { allowRehearsal }) };
 }
 
-/**
- * One cartography run into the newest founded edition, after verifying that edition completely. The withheld list
- * is read on every run, before anything else is decided: a newer revision settles a whole night (newcomers, claims,
- * witnessed raids); without one, newly withheld holdings still get their hidden tombstones now rather than at the
- * next survey. Every append is verified as the edition it would produce before the ledger is replaced, and every run
- * ends with the map's publication of the head it leaves.
- */
-export function runSettle(dataDir: string, founderKeyPem: string | null, now: number, options: { revision?: string | undefined; allowRehearsal?: boolean } = {}): SettleResult {
+/** Everything one settle run decides from, read and verified once under the data directory's lock. */
+type SettleLoad =
+  | { done: SettleResult }
+  | {
+    done: null; id: string; key: ReturnType<typeof keyFrom>; allowRehearsal: boolean; files: EditionFiles; report: EditionReport;
+    withheld: ReadonlySet<string>; revision: string; manifest: SnapshotManifest; records: RevisionRecords; roadRaids: AtlasRaid[];
+  };
+
+function loadSettle(dataDir: string, founderKeyPem: string | null, now: number, options: { revision?: string | undefined; allowRehearsal?: boolean }): SettleLoad {
   const editions = listEditions(dataDir);
   const id = editions[editions.length - 1];
-  if (!id) return { outcome: 'no-edition' };
+  if (!id) return { done: { outcome: 'no-edition' } };
   const allowRehearsal = options.allowRehearsal ?? rehearsalAllowed();
   const key = keyFrom(founderKeyPem);
   let { files, report } = readVerifiedEdition(dataDir, id, key, allowRehearsal);
@@ -182,24 +186,79 @@ export function runSettle(dataDir: string, founderKeyPem: string | null, now: nu
   const state = report.state;
   if (state.lastNight && manifest.asOf <= state.lastNight.asOf) {
     const hidden = hideWithheld(state, withheld.ids, state.lastNight.revision, now);
-    if (!hidden.length) return { outcome: 'up-to-date', edition: id, revision, publication: publishEdition(dataDir, id, key, allowRehearsal).id };
+    if (!hidden.length) return { done: { outcome: 'up-to-date', edition: id, revision, publication: publishEdition(dataDir, id, key, allowRehearsal).id } };
     const { text, next } = extendLedger(state, hidden);
     appendSettlement(dataDir, id, { files, text, next, revision: state.lastNight.revision, now }, key, { allowRehearsal });
     return {
-      outcome: 'moderated', edition: id, revision: state.lastNight.revision, hidden: hidden.length, settlers: next.settlers.length,
-      publication: publishEdition(dataDir, id, key, allowRehearsal).id,
+      done: {
+        outcome: 'moderated', edition: id, revision: state.lastNight.revision, hidden: hidden.length, settlers: next.settlers.length,
+        publication: publishEdition(dataDir, id, key, allowRehearsal).id,
+      },
     };
   }
-  const ctx = editionContext(report.world, loadTaxonomy(files.taxonomyText));
+  const roadRaids = witnessedRoadRaids(dataDir, report.world.asOf, Math.max(now, manifest.asOf));
+  return { done: null, id, key, allowRehearsal, files, report, withheld: withheld.ids, revision, manifest, records, roadRaids };
+}
+
+function finishSettle(dataDir: string, load: Exclude<SettleLoad, { done: SettleResult }>, now: number, arrivals?: ArrivalCheck['summary']): SettleResult {
+  const { id, key, allowRehearsal, files, report, manifest, records, revision } = load;
+  const state = report.state!;
+  const since = state.lastNight?.asOf ?? 0;
+  const ctx = editionContext(report.world!, loadTaxonomy(files.taxonomyText));
   const night = settleNight({
     number: id === 'ed-0' ? '0' : 'I', ctx, state, manifest,
-    channels: records.channels, raidPairs: records.raidPairs, raidObservations: records.raidObservations, withheld: withheld.ids,
+    channels: records.channels, raidPairs: records.raidPairs, raidObservations: records.raidObservations, withheld: load.withheld,
     claims: readClaims(dataDir),
-    roadRaids: witnessedRoadRaids(dataDir, state.lastNight?.asOf ?? 0, Math.max(now, manifest.asOf)),
+    roadRaids: load.roadRaids.filter((raid) => raid.observedAt > since),
+    arrivals: foundArrivals(readArrivals(dataDir), manifest.asOf),
   });
   const { text, next } = extendLedger(state, night.events);
   appendSettlement(dataDir, id, { files, text, next, revision, now }, key, { allowRehearsal });
-  return { outcome: 'settled', edition: id, revision, summary: night.summary, settlers: next.settlers.length, publication: publishEdition(dataDir, id, key, allowRehearsal).id };
+  return {
+    outcome: 'settled', edition: id, revision, summary: night.summary, settlers: next.settlers.length,
+    publication: publishEdition(dataDir, id, key, allowRehearsal).id, ...(arrivals ? { arrivals } : {}),
+  };
+}
+
+/**
+ * One cartography run into the newest founded edition, after verifying that edition completely. The withheld list
+ * is read on every run, before anything else is decided: a newer revision settles a whole night (newcomers, claims,
+ * witnessed raids); without one, newly withheld holdings still get their hidden tombstones now rather than at the
+ * next survey. Every append is verified as the edition it would produce before the ledger is replaced, and every run
+ * ends with the map's publication of the head it leaves. Raided channels the survey never saw are granted only on
+ * answers already in the arrivals log; `settleWithArrivals` asks Twitch for the missing ones first.
+ */
+export function runSettle(dataDir: string, founderKeyPem: string | null, now: number, options: { revision?: string | undefined; allowRehearsal?: boolean } = {}): SettleResult {
+  const load = loadSettle(dataDir, founderKeyPem, now, options);
+  return load.done ?? finishSettle(dataDir, load, now);
+}
+
+/**
+ * The settle run imports and `atlas:settle` use: before a new night is settled, every raided channel the survey never
+ * saw is checked with Twitch through the service's public, budgeted lookup (`arrivalsToCheck`, `checkArrivals`), and
+ * the answers are fsynced to the arrivals log before the night reads them. Without credentials or budget the night
+ * still settles; those raids wait for the next one. The caller holds the data directory's lock.
+ */
+export async function settleWithArrivals(
+  dataDir: string, founderKeyPem: string | null, now: () => number, lookup: Pick<TwitchLookup, 'channels'> | null,
+  options: { revision?: string | undefined; allowRehearsal?: boolean; budgetMs?: number } = {},
+): Promise<SettleResult> {
+  const started = now();
+  const load = loadSettle(dataDir, founderKeyPem, started, options);
+  if (load.done) return load.done;
+  const state = load.report.state!;
+  const until = Math.max(load.manifest.source.database.openedAt, ...load.roadRaids.map((raid) => raid.observedAt));
+  const raids: RaidRef[] = [...load.records.raidObservations.map((observation) => observation.raid), ...load.roadRaids]
+    // Every raid of this edition the night's sources still hold: one whose check failed before is asked again.
+    .filter((raid) => raid.observedAt > load.report.world!.asOf && raid.observedAt <= until);
+  const wanted = arrivalsToCheck({ state, channels: load.records.channels, raids, arrivals: readArrivals(dataDir), withheld: load.withheld });
+  let summary: ArrivalCheck['summary'] = { asked: wanted.length, found: 0, absent: 0, unanswered: wanted.length, reason: wanted.length ? 'disabled' : null };
+  if (wanted.length && lookup?.channels) {
+    const checked = await checkArrivals(wanted, (ids) => lookup.channels!(ids), load.manifest.asOf, now, started + (options.budgetMs ?? 300_000));
+    appendArrivals(dataDir, checked.arrivals);
+    summary = checked.summary;
+  }
+  return finishSettle(dataDir, load, now(), summary);
 }
 
 /** One edition's publication at its current head: built from the verified files and the night's own revision. */
@@ -212,8 +271,28 @@ export function editionPublication(dataDir: string, id: string, key: ReturnType<
   const state = lines === undefined || lines === report.state.lines ? report.state : replayLedger(ledgerPrefix(files.ledgerText, lines), report.edition);
   if (!state.lastNight) throw new AtlasError('check', `${id} has no settled night to publish.`);
   const { manifest, records } = readVerifiedRevision(dataDir, state.lastNight.revision);
-  const publication = buildEditionPublication({ edition: report.edition, founding: files.founding, world: report.world, address, state, manifest, channels: records.channels });
+  const head = files.heads.find((entry) => entry.lines === state.lines && entry.head === state.head);
+  const arrived = arrivedNames(dataDir, head?.at ?? Number.POSITIVE_INFINITY);
+  const publication = buildEditionPublication({ edition: report.edition, founding: files.founding, world: report.world, address, state, manifest, channels: records.channels, arrived });
   return { publication, address, state, edition: report.edition, founding: files.founding };
+}
+
+/**
+ * Names for holdings whose channel the night's survey did not observe: a raided channel's arrival answer, else a
+ * claim's own Twitch lookup. Only answers recorded by the time the published head was acknowledged count, so a
+ * publication rebuilt later (atlas:check, adoption) is byte-identical however the logs have grown since.
+ */
+export function arrivedNames(dataDir: string, cutoff: number): Map<string, ArrivedName> {
+  const names = new Map<string, ArrivedName>();
+  for (const arrival of readArrivals(dataDir)) {
+    if (arrival.status !== 'found' || arrival.checkedAt > cutoff || names.has(arrival.kingdomId)) continue;
+    names.set(arrival.kingdomId, { login: arrival.login, name: arrival.name, factsAt: arrival.checkedAt });
+  }
+  for (const claim of readClaims(dataDir)) {
+    if (!claim.login || !claim.name || claim.receivedAt > cutoff || names.has(claim.kingdomId)) continue;
+    names.set(claim.kingdomId, { login: claim.login, name: claim.name, factsAt: claim.receivedAt });
+  }
+  return names;
 }
 
 /**
@@ -298,7 +377,7 @@ export function runRehearsal(dataDir: string, number: EditionNumber, now: number
     const before = state.settlers;
     const night = settleNight({
       number, ctx, state, manifest, channels: records.channels, raidPairs: records.raidPairs, raidObservations: records.raidObservations,
-      withheld: withheld.ids,
+      withheld: withheld.ids, arrivals: foundArrivals(readArrivals(dataDir), manifest.asOf),
     });
     const { text, next } = extendLedger(state, night.events);
     ledgerText += text;

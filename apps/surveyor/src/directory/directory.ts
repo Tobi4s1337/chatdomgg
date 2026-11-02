@@ -10,6 +10,7 @@ import { loadLiveTarget } from '../live/target';
 import type { AtlasAlignment } from '@chatdom/shared';
 import { isGamblingCategory, nameFreshUntil, publicVisibility } from '../policy/visibility';
 import { readManifest, revisionDir } from '../store/revisions';
+import { readPreviewNames } from '../preview/store';
 import { matchRank, queryKey, searchKey } from './normalize';
 import {
   CARD_ROADS, CardReplySchema, DIRECTORY_KIND, MAX_RESULTS, RoadReplySchema, SearchReplySchema,
@@ -30,9 +31,15 @@ interface Entry {
   factsAt: number;
   avatarUrl: string | null;
   avatarFactsAt: number | null;
-  firstSeenAt: number;
-  lastLiveAt: number;
+  firstSeenAt: number | null;
+  lastLiveAt: number | null;
+  /** Observed average audience; 0 (and `surveyed` false) for a holding the revision never observed. */
   average: number;
+  /**
+   * False for an edition holding whose channel this night's survey never saw (a raided or claimed stream under the
+   * sweep's floor): it is named from the publication and has land, but no observed facts.
+   */
+  surveyed: boolean;
   language: string;
   live: boolean;
   stream: ChannelObservation['stream'];
@@ -176,13 +183,13 @@ export class Directory {
   facts(id: string): ChannelFacts {
     const entry = this.byId.get(id);
     if (!entry) return { average: null, region: null, realm: null, ordinal: null, language: null };
-    return { average: entry.average, region: entry.region, realm: entry.realm, ordinal: entry.ordinal >= 0 ? entry.ordinal : null, language: entry.language };
+    return { average: entry.surveyed ? entry.average : null, region: entry.region, realm: entry.realm, ordinal: entry.ordinal >= 0 ? entry.ordinal : null, language: entry.language };
   }
 
   /** The last stream the survey saw, while it is still fresh (a day after the channel was last live), else null. */
   stream(id: string, now: number): { live: boolean; game: string | null; viewers: number | null } | null {
     const entry = this.byId.get(id);
-    if (!entry?.stream || nameFreshUntil(entry.lastLiveAt) <= now) return null;
+    if (!entry?.stream || entry.lastLiveAt === null || nameFreshUntil(entry.lastLiveAt) <= now) return null;
     return { live: entry.live, game: entry.stream.game, viewers: entry.stream.viewers };
   }
 
@@ -312,7 +319,7 @@ export class Directory {
       ...this.reply(now),
       kind: `${DIRECTORY_KIND}-search`,
       key: query.key,
-      results: chosen.map((entry) => ({ channel: this.face(entry.id, withheld, now)!, ...(portraits ? { portrait: this.portrait(entry, now) } : {}), average: entry.average, language: entry.language, ...(positions ? { position: this.pencilPosition(entry) } : {}) })),
+      results: chosen.map((entry) => ({ channel: this.face(entry.id, withheld, now)!, ...(portraits ? { portrait: this.portrait(entry, now) } : {}), average: entry.surveyed ? entry.average : null, language: entry.language, ...(positions ? { position: this.pencilPosition(entry) } : {}) })),
       more: matched > chosen.length,
     });
   }
@@ -349,14 +356,14 @@ export class Directory {
     }
     // Strongest: most raids either way, then most travellers, then the latest, then channel ID.
     roads.sort((a, b) => (b.sent + b.received) - (a.sent + a.received) || b.travellers - a.travellers || b.lastAt - a.lastAt || compareId(a.other.id, b.other.id));
-    const streamFresh = entry.stream && nameFreshUntil(entry.lastLiveAt) > now;
+    const streamFresh = entry.stream && entry.lastLiveAt !== null && nameFreshUntil(entry.lastLiveAt) > now;
     return CardReplySchema.parse({
       ...this.reply(now),
       kind: `${DIRECTORY_KIND}-card`,
       channel,
       ...(portraits ? { portrait: this.portrait(entry, now) } : {}),
       ...(positions ? { position: this.pencilPosition(entry) } : {}),
-      average: entry.average,
+      average: entry.surveyed ? entry.average : null,
       language: entry.language,
       firstSeenAt: entry.firstSeenAt,
       lastLiveAt: entry.lastLiveAt,
@@ -456,6 +463,7 @@ export async function loadDirectory(dataDir: string, previewId: string): Promise
       firstSeenAt: channel.firstSeenAt,
       lastLiveAt: channel.lastLiveAt,
       average: Math.round(channel.averageViewers),
+      surveyed: true,
       language: channel.language,
       live: channel.live,
       stream: channel.stream,
@@ -471,6 +479,23 @@ export async function loadDirectory(dataDir: string, previewId: string): Promise
     const pair = JSON.parse(line) as { fromKingdomId: string; toKingdomId: string; raids: number; viewersTotal: number; lastAt: number };
     return { from: pair.fromKingdomId, to: pair.toKingdomId, tally: { raids: pair.raids, travellers: pair.viewersTotal, lastAt: pair.lastAt } };
   });
+  // Edition holdings this revision never observed (raided or claimed streams under the sweep's floor) are named by
+  // the publication from Twitch's answer for them: a search finds them on their land, never as waiting pencil.
+  if (target.world.status === 'edition') {
+    const names = readPreviewNames(dataDir, previewId);
+    const known = new Set(entries.map((entry) => entry.id));
+    names.ids.forEach((id, i) => {
+      const ordinal = target.ordinalOf.get(id) ?? -1;
+      if (ordinal < 0 || known.has(id) || blocked.has(id)) return;
+      const realm = target.realmOf[ordinal]!;
+      const region = realmRegions[realm] ?? 0;
+      entries.push({
+        id, login: names.logins[i]!, name: names.names[i]!, loginKey: searchKey(names.logins[i]!), nameKey: searchKey(names.names[i]!),
+        factsAt: names.factsAt[i]!, avatarUrl: null, avatarFactsAt: null, firstSeenAt: null, lastLiveAt: null, average: 0, surveyed: false,
+        language: target.world.regions[region]?.language ?? 'other', live: false, stream: null, ordinal, tier: target.tierRank[ordinal]!, realm, region,
+      });
+    });
+  }
   entries.sort((a, b) => b.average - a.average || compareId(a.id, b.id));
   const pencil = new PencilPlaces(target.world);
   const regions = new Map<number, PencilRegionPlaces>();

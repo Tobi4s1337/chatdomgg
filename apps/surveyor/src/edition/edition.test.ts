@@ -242,7 +242,7 @@ describe('nightly settlement is append-only', () => {
 
   it('grants each new public candidate one holding on a free lattice slot in its realm, with shore and gap', () => {
     const { result, chain } = one;
-    expect(result.summary).toEqual({ settled: 15, byRaid: 0, byClaim: 0, outer: 3, tombstones: 0, restores: 0, deferred: 0, unseenRaidTargets: 0 });
+    expect(result.summary).toEqual({ settled: 15, byRaid: 0, byClaim: 0, outer: 3, tombstones: 0, restores: 0, deferred: 0, byRaidArrival: 0, unseenRaidTargets: 0 });
     const granted = settles(result);
     expect(granted.map((event) => nOf(event.settler.kingdomId)).sort((a, b) => a - b)).toEqual([...Array.from({ length: 15 }, (_, k) => 1001 + k)]);
     const deRealm = realmOfLanguage(d0.world, 'de');
@@ -553,7 +553,7 @@ describe('when land runs out', () => {
     const ready: Chain = { ...chain, state: filled.next, text: chain.text + filled.text, heads: [...chain.heads, headOf(filled.next, rev1.manifest.revision)] };
     const { result, chain: after } = night(ready, crowd);
     // Two fr and one nl newcomer have nowhere to go; the de newcomer still settles at home.
-    expect(result.summary).toEqual({ settled: 1, byRaid: 0, byClaim: 0, outer: 0, tombstones: 0, restores: 0, deferred: 3, unseenRaidTargets: 0 });
+    expect(result.summary).toEqual({ settled: 1, byRaid: 0, byClaim: 0, outer: 0, tombstones: 0, restores: 0, deferred: 3, byRaidArrival: 0, unseenRaidTargets: 0 });
     expect(settles(result).map((event) => nOf(event.settler.kingdomId))).toEqual([3004]);
     expect(result.events.at(-1)).toMatchObject({ kind: 'night', settled: 1, deferred: 3 });
     for (const n of [3001, 3002, 3003]) expect(after.state.owners.has(synthId(n))).toBe(false);
@@ -769,7 +769,7 @@ describe('land by raid', () => {
   it('grants an observed small target a hamlet under Edition I, and counts an unseen one', () => {
     const rev = raidRevision(at(24), ASOF1, RAIDS);
     const { result, chain } = night(start(dI, 'I'), rev);
-    expect(result.summary).toEqual({ settled: 1, byRaid: 1, byClaim: 0, outer: 0, tombstones: 0, restores: 0, deferred: 0, unseenRaidTargets: 1 });
+    expect(result.summary).toEqual({ settled: 1, byRaid: 1, byClaim: 0, outer: 0, tombstones: 0, restores: 0, deferred: 0, byRaidArrival: 0, unseenRaidTargets: 1 });
     const [granted] = settles(result);
     expect(granted).toMatchObject({
       reason: 'raid', path: 'realm', revision: rev.manifest.revision,
