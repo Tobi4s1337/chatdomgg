@@ -1,5 +1,62 @@
 # Mouse look: the wild spin (2026-11-02)
 
+## Update, 20:40: the real cause on Tobias's machine
+
+The three fixes below were right but not enough. Tobias is on **Linux, Firefox 158 on X11** (dpr 1, 343 fps), not
+Windows. His mouse lab (https://stills.chatdom.io/mouselab/) recorded the locked stream: every real move ([1,0],
+[0,1]...) is followed by a fake event equal to the hidden cursor's offset from the re-centre point ([-978,105],
+[-977,106]...), drifting by exactly the real movement. Firefox is not really re-centring the OS cursor (likely
+XWayland), so the offset arrives as movement: the spin, and "up and down turns me sideways". Every plain, raw,
+guarded, per-frame and DPR mode spun; right-button drag worked; lab mode 8 (a warp-echo filter) worked "pretty well".
+
+What changed (`apps/web/src/walk/input/look.ts`):
+- **`createEchoFilter`**, ported from lab mode 8 and made safe for real flicks. An echo is predicted as the last
+  echo W plus the real movement since; an event within 3 counts + 2 % of that (both axes) is dropped, and so is a
+  large event within 40 of W (a missed event). Lab mode 8 dropped *every* event over 200 counts to learn W, which
+  would eat real fast flicks on Windows and Chrome. Here a large event with nothing learnt is only *held*: if a
+  second large event arrives equal to it plus the small real movement between them (a real move must sit between,
+  at most a quarter of its size), both were echoes and W is learnt; otherwise it is released whole, after the next
+  large event, three smaller ones or 12 ms (one 60 Hz frame), whichever comes first. A steady fast turn of equal
+  events never pairs up. W is forgotten after 1 s without an echo and on every lock change.
+- **Only in Firefox.** The filter runs where the user agent says Firefox (any OS); Chromium keeps the pure 1:1 sum
+  with no hold at all (`echoFilter` option to override, used by tests).
+- **Right-button look** (lab mode 6): holding the right button on the world turns 1:1 by movementX/Y with no
+  capture, the cursor visible and no context menu, whenever the mouse is not captured and no panel holds a lease.
+  It works in every browser, including a page that can never capture.
+- **Drift said once, calmly.** Six echoes in one capture set `drifting` (sticky for the page). The first lock lost
+  after that is reported as `onLetGo('drift')`: the play session does not open the ledger, the street shows "Click
+  to walk" with the line "Your browser lets the cursor drift. Hold the right mouse button to look, or run Firefox on
+  Wayland." The ledger shows the same line under "Back to the street". Later losses open the ledger as usual, and
+  Escape from the calm street still opens it.
+
+Tests (all green): `look.test.ts › the re-centre echo` runs Tobias's recorded 40-event sequence through the filter
+and through the captured mouse, and the turn is exactly the hand's (x 4, y -3), with all 21 fakes dropped; every
+Windows/Chrome flick (300-800 count ramps at 60 Hz and 1000 Hz, a steady fast turn of equal events, there and back)
+and every older flick trace keeps every count with the filter on; with no filter a flick arrives whole in its own
+frame; an old offset never eats a new real move after re-locking; drift and the calm first loss; a few stray echoes
+are not drift. `look.test.ts › right-button look`: 1:1 while held, no context menu, ends on release (also outside
+the window), never under a lease or a disabled walk, works where capture is unavailable. `mouse-look.test.ts`: an
+echoing 500 Hz mouse at 60, 144 and 343 Hz frames turns exactly by the hand and not a hair after.
+`session.test.ts`: the drift loss keeps the street the first time, Escape still opens the ledger, the next loss
+opens it. Stills: `work/evidence/play/mouse/hud-drift@1440x900.png`, `ledger-drift@1440x900.png` (SwiftShader,
+the dev bench; the line is HTML type, not light, so a real-GPU still adds nothing).
+
+Doubts: an echo offset under 200 counts (the hidden cursor near the centre when the lock began) is not learnt, as in
+the lab; if Tobias still feels a spin after clicking near the middle of the screen, that is the case to look at
+next. One real check in his Firefox remains (below, "Check on Tobias's machine").
+
+## Check on Tobias's machine (Linux, Firefox 158, X11)
+
+1. Hard-reload chatdom.io and walk. Click into the world once, near an edge and once near the middle.
+2. Move slowly left, right, up and down for 10 s, then flick. The view turns with the hand, up and down never turns
+   sideways, and it stops when the hand stops.
+3. If the lock breaks at the window edge: the street stays, the line about the right button shows, and holding the
+   right button looks around with the cursor visible.
+4. In the lab or the console, `document.pointerLockElement` while captured should be the canvas.
+
+## Before 20:40 (Windows assumptions)
+
+
 Tobias's report: on chatdom.io (Windows, RTX 5080, Firefox on a 360 Hz monitor, also Chrome), moving the mouse a
 little spins the camera wildly. He said it felt basic, "as if the pointer reaches the edge of the window".
 

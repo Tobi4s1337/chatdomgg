@@ -117,6 +117,7 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
     // A place view or another owner holding the camera holds the cursor too: never "click to walk" over it.
     state: (controller.touch ? 'touch' : controller.owner !== 'walking' && cursor.mode !== 'unavailable' ? 'leased' : cursor.mode) as CursorState,
     fullscreen: cursor.fullscreen, keyboardLocked: cursor.keyboardLocked, canFullscreen: cursor.canFullscreen, canLockKeyboard: cursor.canLockKeyboard,
+    ...(cursor.drifting ? { drifting: true } : {}),
   });
   let announced = '';
   const announce = () => {
@@ -174,7 +175,8 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
   const stopCursor = cursor.onChange(announce);
   // The person let the mouse go (the browser ate Escape, or focus left): the ledger opens, as a paused game would.
   // Seated at a game, Escape is the interaction owner's: it stands you up first, and the ledger waits for the next one.
-  const stopLetGo = cursor.onLetGo(() => { if (!disposed && !arriving && !topInput()) hud.openLedger(); });
+  // The first capture lost to a drifting cursor (Firefox on X11) is not a pause: the street stays, with one calm line.
+  const stopLetGo = cursor.onLetGo(why => { if (why !== 'drift' && !disposed && !arriving && !topInput()) hud.openLedger(); });
 
   const plain = (event: KeyLike) => !event.repeat && !event.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey && !isEditableTarget(event.target);
   // A seated game hears its keys first; Escape is never its own (the interaction owner stands you up with it).

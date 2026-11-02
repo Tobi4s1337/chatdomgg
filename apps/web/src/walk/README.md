@@ -139,8 +139,17 @@ for it.
   dropped (as in three.js PointerLockControls and any PC game). A neighbour-judging warp filter used to live here; it
   dropped one half of Firefox-on-Windows recentre pairs and spun the view (work/lanes/play/MOUSE-LOOK.md). Where `requestPointerLock` returns a promise, the promise alone answers that request: Chromium without raw
   input also fires `pointerlockerror` for the refused raw request, which must not end the ordinary retry.
+- **The re-centre echo (Firefox only).** Firefox on X11 does not really re-centre the hidden cursor and reports its
+  offset from the centre as movement after every real move. `createEchoFilter` predicts each echo (the last one
+  plus the real movement since) and drops only events that match it; the first echo is learnt by holding an event
+  over 200 counts for at most 12 ms (one 60 Hz frame) until its twin proves it. Real flicks are never lost, only a
+  large event's arrival may wait that one frame. Chromium has no filter at all. Six echoes in one capture set
+  `drifting`; the first lock lost after that is `onLetGo('drift')`, which keeps the street (no ledger) with one calm
+  line about the right-button look.
+- **Right-button look.** Holding the right button on the world turns the view 1:1 by movementX/Y without any capture
+  (cursor visible, no context menu), whenever the mouse is not captured and no panel holds a lease.
 - **Letting go.** The browser spends Escape on the lock and may never deliver the keydown. The lock's own
-  `pointerlockchange` is the signal: `onLetGo('browser')` fires, keys and sticks clear, and the play layer opens the
+  `pointerlockchange` is the signal: `onLetGo('browser')` (or `'drift'`, above) fires, keys and sticks clear, and the play layer opens the
   ledger. Blur and a hidden page release the same way.
 - **Fullscreen** (`F`, or the ledger) also takes the Keyboard Lock where the browser has it (Chromium), so Ctrl+W,
   Ctrl+T and Ctrl+N stay inside the game, Ctrl and Cmd shortcuts are swallowed except in a text field, Escape is
