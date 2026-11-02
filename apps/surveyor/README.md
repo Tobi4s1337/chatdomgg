@@ -41,6 +41,11 @@ database: one environment's locations never become application constants.
 | `ATLAS_INGEST_PORT`, `ATLAS_INGEST_HOST`, `ATLAS_INGEST_TOKEN` | Optional private listener (loopback by default) for road observations, claims and owner hide/show. |
 | `ATLAS_FOUNDER_PUBLIC_KEY` | The founder's Ed25519 public key (PEM text or a path to it). Without it no founding authorization can verify, so `found` refuses and `check` reports a founded edition as unverifiable. |
 
+Running it for chatdom.io: `scripts/atlas-live.sh seed | serve | wash | refresh | health [base]` (after a build) seeds a
+data directory read-only from another one, runs the service, the live producer and the 6-hourly import as restarting
+loops, and gates the switch on a health check that finds a channel outside the survey and never invents one. Defaults
+and steps: `work/lanes/atlas-map/SEAMS.md` "deploy:".
+
 ## What an import does
 
 1. `GET status` and `GET raids/recent`, validated with `SurveyorStatusSchema` / `SurveyorRecentRaidsSchema`.

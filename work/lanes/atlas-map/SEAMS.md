@@ -400,88 +400,50 @@ taskset -c 0-8 nice -n 10 pnpm install --frozen-lockfile --ignore-scripts
 taskset -c 0-8 nice -n 10 pnpm --filter @chatdom/surveyor build          # writes apps/surveyor/dist/atlas.mjs
 ```
 
-**2. Seed the data directory from a read-only copy of the live data (about 1 minute, then 30 s + 30 s + 15 s).**
+**2–4 run through one script**, `apps/surveyor/scripts/atlas-live.sh` in the built checkout. Its defaults are the
+table above (each can be overridden from the environment; `ATLAS_SEED_FROM` names the old data, which it only reads;
+`ATLAS_LOG_DIR` defaults to `ops/state`). It refuses to run without a build or before the data is seeded. All three
+loops and the health gate were rehearsed on this lane's copy on 2 Nov (127.0.0.2:5199): seed 2 min 22 s, the service
+restarted 10 s after it was ended and shut down cleanly on SIGTERM, health green.
+
+**2. Seed (about 2.5 minutes; safe to run again, it then copies nothing).** Copies the old service's current revision,
+its import ledger and the operator's withheld list read-only (the pointer last, so it never names a missing revision),
+draws this build's own preview from that revision (language names, codes-only artifacts; the old preview is not
+copied), runs `check` (fails the seed unless it ends "verified: …") and publishes the first live wash frame.
 
 ```sh
-OLD=/srv/chatdom/atlas/apps/surveyor/shots/atlas-data
-NEW=/srv/chatdom/data/atlas
-mkdir -p $NEW/revisions $NEW/ledger
-REV=$(node -p "require('$OLD/current.json').revision")
-nice -n 10 ionice -c3 cp -a $OLD/revisions/$REV $NEW/revisions/
-cp -a $OLD/ledger/imports.ndjson $NEW/ledger/
-[ -d $OLD/moderation ] && cp -a $OLD/moderation $NEW/        # the operator's withheld list, if there is one
-cp -a $OLD/current.json $NEW/current.json                    # last, so the pointer never names a missing revision
-cd /srv/chatdom/atlas-live/apps/surveyor
-export ATLAS_DATA_DIR=$NEW
-A='taskset -c 0-8 nice -n 10 node --disable-warning=ExperimentalWarning dist/atlas.mjs'
-$A preview           # draws this build's survey preview from the copied revision: "atlas:preview pv-… written"
-$A check             # must end with "verified: …" (no FAILED)
-SURVEYOR_DB_PATH=/srv/chatdom-atlas/data/surveyor.db $A live --once   # the first live wash frame: "… published lf-…"
+L=/srv/chatdom/atlas-live/apps/surveyor/scripts/atlas-live.sh
+$L seed
 ```
 
-The old preview is not copied: this build draws its own (language names, codes-only artifacts) from the same revision.
-
-**3. Run it: three loops, like `bin/public` and `bin/atlas-refresh` (logs in `ops/state/`).**
-
-`atlas-live` (the service; restarts 10 s after it exits):
+**3. Run it: three loops, each in its own window, like `bin/public` and `bin/atlas-refresh`.** Logs:
+`ops/state/atlas-live.log`, `atlas-live-wash.log`, `atlas-live-refresh.log`.
 
 ```sh
-cd /srv/chatdom/atlas-live/apps/surveyor
-while true; do
-  ATLAS_DATA_DIR=/srv/chatdom/data/atlas ATLAS_HOST=127.0.0.1 ATLAS_PORT=5200 \
-  ATLAS_TRUST_LOOPBACK_PROXY=1 ATLAS_LOOKUPS_PER_CLIENT_MINUTE=60 \
-  SURVEYOR_BASE_URL=http://172.17.0.1:3541/atlas/api/ SURVEYOR_DB_PATH=/srv/chatdom-atlas/data/surveyor.db \
-    taskset -c 0-8 nice -n 10 node --env-file=/root/.config/chatdom/atlas.env --disable-warning=ExperimentalWarning \
-    dist/atlas.mjs serve >> /srv/chatdom/ops/state/atlas-live.log 2>&1
-  echo "$(date '+%F %T') exit $?" >> /srv/chatdom/ops/state/atlas-live.log; sleep 10
-done
+tmux new-window -d -t chatdom -n atlas-live         "$L serve"     # the service on 127.0.0.1:5200, restarted 10 s after an exit
+tmux new-window -d -t chatdom -n atlas-live-wash    "$L wash"      # the live producer: wash, live cards, the finder's live check
+tmux new-window -d -t chatdom -n atlas-live-refresh "$L refresh"   # the 6-hourly import, same source and cadence as atlas-refresh
 ```
 
-`atlas-live-wash` (the live producer: the vermilion wash, live cards and the gate finder's live check; the old setup has
-none running, which is why chatdom.io's wash is from 30 Oct):
-
-```sh
-cd /srv/chatdom/atlas-live/apps/surveyor
-while true; do
-  ATLAS_DATA_DIR=/srv/chatdom/data/atlas SURVEYOR_DB_PATH=/srv/chatdom-atlas/data/surveyor.db ATLAS_LIVE_INTERVAL_MS=60000 \
-    taskset -c 0-8 nice -n 10 node --disable-warning=ExperimentalWarning dist/atlas.mjs live >> /srv/chatdom/ops/state/atlas-live-wash.log 2>&1
-  sleep 30
-done
-```
-
-`atlas-live-refresh` (the 6-hourly import, same source and cadence as `atlas-refresh`; the Twitch env file is for the
-nightly settlement once Edition I is founded, harmless before):
-
-```sh
-cd /srv/chatdom/atlas-live/apps/surveyor
-LOG=/srv/chatdom/ops/state/atlas-live-refresh.log
-while true; do
-  sleep $(( ${ATLAS_REFRESH_H:-6} * 3600 ))
-  echo "$(date '+%F %T') import" >> $LOG
-  ATLAS_DATA_DIR=/srv/chatdom/data/atlas SURVEYOR_BASE_URL=http://172.17.0.1:3541/atlas/api/ \
-  SURVEYOR_DB_PATH=/srv/chatdom-atlas/data/surveyor.db SURVEYOR_HTTP_TIMEOUT_MS=60000 \
-    timeout 1800 taskset -c 0-8 nice -n 10 node --env-file=/root/.config/chatdom/atlas.env \
-    --disable-warning=ExperimentalWarning dist/atlas.mjs import >> $LOG 2>&1
-  echo "$(date '+%F %T') exit $?" >> $LOG
-done
-```
+`serve` and `refresh` read the Twitch app credentials from `/root/.config/chatdom/atlas.env` with `node --env-file`
+(nothing else in that file is used); without the file the service still answers from the survey and says plainly that a
+name is not on the map yet. The old setup runs no live producer, which is why chatdom.io's wash dates from 30 Oct.
 
 An import takes its own lock and never the service's road ledger, so it runs beside the service; the service notices the
 new `current.json` and reads the new register within 30 s, before anyone has to wait for it. Two import loops read the
 collector: once the new service has served a day, stopping `atlas-refresh` halves that load (the old service then keeps
 its last data as a frozen rollback).
 
-**4. Health check, before switching.** The service listens 10–20 s after start (it first recovers the road ledger
-from the recorder, about 100 MB on the first start) and reads the search register in about 20 s.
+**4. Health check, before switching.** The service listens 10–20 s after start (it first recovers the road ledger from
+the recorder, about 100 MB on the first start) and reads the search register in about 15–20 s. The gate waits through
+that (up to `ATLAS_HEALTH_WAIT_S`, 120 s) and exits 0 only when health and preview answer, `tobi4s_` (a channel outside
+the survey) is found and pencilled, its card stands at the same place and holds no land, and a random made-up login is
+never invented:
 
 ```sh
-curl -fsS http://127.0.0.1:5200/map-data/v1/health                       # {"ok":true,"revision":"obs-…"}
-PV=$(curl -fsS http://127.0.0.1:5200/map-data/v1/preview | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).id')
-grep "register of $PV" /srv/chatdom/ops/state/atlas-live.log     # "…: 478748 named channels …"
-grep "roads connected" /srv/chatdom/ops/state/atlas-live.log
-curl -fsS "http://127.0.0.1:5200/map-data/v1/preview/$PV/search?q=tobi4s_&portraits=1&lookup=1" | grep -o '"id":"129634568"[^}]*'
-#   → "id":"129634568","login":"tobi4s_",…,"place":"waiting" (0.6 s the first time, 0.1 s cached)
-curl -fsS "http://127.0.0.1:5200/map-data/v1/preview/$PV/card/login/tobi4s_?portraits=1&lookup=1" | grep -o '"position":{[^}]*}'
+$L health                     # "healthy in …"; exit 1 with the failing line otherwise
+#   ok   tobi4s_ waiting at {"x":-11.2,"y":355.6}
+#   ok   card 200 in 5 ms at {"x":-11.2,"y":355.6}
 ```
 
 **5. Switch.** In `ops/bin/public`, set `export PUBLIC_MAP_TARGET=http://127.0.0.1:5200` and restart the window
@@ -490,8 +452,7 @@ code change: its allowlist already admits every route the search and the card re
 `apps/surveyor/src/directory/public-gateway.test.ts`). Then:
 
 ```sh
-PV=$(curl -fsS https://chatdom.io/map-data/v1/preview | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).id')
-curl -fsS "https://chatdom.io/map-data/v1/preview/$PV/search?q=tobi4s_&portraits=1&lookup=1" | grep -c '"login":"tobi4s_"'   # 1
+$L health https://chatdom.io   # the same gate through the public gateway: exit 0 (today it fails "tobi4s_ not found")
 cd /srv/chatdom/atlas-map
 ATLAS_CHECK_URL=https://chatdom.io ATLAS_CHECK_NAME=chatdomio node apps/web/src/atlas/checks/deploy-shots.mjs
 #   stills work/evidence/atlas-map/am14-chatdomio-card-{1440,390}.png, timings in am14-chatdomio.json (exit 0 = found and placed)
