@@ -1,3 +1,33 @@
+# PW10 checkpoint — 2 November 2026, the window opens into the arch
+
+PW10 stays unticked. This checkpoint answers the follow-up "smooth the first transition from the smaller drawn window to the larger arch, and capture a crop-to-crop transition".
+
+## What was below the bar
+
+When the first painting showing the viewer's window arrived, the 72 × 100 drawn window was swapped for a 112 × 148 arch in one frame. The mullions vanished, and on the panel size the words under it dropped about 24 px. The crop-to-crop change had never been seen, because only one painting marked the window.
+
+## Implemented
+
+- One frame for every You state (`.cw-window` in `Panel.tsx`). The drawn panes are a layer inside it, and the painting button sits inside the same frame. When a painting first shows the window lit, the frame grows to the arch (0.9 s, ease-out). The panes give way to lit glass (0.6 s after 0.25 s), the inner vignette comes in, and the painting clears out of the glass after 0.7 s with the ring last (1.9 s delay). Each later painting still rises over the last crop at once. A You tab that mounts already open (opened later, or a reload) moves nothing. Under reduced motion every step is instant.
+- While lit, the view keeps the open arch's height on the panel size, so the words under the window stay put when it opens. The phone layout already gave the window its own flexible space.
+- The focus ring moved to the frame (`:has(:focus-visible)`), because the button now fills the clipped frame.
+- `pw10-capture.mjs` (`--only tap,arch`): two more panels for the tapping viewer wait on the You tab, one at each size. Their animations run at a twentieth of their speed through the DevTools animation clock. They watch painting 02 open the window, then a neighbour (`PANEL_NEIGHBOUR_LOGIN`, default twitchrivals) takes their place from their own panel. Painting 03 is made with both windows lit, and the watchers see the crop move. Each still records the measured frame size, pane, painting and ring opacity. Record writes now take turns, because two watching pages once wrote `capture.json` at the same moment.
+
+## Verified
+
+- 108 panel vitest pass. tsc shows no `apps/panel` errors, and eslint is clean on the touched files.
+- Lane stack, SwiftShader, because the GPU tunnel was down all session (`chatdom-pc status`: not connected). The taps lit in 1582, 1444 and 1447 ms at 318×496 and in 897 ms at 390×844, each confirmed by the realm.
+- Opening (run 3, `arch-live/open-1..5`, `sheet-open-*`): frame 103×137 with panes at 0.94, then 111×147 with panes at 0.07, then 112×148 glass with the painting at 0.09, then the painting at 0.62, then settled with the ring. At 390 the frame went 141×187, 149×197, then 150×198. I looked at both sheets. The words do not move.
+- Crop-to-crop (run 1, `arch-live/move-1..3`, `sheet-move-*`, same panel code): painting 03 (2 lit, windows `11:…` and the neighbour) reframed, so the house shifts left in the arch. Mid-way 0.62/0.61 over the last crop, then settled with the ring on the window. I looked at both sheets.
+- `lit-you` and `lit-you-painted` were reshot at both sizes, and lit You is still 11 words. On the phone, `lit-you` caught the open arch at its glass stage, because painting 03 already marked the window when that tap landed. That is a real in-between moment.
+- The zip still fails only on the two shared simulation strings.
+
+## Doubts
+
+- Run 2 died on the concurrent record write (now fixed). Run 3's painting 03 hit a SwiftShader page loss under host load, so its crop-to-crop frames come from run 1.
+- Mid-way through the crop-to-crop dissolve, the two crops ghost softly. Judge on a real GPU whether 1.8 s is the right pace.
+- While the frame grows, the panes stretch with it. In the first frame, the pane layer's inner brass line shows a hair inside the frame's own.
+
 # PW10 checkpoint — 2 November 2026, the window on the You tab dissolves
 
 PW10 is still unticked. Main is still at `0e92df4`, and the Passport provenance seal is still in place on front-door and on the integrator, so the zip fails only on those shared strings, as before. The GPU tunnel was down all session (`chatdom-pc status` exit 3).

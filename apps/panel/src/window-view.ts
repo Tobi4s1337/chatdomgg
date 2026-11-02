@@ -5,7 +5,7 @@
  * never shows past the painting.
  */
 
-/** Arch height over arch width; `.cw-window-view` uses the same ratio. */
+/** Arch height over arch width; the open `.cw-window` frame uses the same ratio (112 × 148, 150 × 198). */
 export const WINDOW_VIEW_ASPECT = 1.32;
 /** Painting width over arch width. A 640 px painting in a 112 to 150 px arch is drawn at about its own pixel size. */
 export const WINDOW_VIEW_ZOOM = 4.2;

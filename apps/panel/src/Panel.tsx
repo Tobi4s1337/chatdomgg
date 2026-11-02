@@ -203,14 +203,19 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
           </Match>
           <Match when={tab() === 'you'}>
             <section class="cw-you">
-              <div class="cw-you-view">
-              <Show when={windowView()} fallback={<div class="cw-window" classList={{ lit: snap().light.kind === 'lit' }} aria-hidden="true"><span /><span /><span /><span /></div>}>{view =>
-                <button type="button" class="cw-window-view" classList={{ settling: windowFade.settling() }} aria-label={`Your lit window in the painting from ${view().time}. Show the kingdom`} onClick={() => openTab('kingdom')}>
-                  <Show when={windowFade.under()}>{old => <img class="cw-window-view-under" src={old().url} alt="" aria-hidden="true" draggable={false} style={cropStyle(old().crop)} />}</Show>
-                  <img class="cw-window-view-image" src={view().url} alt="" draggable={false} style={cropStyle(view().crop)} onError={() => setFailed(true)}
-                    onLoad={windowFade.reveal} onTransitionEnd={windowFade.settled} />
-                  <span class="cw-window-view-ring" style={{ left: `${view().crop.ring.x * 100}%`, top: `${view().crop.ring.y * 100}%` }} />
-                </button>}</Show>
+              <div class="cw-you-view" classList={{ lit: snap().light.kind === 'lit' }}>
+              {/* One frame for every state. Once a painting shows the viewer's window lit, the drawn window opens into
+                  the arch: the frame grows, its panes give way to lit glass and the painting clears out of the glass. */}
+              <div class="cw-window" classList={{ lit: snap().light.kind === 'lit', open: windowView() !== null }}>
+                <span class="cw-window-panes" aria-hidden="true"><span /><span /><span /><span /></span>
+                <Show when={windowView()}>{view =>
+                  <button type="button" class="cw-window-view" classList={{ settling: windowFade.settling(), first: windowFade.under() === null }} aria-label={`Your lit window in the painting from ${view().time}. Show the kingdom`} onClick={() => openTab('kingdom')}>
+                    <Show when={windowFade.under()}>{old => <img class="cw-window-view-under" src={old().url} alt="" aria-hidden="true" draggable={false} style={cropStyle(old().crop)} />}</Show>
+                    <img class="cw-window-view-image" src={view().url} alt="" draggable={false} style={cropStyle(view().crop)} onError={() => setFailed(true)}
+                      onLoad={windowFade.reveal} onTransitionEnd={windowFade.settled} />
+                    <span class="cw-window-view-ring" style={{ left: `${view().crop.ring.x * 100}%`, top: `${view().crop.ring.y * 100}%` }} />
+                  </button>}</Show>
+              </div>
               </div>
               <div class="cw-you-act">
               <Show when={canPlace()} fallback={<p class="cw-status" role="status">{lightWords() ?? 'Your place is waiting'}</p>}><button class="cw-primary" onClick={place}>Take your place</button></Show>

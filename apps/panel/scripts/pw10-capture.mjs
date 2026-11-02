@@ -131,7 +131,14 @@ async function launch() {
 // while queued for the lock) keeps what it proved. An entry replaces the earlier one with the same still, painting or tap.
 const record = [];
 const key = entry => entry.file ?? (entry.painting ? `painting:${entry.painting}` : `tap:${entry.tap}`);
-async function remember(entry) {
+// Entries come from pages watched side by side, so writes take turns: one reading a half-written file would lose the record.
+let remembering = Promise.resolve();
+function remember(entry) {
+  const turn = remembering.then(() => rememberNow(entry));
+  remembering = turn.catch(() => {});
+  return turn;
+}
+async function rememberNow(entry) {
   record.push(entry);
   const path = join(evidence, 'capture.json');
   const earlier = await readFile(path, 'utf8').then(text => JSON.parse(text), () => null);
@@ -179,6 +186,53 @@ async function shot(page, name, note = '') {
 }
 const wanted = name => !only || only.has(name);
 
+// The You tab's window while a new painting reaches an open panel: the drawn window opening into the arch, and later a
+// crop of one painting rising out of the crop of the last. The watching pages run their animations at a twentieth of
+// their speed, so each still lands near its moment; what the frame actually showed (its width, the panes, both paintings and
+// the ring) is measured from the page and kept in the record beside the still.
+const ARCH = join(evidence, 'arch-live');
+const WATCH_RATE = 0.05;
+async function slowWatch(page) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Animation.enable');
+  await cdp.send('Animation.setPlaybackRate', { playbackRate: WATCH_RATE });
+  return async () => { await cdp.send('Animation.setPlaybackRate', { playbackRate: 1 }).catch(() => {}); await cdp.detach().catch(() => {}); };
+}
+const archState = page => page.evaluate(() => {
+  const frame = document.querySelector('.cw-you-view .cw-window');
+  const style = element => element ? window.getComputedStyle(element) : null;
+  const image = document.querySelector('.cw-window-view-image'), under = document.querySelector('.cw-window-view-under');
+  const round = value => Math.round(Number(value) * 100) / 100;
+  return { frame: frame ? `${Math.round(frame.getBoundingClientRect().width)}x${Math.round(frame.getBoundingClientRect().height)}` : null,
+    open: frame?.classList.contains('open') ?? false, panes: round(style(frame?.querySelector('.cw-window-panes'))?.opacity ?? 0),
+    painting: image ? round(style(image).opacity) : null, paintingCrop: image?.style.transform ?? null,
+    under: under ? under.style.transform : null, ring: round(style(document.querySelector('.cw-window-view-ring'))?.opacity ?? 0) };
+});
+async function archFrame(page, name, note) {
+  const { width, height } = page.viewportSize();
+  const file = `arch-live/${name}@${width}x${height}.png`;
+  await page.screenshot({ path: join(evidence, file) });
+  const state = await archState(page);
+  await remember({ file, note, at: new Date().toISOString(), ...state });
+  console.info(`${file}: frame ${state.frame}, panes ${state.panes}, painting ${state.painting}, ring ${state.ring}${state.under ? ', over the last crop' : ''}`);
+}
+/** Follows one watching page through a change it detects by itself: stills at the given moments (seconds of animation
+ * time after the change began), then the settled window at full speed. Start it before the painting is made: the page
+ * picks the painting up on its own poll, and a watch begun later would miss the start. */
+async function watchChange(watch, began, label, moments) {
+  await watch.page.waitForFunction(began, null, { timeout: 150_000, polling: 'raf' });
+  const start = Date.now();
+  for (const [index, [seconds, note]] of moments.entries()) {
+    const wait = start + seconds * 1_000 / WATCH_RATE - Date.now();
+    if (wait > 0) await delay(wait);
+    await archFrame(watch.page, `${label}-${index + 1}`, `${note} (about ${seconds} s into the change)`);
+  }
+  await watch.restore();
+  await watch.page.waitForFunction(() => !document.querySelector('.cw-window-view.settling, .cw-window-view-under'), null, { timeout: 15_000 }).catch(() => {});
+  await delay(3_200);
+  await archFrame(watch.page, `${label}-${moments.length + 1}`, 'settled, with the ring');
+}
+
 let secretDir, stack, success = false, lock = null, streamStarted = false;
 try {
   const [realmPort, stackPort] = choosePorts();
@@ -188,8 +242,9 @@ try {
   secretDir = await mkdtemp(join(tmpdir(), 'pw10-capture-'));
   const secretFile = join(secretDir, 'helper-secret');
   await writeFile(secretFile, env.TWITCH_EXTENSION_SECRET, { mode: 0o600 });
-  const [tapper, held, waiting] = await twitchIds([env.PANEL_TAP_LOGIN || 'twitchdev', env.PANEL_HELD_LOGIN || 'twitch', env.PANEL_UNFOUNDED_LOGIN || 'twitchgaming']);
-  if (new Set([tapper, held, waiting, kingdom]).size !== 4) throw new Error('The capture needs four distinct Twitch IDs.');
+  const [tapper, held, waiting, neighbour] = await twitchIds([env.PANEL_TAP_LOGIN || 'twitchdev', env.PANEL_HELD_LOGIN || 'twitch',
+    env.PANEL_UNFOUNDED_LOGIN || 'twitchgaming', env.PANEL_NEIGHBOUR_LOGIN || 'twitchrivals']);
+  if (new Set([tapper, held, waiting, neighbour, kingdom]).size !== 5) throw new Error('The capture needs five distinct Twitch IDs.');
   const vars = { ...env, REALM_PORT: String(realmPort), REALM_HOST: '127.0.0.1' };
   const realmLog = join(secretDir, 'realm.log');
   const realm = await start([join(root, 'apps/realm/dist/realm.mjs')], vars, realmLog);
@@ -272,14 +327,50 @@ try {
         // The next painting is made while this viewer is still here (the light burns only while they are present),
         // and this same open panel must show it at its next poll.
         await shot(tap.page, 'tap-kingdom-before', 'the panel still shows the painting from before the tap');
+        // Two more open panels for the same viewer wait on the You tab, one at each size, to see their drawn window
+        // open into the arch when this painting arrives, and later move to the next painting.
+        const watching = [];
+        if (wanted('arch')) {
+          await mkdir(ARCH, { recursive: true });
+          for (const [watchView, watchWidth, watchHeight] of SIZES) {
+            const watch = await openPanel(watchView, watchWidth, watchHeight, as('shared', tapper));
+            await tab(watch.page, 'You');
+            await watch.page.locator('.cw-you-view .cw-window.lit').waitFor({ timeout: 15_000 });
+            watching.push({ ...watch, restore: await slowWatch(watch.page) });
+          }
+        }
         const before = await tap.page.locator('img.cw-picture-image').getAttribute('src').catch(() => null);
         await waitFor(async () => (await realmKingdom()).lights >= 1, 'the lit window in the public frame');
+        const watchAll = (began, label, moments) => {
+          const all = Promise.all(watching.map(watch => watchChange(watch, began, label, moments)));
+          all.catch(() => {});
+          return all;
+        };
+        const opening = watching.length ? watchAll(() => document.querySelector('.cw-you-view .cw-window.open'), 'open', [
+          [.2, 'the frame growing'], [.5, 'the panes giving way to lit glass'], [1, 'lit glass in the open arch'], [1.7, 'the painting clearing out of the glass']]) : null;
         await painting('02-after');
         await tap.page.waitForFunction(previous => { const img = document.querySelector('img.cw-picture-image'); return img && img.getAttribute('src') !== previous && img.complete; }, before, { timeout: 30_000 });
         // The new painting dissolves in over the old one; one still mid-way, then the settled picture and its mark.
         await delay(700); await shot(tap.page, 'tap-kingdom-dissolve', 'the painting made after the tap rising out of the one before');
         await tap.page.waitForFunction(() => !document.querySelector('.cw-picture-under, .cw-picture.settling'), null, { timeout: 15_000 }).catch(() => {});
         await delay(2_200);
+        if (opening) {
+          await opening;
+          // A neighbour takes their place from their own panel, and the next painting is made with both windows lit.
+          // Every watching arch moves from its crop of the last painting to its crop of this one.
+          const next = await openPanel('panel', 318, 496, as('unshared', neighbour, { share: 'grant' }));
+          await tab(next.page, 'You');
+          await next.page.getByRole('button', { name: 'Take your place' }).click();
+          await next.page.getByText('Your window is lit').waitFor({ timeout: 15_000 });
+          await waitFor(async () => (await realmKingdom()).lights >= 2, 'both lit windows in the public frame');
+          for (const watch of watching) watch.restore = await slowWatch(watch.page);
+          const moving = watchAll(() => document.querySelector('.cw-window-view-under') || !document.querySelector('.cw-you-view .cw-window.open'), 'move', [
+            [.5, 'the next painting beginning to rise over the last crop'], [1, 'half way between the two crops']]);
+          await painting('03-neighbour');
+          await moving;
+          await next.close();
+          for (const watch of watching) await watch.close();
+        }
       }
       await shot(tap.page, 'lit-kingdom', view === 'panel' ? 'the painting made after the tap, shown by the same open panel' : '');
       await tap.page.getByRole('button', { name: 'Walk in ↗' }).click();
