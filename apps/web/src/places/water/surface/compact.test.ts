@@ -76,7 +76,7 @@ describe('compact native water', () => {
   });
 
   it('rejects incompatible or invalid quantization and never mutates caller arrays', () => {
-    const { ground, raster, data, levels } = fixture();
+    const { ground, raster, data, levels, floatGround } = fixture();
     if (ground.encoding !== 'quantized' || raster.encoding !== 'quantized') throw new Error('Fixture must be quantized');
     const beforeGround = data.slice(), beforeWater = levels.slice();
     for (const scale of [0, -1, NaN, Infinity]) expect(() => assertGround({ ...ground, scale })).toThrow();
@@ -84,7 +84,7 @@ describe('compact native water', () => {
     expect(() => assertRaster({ ...raster, scale: raster.scale * 2 }, ground)).toThrow();
     expect(() => assertRaster({ ...raster, offset: raster.offset + 1 }, ground)).toThrow();
     expect(() => assertRaster({ ...raster, dryGround: data.slice() }, ground)).toThrow();
-    expect(() => assertRaster(raster, { ...ground, data: Float32Array.from(data), encoding: undefined } as WaterGround)).toThrow();
+    expect(() => assertRaster(raster, floatGround)).toThrow();
     expect(data).toEqual(beforeGround); expect(levels).toEqual(beforeWater);
   });
 });

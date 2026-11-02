@@ -25,6 +25,18 @@ describe('receipt-bound baked land browser source', () => {
     expect(progress).toHaveBeenCalled(); source.dispose(); expect(source.stats.phase).toBe('disposed');
   });
 
+  it('accepts a binding the host already read, verifying it the same way and never fetching it again', async () => {
+    const fixture = await artifact(), bytes = utf8(canonicalSceneJson(fixture.binding));
+    const source = await openBakedLand({ expected, fetch: fixture.fetcher, cache: null, binding: bytes });
+    expect(fixture.requests).toHaveLength(2);
+    expect(source.stats.networkBytes).toBe(bytes.byteLength + fixture.binding.manifest.gzipBytes + fixture.metadata.surface.gzipBytes);
+    source.dispose();
+    const other = await artifact();
+    await expect(openBakedLand({ expected: { ...expected, recipeHash: 'f'.repeat(64) }, fetch: other.fetcher, cache: null, binding: bytes }))
+      .rejects.toThrow('current founded scene');
+    expect(other.requests).toHaveLength(0);
+  });
+
   it.each(['kingdomId', 'sceneHash', 'layoutRevision', 'collisionRevision', 'sourcePlanHash', 'recipeHash'] as const)(
     'rejects a binding with the wrong %s before fetching metadata', async field => {
       const fixture = await artifact();

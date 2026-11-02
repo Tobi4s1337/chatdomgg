@@ -20,6 +20,7 @@ import { createSimulatedPresence, createHeraldPresence } from './presence-feed';
 import { loadTerrain } from './terrain-client';
 import { grandRecipeFor } from './grand-land/recipes';
 import { foundedLandReceipt } from './grand-land/scene-receipt';
+import { probePublishedLand } from './grand-land/land-availability';
 import type { RealmFoundedManifest } from '@chatdom/shared/realm';
 import { createGrandOverview } from './grand-land/overview';
 import { overviewFrame } from './grand-land/overview-pose';
@@ -124,7 +125,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const generated=options.founded?.plan??options.potential?.plan??generateSettlementPlan({seed:options.seed,tier:options.tier,firstYear:options.firstYear??(options.tier==='hamlet'?2025:2022),year:options.year??2026});
   const layout=!options.founded&&!options.potential&&options.nativeStyle?{...generated,homes:generated.homes.map(h=>({...h,style:options.nativeStyle!}))}:generated;
   const grandRecipe=options.founded?grandRecipeFor(String(options.founded.kingdomId)):undefined;
-  const useGrandLand=!!grandRecipe;
+  // A recipe alone does not move a kingdom onto the grand floor: the realm must serve a land published for this
+  // exact receipt. Until it does (no land routes yet, a receipt not yet rebound after growth, offline) the kingdom
+  // keeps today's land, which its homes, doors and walk already stand on. The public grand view stays fail-closed.
+  const landReceipt=grandRecipe?await foundedLandReceipt(options.founded!,options.foundedReceipt):undefined;
+  const publishedLand=landReceipt?await probePublishedLand({kingdomId:String(options.founded!.kingdomId),receipt:landReceipt,...(options.signal?{signal:options.signal}:{})}):undefined;
+  const useGrandLand=!!grandRecipe&&(publishedLand?.kind==='published'||!!options.overview);
+  if(grandRecipe&&!useGrandLand&&publishedLand?.kind==='absent')canvas.dataset.hostedLand=JSON.stringify({phase:'absent',reason:publishedLand.reason,kingdomId:String(options.founded!.kingdomId)});
   let grandLand:HostedGrandLand|undefined;
   let overview:ReturnType<typeof createGrandOverview>|undefined,overviewView=options.initialView;
   const overviewOwnsLens=()=>!!overview&&!walkSelected&&!capturePose;
@@ -715,15 +722,16 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       return person&&!windowOccluded(nearBlockers,[camera.position.x,camera.position.y,camera.position.z],[person.x,person.y+1.95,person.z]);
     }));
     if(now-lastNames>80){const namedHomes=labels();options.onSpeech?.(crowd.speechLabels(camera,canvas.clientWidth,canvas.clientHeight,presentationMs,namedHomes,people?.heads));options.onMomentCaptions?.(moments?.captions()??[]);lastNames=now;}
-    if(loaded)sunShadows.updateSunDirection(grade.sunDirection);
     // Fixed evidence frames have no animation between seeks. Keep the public
     // feed/watchdog alive, but don't burn SwiftShader CPU redrawing identical
     // pixels while a capture waits on fonts, a field worker or the filesystem.
     const renderKey=[dockCameraDirected?now:0,poseRevision,overview?.revision??0,placeShot.revision,placeMounts.revision,kingdomLayers?.revision??0,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,grandLand?.revision??0,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
     // The stream curtain covers preparation. Keep the bounded land install/update pump running,
     // but do not redraw a hidden high-quality reflection/post stack for every installed region.
+    // The sun-shadow map is refreshed only for a frame that draws: every region attached during
+    // startup dirties it, and re-rendering the whole static shadow pass per install starved the pump.
     // The first loaded frame below still draws the full native view before announcing ready.
-    if((loaded||!useGrandLand)&&(!grandLand||grandLand.canPresent())&&((loaded&&(!fixedTime||!!walk))||renderKey!==lastRenderedKey)){renderPhase='drawing';renderStartedAt=performance.now();water.reflect({renderer,scene,camera,frame:++waterFrame,exclusions:atmosphere.reflectionExclusions});post.render(dt);if(!landPresentationDeferred||handoffAwaiter){grandLand?.markPresented();landPresentationDeferred=false;}renderCompletedAt=performance.now();if(handoffAwaiter){const complete=handoffAwaiter;handoffAwaiter=undefined;complete.resolve();}renderPhase='drawn';lastRenderedKey=renderKey;if(dockVisible){dockActs?.drawn();if(dockVisuals?.finished())dockActs?.finish();}}
+    if((loaded||!useGrandLand)&&(!grandLand||grandLand.canPresent())&&((loaded&&(!fixedTime||!!walk))||renderKey!==lastRenderedKey)){renderPhase='drawing';renderStartedAt=performance.now();if(loaded)sunShadows.updateSunDirection(grade.sunDirection);water.reflect({renderer,scene,camera,frame:++waterFrame,exclusions:atmosphere.reflectionExclusions});post.render(dt);if(!landPresentationDeferred||handoffAwaiter){grandLand?.markPresented();landPresentationDeferred=false;}renderCompletedAt=performance.now();if(handoffAwaiter){const complete=handoffAwaiter;handoffAwaiter=undefined;complete.resolve();}renderPhase='drawn';lastRenderedKey=renderKey;if(dockVisible){dockActs?.drawn();if(dockVisuals?.finished())dockActs?.finish();}}
     // The gate covers loading the place, not background light refinement. The
     // full scene and presence windows have drawn; independently scheduled light
     // workers may still be waking. Captures can wait on lightingReady separately.
@@ -763,7 +771,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   tasks.push(shore.prepare());
   if(useGrandLand){
     canvas.dataset.hostedLand=JSON.stringify({phase:'opening',kingdomId:String(options.founded!.kingdomId)});
-    tasks.push(foundedLandReceipt(options.founded!,options.foundedReceipt).then(receipt=>prepareHostedGrandLand({scene,camera,renderer,plan:layout,receipt,kingdomId:String(options.founded!.kingdomId),recipe:grandRecipe!,signal:abort.signal,
+    tasks.push(Promise.resolve(landReceipt!).then(receipt=>prepareHostedGrandLand({scene,camera,renderer,plan:layout,receipt,...(publishedLand?.kind==='published'?{binding:publishedLand.binding}:{}),kingdomId:String(options.founded!.kingdomId),recipe:grandRecipe!,signal:abort.signal,
       materialFactory:(palette,town)=>{const material=createHostedGrandMaterial(palette,ground,town);sunShadows.bindReceiver(material.material);return material;},
       register:mesh=>sunShadows.register(mesh),
       onProgress:fraction=>options.onProgress('Opening the wider kingdom',.7+.25*fraction),

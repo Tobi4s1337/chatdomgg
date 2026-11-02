@@ -34,6 +34,9 @@ export interface BakedLandOptions {
   /** Injection seams for isolated transport tests. Production uses same-origin fetch and CacheStorage. */
   readonly fetch?: typeof globalThis.fetch;
   readonly cache?: BakedCompressedCache | null;
+  /** The receipt binding's bytes when the host already read them to decide that this land is published.
+   * They are decoded and checked against `expected` exactly as a fetched binding is. */
+  readonly binding?: Uint8Array;
 }
 
 /** Read-only, receipt-bound artifact source. No generator, adoption or physical-authority path lives here.
@@ -119,10 +122,13 @@ export async function openBakedLand(options: BakedLandOptions): Promise<BakedLan
   }
   try {
     checkSignal(controller.signal);
-    const release = await gate.acquire(BAKED_BINDING_BYTES, controller.signal);
     let binding;
-    try { binding = decodeLandBinding(await response(base, BAKED_BINDING_BYTES, controller.signal, 'application/json'), expected); }
-    finally { release(); }
+    if (options.binding) { stats.networkBytes += options.binding.byteLength; binding = decodeLandBinding(options.binding, expected); }
+    else {
+      const release = await gate.acquire(BAKED_BINDING_BYTES, controller.signal);
+      try { binding = decodeLandBinding(await response(base, BAKED_BINDING_BYTES, controller.signal, 'application/json'), expected); }
+      finally { release(); }
+    }
     const metadata = await blob<BakedMetadata>(binding.manifest, controller.signal, { kind: 'metadata', expected });
     // Structured cloning out of a worker drops property descriptors, so restore metadata immutability.
     freezeMetadata(metadata);

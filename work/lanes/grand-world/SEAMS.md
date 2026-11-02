@@ -683,3 +683,25 @@ For the integrator: publish tobi4s_'s land from a **format 2 bake**, not the ear
 changes. A format 1 binding that already exists keeps working and is replaced only by deliberate republication.
 On his land, the format 2 store is 17.64 MB against 30.43 MB, and the recorded first views are 2.55 to 3.06 MB,
 all under the 4 MiB budget. Evidence: `work/evidence/grand-world/GW10-format-2.md`.
+
+## GW10 published-land probe: deploy-safe before publication — 2026-11-02
+
+This supersedes "Do not deploy this frontend checkpoint alone" above. Before a kingdom with a grand recipe chooses
+its floor, `scene.ts` asks the realm for its land through `probePublishedLand` (kingdom
+`grand-land/land-availability.ts`): `GET /api/realm/land/<kingdomId>/<sceneHash>` with a 6 s limit.
+
+- **200:** the grand floor. The answered bytes go to `openBakedLand({ binding })`, which verifies them exactly as a
+  fetched binding (identity, recipe, receipt) and fails closed. An oversized body throws.
+- **404, no answer, another status or offline:** today's land, unchanged. The canvas records
+  `dataset.hostedLand = {phase:'absent', reason:'unpublished'|'unanswered'|'unreachable', kingdomId}`.
+  A realm that does not mount the land routes hangs on them today; the timeout is what ends that.
+- **Abort** (the kingdom closing) propagates. **The public grand view** (`options.overview`) stays fail-closed: it
+  never falls back.
+
+needs (integrator, unchanged): publish a binding for every adopted receipt, including growth and Forge
+revisions (`publishFoundedLand`), and mount the land routes on the live realm (`REALM_LAND_DIRECTORY` plus the
+gateway allowlist line). Until then, tobi4s_ simply sees today's land. A receipt that grows without a rebound
+binding falls back the same way instead of stalling. It is no longer a deploy blocker.
+
+The probe adds up to 6 s to a load only when the realm hangs on the land route. A realm that answers 404 adds one
+round trip.

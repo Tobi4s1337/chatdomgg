@@ -67,6 +67,8 @@ export interface HostedGrandOptions {
   readonly kingdomId: string;
   readonly recipe: GrandLandRecipe;
   readonly receipt: RealmFoundedManifest;
+  /** The published receipt binding, already read by `probePublishedLand`; verified again by the baked source. */
+  readonly binding?: Uint8Array;
   readonly signal?: AbortSignal;
   /** `town` is the installed physical region in world metres (the native settlement frame). */
   readonly materialFactory: (palette: readonly GrandMaterial[], town: BakedMetadata['physicalRegion']) => HostedGrandMaterial;
@@ -176,7 +178,8 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
   try {
     source = await openBakedLand({ expected: { kingdomId: options.kingdomId,
       sceneHash: options.receipt.sceneHash, layoutRevision: options.receipt.layoutRevision,
-      collisionRevision: options.receipt.collisionRevision, sourcePlanHash, recipeHash }, signal: controller.signal });
+      collisionRevision: options.receipt.collisionRevision, sourcePlanHash, recipeHash }, signal: controller.signal,
+      ...(options.binding ? { binding: options.binding } : {}) });
     if (stopped) { source.dispose(); throw failed ?? new DOMException('The kingdom closed', 'AbortError'); }
     const { metadata, surface } = source;
     // Recipe identity survives growth; installed geometry still has its own revision-bound digest.
