@@ -173,7 +173,9 @@ export function createPostStack(renderer: THREE.WebGLRenderer, scene: THREE.Scen
   let cssWidth = Math.max(1, initialSize.x), cssHeight = Math.max(1, initialSize.y), requestedRatio = renderer.getPixelRatio();
   let width = 1, height = 1, exposure = renderer.toneMappingExposure;
   let composer: EffectComposer | undefined, depth: DepthPass | undefined, bloom: ScaledBloomPass | undefined;
-  let output: OutputPass | undefined;
+  let output: OutputPass | undefined, scenePass: RenderPass | undefined;
+  /** What the scene pass draws while the passes are warmed: nothing. */
+  const emptyScene = new THREE.Scene();
   const viewport = new THREE.Vector4(), scissor = new THREE.Vector4(), oldClear = new THREE.Color();
   const projected = new THREE.Vector3(), viewed = new THREE.Vector3();
   const uniforms = {
@@ -201,7 +203,8 @@ export function createPostStack(renderer: THREE.WebGLRenderer, scene: THREE.Scen
     bloom = new ScaledBloomPass(new THREE.Vector2(1, 1), .24, .18, 1.05);
     bloom.materialHighPassFilter.uniforms.smoothWidth!.value = .25;
     output = new OutputPass();
-    composer.addPass(new RenderPass(scene, camera));
+    scenePass = new RenderPass(scene, camera);
+    composer.addPass(scenePass);
     composer.addPass(depth);
     composer.addPass(bloom);
     composer.addPass(output);
@@ -237,6 +240,35 @@ export function createPostStack(renderer: THREE.WebGLRenderer, scene: THREE.Scen
     target.set(projected.x * .5 + .5, projected.y * .5 + .5, -viewed.z, Math.min(1, light.strength));
   }
 
+  function draw(deltaSeconds: number, onePixel: boolean): void {
+    if (disposed) return;
+    const target = renderer.getRenderTarget(), face = renderer.getActiveCubeFace(), mip = renderer.getActiveMipmapLevel();
+    const tone = renderer.toneMapping, colourSpace = renderer.outputColorSpace, oldExposure = renderer.toneMappingExposure;
+    const autoClear = renderer.autoClear, xr = renderer.xr.enabled, scissorTest = renderer.getScissorTest();
+    const clearAlpha = renderer.getClearAlpha(), autoReset = renderer.info.autoReset;
+    renderer.getViewport(viewport); renderer.getScissor(scissor); renderer.getClearColor(oldClear);
+    try {
+      renderer.xr.enabled = false; renderer.setScissorTest(false); renderer.autoClear = true;
+      // Only the screen pass follows the renderer's viewport; the passes' own targets keep theirs.
+      if (onePixel) renderer.setViewport(0, 0, 1, 1);
+      renderer.toneMapping = outputMapping; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMappingExposure = exposure;
+      // Count the complete composer frame, rather than only the last fullscreen triangle.
+      renderer.info.autoReset = false; renderer.info.reset();
+      camera.updateMatrixWorld();
+      uniforms.uProjectionInverse.value.copy(camera.projectionMatrixInverse);
+      uniforms.uCameraWorld.value.copy(camera.matrixWorld);
+      uniforms.uProjectionY.value = camera.projectionMatrix.elements[5]!;
+      if (composer) composer.render(Number.isFinite(deltaSeconds) ? Math.max(0, deltaSeconds) : 0);
+      else { renderer.setRenderTarget(null); renderer.render(scene, camera); }
+    } finally {
+      renderer.setRenderTarget(target, face, mip);
+      renderer.setViewport(viewport); renderer.setScissor(scissor); renderer.setScissorTest(scissorTest);
+      renderer.setClearColor(oldClear, clearAlpha); renderer.autoClear = autoClear; renderer.xr.enabled = xr;
+      renderer.toneMapping = tone; renderer.outputColorSpace = colourSpace; renderer.toneMappingExposure = oldExposure;
+      renderer.info.autoReset = autoReset;
+    }
+  }
+
   return {
     resize,
     setQuality(next: PostQuality): void { if (quality !== next) { quality = next; resize(cssWidth, cssHeight, requestedRatio); } },
@@ -251,32 +283,18 @@ export function createPostStack(renderer: THREE.WebGLRenderer, scene: THREE.Scen
       uniforms.uFocus.value = POST_QUALITY[quality].dof && frame.focusDistance != null && Number.isFinite(frame.focusDistance) && frame.focusDistance > camera.near && frame.focusDistance < 40 ? frame.focusDistance : 0;
       setLight(uniforms.uBeacon.value, frame.beacon); setLight(uniforms.uForge.value, frame.forge);
     },
-    render(deltaSeconds = 0): void {
-      if (disposed) return;
-      const target = renderer.getRenderTarget(), face = renderer.getActiveCubeFace(), mip = renderer.getActiveMipmapLevel();
-      const tone = renderer.toneMapping, colourSpace = renderer.outputColorSpace, oldExposure = renderer.toneMappingExposure;
-      const autoClear = renderer.autoClear, xr = renderer.xr.enabled, scissorTest = renderer.getScissorTest();
-      const clearAlpha = renderer.getClearAlpha(), autoReset = renderer.info.autoReset;
-      renderer.getViewport(viewport); renderer.getScissor(scissor); renderer.getClearColor(oldClear);
-      try {
-        renderer.xr.enabled = false; renderer.setScissorTest(false); renderer.autoClear = true;
-        renderer.toneMapping = outputMapping; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMappingExposure = exposure;
-        // Count the complete composer frame, rather than only the last fullscreen triangle.
-        renderer.info.autoReset = false; renderer.info.reset();
-        camera.updateMatrixWorld();
-        uniforms.uProjectionInverse.value.copy(camera.projectionMatrixInverse);
-        uniforms.uCameraWorld.value.copy(camera.matrixWorld);
-        uniforms.uProjectionY.value = camera.projectionMatrix.elements[5]!;
-        if (composer) composer.render(Number.isFinite(deltaSeconds) ? Math.max(0, deltaSeconds) : 0);
-        else { renderer.setRenderTarget(null); renderer.render(scene, camera); }
-      } finally {
-        renderer.setRenderTarget(target, face, mip);
-        renderer.setViewport(viewport); renderer.setScissor(scissor); renderer.setScissorTest(scissorTest);
-        renderer.setClearColor(oldClear, clearAlpha); renderer.autoClear = autoClear; renderer.xr.enabled = xr;
-        renderer.toneMapping = tone; renderer.outputColorSpace = colourSpace; renderer.toneMappingExposure = oldExposure;
-        renderer.info.autoReset = autoReset;
-      }
+    render(deltaSeconds = 0): void { draw(deltaSeconds, false); },
+    /**
+     * Draw the composer's own passes once, over an empty scene and onto one pixel of the canvas, so the driver has
+     * finished their programs (in the targets and formats they really draw into) before the first real frame.
+     */
+    warm(): void {
+      if (disposed || !composer || !scenePass) return;
+      scenePass.scene = emptyScene;
+      try { draw(0, true); } finally { scenePass.scene = scene; }
     },
+    /** The target the scene's main pass draws into, or null when it draws straight to the canvas. */
+    sceneTarget(): THREE.WebGLRenderTarget | null { return composer ? composer.readBuffer : null; },
     diagnostics() {
       let textureBytes = 0;
       if (composer && bloom) {

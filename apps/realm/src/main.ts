@@ -163,6 +163,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     authority: id => boot.services.kingdoms.get(id) ?? null, scene: id => boot.loader.current(id)?.scene ?? null,
     visible: () => pierVisible, where: pierWhere, pier })] });
   citizens.use(boot.allocation, boot.services);
+  land?.knowFounded(kingdomId => boot.allocation.currentLayout(kingdomId));
   // Forgotten people are left out before the raid-guest guard and settlement see them.
   const forgetGuard = new ForgetGuard(pool, origin);
   boot.ingress.moments.useSettler(forgetGuard.settler(raidGuests.guardSettler(citizens)));

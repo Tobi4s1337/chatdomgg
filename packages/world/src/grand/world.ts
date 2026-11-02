@@ -1,5 +1,5 @@
 import type { GenesisBiome, GenesisLandmark, GenesisTier } from '../genesis/contracts';
-import { hashString, mix32 } from './noise';
+import { hashString, mix32 } from './hash';
 import type { GrandCharacter, GrandLandSeed } from './types';
 
 /**

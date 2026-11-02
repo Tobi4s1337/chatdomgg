@@ -4,14 +4,14 @@ import { MATERIALS } from '@chatdom/content';
 import type { VoxelBlueprint } from '@chatdom/shared';
 import { executeVoxelJob } from '@chatdom/voxel';
 import { generateSettlementPlan, samplePublicGround, terrainHeight, type SettlementPlan, type XZ } from '@chatdom/world';
-import { foundedGroundAt } from '@chatdom/world/founded-collision';
+import { foundedGroundAt, sampleFoundedTerrain } from '@chatdom/world/founded-collision';
 import { frameSettlement, settlementWater } from '../../../../../../packages/world/src/grand/kingdom/frame';
 import { planTownWalls } from '../../../../../../packages/world/src/grand/kingdom/walls';
 import { createCastleContent } from '../../castle-content';
 import { polygonDistance, type GroundPiece } from '../../ground-dressing/plan';
 import { placeMarketContent, placeSettlementContent } from '../../settlement-content';
 import { TOWN_FORMS, TOWN_FORM_ROLES, townBlueprint, type TownForm } from './forms';
-import { planTownGround, townKeepOut, townRowAngle, TOWN_USE, TOWN_USE_LOOK, type TownGroundInput, type TownGroundPlan } from './plan';
+import { planTownGround, primeTownFloor, townKeepOut, townRowAngle, TOWN_USE, TOWN_USE_LOOK, type TownGroundInput, type TownGroundPlan } from './plan';
 
 const CELL = 0.125;
 const SLOW = 600_000;
@@ -210,6 +210,13 @@ describe('planTownGround', () => {
     checkPlan(plan, input, result);
   }, SLOW);
 
+  it('takes the floor the ground workers sampled and refuses one that does not fit', () => {
+    const floor = Float32Array.from(sampleFoundedTerrain(plan).heights as ArrayLike<number>), installed = plan.version === 2 && plan.landform.version === 1;
+    expect(primeTownFloor(plan, floor)).toBe(installed);
+    expect(primeTownFloor(plan, floor.subarray(1))).toBe(false);
+    expect(primeTownFloor(plan, null)).toBe(false);
+    expect(planTownGround(plan, input).mask.data).toEqual(result.mask.data);
+  }, SLOW);
   it('keeps clear of an existing dressing plan by half a metre', () => {
     const crop = all(result).find(p => formOf(p) === 'crop-wheat' || formOf(p) === 'crop-barley' || formOf(p) === 'crop-lavender')!;
     const blocker: GroundPiece = { id: 'existing', blueprint: townBlueprint('tall-grass'), position: [Math.floor(crop.position[0]) - 1, 0, Math.floor(crop.position[2]) - 1], yaw: 0 };

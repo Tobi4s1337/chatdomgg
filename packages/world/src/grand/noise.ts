@@ -2,18 +2,8 @@
  * Seeded noise for the grand land: 2D simplex (Gustavson's formulation), fBm, ridged multifractal
  * (Musgrave) and integer hashes. Pure functions over a permutation built from one seed.
  */
-export function hashString(text: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return h >>> 0;
-}
-
-export function mix32(value: number): number {
-  let x = value >>> 0;
-  x = Math.imul(x ^ (x >>> 16), 0x7feb352d);
-  x = Math.imul(x ^ (x >>> 15), 0x846ca68b);
-  return (x ^ (x >>> 16)) >>> 0;
-}
+import { hashString, mix32 } from './hash';
+export { hashString, mix32 };
 
 /** Hash of an integer cell, in [0, 1). */
 export function hash2(x: number, z: number, seed: number): number {

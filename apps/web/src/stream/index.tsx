@@ -3,7 +3,7 @@ import { openDurableChronicle } from '../chronicle/native-overlay';
 import { createDockConnection } from './dock-connection';
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
 import type { NameLabel, PlaceMounter } from '../kingdom/scene';
-import { createSceneMount, StreamRefusal, type KingdomScene, type StreamPhase } from './mount';
+import { createSceneMount, type KingdomScene, type StreamPhase } from './mount';
 import { browserSourcePath, parseStreamParams, safeAreaName, SAFE_PRESETS, type SafeArea, type StreamLayout, type StreamMood, type StreamSeam } from './params';
 import { createDirector, planNight, type DirectorCueSource, type DirectorState, type Shot } from './director';
 import { Corner, Crest, Flame, StreamDefs } from './fittings';
@@ -135,7 +135,7 @@ export default function StreamView(props: StreamViewProps = {}) {
     // inhabited town after loading leaves its warm ground light behind for a beat.
     settings: () => ({ ...(props.places ? { places: props.places } : {}), ...(dockFixture ? { dockFeed: dockFixture, simulatedDockSites: true, kingdomId: dockFixture.kingdomId } : {}), directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), islandOpening: params.opening && params.camera === 'hero' && seam() !== 'ending', hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: dockFixture ? 'simulated' : params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
     ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
-      if (!spectator) throw new StreamRefusal('Choose a founded kingdom to watch.');
+      if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
       if (location.pathname !== '/-/stream' && connection.manifest.origin !== 'live') {
         connection.dispose();
@@ -340,7 +340,7 @@ export default function StreamView(props: StreamViewProps = {}) {
       <Switch>
         <Match when={phase() === 'failed'}>
           <div class="stream-gate kingdom-gate">
-            <h2>{params.source === 'realm' && !params.kingdomId ? 'Choose a kingdom' : `${named() ? kingdomName() : 'The kingdom'} needs a moment`}</h2>
+            <h2>{params.source === 'realm' && !params.kingdomId ? 'Choose a kingdom' : `${kingdomName()} needs a moment`}</h2>
             <p>{mount.stats.lastFailure ?? 'The gate will open again shortly.'}</p>
             <Show when={params.source === 'realm' && !params.kingdomId} fallback={<button type="button" onClick={open}>Try again now</button>}>
               <a href="/map">Find a kingdom</a>

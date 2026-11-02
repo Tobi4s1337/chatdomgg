@@ -60,8 +60,10 @@ export function createKingdomReveal(kingdomId: string): KingdomReveal {
         x1: Math.min(surface.size, c.x1 + seat.band), z1: Math.min(surface.size, c.z1 + seat.band),
       });
       count = Math.floor(citizens);
-      stage = grandRevealStage(count);
       const seen = drawnStage.get(kingdomId);
+      // Land this tab has shown open stays open: a later scene that reports fewer citizens (a replayed or older
+      // receipt) never lays the mist back over it.
+      stage = Math.max(grandRevealStage(count), seen ?? -1);
       const lifting = seen !== undefined && seen < stage;
       const metres = surface.size * M;
       // Settlement metres + seat offset = land metres.
