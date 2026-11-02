@@ -12,7 +12,9 @@ const { AbortController, structuredClone } = globalThis;
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
 const toolDirectory = '/tmp/chatdom-gather/sql-deps/node_modules/@electric-sql/pglite';
 const pinnedVersion = '0.5.14';
-const evidencePath = `${root}/work/evidence/gather/ga10-turn-sql.json`;
+const evidencePrefix = process.env.GATHER_EVIDENCE ?? 'ga10-turn';
+assert.match(evidencePrefix, /^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+const evidencePath = `${root}/work/evidence/gather/${evidencePrefix}-sql.json`;
 const migrationPath = 'apps/realm/src/persistence/migrations/0016_realm_gather.sql';
 const report = {
   at: new Date().toISOString(), node: process.version, status: 'running',

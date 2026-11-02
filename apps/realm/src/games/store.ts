@@ -123,6 +123,7 @@ export function createPostgresGatherStore(pool: Pool): GatherStore {
     async commit(kingdom, expectedVersion, next, command) {
       const prepared = prepare(kingdom, expectedVersion, next, command), { snapshot } = prepared;
       const client = await pool.connect();
+      let discard = false;
       try {
         await client.query('BEGIN');
         // Separate advisory-lock namespaces prevent a receipt/table hash collision from reversing lock order.
@@ -152,9 +153,10 @@ export function createPostgresGatherStore(pool: Pool): GatherStore {
         await client.query('COMMIT');
         return 'committed';
       } catch (error) {
-        await client.query('ROLLBACK').catch(() => {});
+        // A failed cleanup leaves transaction state uncertain. Do not return that client to the realm pool.
+        try { await client.query('ROLLBACK'); } catch { discard = true; }
         throw error;
-      } finally { client.release(); }
+      } finally { client.release(discard); }
     },
   };
 }

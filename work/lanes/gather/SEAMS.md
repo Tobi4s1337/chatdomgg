@@ -168,6 +168,10 @@ production transport or dependency file is changed here. This is a host-isolatio
   the existing dock service install in `main.ts`. It shares the boot pool and schema and owns no second pool or
   shutdown resource. `0016` currently creates only `gather_table_checkpoints` and `gather_table_moves`; result,
   tally and keepsake derivation remains GA12. The checkpoint and immutable accepted move commit together.
+- The store owns only each client it checks out from that pool. If write/commit cleanup cannot roll back, it
+  releases with destruction so an uncertain transaction is never recycled to another realm operation. Successful
+  rollback keeps the client reusable; the original failure still reaches table reconciliation. No caller pool
+  lifetime or attach contract changes. Evidence: `work/evidence/gather/ga10-store-cleanup.md`.
 - Tables expose additive optional `game`, `stones`, `dice`, `players`, `status` and `extraSeats` fields in
   `games.ts`. The original two-chair `seats` tuple remains stable. Hearth Dice has physical chairs 1–4;
   `self.seatIndex` identifies the physical chair, while `self.playerIndex` indexes immutable match participants.
