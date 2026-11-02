@@ -19,6 +19,9 @@ import { attachEveningInteractions } from './evening/interactions';
 import { createServer as createPortReservation } from 'node:net';
 import { realmListenHost, realmListenPort } from './listen-port';
 import { ownRealmShutdown } from './lifecycle';
+import { composeRealmItems } from './items/compose';
+import { createItemRoomChannel } from './items/channel';
+import { createPostgresItemAdmission } from './items/entry';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -61,6 +64,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const config = realmDatabaseConfig();
   const pool = createRealmPool(config);
   try { await assertRealmSchema(pool); } catch (error) { await pool.end(); throw error; }
+  const itemFoundation = composeRealmItems(pool);
   const credentials = ingressCredentials();
   const gate = new ForgeWriteGate();
   const approvals = new FileForgeApprovals(join(foundedDirectory, 'forge-approvals'));
@@ -84,6 +88,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
       return () => { detachInteractions(); detachEvening(); };
     },
   });
+  Object.assign(boot.services, { channels: [...(boot.services.channels ?? []), createItemRoomChannel(itemFoundation.items, createPostgresItemAdmission({ pool, origin, readiness: boot.readiness }))] });
   citizens.use(boot.allocation, boot.services);
   boot.ingress.moments.useSettler(citizens);
   castle.use(boot.allocation, boot.store);
@@ -97,6 +102,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
   ownRealmShutdown(server, transport, async () => {
+    itemFoundation.dispose();
     dock.stop();
     try { await evening.stop(); }
     finally { try { await boot.stop(); } finally { await pool.end(); } }
@@ -105,7 +111,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     await boot.readiness.start();
     await releasePort();
     await server.listen(port, host);
-  } catch (error) { dock.stop(); await evening.stop(); await boot.stop(); await pool.end(); throw error; }
+  } catch (error) { itemFoundation.dispose(); dock.stop(); await evening.stop(); await boot.stop(); await pool.end(); throw error; }
   console.info(`${simulated ? 'SIMULATED' : 'LIVE'} realm on ${port}: adopted durable Postgres kingdoms in schema "${config.schema}"; `
     + (boot.ingress.gate.configured ? `service ingress at POST ${INGRESS_ROUTE} (${Object.keys(credentials).join(', ')})` : 'service ingress closed (no REALM_INGRESS_*_SECRET)')
     + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}; current approved geometry only`);

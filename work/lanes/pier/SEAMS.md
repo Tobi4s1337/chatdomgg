@@ -1,0 +1,692 @@
+# pier: our side of each seam
+
+Frozen on Sun 1 Nov 2026 for this round. A seam changes only when both lanes write the change into their SEAMS.md.
+When another lane or the integrator must act, pier writes `needs: <who> <what>` in its progress with the exact patch,
+and keeps going on its fallback. Every ask below has a fallback; pier uses it until the seam lands and never ships
+both. Section 1 is what pier provides; sections 2 to 4 are what pier asks for; section 5 is the small realm hooks pier
+writes itself; section 6 lists the other lanes that touch this one.
+
+## PI10 physical pier checkpoint — 2 November 2026
+
+The fallback site is now implemented in `apps/realm/src/fishing/site.ts`. It reads only the adopted plan's
+lake, actual drawn water and founded ground. It checks the dry approach, roads, civic reservations, full head
+and casting water, then refuses if any existing piece obstructs that fixed site. Obstructions never move it.
+`FishingPierSite` is an additive shared type; `root` is the dry-end centre at physical ground height and
+`deckY` is the separate timber datum. `walk` is in metres; content factory coordinates are build cells.
+Grand-world's anchor has not landed in this checkout; there is one fallback, never a second competing anchor.
+
+The founded assembler now imports `pierFurnishings` and adds the section 5c placement call. The new content
+reuses the places-water deck modules and merges furnishings into their collision blueprints. The source kit
+is unchanged. Its scenery gateway is lifted one metre locally, extending its posts so a walking body clears
+the board over a half-metre terrain step. IDs start with `pier:lake:`. No prior placement is edited.
+
+The only web entry hook is `lanePaths['/-/pier']` in `apps/web/src/main.tsx`. This is an isolated review
+surface, with a hash-verified read-only copy of founded geometry. Its warm glass panes and light-field
+contribution run there. **The production kingdom layer is not mounted yet.** There is no completed
+`mountPierLayer(host)` to request at this checkpoint; section 3's eventual mount ask still applies once
+the fishing layer exists. Static timber renders through the ordinary founded placements already.
+
+At that physical checkpoint no room channel, fishing intent, public feed, clock mapping, bag or tool registration
+was added. That checkpoint changed no existing API in sections 1–6. No other lane's SEAMS file is present here;
+there is no additional cross-lane contract change to write into another scope.
+
+## 1. The items API (pier provides; gather, forge-wish, play, raid-show and panel-window call it)
+
+### PI10 authored fish and rod checkpoint — 2 November
+
+The item catalogue now contains twelve reviewed species and `tool:rod.willow`, without granting any copies.
+`apps/realm/src/items/providers.ts` imports `../fishing/content`, which registers the real definitions and exports
+the validated `fishingSpecies`. The fishing room adapter is still absent, so registration alone enables no cast.
+The three-view dusk sheets are in `work/evidence/pier/`; this is a software-rendered content review, not the signed-in
+world or real-GPU demonstration. Earlier references below to the empty catalogue describe the foundation checkpoint.
+
+The browser catalogue now exists at `apps/web/src/bag/index.ts`; importing it loads `providers.ts`.
+`registerItemModels(models)` accepts `{ id: string, create: () => VoxelAsset }[]` and returns an unregister function.
+Factories return fresh CPU-owned buffers. A conflicting batch registers nothing. `itemModels.has(id)` and
+`itemModels.create(id)` resolve a registered model; an unknown id returns false/undefined. A factory returning a
+different id throws. Another lane still adds only its own registration import in `bag/providers.ts`, as below.
+There is no bag UI or fallback portrait yet. Fish assets, lore and definitions live in `packages/content/src/fish`;
+the held rod and its grip/tip anchors live in `packages/content/src/pier/rod.ts`.
+
+Mossback Carp requires an adopted `meadow`/`woodland` recipe biome and Redfin Char requires `highland`. Unknown
+old-plan biomes remain honest: only wildcard fish are eligible. Bell Minnow and Silver Dace guarantee a common
+candidate at every hour/mood/water at one metre depth. The existing adopted-biome ask and fallback still apply.
+Rare catches remain separate protected gathered records; numbered mounted keepsakes are PI11 work.
+
+Owner: pier. Every thing a person owns has one record: what it is, where it came from (who, where, when) and where it
+lives now. Other lanes write into it through the realm service below, never through SQL, and never edit pier's files:
+they register their own item definitions with one import line in pier's `providers.ts` files.
+
+### 1a. The contract: `packages/shared/src/items.ts` (new, additive, exported from `packages/shared/src/index.ts`)
+
+```ts
+import { z } from 'zod';
+import type { KingdomId, PersonId } from './identity';
+
+/** World-Tree §4: where a thing lives decides its branch. */
+export const ITEM_BRANCHES = ['worn', 'held', 'placed', 'kept', 'gathered', 'used-up'] as const;
+export type ItemBranch = (typeof ITEM_BRANCHES)[number];
+
+/** Where one copy lives now. 'away' is put away (never destroyed); 'spent' is a used-up thing whose record stays. */
+export const ITEM_PLACES = ['worn', 'hand', 'hotbar', 'lot', 'shelf', 'bag', 'away', 'spent'] as const;
+export type ItemPlace = (typeof ITEM_PLACES)[number];
+
+/** Every writer is listed now, so no lane has to edit this file later. */
+export const ITEM_SOURCE_KINDS = ['fishing', 'pier', 'game', 'campfire', 'forge', 'wardrobe', 'moment', 'gift',
+  'presence', 'tenure', 'raid'] as const;
+export type ItemSourceKind = (typeof ITEM_SOURCE_KINDS)[number];
+
+/** ids: 'fish:copper-perch', 'tool:rod.willow', 'keepsake:mount.moonlit-pike', 'game:pong.ribbon', 'forge:<pieceId>'. */
+export const ItemDefIdSchema = z.string().regex(/^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9._-]{0,63}$/);
+export type ItemDefId = z.infer<typeof ItemDefIdSchema>;
+export type ItemId = string;                         // opaque, server-made
+
+export interface ItemDefinition {
+  readonly id: ItemDefId;
+  readonly branch: ItemBranch;
+  readonly title: string;                            // 'Copper Perch', sentence or title case, never an id
+  readonly lore: string;                             // one line, authored, never free text
+  /** null: every copy is its own storied record. A number: copies stack up to it. */
+  readonly stack: number | null;
+  /** Keepsakes are numbered per kingdom and definition ("No. 3"): only moments are scarce. */
+  readonly keepsake: boolean;
+  /** How the client draws it: a registered voxel model id the client catalogue resolves. */
+  readonly model: string;
+  /** Places this kind of thing may live in. */
+  readonly places: readonly ItemPlace[];
+}
+
+export interface ItemSource {
+  readonly kind: ItemSourceKind;
+  /** The writer's own reference: catch id, match id, piece id, moment id. Part of the idempotency key. */
+  readonly ref: string;
+}
+
+export interface ItemStory {
+  /** Who caught, made or won it. null for a thing the kingdom itself gives. Name is the approved public name. */
+  readonly by: { readonly personId: PersonId; readonly name: string } | null;
+  readonly kingdomId: KingdomId;
+  readonly where: string;                            // 'Willowmere pier', 'the tavern', 'the Forge square'
+  readonly at: number;                               // epoch ms, server time
+  readonly line: string;                             // the card's sentence: 'Caught at dusk in the mist'
+  readonly forPersonId?: PersonId;                   // gifts
+}
+
+export interface ItemRecord {
+  readonly version: 1;
+  readonly id: ItemId;
+  readonly defId: ItemDefId;
+  readonly branch: ItemBranch;
+  readonly ownerId: PersonId;
+  /** The kingdom it belongs to (World-Tree rule 9). Worn things travel; the rest stay here. */
+  readonly kingdomId: KingdomId;
+  readonly origin: 'live' | 'simulated';
+  readonly place: ItemPlace;
+  /** Position in the hotbar or on the shelf; null elsewhere. */
+  readonly slot: number | null;
+  readonly count: number;                            // 1 for storied things
+  readonly storied: boolean;                         // a storied thing is never destroyed
+  readonly number: number | null;                    // keepsake number, or null
+  readonly story: ItemStory;
+  readonly source: ItemSource;
+  /** Small typed facts for the card: { weightG: 2140, lengthMm: 610, hour: 'dusk', mood: 'mist' }. */
+  readonly detail: Readonly<Record<string, string | number>>;
+  readonly createdAt: number;
+  readonly revision: number;
+}
+
+export type ItemEventKind = 'granted' | 'stacked' | 'moved' | 'released' | 'put-away' | 'spent' | 'given';
+export interface ItemEvent {
+  readonly itemId: ItemId; readonly kind: ItemEventKind; readonly at: number;
+  readonly from?: ItemPlace; readonly to?: ItemPlace; readonly count?: number;
+  readonly actor: 'owner' | 'kingdom' | { readonly personId: PersonId };
+  readonly source?: ItemSource;                       // the catch or other fact added to a stack
+}
+
+// These cursor schemas are exported from packages/shared/src/items.ts.
+export const ItemListCursorSchema = z.string().regex(/^[a-zA-Z0-9-]{1,64}$/);
+export const ItemHistoryCursorSchema = z.string().refine(value => /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= 9223372036854775807n);
+/** Walker requests over the 'items' room channel (section 5a). Grants never come from a browser. */
+export const ItemRequestSchema = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('items.list'), id: z.string().min(1).max(64), after: ItemListCursorSchema.optional() }),
+  z.strictObject({ type: z.literal('items.move'), id: z.string().min(1).max(64), itemId: z.string().min(1).max(64),
+    revision: z.number().int().nonnegative(), to: z.enum(ITEM_PLACES), slot: z.number().int().min(0).max(63).nullable() }),
+  z.strictObject({ type: z.literal('items.release'), id: z.string().min(1).max(64), itemId: z.string().min(1).max(64),
+    revision: z.number().int().nonnegative(), count: z.number().int().min(1).max(999) }),
+  z.strictObject({ type: z.literal('items.history'), id: z.string().min(1).max(64), itemId: z.string().min(1).max(64), after: ItemHistoryCursorSchema.optional() }),
+]);
+export type ItemRequest = z.infer<typeof ItemRequestSchema>;
+export type ItemReply =
+  | { readonly type: 'items.list'; readonly id: string; readonly items: readonly ItemRecord[]; readonly next?: string | null }
+  | { readonly type: 'items.changed'; readonly id?: string; readonly items: readonly ItemRecord[] }
+  | { readonly type: 'items.history'; readonly id: string; readonly itemId: ItemId; readonly events: readonly ItemEvent[]; readonly next?: string | null }
+  | { readonly type: 'items.invalidated' } // refresh through bounded bag pages
+  | { readonly type: 'items.refused'; readonly id: string; readonly message: string };   // plain words for the person
+```
+
+The exact field names may be refined while PI10 is built, as long as the shape stays this: definitions, records with
+story, source, place and revision, an append-only history, and requests that never grant. Any refinement is written
+here before another lane builds on it.
+
+### 1b. The realm service: `apps/realm/src/items/index.ts`
+
+```ts
+export interface GrantInput {
+  /** `${source.kind}:${source.ref}:${ownerId}` unless the writer has a better one. The same key never makes a second copy. */
+  readonly key: string;
+  readonly ownerId: PersonId;
+  readonly kingdomId: KingdomId;
+  readonly origin: 'live' | 'simulated';
+  readonly defId: ItemDefId;
+  readonly count?: number;                           // stacks only; default 1
+  readonly place?: ItemPlace;                        // default: the definition's first place ('bag' for gathered)
+  readonly storied?: true;                           // a personal first stays its own protected record
+  readonly story: ItemStory;
+  readonly source: ItemSource;
+  readonly detail?: Readonly<Record<string, string | number>>;
+}
+
+export interface RealmItems {
+  /** Idempotent. Stackable definitions merge into the owner's stack in that kingdom; storied ones make one record. */
+  grant(input: GrantInput, tx?: ItemTransaction): Promise<ItemRecord>;
+  /** G06: the same dated keepsake to everyone who took part, one record each, in one transaction, idempotent per person. */
+  grantShared(input: Omit<GrantInput, 'ownerId' | 'key' | 'story'> & {
+    readonly key: string;
+    readonly people: readonly { readonly personId: PersonId; readonly name: string }[];
+    readonly story: Omit<ItemStory, 'by'>;
+  }): Promise<readonly ItemRecord[]>;
+  /** Owner-only, revision-checked. Refuses a place the definition does not allow. */
+  move(ownerId: PersonId, itemId: ItemId, to: { place: ItemPlace; slot: number | null }, revision: number): Promise<ItemResult>;
+  /** Owner-only. Only spare stacks of gathered things; a storied thing is refused. */
+  release(ownerId: PersonId, itemId: ItemId, count: number, revision: number): Promise<ItemResult>;
+  list(ownerId: PersonId, kingdomId: KingdomId, filter?: { readonly place?: ItemPlace }): Promise<readonly ItemRecord[]>;
+  get(itemId: ItemId): Promise<ItemRecord | null>;
+  history(itemId: ItemId): Promise<readonly ItemEvent[]>;
+  /** Private client reads: at most 32 rows / 48 KiB, next is null when complete. */
+  listPage(ownerId: PersonId, kingdomId: KingdomId, origin: 'live' | 'simulated', after?: string): Promise<{ items: readonly ItemRecord[]; next: string | null }>;
+  historyPage(itemId: ItemId, after?: string): Promise<{ events: readonly ItemEvent[]; next: string | null }>;
+  /** Pushes 'items.changed' to the owner's seat after commit. */
+  onChange(listener: (ownerId: PersonId, kingdomId: KingdomId, items: readonly ItemRecord[]) => void): () => void;
+  /** For panel-window's forget: hides the person's name from public pages; their records stay theirs. */
+  forgetName(personId: PersonId): Promise<void>;
+}
+export type ItemResult = { readonly ok: true; readonly item: ItemRecord } | { readonly ok: false; readonly message: string };
+export interface ItemTransaction { /* the store's kingdom-scoped unit of work; see the transaction recipe below */ }
+
+export function createRealmItems(options: { store: ItemStore; catalogue: ItemCatalogue; clock: () => number }): RealmItems;
+export function registerItemDefinitions(definitions: readonly ItemDefinition[]): () => void;   // server catalogue
+```
+
+How another lane writes into it:
+- Define your items in your own content folder (gather: `packages/content/src/tavern/**`; forge-wish: its Forge content)
+  as `ItemDefinition[]`.
+- Server: add exactly one import line to `apps/realm/src/items/providers.ts` that registers them. That file holds import
+  lines only, like play's `providers.ts`.
+- Client: add exactly one import line to `apps/web/src/bag/providers.ts` that registers the same definitions with their
+  voxel models (`registerItemModels(models)`), so the bag, the hotbar, the shelf and the cards can draw them.
+- Call `items.grant(...)` (or `grantShared`) from your realm module when the thing is really earned, with a stable key.
+  Pass your transaction when the grant must commit with your own rows.
+- The composed `RealmItems` instance is created once in `apps/realm/src/main.ts`; pier exports a getter for it
+  (`realmItems()`), and other realm modules take it as a constructor option from the composition, never a second instance.
+
+Rules the service enforces (tested by pier):
+- Only server modules grant. The 'items' room channel only lists, moves, releases and reads history.
+- Every change appends an `ItemEvent` in the same transaction.
+- A storied record is never deleted: the database refuses the delete. It can only be put away.
+- Only spare stacks of gathered things can be released (a fish let go back into the water).
+- Keepsake numbers are unique and gapless per kingdom and definition, under concurrency.
+- Nothing for sale buys an advantage: no grant path takes payment, and no definition's use depends on money, subs or rank.
+
+### 1d. Item foundation checkpoint (PI10, 1 November)
+
+The service and both stores exist. The durable process composes exactly one instance through
+`composeRealmItems(pool)` in `apps/realm/src/main.ts`; `realmItems()` returns that instance. The composition also
+returns its `store` for a fishing/catch transaction. `providers.ts` is intentionally empty until actual definitions
+with real models register; no made-up inventory is granted at startup. No browser channel is mounted yet.
+
+Decisions frozen by the implementation:
+- Grant keys are scoped by kingdom, owner and origin. The same key returns the current record, even after release;
+  it cannot resurrect a spent stack. Reusing a key with changed facts is refused. Approved display names are
+  presentation and excluded from the fingerprint; the maker's identity remains part of it.
+- Storied definitions have `stack: null`; keepsakes are always storied and in the `kept` branch. All definitions
+  permit `away`. A common personal first uses `storied: true`, count one, independently of ordinary stacks.
+- Each ordinary grant must fit one definition-sized stack. It fills an existing bag stack with room, or starts
+  another; it never silently drops overflow. The first story and source are immutable. Gathered stack details hold
+  `firstCaughtAt`, `lastCaughtAt`, `firstCaughtWhere`, `lastCaughtWhere`, and best `weightG`; every added source is
+  also in ordered history. Only ordinary gathered stacks in the bag or put away may be released.
+- A wholly released stack remains at `spent`, count zero; ordinary lists omit it. Records, grant receipts and
+  events cannot be deleted through SQL. Existing stories cannot be rewritten, nor can storied status be removed.
+- `hotbar` and `shelf` require an integer slot 0–63. Other places require null. Occupied slots and hands refuse the
+  move, preserving both things; no automatic swap is shipped at this checkpoint. A grant into a slotted place
+  selects its first free slot. Owner writes are revision-checked inside the transaction.
+- `grantShared` is for keepsakes: one dated moment gets one number for every person in its fixed participant set.
+  Duplicate participants are collapsed; participant order does not matter. All recipients, receipts and the
+  allocation commit together. Distinct moments get consecutive numbers, including after rollback.
+- Name withdrawal is an enduring redaction on service reads, grant replies and notifications, including future
+  grants. Raw provenance remains internal to a transaction. Public routes must still omit person ids; they do not
+  exist yet. `onChange` is at least once: a retry also notifies so a lost commit acknowledgement cannot lose a push.
+
+Atomic writer recipe (no nested transaction, no separately committed catch):
+
+```ts
+import { postgresItemClient } from './items/postgres';
+// items and store are the process's composed instances, passed to the feature constructor.
+await store.transaction(kingdomId, async tx => {
+  const sql = postgresItemClient(tx);   // scoped query-only capability, invalid after this callback
+  // Insert the authoritative catch with sql.query(...) here, using the feature's stable catch id.
+  return items.grant(grantForThatCatch, tx);
+});
+```
+
+`ItemTransaction` is the store capability, not a naked `pg.PoolClient`. It binds the kingdom and the store and
+expires after the callback. Its SQL capability exposes only `query`, with no client release method; the store
+owns transaction lifecycle and the caller must not issue transaction-control SQL.
+All item mutations serialize on a kingdom advisory lock. Nothing notifies before a confirmed commit. An
+`ItemCommitUncertainError` means to retry the same grant key; never mint a replacement key. A rollback failure
+destroys the pooled connection. The memory store is explicitly for tests, never a durability fallback.
+
+Migration `0017_realm_pier.sql` is already applied to the lane's isolated `pier` schema. The room checkpoint
+adds `0017b_realm_pier_pages.sql`, an owner/origin/id index for private keyset reads, also applied only in
+`pier`. Never edit either applied migration; catch/Almanac tables now start at `0017c`. Focused checks are
+recorded in `work/evidence/pier/README.md`.
+
+### 1c. Client pieces other lanes may mount (`apps/web/src/bag/`)
+
+```ts
+export function mountItemCard(host: HTMLElement, item: ItemRecord): () => void;      // the story card, in the carved kit
+export function itemPortrait(defId: ItemDefId, size: number): Promise<ImageBitmap>;  // the real voxel item, lit like the world
+```
+
+## 2. What pier asks of play (play provides; pier mounts)
+
+Owner: play (`apps/web/src/play/slots.ts`). pier never edits play's files. pier registers from
+`apps/web/src/bag/play-slot.ts` and `apps/web/src/fishing/play-slot.ts`, with one import line in
+`apps/web/src/play/providers.ts`.
+
+Used as play already froze them:
+- `registerLedgerPage({ id: 'bag', title: 'Bag', order: 25, ... })` and `registerLedgerPage({ id: 'almanac', title: 'Almanac', order: 35, ... })`.
+- `registerHudPiece` for the hotbar, and `ctx.requestCursor('bag')` while the bag or the Almanac is open.
+
+Asked of play (additive to `slots.ts`), each with pier's fallback:
+
+```ts
+// 1. A bottom-centre HUD region for the hotbar.
+type HudRegion = 'top-left' | 'top-centre' | 'top-right' | 'bottom-left' | 'bottom-centre' | 'bottom-right';
+
+// 2. Key bindings other lanes register, listed and rebindable in play's controls page.
+export interface ActionBinding {
+  readonly id: string;                 // 'bag', 'hotbar.1' .. 'hotbar.9'
+  readonly label: string;              // 'Open your bag'
+  readonly defaultCode: string;        // KeyboardEvent.code: 'KeyB', 'Digit1'
+  onPress(ctx: PlayContext): void;
+}
+export function registerActionBinding(binding: ActionBinding): () => void;
+
+// 3. Held tools: play routes the primary button (and a touch button) to the equipped tool, and draws it in the hand.
+export interface HeldToolProvider {
+  readonly id: string;                 // 'rod'
+  equip(ctx: ToolContext): HeldToolHandle;
+}
+export interface HeldToolHandle {
+  /** Primary button or touch, down and up, with the room clock's time; play does not use them for anything else. */
+  press(at: number): void; release(at: number): void;
+  /** Secondary button: put the tool down or reel in. */
+  cancel(): void;
+  update(dt: number): void;
+  dispose(): void;
+}
+export interface ToolContext extends PlayContext {
+  /** The same retained walking room as movement (as in walk-interactions): typed message channel, never a second socket. */
+  readonly room: { onMessage<T>(type: string, cb: (message: T) => void): () => void; send(type: string, payload: unknown): void };
+  /** The walker's own pose, read each frame. */
+  pose(): { readonly position: readonly [number, number, number]; readonly yaw: number; readonly lookUp: number; readonly grounded: boolean } | null;
+  /** World matrix of the walker's right-hand grip, third or first person; null while not drawn. */
+  hand(): THREE.Matrix4 | null;
+  /** A short pose the body holds while the tool is used. */
+  holdPose(pose: 'cast' | 'hold' | 'reel' | null): void;
+  /** The three.js scene, camera and per-frame hour the tool draws in (from grand-world's mount, passed through). */
+  readonly scene: THREE.Scene; readonly camera: THREE.Camera;
+}
+export function registerHeldTool(provider: HeldToolProvider): () => void;
+export function equipTool(id: string | null): void;           // called by pier's hotbar
+
+// 4. Prompts at places that are not realm interaction targets: "Take a rod", "Read the Almanac", "Your shelf".
+export interface WorldPromptProvider {
+  readonly id: string;
+  /** Called a few times a second with the walker's pose; return the nearest prompt or null. */
+  prompt(pose: { position: readonly [number, number, number]; yaw: number }): { readonly label: string; readonly at: readonly [number, number, number] } | null;
+  use(ctx: PlayContext): void;          // on play's 'use' action
+}
+export function registerWorldPrompt(provider: WorldPromptProvider): () => void;
+
+// 5. Other walkers' hands, so their rods and lines can be drawn.
+export function observedWalkerHand(walkerId: string): THREE.Matrix4 | null;
+export function observedWalkerPose(walkerId: string, pose: 'cast' | 'hold' | 'reel' | null): void;
+```
+
+pier's fallbacks until each lands:
+1. The hotbar mounts in `bottom-left` (play's existing region) and moves to `bottom-centre` when it exists.
+2. The bag opens from the ledger page only, and the rod is the only tool, selected by taking it.
+3. pier's fishing input listens for the primary button only while the rod is equipped and the cursor is locked, on the
+   kingdom canvas, and takes the room from the walk debug handle the page already exposes; the rod is drawn at an
+   offset from the walker's pose instead of the hand. This fallback is never merged as the final state:
+   `needs: play held tools`.
+4. "Take a rod" uses a small in-world sign on the rack that pier draws, triggered by the 'use' action through the same
+   fallback listener.
+5. Other walkers' rods are drawn from their published pose with a fixed hand offset.
+
+What pier guarantees play: pier never moves the camera, never takes pointer lock itself, releases every cursor lease it
+takes, consumes the primary button only while its tool is equipped, and draws nothing in the stream view's HUD.
+
+## 3. What pier asks of grand-world (grand-world provides; pier mounts)
+
+Owner: grand-world (`apps/web/src/kingdom/scene.ts`, the land, the water surface, the stream director,
+`packages/world/src/land-interface.ts`). pier never edits those files.
+
+```ts
+// 1. Pier anchors on the water, on the old land and on the grand land (additive to KingdomLandInterface).
+export interface PierAnchor {
+  readonly id: string;                                  // stable: 'pier:lake', 'pier:harbour'
+  /** Where the deck meets dry, walkable ground, in world metres. */
+  readonly root: readonly [number, number, number];
+  readonly turn: 0 | 1 | 2 | 3;                         // local +Z points out over the water
+  /** The water surface height, and the bed depth at 1 m steps along the deck's centreline from the root. */
+  readonly waterY: number;
+  readonly depth: readonly number[];
+  readonly water: 'lake' | 'river' | 'sea';
+  readonly biome: string;                               // the Genesis biome id at this water
+}
+// KingdomLandInterface.piers?: readonly PierAnchor[]   (at least one per founded kingdom, inside the walkable region,
+// matching the drawn water on both lands; a pure function of the founded plan, so it never moves)
+
+// 2. A typed mount for a lane's world layer, in the kingdom page and the stream view alike.
+export interface KingdomLayerMount {
+  readonly scene: THREE.Scene; readonly camera: THREE.Camera;
+  readonly mode: 'walking' | 'watching' | 'stream';
+  readonly kingdomId: KingdomId; readonly founded: RealmFoundedScene;
+  hour(): number;                                       // the scene's current hour
+  waterHeight(x: number, z: number): number | null;     // the drawn water surface
+  onTick(listener: (dt: number, now: number) => void): () => void;
+  readonly quality: 'high' | 'balanced' | 'low';
+  readonly signal: AbortSignal;                         // dispose
+}
+// export function registerKingdomLayer(id: string, mount: (host: KingdomLayerMount) => () => void): () => void;
+
+// 3. Director attention for a moment at the pier on stream.
+// requestAttention({ id, at: Vec3, radius: number, seconds: number, priority: 'first' | 'rare' }): void
+
+// 4. The kingdom clock (decision 15): kingdomHour(serverTime: number): number, from grand-world when it exists.
+// 5. The water mood for the sky: pier exports kingdomWaterMood(kingdomId, serverTime); grand-world may adopt it.
+```
+
+pier's fallbacks until each lands:
+1. pier derives its site itself, read-only, in `apps/realm/src/fishing/site.ts` from the founded plan's lake
+   (`plan.landform.lake`) and `foundedGroundAt`, with a deterministic search for a straight shore whose root meets the
+   deck height and whose water is deep enough under the head, inside the walkable region and clear of every lot, road,
+   civic site and placement. Where nothing fits it places nothing and writes `needs: grand-world pier anchor <kingdom>`.
+   On tobi4s_'s grand land it checks the drawn water matches before it trusts the site.
+2. The pier layer mounts from the founded scene the page already loads: `apps/web/src/fishing` exports
+   `mountPierLayer(host)`, and pier writes `needs: grand-world mount kingdom-layer pier` with the exact one-line call.
+   Until grand-world adds it, the pier's voxel pieces still show (they are founded placements) and the layer runs on
+   pier's bench and in the lane's own build only; nothing half-mounted ships.
+3. No director hook: a first or rare catch's tag is drawn large enough to read in the existing wide shots.
+4. No kingdom clock: one documented mapping of realm time in `packages/shared/src/fishing.ts`.
+5. The mood shows only at the pier.
+
+What pier tells grand-world:
+- The pier is a founded placement (section 5c). It adds placements to every founded kingdom and changes the geometry
+  digest once, through the existing revision handshake. It changes no terrain column, plot, door or other placement.
+  grand-world's "placements unchanged" tests should allow placements whose id starts with `pier:`.
+- Nothing pier draws is solid without a collider: every walkable plank, rail and post is in the founded placement, and
+  the layer draws only lines, floats, splashes, fish, glow and mist.
+
+## 4. Stream and public reads (pier provides; front-door carries one allowlist line)
+
+- `GET /api/realm/pier/almanac/:kingdomId`: the kingdom's Almanac as JSON. Public, cacheable for a few seconds,
+  approved names only, no person ids.
+- `GET /api/realm/pier/watch/:kingdomId`: server-sent events of public pier beats (a float cast by a named light, a
+  bite, a catch, a first, a broken line). No person ids; a light is named by its home slot and approved name.
+- One proxy entry in `apps/web/vite.config.ts` (`'/api/realm/pier': realmTarget`) and one additive line in
+  `apps/api/src/public/routes.ts`'s realm read pattern for `pier/(almanac|watch)/<kingdomId>`. If front-door prefers to
+  add the line itself, pier writes `needs: front-door allowlist /api/realm/pier/(almanac|watch)/<id>`.
+
+## 5. Small realm hooks pier writes itself (additive, typed; the integrator is told)
+
+### PI10 room and items channel decisions — 2 November
+
+Section 5a is implemented with a transport adapter in `room-channels.ts`. The adapter takes only
+the existing room's seats, clients, pose, world and auth check; no second socket or identity map. Channel
+handlers may return a promise. One handler per channel runs at a time for each person, including across
+replacement tabs; its slot stays occupied until the actual work settles. A fixed one-second per-person
+rate window drops and counts excess messages. There are at most 16 channels, each rate 1–60, with at most
+300 person slots per channel. Reserved protocol names and duplicate registrations refuse at setup.
+Disconnected people's idle rate slots remain until their window expires, so re-entry cannot reset them.
+The returned binding exposes counts without names or payloads. There is no unbounded request queue.
+
+Every admitted request asks the existing auth service and rechecks the live socket, controlling seat,
+held state, expiry and authority afterwards. `sender.current()` repeats those checks; `sender.pose()` reads
+the latest server pose. `sender.present()` is the synchronous socket/seat/expiry/authority gate, for a feature
+checking the session through its transaction. An auth exception ends the seat with the existing 4503
+unavailable flow, rather than leaving a request silently waiting. `room.person(personId)` supplies the
+existing seat's sender for server pushes. `toPerson` itself is a local delivery gate; sensitive pushes must
+first await that sender's `current()`, then recheck `present()`. Feature callbacks detach with the room and
+cannot publish after disposal.
+
+`createItemRoomChannel(items, admit)` registers `items` at 8 messages/second. It parses the strict shared request
+schema, never grants, and never broadcasts. Lists, history, moves, releases and commit notifications are
+owner-only and filtered by the room's kingdom and origin. Move/release gain an optional server-only
+`ItemOwnerAccess { kingdomId, origin, current(tx): Promise<boolean> }` argument; it is checked inside the
+store transaction before writing and immediately before commit. Existing server writers keep their
+existing signatures. Direct `items.changed` replies gain an optional `id`; unsolicited changes omit it.
+Notifications remain at least once, so clients merge records by id and revision and recover with a list.
+
+Durable composition passes `createPostgresItemAdmission({ pool, origin, readiness: boot.readiness })`.
+It invokes the actual readiness `held()` method and reuses the existing realm authenticator's SQL through
+the item transaction's query-only connection. No nested pool checkout is allowed. Do not pass a normal
+pool-backed `sender.current()` as a Postgres transaction guard: concurrent transactions can exhaust that
+same pool. Memory-only tests explicitly inject their in-memory auth callback.
+
+Private changes coalesce behind fresh auth, at most 300 pending owners and 32 records per owner; record or
+byte overflow becomes `items.invalidated`, never an unbounded message queue. A missing notification is
+recovered by listing. Subscription removal and room disposal cancel pending delivery. The commit captures
+its current listeners, so subscribing afterwards does not receive an old grant's delayed callback.
+
+Browser lists/history use `listPage`/`historyPage` (new additive service methods). Requests omit `after` for
+the first page, then send the reply's `next` until it is null. IDs are the bag keyset; decimal bigint event
+sequences are the history keyset. The store reads at most 33 rows, including one lookahead; replies contain
+at most 32 records/events and 48 KiB of JSON. Details are bounded to 64 fields and 24 KiB when granted.
+History is ordered by the numeric database column, not its text cursor alias. The old full `list`/`history`
+methods remain server-only. Paging is a live read, so merge intervening pushes by item id and revision.
+
+Composition adds two imports and one line to `main.ts`, appending the channel on `boot.services` before
+the transport is created. The room takes one optional `channels` field on `RealmRoomServices` and one
+registration block; feature rules stay in pier's module. No other lane's SEAMS file is present in this
+checkout. This freezes this lane's implementation of the already agreed room hook, without another lane
+needing to change its files.
+
+### PI10 fishing rules checkpoint — 2 November
+
+[Fishing rules](fishing-rules.md) freeze the new domain. `FishingRequestSchema` accepts only draw, release,
+strike, reel and cancel controls. Cast id and increasing sequence belong to the server's current seat;
+no request accepts time, pose, seed, fish, outcome or a replay tape. The new cast domain takes trusted ports
+for the authenticated controlling seat, equipped owned rod, adopted installation and real water sampler.
+It validates the fishing lip, byte yaw, full water corridor, depth and collision revision; moving away,
+seat/rod/revision/biome loss or disconnect cancels. Restart begins empty. There are at most 48 casts, finite
+charge/wait/fight/landing lifetimes, no resting timers and at most 256 returned beats per operation.
+
+`fight.ts` runs immutable integer 50 ms steps, at most 600. Seeded rest/warning/run rhythms and fatigue use
+no render randomness. The server records actual next-tick reel edges, coalesces edges in one step, replays
+the entire bounded tape and compares every terminal field. A won fight remains an expiring immutable
+candidate. Candidate access rechecks seat, rod, geometry and expiry. It grants nothing and never emits a
+`caught` beat. The eventual writer must take that candidate from the server domain, recheck admission and
+writer fencing inside its item transaction, then commit catch, item and receipt atomically before publishing.
+Verifying an arbitrary supplied tape is not authorization to write a catch.
+
+This checkpoint adds **no fishing channel registration or public endpoint**. It is intentionally unmounted
+until the durable writer, real content and visible mood presentation exist. The existing items channel
+and physical geometry remain available. Species used in domain tests are fixtures, not production content.
+
+The shared module now supplies `kingdomFishingHour`, `fishingHourBand` and `kingdomWaterMood`. The documented
+fallback maps realm epoch time to actual UTC hours; it does not use a device's local time or invent a fast
+day cycle. Water mood is a stable kingdom-specific half-hour bucket and must be drawn before it affects a
+reachable fishing path. The single hour function is the clock replacement point.
+
+The review found that persisted founded plans have no biome identity. A landscape's `character` is not a
+biome, and homes' style cannot recover one. The physical site finder now honestly says `biome: 'unknown'`.
+`FishingInstallation.biome: string | null` is a mandatory trusted input from adopted recipe identity. Null
+qualifies wildcard habitats only; species definitions cannot reserve `unknown` as a special habitat.
+Authored species are validated/copy-frozen once and sorted by ASCII id so catalogue order never changes a roll.
+
+needs: grand-world kingdom clock export. Provide `kingdomHour(serverTime: number): number` (0 inclusive,
+24 exclusive), then replace only the body of `kingdomFishingHour` with `return kingdomHour(serverTime)`.
+Until it lands, the documented UTC mapping remains the single fallback. Sky adoption of water mood must
+call the existing shared `kingdomWaterMood(kingdomId, serverTime)` rather than roll another mood.
+
+needs: grand-world adopted biome metadata. Exact additive plan contract in
+`packages/world/src/settlement/types.ts`: `readonly biome?: import('../genesis/contracts').GenesisBiome;`.
+In `compileGenesisSettlement`'s `body`, persist `biome: recipe.identity.biome` alongside `genesisSurface`
+before hashing the revision. Preserve this optional metadata through adopted plan persistence. Pier's
+trusted installation can then use `biome: adoptedPlan.biome ?? null`; old stored plans remain null unless
+their original approved recipe identity is available. Never infer it from character, style or channel id.
+Until that lands, only wildcard-biome fish can bite on those plans. Pier did not edit world or old plans.
+
+needs: integrator apply the reviewed `0017b_realm_pier_pages.sql` migration alongside 0017 when preparing
+the release schema; this lane migrated only `pier`, never live data. Use the existing migration runner
+against the intended integration schema, with its normal environment loaded, before starting that build.
+For the standard integration schema the command is
+`node --env-file-if-exists=.env apps/realm/scripts/migrate.mjs --schema realm`; the integrator owns its target
+environment. The lane did not run that command.
+
+needs: integrator remove “Nothing has changed” from `REALM_SEAT_ENDINGS.unavailable.reason` in
+`apps/realm/src/auth/seats.ts`. Exact replacement: “The kingdom could not check your session. Walk in again
+shortly to check your work.” This core file is outside the lane's allowed hooks. A session check can fail
+after an already committed request; reconnecting must always recover by listing, not assume rollback.
+
+### PI10 durable catch checkpoint — 2 November
+
+[Catch persistence](catch-persistence.md) freezes the implemented private writer API.
+`createPostgresFishingCatchWriter(options).keep(sender, castId)` takes a trusted sender and opaque cast id,
+never a browser candidate or replay. It obtains the current domain candidate, recomputes its species/size
+and fight from private seed, and writes catch, item, grant receipt and history through the same item store
+transaction. A personal species first is protected; later common/uncommon catches stack, and rare fish stay
+individual. Firsts are scoped by kingdom/species/origin and owner for personal firsts. The SQL has unique
+first indexes, exact five-column item/receipt linkage, record bounds and an append-only trigger.
+
+Options bind the actual retained `DurableKingdom` structural view (kingdomId, origin, writerEpoch, current),
+the single existing item store/service, authored catalogue/species, trusted pier name, domain candidate and
+finish functions, and `createPostgresFishingAdmission({pool, origin, readiness})`. The writer locks and checks
+the existing realm lease row at the beginning and end, using database time, without acquiring another writer
+or advancing realm sequence. It checks the actual entry/session policy on the same transaction connection.
+Admission explicitly locks person, then session, then entry, matching the API sign-in transaction. The
+approved name comes from the locked person row; a stale socket name is ignored.
+
+The item Postgres module adds `postgresItemCommitGuard(tx, current: () => boolean)`, for at most 16 synchronous
+local checks. All transaction/query capabilities close after the work callback settles and before guards
+run. The store then sends COMMIT with no await in between. Guards cannot query, and false or throw rolls back.
+The catch guard checks its original candidate and retained authority at that exact boundary. Session row
+locks and the last SQL lease fence remain required; this local guard replaces neither one.
+
+Only a `status: 'kept'` return permits the eventual adapter to publish catch success. Its private catch
+record includes proof and identities and must never be broadcast. Item replies are copied/frozen and
+redacted. A confirmed retry recovers by committed receipt before consulting a candidate, so it works after
+cast expiry or restart and returns a moved/spent item without granting again. Owner/kingdom/origin mismatch
+refuses privately. An uncertain COMMIT returns `status: 'uncertain'` with the same cast id; retry that id to
+resolve the ledger. Definite infrastructure failure is the existing typed unavailable error. Domain cleanup
+and item notifications happen only after confirmed commit.
+The future adapter must deliver the returned item privately after a fresh seat/auth check, including on a
+recovered receipt: an uncertain original commit deliberately emitted no item push. A reconnect can always
+recover through the existing paginated bag. Public presentation must deduplicate catches by their stable id.
+
+`0017c_realm_pier_catches.sql` was applied only to `pier` at the checked development endpoint after review
+and a fully rolled-back DDL dry run. Migrations 0017, 0017b and 0017c are frozen; the next is 0017d.
+needs: integrator migrate the intended release schema with the normal runner before starting this build,
+including 0017c. The lane did not migrate live data. The standard integration command remains
+`node --env-file-if-exists=.env apps/realm/scripts/migrate.mjs --schema realm`; the integrator owns its target.
+
+No fishing channel, public route, rod grant or content fixture is registered in production by this checkpoint.
+The eventual room adapter constructs this writer from its already retained kingdom and original cast domain;
+it must not instantiate another authority or pass arbitrary submitted proof. Full signed-in walk, observer,
+content and presentation evidence remain PI10 work. The item service is still the single process composition.
+
+### 5a. The room channel hook (realm core; gather may reuse it)
+
+`RealmIntentSchema` and `RealmTransientMessage` are closed shared unions, so features get their own Colyseus message
+types instead.
+
+```ts
+// apps/realm/src/room-channels.ts (new)
+export interface RealmRoomChannel {
+  /** Colyseus message type, unique per room: 'items', 'pier'. */
+  readonly type: string;
+  /** Messages per second per walker; more are dropped and counted. */
+  readonly rate: number;
+  attach(room: RealmChannelRoom): () => void;
+}
+export interface RealmChannelRoom {
+  readonly kingdomId: KingdomId; readonly origin: 'live' | 'simulated';
+  onMessage(listener: (from: RealmChannelSender, raw: unknown) => void | Promise<void>): void;
+  broadcast(message: unknown): void;                        // everyone in the room, under `type`
+  toPerson(personId: PersonId, message: unknown): void;     // that person's seat, under `type`
+  person(personId: PersonId): RealmChannelSender | null;   // existing current seat, for a fresh push check
+  world(): CollisionWorld;
+}
+export interface RealmChannelSender {
+  readonly principal: RealmPrincipal; readonly walkerId: string;
+  pose(): { readonly position: Vec3; readonly yaw: number; readonly grounded: boolean; readonly collisionRevision: number } | null;
+  present(): boolean;                                     // synchronous socket/seat/expiry/authority gate
+  current(): Promise<boolean>;                              // session and rights still valid
+}
+// apps/realm/src/ports.ts:  RealmRoomServices gains   readonly channels?: readonly RealmRoomChannel[];
+// apps/realm/src/kingdom-room.ts, in onCreate after the 'intent' handler: one loop that registers each channel's
+// onMessage with the rate limit and the same auth checks as 'intent', and detaches on dispose.
+```
+
+If gather lands an equivalent hook first, pier uses gather's and the integrator keeps one.
+
+### 5b. The chat command hook (realm core, `apps/realm/src/evening/bridge.ts`)
+
+Herald already forwards every ordinary chat message with its text. pier never edits Herald.
+
+```ts
+// RealmEveningOptions gains:
+readonly chatCommands?: {
+  /** Called once the chatter has a lit window. Return true to claim the message: no speech bubble is shown. */
+  chat(input: RealmHeraldChat, kingdom: DurableKingdom, slot: number): boolean;
+  /** Deletion, author clear and room clear, as the bridge already receives them. */
+  cleanup(kingdomId: KingdomId, filter: { readonly messageIds?: readonly string[]; readonly personId?: string }): void;
+};
+// In waitForChat, where speechHost(...) first resolves: if chatCommands?.chat(input, host.kingdom, host.slot) is true,
+// return true without calling this.chat(input). In accept's chatCleanup branch: also call chatCommands?.cleanup(...).
+```
+
+`apps/realm/src/evening/**` belongs to main and the integrator; pier writes exactly these lines and nothing else there.
+If the integrator would rather apply them, pier writes `needs: integrator chat command hook` with this patch.
+
+### 5c. The pier placement (`apps/realm/src/founded/scene.ts`)
+
+One line after `pieces.push(...arrivalFurnishings(plan, pieces));`:
+
+```ts
+pieces.push(...pierFurnishings(plan, pieces));   // from '../fishing/site'; pure, deterministic, ids start with 'pier:'
+```
+
+### 5d. Composition (`apps/realm/src/main.ts`) and migration
+
+- One block of additive lines: create the item store and service on the realm pool, the fishing service, pass
+  `chatCommands` to `RealmEveningBridge`, pass `channels` to the room services, and mount the pier routes.
+- Migration `0017_realm_pier.sql`: items, item events, grant keys, keepsake numbers, catches, Almanac firsts. Storied
+  item rows refuse deletion in the database.
+
+## 6. Other lanes
+
+- **gather** writes game and campfire keepsakes through section 1 (`source.kind: 'game' | 'campfire'`) and may reuse the
+  room channel hook (5a). It needs nothing else from pier.
+- **forge-wish** may record a forged piece as an item (`source.kind: 'forge'`, `place: 'lot'`) when it is attached, and
+  its worn twin (`place: 'worn'`), without changing where the Forge keeps the piece. Optional this round.
+- **play** may record wardrobe pieces it grants (`source.kind: 'wardrobe'`); its look storage stays the truth for what is
+  worn. Optional this round.
+- **raid-show** owns Herald; pier needs no Herald change. If Herald ever stops forwarding `!`-prefixed chat, pier writes
+  `needs: raid-show forward !fish`. Visitor gifts may later write `source.kind: 'gift'`.
+- **panel-window**: when its forget lands, it calls `items.forgetName(personId)`; the Almanac then shows "a fisher" for
+  that person. A panel tab for the Almanac is in pier's Backlog.
+- **front-door**: one allowlist line (section 4). pier draws its UI with the carved kit read-only.

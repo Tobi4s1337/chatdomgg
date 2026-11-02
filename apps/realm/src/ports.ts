@@ -1,6 +1,7 @@
 import type { KingdomId } from '@chatdom/shared';
 import type { RealmWalkerFrame, RealmWalkerPresentation } from '@chatdom/shared/realm';
 import type { CollisionWorld, PlayerState, RealmAuthenticator, RealmIntent, RealmPrincipal, RealmReceipt, RealmPublicDelivery, RealmTransientMessage, RealmPrivateMessage, RealmBootstrap } from '@chatdom/shared/realm';
+import type { RealmRoomChannel } from './room-channels';
 
 export interface RealmIntentContext {
   readonly principal: RealmPrincipal; readonly walkerId: string;
@@ -44,6 +45,7 @@ export interface RealmRoomHandle {
 }
 export interface RealmRoomServices {
   readonly auth: RealmAuthenticator;
+  readonly channels?: readonly RealmRoomChannel[];
   /** Acquires the exclusive durable writer lease before returning. Rejects a second active writer. */
   open(kingdomId: KingdomId): Promise<RealmRoomHandle>;
 }

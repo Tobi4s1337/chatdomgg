@@ -6,6 +6,7 @@ import { stepPlayer, bodyStuck, embeddedSolids, supported } from '@chatdom/world
 import type { RealmRoomHandle, RealmRoomServices } from './ports';
 import { RealmSeats, RealmSeatRefusedError, REALM_SESSION_CHECK_MS } from './auth/seats';
 import { RealmDistricts } from './limits/districts';
+import { attachRealmRoomChannels } from './room-channels';
 
 /** Colyseus's own join-time full-state send (pinned core 0.18.23), reused to rebaseline one decoder on a crossing. */
 type FullStateSender = { sendFullState(client: Client): void };
@@ -145,6 +146,13 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
           } else answer({ version: 1, id, status: 'unavailable', message: 'The kingdom could not confirm this request. Reconnect to check its result.' });
         });
       });
+      this.unbind.push(attachRealmRoomChannels(services.channels ?? [], {
+        kingdomId, origin: this.handle.origin, auth: services.auth, active: () => this.accepting,
+        receive: (type, listener) => this.onMessage(type, listener), clients: () => this.clients,
+        client: id => this.clients.getById(id), seat: person => this.control.get(person), held: id => this.seats.held(id),
+        pose: id => { const p = this.state.walkers.get(id); return p ? { position: [p.x,p.y,p.z], yaw: p.yaw, grounded: p.grounded, collisionRevision: p.collisionRevision } : null; },
+        world: () => this.world, end: (id, reason) => this.seats.end(id, reason),
+      }).dispose);
       this.setFixedTimestep(ctx => {
         if(!this.accepting)return;
         for (const [sid, p] of this.state.walkers) {
