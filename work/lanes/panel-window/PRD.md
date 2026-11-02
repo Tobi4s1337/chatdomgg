@@ -183,7 +183,7 @@ without a code change.
   3. the painting;
   4. the pledge, last.
 
-- [ ] **PW11 — Your light burns while you are there.**
+- [x] **PW11 — Your light burns while you are there.**
   *Outcome.* Once a viewer has shared, their window lights within 5 s of being present and dims after a quiet absence,
   always under their name (decision 5). There are three presence sources:
   - **Chat** through the Herald. This already exists; prove it.

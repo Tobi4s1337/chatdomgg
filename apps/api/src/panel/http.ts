@@ -207,9 +207,16 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
         if (!['citizen', 'guest', 'monarch'].includes(kind)) { send(403, { version: 1, status: 'refused' }); return; }
         const prior = await realm('/internal/realm/panel/presence', { kingdomId: viewer.channelId, personId: viewer.personId });
         if (prior.held === true) { send(200, { version: 1, status: 'held', lit: false }); return; }
+        // After "Forget me" the panel sends nothing on this person's behalf until they take their place again.
+        if (prior.forgotten === true) { send(200, { version: 1, status: 'forgotten', lit: false, renewal: prior.renewal === 'applied' ? 'applied' : 'pending' }); return; }
         claim = { version: 1, status: kind === 'citizen' ? 'deed' : kind === 'monarch' ? 'castle' : 'guest' };
       } else claim = await realm('/internal/realm/panel/claim', { kingdomId: viewer.channelId, personId: viewer.personId, name: person.displayName });
       if (!['deed', 'guest', 'castle'].includes(String(claim.status))) { send(200, { ...claim, lit: false }); return; }
+      if (pathname === `${PREFIX}light`) {
+        // A forget hold the realm could not lift with this tap: the home is theirs again, the window stays dark.
+        const after = await realm('/internal/realm/panel/presence', { kingdomId: viewer.channelId, personId: viewer.personId });
+        if (after.forgotten === true) { send(200, { ...claim, lit: false, forgotten: true, renewal: after.renewal === 'applied' ? 'applied' : 'pending' }); return; }
+      }
       const state = await realm('/internal/realm/panel/kingdom', { kingdomId: viewer.channelId });
       if (state.stream !== 'live' || !observe) { send(200, { ...claim, ...(pathname.endsWith('/presence') ? { status: 'accepted' } : {}), lit: false, stream: state.stream ?? 'resting' }); return; }
       await realm('/internal/realm/ingress', { version: 1, observation: {

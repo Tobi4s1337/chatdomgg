@@ -60,7 +60,7 @@
 .cw-card-link { min-height: 44px; margin-top: 15px; padding: 0 12px; border: 0; background: transparent; color: #803f2b; font: 700 14px Alegreya, Georgia, serif; cursor: pointer; }
 .cw-card-link span { font-size: 20px; vertical-align: -1px; }
 .cw-gift-mark { color: #9a6945; font-size: 44px; line-height: 1; } .cw-gifts h2 { margin: 10px 0 5px; font: 400 25px 'IM Fell English', Georgia, serif; } .cw-gifts p { max-width: 220px; margin: 0; font-size: 15px; }
-.cw-deep { position: absolute; inset: 0; overflow: auto; background: #ead9b8 url('./assets/parchment.svg') center / 350px; color: #493324; }
+.cw-deep { position: absolute; inset: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: #a88b62 transparent; background: #ead9b8 url('./assets/parchment.svg') center / 350px; color: #493324; }
 .cw-back { min-height: 44px; padding: 0 14px; border: 0; background: transparent; color: #783d2a; font: 700 14px Alegreya, Georgia, serif; cursor: pointer; }
 .cw-deep .cp-sheet { padding: 8px 13px 35px; }
 .cw-deep .cp-passport-corner { position: sticky; bottom: 0; }
@@ -82,6 +82,10 @@
 .cw-privacy-note { padding: 8px 0; color: #654c37; }
 .cw-privacy-unavailable { border-top: 1px solid #b39a72; padding: 10px 4px; font-size: 15px; }
 .cw-privacy-unavailable p { margin: 4px 0 0; }
+.cw-confirm p strong { display: block; margin-bottom: 4px; font-size: 16px; color: #493324; }
+.cw-forgotten { padding-top: 2px; }
+.cw-forgotten p strong { color: #493324; }
+.cw-forgotten .cw-privacy-note { border-top: 1px solid #b39a72; padding-top: 10px; }
 
 /* The You tab: the window above, the action under the thumb. */
 .cw-you-view { flex: none; display: grid; place-items: center; margin-bottom: 22px; }

@@ -1,0 +1,38 @@
+diff --git a/apps/web/src/kingdom/observed-walkers.ts b/apps/web/src/kingdom/observed-walkers.ts
+index f9aa9091..3cbd3c00 100644
+--- a/apps/web/src/kingdom/observed-walkers.ts
++++ b/apps/web/src/kingdom/observed-walkers.ts
+@@ -53,7 +53,8 @@ export function createObservedWalkerTrack(manifest: WalkerScene) {
+         const before = prior.get(walker.id);
+         const t = before && before.placement === walker.placement ? blend : 1;
+         const lerp = (key: 'x' | 'y' | 'z' | 'distance' | 'speed') => before ? THREE.MathUtils.lerp(before[key], walker[key], t) : walker[key];
+-        return { ...walker, x: lerp('x'), y: lerp('y'), z: lerp('z'), distance: lerp('distance'), speed: lerp('speed'), self: false };
++        // A person who keeps their name off the stream walks on with no label (an empty name is never drawn).
++        return { ...walker, name: walker.name ?? '', x: lerp('x'), y: lerp('y'), z: lerp('z'), distance: lerp('distance'), speed: lerp('speed'), self: false };
+       });
+     },
+   };
+@@ -83,7 +84,8 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
+       const labels: WalkerLabel[] = [];
+       for (const pose of poses) {
+         const head = people.heads.get(pose.id);
+-        if (!head) continue;
++        // A person who keeps their name off the stream walks unlabelled.
++        if (!head || !pose.name) continue;
+         const distance = head.distanceTo(camera.position);
+         if (distance > 40) continue;
+         point.copy(head);
+diff --git a/packages/shared/src/realm/watch.ts b/packages/shared/src/realm/watch.ts
+index cad70bc5..7217a78f 100644
+--- a/packages/shared/src/realm/watch.ts
++++ b/packages/shared/src/realm/watch.ts
+@@ -10,7 +10,8 @@ export const REALM_WALKER_FRAME_MAX_BYTES = 262_144;
+ export const REALM_WALKER_FRAME_INTERVAL_MS = 200;
+ export interface RealmWalkerPresentation { readonly homeSlot: number; readonly look: string }
+ export const RealmObservedWalkerSchema = z.strictObject({
+-  id: TokenSchema, name: DisplayNameSchema, look: CitizenLookIdSchema, homeSlot: UIntSchema.max(65535),
++  /** Null when the person asked to keep their name off the stream: they still walk, unlabelled. */
++  id: TokenSchema, name: DisplayNameSchema.nullable(), look: CitizenLookIdSchema, homeSlot: UIntSchema.max(65535),
+   x: z.number().finite(), y: z.number().finite(), z: z.number().finite(),
+   yaw: UIntSchema.max(255), distance: z.number().finite().nonnegative(), speed: z.number().finite().nonnegative(),
+   placement: UIntSchema.max(0xffff_ffff),

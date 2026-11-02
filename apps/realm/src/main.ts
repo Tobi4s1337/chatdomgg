@@ -5,6 +5,7 @@ import { assertRealmSchema, createRealmPool, describeStorageFailure,
   realmDatabaseConfig } from './persistence';
 import { INGRESS_ROUTE, ingressCredentials } from './ingress';
 import { RealmPanelGifts, RealmPanelService, mountRealmPanelRoutes } from './ingress/panel';
+import { ForgetGuard, RealmChatPrivacy, createQuietDisclosure, disclosedServices, mountChatPrivacyRoute } from './ingress/panel';
 import { RealmPanelSettings } from './ingress/panel/settings';
 import { HEALTH_ROUTE, READY_ROUTE } from './diagnostics';
 import { TenureEvidenceVerifier, tenureEvidenceKey } from './allocation';
@@ -85,17 +86,19 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     },
   });
   citizens.use(boot.allocation, boot.services);
-  boot.ingress.moments.useSettler(citizens);
+  const forgetGuard = new ForgetGuard(pool, origin);
+  boot.ingress.moments.useSettler(forgetGuard.settler(citizens));
   castle.use(boot.allocation, boot.store);
   const evening = new RealmEveningBridge({ origin, ingress: boot.ingress, gate, approvals,
-    beforeObservation: input => citizens.observe(input) });
+    beforeObservation: input => forgetGuard.run(input, kept => citizens.observe(kept)) });
   evening.use(boot.services);
   const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
   dock.use(boot.services);
-  const panel = new RealmPanelService({ settings: new RealmPanelSettings({ db: pool, services: boot.services, origin }), gifts: new RealmPanelGifts({ db: pool, services: boot.services, origin }), db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded });
-  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); mountRealmPanelRoutes(app, panel); } });
+  const panel = new RealmPanelService({ settings: new RealmPanelSettings({ db: pool, services: boot.services, origin }), gifts: new RealmPanelGifts({ db: pool, services: boot.services, origin }), db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded, projection: true, guard: forgetGuard });
+  const chatPrivacy = new RealmChatPrivacy({ db: pool, origin, secret: credentials.herald, services: boot.services, allocation: boot.allocation, guard: forgetGuard });
+  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); mountRealmPanelRoutes(app, panel); mountChatPrivacyRoute(app, chatPrivacy); } });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
-  mountRealmWatchRoutes(transport.app, boot);
+  mountRealmWatchRoutes(transport.app, { services: disclosedServices(boot.services, createQuietDisclosure({ db: pool, origin })), founded: boot.founded, loader: boot.loader });
   ownRealmShutdown(server, transport, async () => {
     dock.stop();
     try { await evening.stop(); }

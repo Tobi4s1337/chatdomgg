@@ -14,13 +14,13 @@ const key = new Uint8Array(32).fill(42);
 async function token(claims: Record<string, unknown> = {}, signing = key) {
   return new SignJWT({ channel_id: '1234', opaque_user_id: 'Uviewer', role: 'viewer', user_id: '5678', ...claims }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('5m').sign(signing);
 }
-async function start(extension: { clientId: string; secret: string } | null = { clientId: 'panellane', secret: Buffer.from(key).toString('base64') }) {
+async function start(extension: { clientId: string; secret: string } | null = { clientId: 'panellane', secret: Buffer.from(key).toString('base64') }, realm: { viewer?: string; presence?: Record<string, unknown> } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'panel-pictures-'));
   cleanup.push(() => rm(directory, { recursive: true, force: true }));
   const requests: { path: string; body: Record<string, unknown> }[] = [];
   const handler = createPanelHttp({
     extension, origin: 'live',
-    authority: { reading: async () => ({ version: 1, kingdom: null, viewer: { kind: 'anonymous' } }), cardSource: async () => { throw new Error(); } },
+    authority: { reading: async () => ({ version: 1, kingdom: null, viewer: { kind: realm.viewer ?? 'anonymous' } }) as never, cardSource: async () => { throw new Error(); } },
   }, {
     realmOrigin: 'http://realm.invalid', panelSecret: 'p'.repeat(40), painterSecret: 's'.repeat(40), pictures: new PanelPictures(directory),
     users: { person: async () => ({ login: 'wren', displayName: 'Wren', colour: null }) },
@@ -32,7 +32,7 @@ async function start(extension: { clientId: string; secret: string } | null = { 
       if (path.endsWith('/gift-status') || path.endsWith('/gift-resolve')) return new Response(JSON.stringify({ version: 1, status: 'pending' }));
       if (path.endsWith('/forget')) return new Response(JSON.stringify({ version: 1, status: 'unavailable' }), { status: 503 });
       if (path.endsWith('/privacy') || path.endsWith('/quiet')) return new Response(JSON.stringify({ version: 1, status: path.slice(path.lastIndexOf('/') + 1), quiet: body.quiet ?? false, projection: 'pending', forgetAvailable: false }));
-      const answer = path.endsWith('/claim') ? { version: 1, status: 'deed' } : path.endsWith('/presence') ? { version: 1, status: 'presence', lit: true, stream: 'live', held: false, slot: 7 }
+      const answer = path.endsWith('/claim') ? { version: 1, status: 'deed' } : path.endsWith('/presence') ? realm.presence ?? { version: 1, status: 'presence', lit: true, stream: 'live', held: false, slot: 7 }
         : path.endsWith('/ingress') ? { version: 1, status: 'accepted' } : { version: 1, status: 'kingdom', stream: 'live', lights: 1, moment: null };
       return new Response(JSON.stringify(answer), { status: path.endsWith('/ingress') ? 202 : 200 });
     },
@@ -55,6 +55,19 @@ function webp(fill = 1) {
 }
 
 describe('verified panel door', () => {
+  it('never posts presence for someone the realm remembers asked to be forgotten', async () => {
+    const { call, requests } = await start(undefined, { viewer: 'citizen', presence: { version: 1, status: 'presence', lit: false, stream: 'live', held: false, forgotten: true } });
+    expect(await (await call('presence', await token())).json()).toEqual({ version: 1, status: 'forgotten', lit: false, renewal: 'pending' });
+    expect(requests.map(request => request.path)).not.toContain('/internal/realm/ingress');
+    // Taking their place again where the realm cannot lift the hold yet: the home answer, a dark window, no observation.
+    const again = await start(undefined, { viewer: 'citizen', presence: { version: 1, status: 'presence', lit: false, stream: 'live', held: false, forgotten: true, renewal: 'pending' } });
+    expect(await (await again.call('light', await token())).json()).toEqual({ version: 1, status: 'deed', lit: false, forgotten: true, renewal: 'pending' });
+    expect(again.requests.map(request => request.path)).not.toContain('/internal/realm/ingress');
+    const lit = await start(undefined, { viewer: 'citizen' });
+    expect(await (await lit.call('presence', await token())).json()).toMatchObject({ lit: true });
+    expect(lit.requests.map(request => request.path)).toContain('/internal/realm/ingress');
+  });
+
   it('mounts configuration with verified broadcaster ownership, never selected channel identities', async () => {
     const { call, requests } = await start();
     expect(await (await call('configuration', await token())).json()).toMatchObject({ status: 'settings', revision: '1', connected: true });
