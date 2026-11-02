@@ -287,3 +287,19 @@ shows it). A producer sends only the verified ID and the cause, never a place, t
 - main's Genesis posts `founded` when a kingdom is founded.
 
 Neither producer exists yet; `needs:` lines are in progress.
+
+**Realm words outside the land (2 Nov, AM12).** Realm labels now come from
+`apps/surveyor/src/cartography/realm-names-1.json` (proposed), keyed by family id and land kind, applied when the
+browser reads a world (`labelWorld`, `geographyOf`, `realmWord`). It repeats today's labels exactly, so no host sees a
+change; a later rename never touches an edition. `DoorHolding.realm.name` reads from it too.
+
+## Site build needs the Solid plugin — 2 Nov (front-door finished; file not on this branch)
+
+chatdom.io's site build (`apps/web/src/site/vite.config.mjs`, front-door's) fails once the front page mounts the
+Atlas embed, because the site config compiles `src/atlas/scene.tsx` without Solid's JSX transform ("Unexpected JSX
+expression"). The fix is two lines, in `work/lanes/atlas-map/site-solid-plugin.patch`: `import solid from
+'vite-plugin-solid'` and `plugins: [partials, solid()]`. The file exists only on `lane/front-door` and
+`lane/integrator`, never on `lane/atlas-map`, so it cannot be committed from this branch without an add/add
+conflict. Checked on an export of `lane/integrator` (`ed7ac60e`): without the patch the site build fails with that
+error, with it the site build exits 0 and writes all six pages. Apply it with `git apply` on the integrator (or on
+this branch after it takes front-door).

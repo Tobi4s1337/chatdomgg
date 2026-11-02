@@ -10,8 +10,13 @@ Survey: `obs-20261101T223528Z-f83a4722106d`, preview `pv-20261101T223528Z-0eafe4
 - **Wilds.** A family below that cut-off goes to the continent's Wilds, and so does a channel whose top community is a game outside the families.
 
 **What approving freezes.** Founding Edition I copies this file byte for byte into the edition. Its SHA-256 goes into the drawn world and into the founding authorization. From then on, every new holding in Edition I is placed with these families, for the life of the edition. In detail:
-- Fixed with no way back: family ids, the games in each family, and the map label (`name`). The label is written into the drawn world as each family realm's name, and the web reads family realm names straight from there.
-- `realmName` is not drawn into the world and nothing displays it yet, but it is inside the frozen bytes. It could only be changed later through a separate display table keyed by family id and applied outside the geometry. That is how `language-names-1` relabels language isles. No such table exists for families, so as things stand both `name` and `realmName` are fixed.
+- Fixed with no way back: family ids and the games in each family.
+- The words are not fixed. The map now labels every realm from a separate display table,
+  [realm-names-1.json](../../../apps/surveyor/src/cartography/realm-names-1.json), keyed by family id (and by kind for
+  the Crossroads, the Wilds, the Isles of Many Tongues and the Outer Isles), the way `language-names-1` labels languages.
+  The `name` and `realmName` inside this file stay in its frozen bytes as the record of the founding, but a later table
+  can rename any realm without touching the land, the taxonomy hash or anyone's place. Today the table repeats these
+  labels word for word, so nothing on the map changed.
 - The variety rule and the threshold live in code, recorded by id, not in this file.
 
 ## The families
@@ -83,7 +88,7 @@ Together these six send 601 holdings to the Wilds.
 3. **Fighting Games.** It has its own realm only on Japanese. 299 English, 37 Spanish and 26 French fighting holdings go to the Wilds. Options: keep it as it is, or merge it into Arenas & MOBAs under a new label. The same question applies on a smaller scale to Retro (2 continents) and Cozy (3).
 4. **Money-adjacent categories.** Should Crypto, Casino Simulator, Casino Simulator 2024 and Tournament Poker be kept off the map like Slots and Poker? That would mean a new gambling list, `gambling-categories-2`, and removing them from the unassigned list, which the schema requires. The alternative is to leave them in the Wilds. The category "Casino" (493887283, 6 Wilds holdings) is in neither list. $cam With Your Friends needs a look.
 5. **Realm names.** Show the `realmName` proposals once the file is reviewed, keep the plain labels, or use both (realm name on the map, plain label on cards)? Three of the names reuse Chatdom's own words: Kingdoms (Online Worlds), Free Cities (Roleplay) and Hamlets (Cozy).
-6. **Renaming later.** Should a family display table, like `language-names-1`, be built before founding, so labels and realm names can change later without touching the land? Without it both stay fixed for Edition I.
+6. **Renaming later.** Done, so you need not decide it before signing: `realm-names-1` (proposed, 2 Nov) labels realms by family id outside the frozen land. Approve its words with this file, or send renames any time; they never need a new edition. It is not a founding gate.
 7. **Placements to confirm:**
    - all GTA V play goes to Roleplay
    - Games + Demos goes to Cozy

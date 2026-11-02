@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "kind": "chatdom-atlas-realm-names",
+  "id": "realm-names-1",
+  "review": {
+    "status": "proposed",
+    "proposedAt": "2026-11-02",
+    "reviewedBy": null,
+    "reviewedAt": null
+  },
+  "note": "Words only. The map labels realms with these at reading time, keyed by family id and land kind; the frozen world and the founded taxonomy keep their own bytes, so a later table renames land without moving it. realmName is a proposal the map does not show yet (families-1 review, question 5).",
+  "taxonomies": [
+    "families-1"
+  ],
+  "families": {
+    "just-chatting": {
+      "label": "Just Chatting & IRL",
+      "realmName": "The Lantern-Lit Commons"
+    },
+    "creative": {
+      "label": "Creative & Music",
+      "realmName": "The Minstrel's Painted Coast"
+    },
+    "shooters": {
+      "label": "Shooters",
+      "realmName": "The Gunpowder Marches"
+    },
+    "arenas": {
+      "label": "Arenas & MOBAs",
+      "realmName": "The Warring Lanes"
+    },
+    "mmo": {
+      "label": "Online Worlds",
+      "realmName": "The Thousand-Guild Kingdoms"
+    },
+    "roleplay": {
+      "label": "Roleplay & Open Worlds",
+      "realmName": "The Masquerade Free Cities"
+    },
+    "sandbox": {
+      "label": "Builders & Sandboxes",
+      "realmName": "The Blockwright Highlands"
+    },
+    "survival": {
+      "label": "Survival & Horror",
+      "realmName": "The Moors of Last Light"
+    },
+    "adventure": {
+      "label": "Adventures & RPGs",
+      "realmName": "The Wandering Heroes' Reach"
+    },
+    "strategy": {
+      "label": "Strategy & Cards",
+      "realmName": "The Chequered Vale"
+    },
+    "sports": {
+      "label": "Sports, Racing & Simulators",
+      "realmName": "The Tournament Downs"
+    },
+    "fighting": {
+      "label": "Fighting Games",
+      "realmName": "The Duelists' Cliffs"
+    },
+    "retro": {
+      "label": "Retro & Speedruns",
+      "realmName": "The Old Cartridge Ruins"
+    },
+    "cozy": {
+      "label": "Cozy & Party",
+      "realmName": "The Tea-Garden Hamlets"
+    }
+  },
+  "lands": {
+    "crossroads": {
+      "label": "The Crossroads"
+    },
+    "wilds": {
+      "label": "The Wilds"
+    },
+    "isles": {
+      "label": "The Isles of Many Tongues"
+    },
+    "outer": {
+      "label": "The Outer Isles"
+    }
+  }
+}
