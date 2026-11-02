@@ -17,6 +17,7 @@ import { attachEveningInteractions } from './evening/interactions';
 import { createServer as createPortReservation } from 'node:net';
 import { realmListenHost, realmListenPort } from './listen-port';
 import { ownRealmShutdown } from './lifecycle';
+import { RealmPortalArrivals, installPortalArrivals } from './portals/arrivals';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -90,6 +91,8 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   evening.use(boot.services);
   const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
   dock.use(boot.services);
+  // Doors out of the kingdom (the tavern's) register their outside here; coming back stands you outside them.
+  const doors = new RealmPortalArrivals(); installPortalArrivals(boot.services, doors);
   const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); } });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);

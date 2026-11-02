@@ -11,6 +11,7 @@ import { RealmDistricts } from './limits/districts';
 type FullStateSender = { sendFullState(client: Client): void };
 import { REALM_ROOM_LIMITS as LIMITS, within } from './limits';
 import type { RealmRoomObserver } from './diagnostics';
+import { portalArrivalsFor } from './portals/arrivals';
 
 const UNOBSERVED: RealmRoomObserver = { inputDepth() {}, actionStarted() {}, actionRefused() {}, closed() {} };
 /** Colyseus closes a sender past `maxMessagesPerSecond` (and the room ends invalid input) with this code. */
@@ -166,7 +167,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       this.clock.setInterval(()=>this.seats.check(),REALM_SESSION_CHECK_MS);
       this.initialized = true;
     }
-    async onJoin(client: Client<{ auth: RealmPrincipal }>) {
+    async onJoin(client: Client<{ auth: RealmPrincipal }>, options?: unknown) {
       const auth = client.auth;
       if (!this.accepting) throw new ServerError(503,'The kingdom writer is unavailable');
       if (!auth || auth.kingdomId !== this.state.kingdomId || auth.origin !== this.state.origin) throw new ServerError(403, 'Wrong kingdom entry');
@@ -176,13 +177,15 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       const resume = carried && carried.collisionRevision === this.world.revision
         && [carried.x, carried.y, carried.z].every(Number.isFinite)
         && !embeddedSolids(carried, this.world).length && supported(carried, this.world) ? carried : undefined;
-      const position = resume ? [resume.x, resume.y, resume.z] as const : this.handle.spawn(auth), body = {x:position[0],y:position[1],z:position[2]};
+      // Back through a door: the server's own feet outside it, checked here, or the gate as always.
+      const door = resume ? undefined : this.doorArrival(auth, options);
+      const position = resume ? [resume.x, resume.y, resume.z] as const : door ? door.feet : this.handle.spawn(auth), body = {x:position[0],y:position[1],z:position[2]};
       if (!position.every(Number.isFinite) || embeddedSolids(body,this.world).length || !supported(body,this.world)) throw new ServerError(503,'The kingdom gate has no safe arrival yet');
       const replacedPrincipal = previous ? this.viewers.get(previous)?.auth : undefined;
       const replaced = this.seats.seat(auth, client.sessionId);
       if (replaced) this.removeWalker(replaced, replacedPrincipal);
       const walker = new WalkerSchema({ name: auth.publicName, look: auth.look, district: '', x: position[0], y: position[1], z: position[2],
-        vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
+        vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? door?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
       this.state.walkers.set(client.sessionId, walker);
       // Attached to state first, then shared: Colyseus sends this socket the full state of its view after the join.
       client.view = this.districts.enter(client.sessionId, walker);
@@ -224,7 +227,17 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
     }
     onLeave(client: Client<{ auth: RealmPrincipal }>, code?: number) {
       observer.closed('leave', code);
+      // Only the person's own current walker leaving counts as walking out (a second tab replacing it does not).
+      if (client.auth && this.control.get(client.auth.personId) === client.sessionId) portalArrivalsFor(services)?.departed(this.handle.kingdomId, client.auth.personId);
       this.removeWalker(client.sessionId, client.auth);
+    }
+    private doorArrival(auth: RealmPrincipal, options: unknown) {
+      const arrive = RealmJoinSchema.safeParse(options).data?.arrive, arrivals = portalArrivalsFor(services);
+      if (!arrive || !arrivals) return undefined;
+      const found = arrivals.arrival(this.handle.kingdomId, auth.personId, arrive.portal, this.world);
+      if (!found) return undefined;
+      const body = { x: found.feet[0], y: found.feet[1], z: found.feet[2] };
+      return !embeddedSolids(body, this.world).length && supported(body, this.world) ? found : undefined;
     }
     private removeWalker(id: string, principal?: RealmPrincipal) {
       if (principal && this.state.walkers.has(id)) this.handle.lifecycle('leave',principal,id,Date.now());

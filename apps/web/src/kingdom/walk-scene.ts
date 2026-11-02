@@ -282,7 +282,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         position: [pose.x, bodyY(pose), pose.z] as const, heading: pose.yaw * Math.PI * 2 / 256,
         distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, gesture: toolPoses.has(pose.id) ? 'point' : controller.gestureFor(pose.id, now),
         ...(pose.posture ? { posture: pose.posture } : {}),
-        // The gait's drawn ground and floors (citizens-gait-ground.patch, asked of PL11): read once the renderer takes them.
+        // The gait reads the drawn ground and floors, so no sole cuts a slope or a stair while standing or walking.
         ...gaitGround(pose.id),
         opacity: detail * (pose.self ? play.selfHidden ? 0 : controller.owner === 'walking' ? controller.selfOpacity : 1 : 1), time: now / 1000 })), camera);
       ground.retain(drawnHeights);
