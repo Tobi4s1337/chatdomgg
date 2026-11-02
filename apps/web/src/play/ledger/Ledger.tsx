@@ -3,6 +3,8 @@ import { ScrollLeaf } from './controls';
 import { anvilMark, awayMark, cornerCap, doorMark, flourish } from './marks';
 import { BuildPage, HelpPage, ProviderPage, SettingsPage, WayHomePage, type PageProps } from './pages';
 import { folio } from './words';
+import { CardPage } from '../card/CardPage';
+import { MapPage } from '../map/MapPage';
 
 export type LedgerPhase = 'opening' | 'open' | 'closing';
 
@@ -139,6 +141,9 @@ export function LedgerBook(props: PageProps & { phase: LedgerPhase }): JSX.Eleme
                 <Switch fallback={<Show when={current().provider} keyed>{provider => <ProviderPage provider={provider} ctx={props.play.ctx} />}</Show>}>
                   <Match when={current().id === 'settings'}><SettingsPage {...props} /></Match>
                   <Match when={current().id === 'way-home'}><WayHomePage {...props} /></Match>
+                  <Match when={current().id === 'card'}><CardPage ctx={props.play.ctx} cue={surface => props.play.cue(surface)} reducedMotion={reduced} /></Match>
+                  <Match when={current().id === 'map'}><MapPage map={() => props.play.map?.() ?? null} {...(props.play.lights ? { lights: props.play.lights } : {})}
+                    cue={surface => props.play.cue(surface)} reducedMotion={reduced} /></Match>
                   <Match when={current().id === 'build'}><BuildPage {...props} /></Match>
                   <Match when={current().id === 'help'}><HelpPage {...props} /></Match>
                 </Switch>

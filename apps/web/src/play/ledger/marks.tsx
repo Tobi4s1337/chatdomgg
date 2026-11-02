@@ -70,3 +70,18 @@ export const buildMark = () => mark('pl-mark-build', <>
 export const signpostMark = () => mark('pl-mark-signpost', <>
   <path d="M11.5 21.5V2.5M8 21.5h7" /><path d="M11.5 5h7.5l2 2.2-2 2.2h-7.5Z" class="pl-mark-fill" /><path d="M11.5 11.5H4.5l-2 2.2 2 2.2h7" class="pl-mark-fill" />
 </>);
+
+/** A hanging street lantern: its cap, cage and lit glass. The lantern path home. */
+export const lanternMark = () => mark('pl-mark-lantern', <>
+  <path d="M12 2.5v2.2M9 6.6 12 4.7l3 1.9Z" />
+  <path d="M8.6 7.6h6.8l-.8 9.4H9.4Z" />
+  <path d="M10.3 9.4h3.4l-.5 5.8h-2.4Z" class="pl-mark-fill" />
+  <path d="M9.4 17h5.2M10.6 19.5h2.8M12 17v2.5" />
+</>);
+
+/** A folded map with a path across it: the map. */
+export const mapMark = () => mark('pl-mark-map', <>
+  <path d="M3.5 6.2 9 4l6 2.2 5.5-2.2v13.8L15 20l-6-2.2-5.5 2.2Z" />
+  <path d="M9 4v13.8M15 6.2V20" class="pl-mark-faint" />
+  <path d="M6 15.5c1.8-.4 2.6-2.3 4.3-2.7 1.8-.5 2.7 1 4.4.4 1.2-.4 1.7-1.7 2.8-2.4" class="pl-mark-dash" />
+</>);

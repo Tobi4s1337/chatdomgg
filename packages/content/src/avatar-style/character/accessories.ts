@@ -1,6 +1,8 @@
 import type { Slot, VoxelGrid } from './grid';
 import { EYE_ROW, FACE_Z, SKULL } from './head';
 import { FRONT, HAIR_SLOTS, cellHash, slab, type Span } from './hair-kit';
+import type { Hex } from './colour';
+import { NEW_HATS } from './hats';
 import type { EarringStyleId, EyeSpacing, GlassesStyleId, HatStyleId } from './recipe';
 
 /*
@@ -120,6 +122,7 @@ const HATS: Record<HatStyleId, Hat> = {
       speckle(g, 'hat', 'hatDeep', .08, 41);
     },
   },
+  ...NEW_HATS,
 };
 
 /** The rows a hat starts at, for tests and the builder. */
@@ -145,6 +148,7 @@ const LENSES: Record<EyeSpacing, readonly (readonly [number, number])[]> = { set
 const LENS_ROWS: Span = [EYE_ROW, EYE_ROW + 2];
 
 export function drawGlasses(g: VoxelGrid, style: GlassesStyleId, spacing: EyeSpacing): void {
+  if (style !== 'round' && style !== 'square' && style !== 'goggles') return drawShapedGlasses(g, style, spacing);
   const at = (col: number, row: number, z: number = FRONT, slot: Slot = 'frame') => g.set(X0 + col, Y0 + row, z, slot);
   const lens = LENSES[spacing];
   const [l, r] = [lens[0]!, lens[1]!];
@@ -181,11 +185,23 @@ export function drawGlasses(g: VoxelGrid, style: GlassesStyleId, spacing: EyeSpa
   if (style === 'goggles') for (let x = X0 - 1; x <= X1; x++) for (const row of [temple, temple + 1]) g.set(x, Y0 + row, Z0 - 1, 'frame');
 }
 
-/** Earrings hang beside the jaw on both sides, just outside whatever is at the ear: skin or hair. */
-const EARRINGS: Record<EarringStyleId, readonly (readonly [number, number])[]> = {
+/**
+ * Earrings hang beside the jaw on both sides, just outside whatever is at the ear: skin or hair. Cells are
+ * [y, z] in the earring's metal, or [y, z, slot] for a pearl, a tassel's threads or a cherry and its stalk.
+ */
+type EarringCell = readonly [number, number] | readonly [number, number, Slot];
+const EARRINGS: Record<EarringStyleId, readonly EarringCell[]> = {
   stud: [[17, 0]],
   hoop: [[16, 0], [15, -1], [15, 1], [14, 0]],
   drop: [[17, 0], [16, 0], [15, 0]],
+  // A thin crescent moon, horns to the front.
+  crescent: [[17, 0], [16, -1], [15, -1], [14, 0], [17, 1], [14, 1]],
+  // A wire and a fat pearl.
+  pearl: [[17, 0], [16, 0], [15, 0, 'bead'], [15, 1, 'bead'], [14, 0, 'bead'], [14, 1, 'bead']],
+  // A metal cap and a silk tassel.
+  tassel: [[17, 0], [16, 0], [15, -1, 'bead'], [15, 0, 'bead'], [15, 1, 'bead'], [14, -1, 'bead'], [14, 1, 'bead'], [13, 0, 'bead']],
+  // Two cherries on forked stalks.
+  cherries: [[17, 0, 'leaf'], [16, -1, 'leaf'], [16, 1, 'leaf'], [15, -1, 'bead'], [15, 1, 'bead']],
 };
 
 export function drawEarrings(g: VoxelGrid, style: EarringStyleId): void {
@@ -194,8 +210,71 @@ export function drawEarrings(g: VoxelGrid, style: EarringStyleId): void {
     // The outermost cell on this side over the earring's rows, so a stud is never buried in a bob.
     let edge = side < 0 ? X0 : X1 - 1;
     for (const [[x, y, z]] of g.entries()) if (cells.some(([cy, cz]) => cy === y && cz === z) && (side < 0 ? x < edge : x > edge)) edge = x;
-    for (const [y, z] of cells) g.set(edge + side, y, z, 'metal');
+    for (const [y, z, slot = 'metal'] of cells) g.set(edge + side, y, z, slot);
   }
+}
+
+/** The fixed colour of an earring's second material: a pearl, a red silk tassel, a cherry. */
+export const EARRING_BEADS: Partial<Record<EarringStyleId, Hex>> = { pearl: '#f1ece2', tassel: '#d8344a', cherries: '#d3202a' };
+
+/**
+ * Glasses with a shape of their own, drawn on the face plane per eye: dark shades across the eyes, half-moon
+ * readers under them, heart and star frames round them, and a monocle on the person's right eye. The eye itself
+ * is only ever behind glass, never behind frame.
+ */
+function drawShapedGlasses(g: VoxelGrid, style: Exclude<GlassesStyleId, 'round' | 'square' | 'goggles'>, spacing: EyeSpacing): void {
+  // A frame cell that falls off the face plane wraps onto the side of the head.
+  const at = (col: number, row: number, slot: Slot = 'frame') => {
+    if (col < 0) g.set(X0 - 1, Y0 + row, FACE_Z, slot);
+    else if (col > 7) g.set(X1, Y0 + row, FACE_Z, slot);
+    else g.set(X0 + col, Y0 + row, FRONT, slot);
+  };
+  const eyes = spacing === 'set' ? [2, 5] as const : [1, 6] as const;
+  const outer = (a: number) => (a < 4 ? a - 1 : a + 1);
+  const r0 = EYE_ROW, r1 = EYE_ROW + 1;
+  let temple = r1;
+  if (style === 'shades') {
+    // One dark band of glass across both eyes, a bar over it, the bridge between.
+    for (let c = 0; c <= 7; c++) for (const row of [r0, r1]) at(c, row, 'lens');
+    for (let c = 0; c <= 7; c++) at(c, r1 + 1);
+    for (let c = eyes[0] + 2; c <= eyes[1] - 2; c++) at(c, r1);
+    temple = r1 + 1;
+  } else if (style === 'half-moon') {
+    // Reading glasses: lens over the lower half of each eye, a rim under them, peered over.
+    for (const a of eyes) {
+      const [c0, c1] = [Math.min(a, outer(a)), Math.max(a, outer(a))];
+      for (let c = c0; c <= c1; c++) { at(c, r0, 'lens'); at(c, r0 - 1); }
+      at(c0 - 1, r0); at(c1 + 1, r0);
+    }
+    temple = r0;
+  } else if (style === 'heart') {
+    // Two lobes over each eye with the notch between, sides, and the point under the eye.
+    for (const a of eyes) {
+      at(a, r0, 'lens'); at(a, r1, 'lens');
+      for (const c of [a - 1, a + 1]) { at(c, r1 + 1); at(c, r1); }
+      at(a, r0 - 1);
+    }
+  } else if (style === 'star') {
+    // A five-pointed star round each eye: the top point, two arms, two feet.
+    for (const a of eyes) {
+      at(a, r0, 'lens'); at(a, r1, 'lens');
+      at(a, r1 + 1);
+      for (const c of [a - 1, a + 1]) { at(c, r1); at(c, r0 - 1); }
+    }
+  } else {
+    // A monocle on the person's right eye: a ring of glass three cells wide, its chain down the cheek.
+    const a = eyes[0];
+    for (let c = a - 1; c <= a + 1; c++) { at(c, r0, 'lens'); at(c, r1, 'lens'); at(c, r1 + 1); at(c, r0 - 1); }
+    at(a - 2, r0); at(a - 2, r1); at(a + 2, r0); at(a + 2, r1);
+    for (const [x, y, z] of [[X0 - 1, Y0 + r0 - 1, FACE_Z - 1], [X0 - 1, Y0 + r0 - 2, FACE_Z - 2], [X0 - 1, Y0 + r0 - 3, FACE_Z - 3]] as const) {
+      if (!g.has(x, y, z)) g.set(x, y, z, 'metal');
+    }
+    return;
+  }
+  // The bridge: on the lens row for readers, a row up for the others.
+  if (style !== 'shades') for (let c = eyes[0] + (spacing === 'set' ? 1 : 2); c < eyes[1] - (spacing === 'set' ? 0 : 1); c++) at(c, style === 'half-moon' ? r0 : r1);
+  // Temples back along the sides of the head, under any hair there.
+  for (const x of [X0 - 1, X1]) for (let z = 1; z <= FACE_Z; z++) if (!g.has(x, Y0 + temple, z)) g.set(x, Y0 + temple, z, 'frame');
 }
 
 /**

@@ -14,7 +14,8 @@ import { generateSettlementPlan, terrainHeight, type RealmFoundedPlacement, type
 import { createCastleContent } from '../../kingdom/castle-content';
 import { placeMarketContent, placeSettlementContent } from '../../kingdom/settlement-content';
 
-export type StillsLand = 'town' | 'hamlet';
+/** `grand`: the grand land's founding (tobi4s_'s Willowmere, town; first year 2019, or 2022 where the generator refuses it). */
+export type StillsLand = 'town' | 'hamlet' | 'grand';
 
 /** Where a still stands: the walker's feet, the way the walk faces, and a close camera for the sole shots. */
 export interface StillSpot {
@@ -49,8 +50,13 @@ export const CROWD_SPOTS = 160;
 
 const digest = (bytes: string) => createHash('sha256').update(bytes).digest('hex');
 
+function grandFounding(): SettlementPlan {
+  const config = { seed: 'tobi4s_', tier: 'town', firstYear: 2019, year: 2026 } as const;
+  try { return generateSettlementPlan(config); } catch { return generateSettlementPlan({ ...config, firstYear: 2022 }); }
+}
+
 function buildScene(land: StillsLand) {
-  const plan = generateSettlementPlan({ seed: land === 'hamlet' ? 'brackenfold' : 'willowmere', tier: land, firstYear: 2022, year: 2026 });
+  const plan = land === 'grand' ? grandFounding() : generateSettlementPlan({ seed: land === 'hamlet' ? 'brackenfold' : 'willowmere', tier: land, firstYear: 2022, year: 2026 });
   const { houses, props } = placeSettlementContent(plan.homes, (x, z) => terrainHeight(plan, x, z));
   props.push(...placeMarketContent(plan.market));
   const assets = new Map<string, { assetHash: string; blueprint: VoxelBlueprint }>();
@@ -136,7 +142,7 @@ export function createStillsFixture(land: StillsLand = 'town'): StillsFixture {
       const gx = (terrainHeight(plan, px + 1, pz) - terrainHeight(plan, px - 1, pz)) / 2;
       const gz = (terrainHeight(plan, px, pz + 1) - terrainHeight(plan, px, pz - 1)) / 2;
       const grade = Math.hypot(gx, gz);
-      if (land === 'town' && grade < .2) standing.push({ x: px, y, z: pz });
+      if (land !== 'hamlet' && grade < .2) standing.push({ x: px, y, z: pz });
       const score = grade < .55 && clearAround(world, px, y, pz, 1.5) ? grade * (.1 + Math.abs(lift)) : 0;
       if (score > slopeScore) { slopeScore = score; spots.slope = { feet: [px, y, pz], heading: Math.atan2(gx, gz), gap: lift, close: closeCamera(world, [px, drawn, pz], Math.atan2(gx, gz)) }; }
       // The street: flat open ground near the market with room around it for the others.

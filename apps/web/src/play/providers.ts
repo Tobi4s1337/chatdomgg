@@ -8,5 +8,6 @@ import '../fishing/play-slot';
 import '../fishing/kingdom-slot';
 import '../raid-gate/play-slot';
 import '../campfire/register';
+import '../avatar-builder/play-slot';
 
 export {};

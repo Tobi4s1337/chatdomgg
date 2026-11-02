@@ -31,6 +31,8 @@ export function lookDistance(a: CitizenLook, b: CitizenLook): number {
   d += .4 * differ(a.eyes.shape, b.eyes.shape) + .3 * differ(a.eyes.spacing, b.eyes.spacing) + .3 * differ(a.freckles, b.freckles) + .2 * differ(a.blush, b.blush);
   d += .4 * differ(a.earrings?.style ?? null, b.earrings?.style ?? null) + .6 * differ(!!a.flower, !!b.flower);
   d += .6 * differ(a.neckwear?.style ?? null, b.neckwear?.style ?? null);
+  // Fey ears change a silhouette; a toy in the hand and face paint are what you notice next.
+  d += 1 * differ(a.ears?.style ?? null, b.ears?.style ?? null) + .8 * differ(a.held?.style ?? null, b.held?.style ?? null) + .6 * differ(a.facePaint?.style ?? null, b.facePaint?.style ?? null);
   d += 1.5 * differ(a.earned.cape?.kind ?? null, b.earned.cape?.kind ?? null) + .8 * differ(!!a.earned.hood, !!b.earned.hood) + differ(!!a.earned.scarf, !!b.earned.scarf);
   return d;
 }

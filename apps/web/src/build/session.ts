@@ -1,18 +1,21 @@
 import * as THREE from 'three';
 import { MATERIALS } from '@chatdom/content';
 import { createWindowLights, geometryFromChunks, type VoxelRenderState } from '@chatdom/render';
-import { KingdomIdSchema, VOXEL_METRES, type BuildDraftPolicy, type BuildMirror, type BuildOperation, type BuildToolsController, type BuildToolsState, type ContentWindow, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
+import { KingdomIdSchema, VOXEL_METRES, type BuildDraftPolicy, type BuildOperation, type BuildToolsController, type BuildToolsState, type ContentWindow, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
 import { type VoxelWorkerPool } from '@chatdom/voxel';
 import { BuildDraft, BuildError, prepareBuildPublication, previewBuildPublication, type BuildPublicationCandidate } from '@chatdom/world';
 import { createKingdomSound } from '../kingdom/sound';
 import { brushBox, pickBuildCell } from './pick';
 import { createBuildStarter } from './starter';
+import type { BuildPiece, BuildRackBridge } from './pieces';
 
 export interface BuildSessionOptions {
   scene: THREE.Scene; camera: THREE.PerspectiveCamera; canvas: HTMLCanvasElement; pool: VoxelWorkerPool;
   material: VoxelRenderState; policy: BuildDraftPolicy; initialBlueprint: VoxelBlueprint;
   position: Vec3; yaw: number; ownerName: string; source: 'SIMULATED' | 'LIVE';
   slot?: number;
+  /** Finished pieces this person may set into the plot (forged gifts kept for later). Absent means none on offer. */
+  pieces?: readonly BuildPiece[];
   onPublish(blueprint: VoxelBlueprint): void | Promise<void>;
   /** Runs after the accepted local candidate and private draft have been saved. */
   onPublished?(): void;
@@ -24,6 +27,8 @@ export interface BuildImportBridge {
   draft: BuildDraft;
   onPreview(blueprint: VoxelBlueprint | null, origin: Vec3): void;
   onChanged(): void;
+  /** The rack's view of the same bridge: pieces on offer, their preview and insertion, and the press sound. */
+  rack: BuildRackBridge;
 }
 const storageKey = (policy: BuildDraftPolicy) => `chatdom:build:SIMULATED:1:${policy.plotId}:${policy.ownerId}`;
 interface SavedBuild { draft: unknown; published?: BuildPublicationCandidate }
@@ -74,13 +79,15 @@ export function createBuildSession(options: BuildSessionOptions) {
   const border = new THREE.Line(borderGeometry, borderMaterial); border.computeLineDistances(); group.add(border);
   options.scene.add(group); group.updateMatrixWorld(true);
   let windows: ReturnType<typeof createWindowLights> | undefined, ghostTime = 0;
-  let tool: BuildToolsState['tool'] = 'place', material = policy.shaping.wall[0]!, brush: 1 | 2 | 4 = 4, mirror: BuildMirror | null = null;
+  let tool: BuildToolsState['tool'] = 'place', material = policy.shaping.wall[0]!, brush: 1 | 2 | 4 = 4;
+  let pieces: readonly BuildPiece[] = options.source === 'SIMULATED' ? [...options.pieces ?? []] : [], previewPiece: string | null = null;
   let meshedRevision = -1, meshing = false, meshRequested = false, meshTask: Promise<void> = Promise.resolve();
   let pointer: number | null = null, lastStroke = '', lastClient: [number, number] | null = null;
   let strokePlane: { axis: number; value: number; target: number; normal: [number, number, number] } | null = null;
   const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
 
-  const snapshot = (): BuildToolsState => ({ tool, material, brush, mirror, occupied: draft.voxelCount, budget: policy.maxVoxels,
+  // Mirror mode is retired (decision 35): the frozen contract keeps the field, and it is always null.
+  const snapshot = (): BuildToolsState => ({ tool, material, brush, mirror: null, occupied: draft.voxelCount, budget: policy.maxVoxels,
     canUndo: draft.canUndo, canRedo: draft.canRedo, dirty, status, publishing, mode: options.source,
     materials: policy.palette.map(id => { const m = MATERIALS.materials.find(m => m.id === id)!; return { id, name: m.name, colour: m.colour }; }) });
   function notify() { if (!disposed) for (const listener of listeners) listener(snapshot()); }
@@ -135,7 +142,7 @@ export function createBuildSession(options: BuildSessionOptions) {
     tool(value) { endStroke(); tool = value; cue(); notify(); refreshGhost(); },
     material(value) { if (!policy.palette.includes(value)) return; material = value; cue(); notify(); },
     brush(value) { brush = value; cue(); notify(); refreshGhost(); },
-    mirror(value) { mirror = value; cue(); notify(); },
+    mirror() { /* Retired: building never mirrors. The contract method stays until main removes it. */ },
     undo: () => history(true), redo: () => history(false), leave() { endStroke(); options.onLeave(); },
     async publish() {
       if (disposed || publishing) return;
@@ -148,7 +155,7 @@ export function createBuildSession(options: BuildSessionOptions) {
         const preview = previewBuildPublication(candidate);
         await options.onPublish(preview.candidate.blueprint);
         published = candidate; dirty = draft.revision !== candidate.revision;
-        status = 'SIMULATED · Your housewarming is on this local street.'; save(); sound.cue('light');
+        status = 'Your housewarming is on your street in this browser.'; save(); sound.cue('light');
         if (!disposed) options.onPublished?.();
       } catch (error) { fail(error); }
       finally { publishing = false; notify(); }
@@ -156,7 +163,7 @@ export function createBuildSession(options: BuildSessionOptions) {
   };
   function clearPreview(restoreWindows = true) {
     const active = previewOpen;
-    previewEpoch++; previewOpen = false; previewMesh.visible = false; previewBounds.visible = false; mesh.visible = true;
+    previewEpoch++; previewOpen = false; previewPiece = null; previewMesh.visible = false; previewBounds.visible = false; mesh.visible = true;
     if (active) { windows?.dispose(); windows = undefined; if (restoreWindows && !disposed) requestMesh(); }
   }
   const imports: BuildImportBridge = {
@@ -183,6 +190,28 @@ export function createBuildSession(options: BuildSessionOptions) {
     onChanged() {
       if (disposed || options.source !== 'SIMULATED' || draft.revision === notifiedRevision) return;
       endStroke(); clearPreview(); sound.cue('wood'); changed();
+    },
+    rack: {
+      pieces: () => options.source === 'SIMULATED' ? pieces : [],
+      previewing: () => previewPiece,
+      preview(id) {
+        if (disposed || options.source !== 'SIMULATED') return;
+        const piece = id === null ? undefined : pieces.find(item => item.id === id);
+        endStroke();
+        imports.onPreview(piece?.blueprint ?? null, piece?.origin ?? [0, 0, 0]);
+        previewPiece = piece?.id ?? null; notify();
+      },
+      place(id) {
+        const piece = pieces.find(item => item.id === id);
+        if (disposed || options.source !== 'SIMULATED' || !piece) return false;
+        endStroke();
+        const before = draft.revision;
+        try { draft.insertBlueprint(piece.blueprint, piece.origin); }
+        catch (error) { fail(error); return false; }
+        if (draft.revision === before) { clearPreview(); notify(); return false; }
+        imports.onChanged(); return true;
+      },
+      cue(kind) { if (disposed) return; if (!options.sound) sound.unlock(); sound.cue(kind); },
     },
   };
   function selection(clientX: number, clientY: number) {
@@ -228,10 +257,9 @@ export function createBuildSession(options: BuildSessionOptions) {
     }
     const key = `${tool}:${selected.box.from.join(',')}`;
     if (key === lastStroke) return; lastStroke = key;
-    const symmetry = mirror ? { mirror } : {};
-    if (tool === 'fill') edit({ kind: 'fill', at: selected.pick.cell, material, ...symmetry });
-    else if (tool === 'erase') edit({ kind: 'erase', ...selected.box, ...symmetry });
-    else edit({ kind: tool, ...selected.box, material, ...symmetry });
+    if (tool === 'fill') edit({ kind: 'fill', at: selected.pick.cell, material });
+    else if (tool === 'erase') edit({ kind: 'erase', ...selected.box });
+    else edit({ kind: tool, ...selected.box, material });
   }
   function pointerDown(event: PointerEvent) {
     if (event.button !== 0 || !event.isPrimary || options.source !== 'SIMULATED') return;
@@ -264,6 +292,13 @@ export function createBuildSession(options: BuildSessionOptions) {
   requestMesh(); if (!storageFailed) save();
   return {
     controller, draft, group, mesh, edit, imports,
+    /** Replace the pieces on offer (main feeds kept forged gifts here). A piece being previewed that is gone is taken away. */
+    offerPieces(next: readonly BuildPiece[]) {
+      if (disposed || options.source !== 'SIMULATED') return;
+      pieces = [...next];
+      if (previewPiece && !pieces.some(item => item.id === previewPiece)) { clearPreview(); }
+      notify();
+    },
     projectCell(at: Vec3) {
       const point = new THREE.Vector3(...at).addScalar(.5).multiplyScalar(VOXEL_METRES.build).applyMatrix4(group.matrixWorld).project(options.camera);
       const rect = canvas.getBoundingClientRect();

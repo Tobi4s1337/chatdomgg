@@ -19,6 +19,10 @@ export interface WalkFeatureWorld {
   audio(): KingdomAudio | null;
   /** Where the features' overlay goes: the walk's HUD host. The overlay sits under the HUD pieces. */
   readonly overlayHost: HTMLElement;
+  /** Your own home while you are inside it; absent on a walk that cannot say. */
+  ownHome?(): ReturnType<NonNullable<WalkFeatureContext['ownHome']>>;
+  /** The drawn camera for a moment; absent on a walk that cannot lend it. */
+  holdCamera?(reason: string): ReturnType<NonNullable<WalkFeatureContext['holdCamera']>>;
 }
 
 export interface WalkFeatureRuntime {
@@ -62,6 +66,8 @@ export function createWalkFeatures(ctx: PlayContext, world: PlayWorld, features:
     ...(features.world ? { world: () => features.world!() } : {}),
     overlay,
     audio: () => features.audio(),
+    ...(features.ownHome ? { ownHome: () => features.ownHome!() } : {}),
+    ...(features.holdCamera ? { holdCamera: (reason: string) => features.holdCamera!(reason) } : {}),
     onFrame(listener) {
       // Only a mounted feature hears frames; a listener added after its own dispose is ignored.
       if (!entry.live) return () => {};

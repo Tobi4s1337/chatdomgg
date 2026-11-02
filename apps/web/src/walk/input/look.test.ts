@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSpikeFilter, createWalkLook, LOOK, type KeyboardLockLike } from './look';
+import { createWalkLook, type KeyboardLockLike } from './look';
 
 type Outcome = 'grant' | 'refuse' | 'throw' | 'no-raw' | 'no-raw-event' | 'silent';
 function harness(outcomes: Outcome[] = [], options: { keyboardLock?: boolean; fullscreen?: boolean } = {}) {
@@ -79,59 +79,27 @@ const FLICKS: Record<string, number[]> = {
   'flick straight out of a still hand': [0, 0, 470, 880, 640, 210, 12],
   '60 Hz, a snap from a still hand landing in one frame': [0, 1000, 120, 0],
   '60 Hz, a shorter snap in one frame': [0, 0, 760, 95, 4],
+  'a lone big event between still ones': [2, 1, 850, 3, 0, -1],
+  'a sign flip mid turn': [120, 130, -700, 125, 118],
+  'a Firefox recentre pair mid turn': [8, 8, 300, -300, 8, 8],
 };
 
-describe('the flick filter', () => {
+describe('raw locked movement', () => {
   for (const [name, trace] of Object.entries(FLICKS)) {
-    it(`keeps every pixel of a real flick (${name})`, () => {
-      const filter = createSpikeFilter();
-      let sum = 0, at = 0;
-      for (const dx of trace) { sum += filter.push(dx, 0, at).dx; at += 8; }
-      sum += filter.flush(at + LOOK.holdMs).dx;
-      expect(sum).toBe(trace.reduce((a, b) => a + b, 0));
-      expect(filter.rejected).toBe(0);
-      expect(Math.max(...trace.map(Math.abs))).toBeGreaterThanOrEqual(400);
+    it(`adds every event 1:1, nothing held or dropped (${name})`, async () => {
+      const { look, click, move, settle } = harness();
+      click(); await settle();
+      for (const dx of trace) move(dx, 0);
+      expect(look.takeLook()).toEqual({ dx: trace.reduce((a, b) => a + b, 0), dy: 0 });
     });
   }
-
-  it('drops an isolated warp between still events, and a warp the moment the lock lands', () => {
-    const filter = createSpikeFilter();
-    let sum = 0, at = 0;
-    for (const dx of [2, 1, 850, 3, 0, -1]) { sum += filter.push(dx, 0, at).dx; at += 8; }
-    expect(sum).toBe(5);
-    filter.reset();
-    sum = filter.push(-1200, 640, 0).dx; // the first event after locking, from nowhere
-    sum += filter.flush(LOOK.holdMs).dx;
-    expect(sum).toBe(0);
-    expect(filter.rejected).toBe(2);
-  });
-
-  it('drops a warp in the middle of a slow steady turn, which no tail follows', () => {
-    const filter = createSpikeFilter();
-    let sum = 0, at = 0;
-    for (const dx of [10, 12, 1500, 11, 10]) { sum += filter.push(dx, 0, at).dx; at += 8; }
-    expect(sum).toBe(43);
-    expect(filter.rejected).toBe(1);
-  });
-
-  it('drops a sign-flipped spike in the middle of a steady turn, and keeps a real reversal', () => {
-    const steady = createSpikeFilter();
-    let sum = 0;
-    for (const dx of [120, 130, -700, 125, 118]) sum += steady.push(dx, 0, 0).dx;
-    expect(sum).toBe(120 + 130 + 125 + 118);
-    const reversal = createSpikeFilter();
-    sum = 0;
-    for (const dx of [120, 130, -700, -650, -300]) sum += reversal.push(dx, 0, 0).dx;
-    expect(sum).toBe(120 + 130 - 700 - 650 - 300);
-  });
-
-  it('holds a big event at most one neighbour or holdMs, never longer', () => {
-    const filter = createSpikeFilter();
-    expect(filter.push(0, 0, 0).dx).toBe(0);
-    expect(filter.push(500, 0, 8).dx).toBe(0); // held: is it a flick or a warp?
-    expect(filter.flush(8 + LOOK.holdMs - 1).dx).toBe(0);
-    expect(filter.push(600, 0, 16).dx).toBe(1100); // its neighbour proves the flick: both arrive at once
-    expect(filter.push(Number.NaN, 4, 24)).toEqual({ dx: 0, dy: 0 });
+  it('ignores a movement that is not a number, and nothing while unlocked', async () => {
+    const { look, click, move, settle } = harness();
+    move(50, 5);
+    expect(look.takeLook()).toEqual({ dx: 0, dy: 0 });
+    click(); await settle();
+    move(Number.NaN, 4); move(3, 1);
+    expect(look.takeLook()).toEqual({ dx: 3, dy: 1 });
   });
 });
 

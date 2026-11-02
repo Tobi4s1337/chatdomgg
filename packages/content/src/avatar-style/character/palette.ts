@@ -89,3 +89,22 @@ export const LEATHER = [
 
 /** Buttons and buckles: brass reads on every cloth. */
 export const BRASS: Hex = '#d9a441';
+
+/**
+ * The paint pot for face paint: bright festival colours only. None is dark, white or near any human skin tone,
+ * so paint never reads as a different skin (Safety §3.1); `checkHarmful` refuses any other colour.
+ */
+export const FACE_PAINTS = [
+  { id: 'sunshine', hex: '#ffd23a' }, { id: 'poppy', hex: '#e8333f' },
+  { id: 'rose', hex: '#ff6fae' }, { id: 'violet', hex: '#a36bff' }, { id: 'sky', hex: '#4cc3f0' },
+  { id: 'teal', hex: '#1fb5a6' }, { id: 'leaf', hex: '#5cc94a' }, { id: 'cobalt', hex: '#3d63ea' },
+] as const satisfies readonly { id: string; hex: Hex }[];
+
+/** Fey tints for ears that do not take the skin: clearly not a human tone. Any `#rrggbb` is allowed. */
+export const FEY_TINTS = [
+  { id: 'moss', hex: '#9cc27a' }, { id: 'lilac', hex: '#c9a8f0' }, { id: 'frost', hex: '#bfe3f2' },
+  { id: 'dusk', hex: '#8f7ad8' }, { id: 'blossom', hex: '#f2a7c3' }, { id: 'seafoam', hex: '#8fd9c4' },
+] as const satisfies readonly { id: string; hex: Hex }[];
+
+/** The white of a hat's eyes, spots and pompoms. */
+export const HAT_WHITE: Hex = '#f6f2e8';

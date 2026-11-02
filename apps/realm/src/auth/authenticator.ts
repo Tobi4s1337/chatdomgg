@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { ServerError } from '@colyseus/core';
 import type { Pool } from 'pg';
-import { KingdomIdSchema, PersonIdSchema, starterCitizenLook } from '@chatdom/shared';
+import { KingdomIdSchema, PersonIdSchema, isLookToken, starterCitizenLook } from '@chatdom/shared';
 import { RealmJoinSchema, type RealmAuthenticator, type RealmJoin, type RealmPrincipal } from '@chatdom/shared/realm';
 
 /** Legacy fallback presentation. Verified entries receive the same free starter recipes as presence. */
@@ -23,6 +23,8 @@ interface ConsumedTicket {
   readonly origin: string; readonly ticket_live: boolean; readonly session_person: string; readonly session_origin: string;
   readonly session_live: boolean; readonly revoked: boolean; readonly session_expires_ms: string;
   readonly person_origin: string; readonly public_name: string | null;
+  /** The person's saved look (`realm_citizen_looks`), if they ever saved one in this origin. */
+  readonly look_token: string | null;
 }
 
 /**
@@ -50,8 +52,9 @@ export function createRealmAuthenticator({ pool, origin }: RealmAuthenticatorOpt
           select b.session_id::text, b.person_id, b.kingdom_id, b.protocol, b.origin, b.ticket_live,
             s.person_id as session_person, s.origin as session_origin, s.expires_at > now() as session_live,
             s.revoked_at is not null as revoked, floor(extract(epoch from s.expires_at) * 1000)::bigint::text as session_expires_ms,
-            p.origin as person_origin, p.public_name
-          from burned b join realm_sessions s on s.session_id = b.session_id join realm_persons p on p.person_id = b.person_id`,
+            p.origin as person_origin, p.public_name, l.token as look_token
+          from burned b join realm_sessions s on s.session_id = b.session_id join realm_persons p on p.person_id = b.person_id
+          left join realm_citizen_looks l on l.person_id = b.person_id and l.origin = b.origin`,
         [ticketHash]);
         row = result.rows[0];
       } catch {
@@ -67,10 +70,13 @@ export function createRealmAuthenticator({ pool, origin }: RealmAuthenticatorOpt
       } catch {
         throw new ServerError(503, 'Kingdom entry is unavailable right now. Nothing has changed; try again shortly.');
       }
+      const personId = PersonIdSchema.parse(row.person_id);
       return {
-        personId: PersonIdSchema.parse(row.person_id), kingdomId: KingdomIdSchema.parse(row.kingdom_id),
+        personId, kingdomId: KingdomIdSchema.parse(row.kingdom_id),
         sessionId: entryId, expiresAt: Number(row.session_expires_ms), origin,
-        publicName: row.public_name ?? REALM_ANONYMOUS_PRESENTATION.publicName, look: starterCitizenLook(PersonIdSchema.parse(row.person_id)),
+        publicName: row.public_name ?? REALM_ANONYMOUS_PRESENTATION.publicName,
+        // Their saved look's token when they have one; otherwise the free starter their identity picks.
+        look: isLookToken(row.look_token) ? row.look_token : starterCitizenLook(personId),
       };
     },
     async current(principal: RealmPrincipal, now: number): Promise<boolean> {

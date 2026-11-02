@@ -13,16 +13,18 @@ import '../../style.css';
 import Kingdom from '../../kingdom';
 import { connectRealm, type RealmClient } from '../../realm/client';
 import type { RealmChatFeed } from '../../realm/adapters/chat';
-import { compileFoundedScene } from '@chatdom/world/founded-collision';
+import { compileFoundedScene, foundedGroundAt } from '@chatdom/world/founded-collision';
 import type { KingdomPresenceFrame, PresenceFeed, Vec3 } from '@chatdom/shared';
 import type { RealmFoundedManifest } from '@chatdom/shared/realm';
 import type { RealmFoundedScene } from '@chatdom/world';
 import { WORLD_FIXTURE_KINGDOM } from '@chatdom/shared/world-fixtures';
 import { sharedPlaySettings } from '../../play/settings';
 import type { StillSpot } from './fixture';
+import { routeHome, streetGraph, trailStops, type HomeRoute } from '../../play/map/route';
+import { activeWayHome } from '../../play/way-home-runtime';
 
 interface FixtureInfo {
-  readonly land: 'town' | 'hamlet';
+  readonly land: 'town' | 'hamlet' | 'grand';
   readonly manifest: RealmFoundedManifest;
   readonly spots: Readonly<Record<'street' | 'slope' | 'stairs' | 'floor', StillSpot | null>>;
   readonly beside: readonly Vec3[];
@@ -37,12 +39,14 @@ interface Still {
   /** Drawn bodies on the drawn ground (after F07), or at the physics height (before). */
   readonly drawnGround: boolean;
   /** The evidence camera: the spot's close sole camera, a wide view over the street, a high one over a crowd, or the walk's own camera. */
-  readonly camera: 'walk' | 'close' | 'wide' | 'high';
+  readonly camera: 'walk' | 'close' | 'wide' | 'high' | 'trail';
   readonly others: boolean;
   /** 'near': the six homes nearest the street speak every four seconds; 'town': every lit home, at a big channel's rate. */
   readonly chat: false | 'near' | 'town';
   /** More walkers the runner joins and stands in the streets around (the crowd still). */
   readonly crowd?: number;
+  /** The lantern path home (PL12): where along a long route home the walker stands, and the trail is lit from there. */
+  readonly lantern?: 'start' | 'middle' | 'door';
 }
 
 const walkStill = (view: Still['view']): Still => ({ spot: 'street', view, drawnGround: true, camera: 'walk', others: true, chat: 'near' });
@@ -57,6 +61,10 @@ export const STILLS: Readonly<Record<string, Still>> = {
   'slope-before': sole('slope', false), 'slope-after': sole('slope', true),
   'stairs-before': sole('stairs', false), 'stairs-after': sole('stairs', true),
   'floor-before': sole('floor', false), 'floor-after': sole('floor', true),
+  // The lantern path home at dusk, from three points of one route: its start, halfway, and the last stretch to the door.
+  'lantern-start': { spot: 'street', view: 'third', drawnGround: true, camera: 'trail', others: false, chat: false, lantern: 'start' },
+  'lantern-middle': { spot: 'street', view: 'third', drawnGround: true, camera: 'trail', others: false, chat: false, lantern: 'middle' },
+  'lantern-door': { spot: 'street', view: 'third', drawnGround: true, camera: 'trail', others: false, chat: false, lantern: 'door' },
 };
 
 /** Lines a second from a chat of about 5,000 people (a busy evening, not a hype train). */
@@ -181,23 +189,65 @@ const place = async (client: RealmClient, at: Vec3) => {
 };
 const far = (index: number): Vec3 => info.beside[info.beside.length - 1 - index] ?? info.spots.street!.feet;
 
-let attachedGround: boolean | null = null;
+let attachedGround: string | null = null;
+// The lantern stills' route: from the street spot to the first home whose way there is a long walk (90 to 170 m).
+let lanternRoute: HomeRoute | null = null;
+function lanternWay(from: Vec3): HomeRoute {
+  if (lanternRoute) return lanternRoute;
+  const graph = streetGraph(founded.plan);
+  const routes = founded.plan.homes.map(home => routeHome(founded.plan, graph, from, home.id)).filter((route): route is HomeRoute => !!route);
+  lanternRoute = routes.find(route => route.length > 90 && route.length < 170) ?? routes.sort((a, b) => b.length - a.length)[0] ?? null;
+  if (!lanternRoute) throw new Error('Stills: no street reaches any home');
+  return lanternRoute;
+}
+/** The point `metres` along a route, and the heading along it there. */
+function along(route: HomeRoute, metres: number): { feet: Vec3; heading: number } {
+  let walked = 0;
+  for (let i = 1; i < route.points.length; i++) {
+    const a = route.points[i - 1]!, b = route.points[i]!, span = Math.hypot(b[0] - a[0], b[2] - a[2]);
+    if (walked + span >= metres || i === route.points.length - 1) {
+      const t = span > 0 ? Math.min(1, Math.max(0, (metres - walked) / span)) : 0;
+      return { feet: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t], heading: Math.atan2(b[0] - a[0], b[2] - a[2]) };
+    }
+    walked += span;
+  }
+  return { feet: route.points[0]!, heading: 0 };
+}
 async function stage(name: string) {
   staged = false;
   const still = STILLS[name];
   if (!still) throw new Error(`Stills: no still named ${name}`);
-  const spot = info.spots[still.spot];
-  if (!spot) throw new Error(`Stills: the ${info.land} has no ${still.spot} spot`);
+  const base = info.spots[still.spot];
+  if (!base) throw new Error(`Stills: the ${info.land} has no ${still.spot} spot`);
+  const route = still.lantern ? lanternWay(base.feet) : null;
   const kingdom = page.__chatdomKingdom!;
   progress(`staging ${name}: placing the walkers`);
   kingdom.pose(null);
   settings.set({ view: still.view });
-  await place(self, spot.feet);
+  let spot: StillSpot = base;
+  if (route) {
+    // The route's points carry the street's height, not the half-metre physics ground, and a stall may stand on the
+    // street: stand on the physics ground under the route, nudged along it until the realm finds the spot clear.
+    const wanted = still.lantern === 'start' ? 3 : still.lantern === 'middle' ? route.length * .5 : Math.max(3, route.length - 12);
+    let placed: StillSpot | null = null;
+    search: for (const nudge of [0, 1.5, -1.5, 3, -3, 5, -5, 8, -8]) {
+      const point = along(route, Math.max(0, Math.min(route.length, wanted + nudge)));
+      const ground = foundedGroundAt(founded.plan, point.feet[0], point.feet[2])[1];
+      for (const y of [ground, point.feet[1], ground + .5, ground + 1]) {
+        const feet: Vec3 = [point.feet[0], y, point.feet[2]];
+        if (await place(self, feet).then(() => true, () => false)) { placed = { ...base, feet, heading: point.heading }; break search; }
+      }
+    }
+    if (!placed) throw new Error(`Stills: nowhere to stand on the way home near ${Math.round(wanted)} m`);
+    spot = placed;
+  } else await place(self, spot.feet);
   for (const [index, peer] of peers.entries()) await place(peer, still.others ? info.beside[index * 3] ?? far(index) : far(index));
-  if (attachedGround !== still.drawnGround) {
+  const attachKey = `${still.drawnGround}:${route?.plotId ?? ''}`;
+  if (attachedGround !== attachKey) {
     if (attachedGround !== null) kingdom.detachWalk();
-    await kingdom.attachWalk({ client: self, collision, manifest: info.manifest, heading: spot.heading, drawnGround: still.drawnGround });
-    attachedGround = still.drawnGround;
+    await kingdom.attachWalk({ client: self, collision, manifest: info.manifest, heading: spot.heading, drawnGround: still.drawnGround,
+      ...(route ? { stillsHome: route.plotId } : {}) });
+    attachedGround = attachKey;
   }
   progress(`staging ${name}: waiting to stand at the ${still.spot}`);
   await until(() => {
@@ -236,6 +286,17 @@ async function stage(name: string) {
     const fx = Math.sin(spot.heading), fz = Math.cos(spot.heading);
     kingdom.pose([spot.feet[0] - fx * 11, spot.feet[1] + 9, spot.feet[2] - fz * 11], [spot.feet[0] + fx * 14, spot.feet[1] + 1, spot.feet[2] + fz * 14], 55);
   }
+  if (still.camera === 'trail' && route) {
+    // Lit from where you stand, then seen from over your shoulder down the street toward the lanterns ahead.
+    const way = activeWayHome();
+    if (!way?.lights.light()) throw new Error('Stills: the way home would not light');
+    const stops = trailStops(way.map()?.route ?? route);
+    const ahead = stops[Math.min(stops.length - 1, 2)]?.position ?? route.door;
+    const fx = Math.sin(spot.heading), fz = Math.cos(spot.heading);
+    kingdom.pose([spot.feet[0] - fx * 5.5, spot.feet[1] + 3.1, spot.feet[2] - fz * 5.5], [ahead[0], ahead[1] + 1.2, ahead[2]], 58);
+    // Every lantern has kindled (about a tenth of a second each) before the shutter.
+    await until(() => (way.trail.debug.litLanterns ?? 0) >= Math.max(1, way.trail.debug.lanterns - 1), 60_000, 'the lanterns kindling');
+  }
   // The boom eases, the drawn ground settles and bubbles rise; then the lighting must have settled too.
   progress(`staging ${name}: the lighting settling`);
   await sleep(3_500);
@@ -248,7 +309,8 @@ async function stage(name: string) {
   if (chatting) await until(() => [...document.querySelectorAll<HTMLElement>('.is-speech')].some(bubble => Number(getComputedStyle(bubble).opacity) > .95),
     30_000, '').catch(() => { bubbleWait = `no bubble within 30 s: heard ${heard}, speech frames ${published}, ownership ${ownership()}, last lines ${lastLines || 'none'}`; });
   const stats = page.__chatdomKingdom!.stats;
-  page.__chatdomStills!.facts = { activeWindows: stats.activeWindows, citizens: stats.citizens, walkers: page.__chatdomWalk?.walkers, heard, person: page.__chatdomWalk?.person,
+  page.__chatdomStills!.facts = { ...(route ? { lantern: { plot: route.plotId, metres: Math.round(route.length), lanterns: activeWayHome()?.trail.debug.lanterns,
+    lit: activeWayHome()?.trail.debug.litLanterns, doorGlow: activeWayHome()?.trail.debug.doorGlow } } : {}), activeWindows: stats.activeWindows, citizens: stats.citizens, walkers: page.__chatdomWalk?.walkers, heard, person: page.__chatdomWalk?.person,
     boom: page.__chatdomWalk?.camera.distance, bubbles: document.querySelectorAll('.is-speech').length, ...(bubbleWait ? { bubbleWait } : {}) };
   page.__chatdomStills!.current = name;
   staged = true;

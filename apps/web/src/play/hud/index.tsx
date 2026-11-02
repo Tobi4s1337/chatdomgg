@@ -11,6 +11,8 @@ import { keyName, readKeyLayout, type KeyLayout } from '../ledger/keys';
 import { LedgerBook, type LedgerPhase } from '../ledger/Ledger';
 import { bookMark, mouseMark } from '../ledger/marks';
 import { createLedger, type Ledger, type LedgerState } from '../ledger/model';
+import { Minimap } from '../map/Minimap';
+import '../map/map.css';
 
 const REGIONS: readonly HudRegion[] = ['top-left', 'top-centre', 'top-right', 'bottom-left', 'bottom-centre', 'bottom-right'];
 /** How long the shutter swings and the book settles; reduced motion keeps only a short fade. */
@@ -111,6 +113,8 @@ function HudView(props: { play: PlayHost; ledger: Ledger }): JSX.Element {
   onCleanup(play.onPrompt(next => setPrompt(() => next)));
   const walking = () => !stream() && !ledgerShown() && (cursor().state === 'locked' || cursor().state === 'touch');
   const useKey = () => keyName(settings().keys.use, layout());
+  // The minimap: on your feet in the world (or about to click back in), never over the ledger or on the stream.
+  const minimap = () => !!play.map && !stream() && !ledgerShown();
 
   const pageProps = { ledger: props.ledger, play, state, settings, cursor, layout, way, bindings };
   return <div class="pl-hud cd-kit" data-reduced={reduced() ? 'true' : undefined} data-cursor={cursor().state} data-ledger={ledgerShown() ? 'open' : undefined}>
@@ -124,6 +128,9 @@ function HudView(props: { play: PlayHost; ledger: Ledger }): JSX.Element {
             <span class="pl-prompt-words">{shown.label}</span>
           </button>
         </Show>}
+      </Show>
+      <Show when={region === 'top-right' && minimap()}>
+        <Minimap map={() => play.map?.() ?? null} reducedMotion={reduced} cue={surface => play.cue(surface)} onOpen={() => props.ledger.open('map')} />
       </Show>
       <Show when={region === 'bottom-right' && touch()}>
         <button type="button" class="pl-ledger-button" aria-label="Open the ledger" onClick={() => props.ledger.open()}>

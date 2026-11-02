@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { getEnvironment } from '@chatdom/render';
 import {
-  PORTRAIT_FIXTURES, SIMULATED_ENTITLEMENTS, earnedOffers, seedLook, subLapsed, twitchDefaultLook, wearPiece, type CitizenLook,
+  PORTRAIT_FIXTURES, earnedOffers, seedLook, subLapsed, twitchDefaultLook, wearPiece, type CitizenLook,
 } from '../../../../packages/content/src/avatar-style';
+import { BENCH_RECORDS } from './bench-records';
 import { citizenGlassMaterial, citizenMaterial, citizenObject } from './portrait-renderer';
 
 /*
- * Full-body lineup (spec 49 acceptance): twenty SIMULATED citizens standing on a cobbled square in the
+ * Full-body lineup (spec 49 acceptance): twenty invented citizens standing on a cobbled square in the
  * kingdom's own light for the hour. `?view=stream` frames them at stream distance (a citizen is about a tenth of
  * a 1080p frame tall); `?view=close` frames them large enough to judge clothes. `?set=fixtures|seeded|earned`,
  * `?hour=19.25` (dusk by default).
@@ -19,29 +20,29 @@ const hour = Number(params.get('hour') ?? 19.25);
 const set = params.get('set') === 'seeded' ? 'seeded' : params.get('set') === 'earned' ? 'earned' : 'fixtures';
 
 /**
- * `?set=earned`: twenty SIMULATED people from the bench's earning records, each in their Twitch default look
+ * `?set=earned`: twenty invented people from the bench's earning records, each in their Twitch default look
  * wearing a different handful of what they have earned (ribbons, hood, pins, scarf, capes, forged hat), so the
  * pieces can be judged at the size chat sees them. Lapsed subscribers wear theirs dimmed.
  */
 function earnedLineup(): { name: string; look: CitizenLook; dim: boolean }[] {
-  const personas = [SIMULATED_ENTITLEMENTS.veteran, SIMULATED_ENTITLEMENTS.regular, SIMULATED_ENTITLEMENTS.lapsed, SIMULATED_ENTITLEMENTS.veteran];
+  const personas = [BENCH_RECORDS.veteran, BENCH_RECORDS.regular, BENCH_RECORDS.lapsed, BENCH_RECORDS.veteran];
   const names = ['#8A2BE2', '#1E90FF', '#2E8B57', '#FF7F50', '#DAA520'];
   return Array.from({ length: 20 }, (_, i) => {
     const e = personas[i % personas.length]!;
-    let look = twitchDefaultLook({ personId: `simulated-earner-${i + 1}`, nameColour: names[i % names.length]!, entitlements: e });
+    let look = twitchDefaultLook({ personId: `bench-earner-${i + 1}`, nameColour: names[i % names.length]!, entitlements: e });
     const owned = earnedOffers(e).filter(o => o.unlocked);
     // A different selection per person: walk the owned pieces with a stride so neighbours differ.
     for (let k = 0; k < 3; k++) {
       const offer = owned[(i * 3 + k * (i % 3 + 1)) % owned.length];
       if (offer) look = wearPiece(look, offer.piece);
     }
-    return { name: `Simulated earner ${i + 1}`, look, dim: subLapsed(e) };
+    return { name: `Earner ${i + 1}`, look, dim: subLapsed(e) };
   });
 }
 const people: readonly { name: string; look: CitizenLook; dim?: boolean }[] = set === 'seeded'
-  ? Array.from({ length: 20 }, (_, i) => ({ name: `Simulated viewer ${i + 1}`, look: seedLook(`simulated-viewer-${i + 1}`) }))
+  ? Array.from({ length: 20 }, (_, i) => ({ name: `Viewer ${i + 1}`, look: seedLook(`bench-viewer-${i + 1}`) }))
   : set === 'earned' ? earnedLineup() : PORTRAIT_FIXTURES;
-const title = { seeded: 'Twenty seeded default looks', earned: 'Twenty SIMULATED people wearing what they earned', fixtures: 'Twenty hand-made citizens' }[set];
+const title = { seeded: 'Twenty seeded default looks', earned: 'Twenty people wearing what they earned', fixtures: 'Twenty hand-made citizens' }[set];
 document.querySelector('#what')!.textContent = `${title} · ${view === 'stream' ? 'stream distance' : 'close'} · hour ${hour}`;
 
 const env = getEnvironment(hour);

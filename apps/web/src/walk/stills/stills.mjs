@@ -7,9 +7,9 @@
 //   another, each in its own process that takes the lock, opens the page, shoots and releases it before the next.
 //   The page is built once, before any lock is taken, and served as plain files: through the dev server a software
 //   browser fetched hundreds of unbundled modules under the lock, and the crowd still never opened inside one hold.
-//     node apps/web/src/walk/stills/stills.mjs [--land town|hamlet] [--only third,first] [--out shots/play/stills]
+//     node apps/web/src/walk/stills/stills.mjs [--land town|hamlet|grand] [--only third,first] [--out shots/play/stills]
 //   Real GPU, inside the lease (web on 5192, realm on 5191, each still a fresh load through `chatdom-pc shot`):
-//     chatdom-pc-lease -- node apps/web/src/walk/stills/stills.mjs --target pc [--land town|hamlet]
+//     chatdom-pc-lease -- node apps/web/src/walk/stills/stills.mjs --target pc [--land town|hamlet|grand]
 //
 // Test identities exist only in the memory room and are never Twitch claims. Dev only: never a route, never built.
 import { chromium } from '@playwright/test';
@@ -31,12 +31,15 @@ const { values } = parseArgs({ options: {
   only: { type: 'string' }, out: { type: 'string', default: 'shots/play/stills' }, size: { type: 'string', default: '1440x900' },
   // A page already built by a parent run (one still per lock hold shares one build).
   bundle: { type: 'string' },
+  // Build the page and print its folder, then stop: build before a lease, then pass it with --bundle inside.
+  'build-only': { type: 'boolean', default: false },
 } });
 const [width, height] = values.size.split('x').map(Number);
 const pc = values.target === 'pc';
-if (!['town', 'hamlet'].includes(values.land)) throw new Error('--land is town or hamlet');
+if (!['town', 'hamlet', 'grand'].includes(values.land)) throw new Error('--land is town, hamlet or grand');
 const repo = fileURLToPath(new URL('../../../../../', import.meta.url));
-const ALL = values.land === 'hamlet' ? ['dusk', 'third'] : ['third', 'first', 'dusk', 'crowd', 'slope-before', 'slope-after', 'stairs-before', 'stairs-after', 'floor-before', 'floor-after'];
+const LANTERNS = ['lantern-start', 'lantern-middle', 'lantern-door'];
+const ALL = values.land === 'grand' ? LANTERNS : values.land === 'hamlet' ? ['dusk', 'third'] : ['third', 'first', 'dusk', 'crowd', 'slope-before', 'slope-after', 'stairs-before', 'stairs-after', 'floor-before', 'floor-after'];
 const names = values.only ? values.only.split(',') : ALL;
 
 // The stills page (page.tsx in place of main.tsx), built with the web app's own config into a scratch folder.
@@ -66,6 +69,7 @@ const servePage = (dir, extra) => createHttp((request, response) => {
 
 const ownBundle = !values.bundle;
 const bundle = values.bundle ?? await buildPage();
+if (values['build-only']) { console.log(`Stills: page built in ${bundle}`); process.exit(0); }
 if (!pc && names.length > 1) {
   // One still per lock hold: run each in its own process and let the queue serve the other lanes in between.
   let failed = 0;

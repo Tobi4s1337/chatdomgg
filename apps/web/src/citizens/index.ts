@@ -6,6 +6,8 @@ import { createCitizenCapeRenderer } from './capes';
 import { createFootstepState, stepFootsteps, type FootstepFloor, type FootstepGround, type FootstepState } from './footsteps';
 import { meshStyledCitizen, STYLED_CITIZEN_RIG, type StyledCitizenLook } from './style-adapter';
 import { createStyledCitizenMaterial, styledCitizenGeometry } from './style-material';
+import { citizenLookFor } from './default-look';
+import type { CitizenLookLibrary } from './look-library';
 
 /** Vertical displacement of the seated head from its standing position. */
 export const CITIZEN_SEATED_HEAD_OFFSET_METRES = -4 * VOXEL_METRES.avatar;
@@ -55,12 +57,26 @@ export interface CitizenFootfall {
 export interface CitizenRendererOptions {
   readonly registry: MaterialRegistry;
   readonly material: VoxelRenderState;
-  readonly looks: readonly CitizenRenderLook[];
+  /** Prepared up front and kept for the renderer's life. */
+  readonly looks?: readonly CitizenRenderLook[];
   readonly capacity?: number;
   readonly pool?: VoxelWorkerPool;
+  /** Any other token is drawn once this library has it, built on first use; until then the sample is skipped. */
+  readonly library?: CitizenLookLibrary;
+  /** Library looks kept resident; beyond this, those not drawn for a minute are released. */
+  readonly libraryLooks?: number;
 }
-interface Batch { readonly attachment: AvatarAttachmentId; readonly mesh: THREE.InstancedMesh; readonly pivot: THREE.Matrix4; readonly seatedHem: boolean }
-interface LookBatch { readonly batches: readonly Batch[]; readonly cape: AvatarCapeBlueprint | undefined; readonly capePaint?: StyledCitizenLook['capePaint']; readonly rig: typeof AVATAR_RIG; readonly headBounds: THREE.Box3 | undefined }
+interface Batch { readonly attachment: AvatarAttachmentId; mesh: THREE.InstancedMesh; readonly pivot: THREE.Matrix4; readonly seatedHem: boolean }
+interface LookBatch {
+  readonly batches: readonly Batch[]; readonly cape: AvatarCapeBlueprint | undefined; readonly capePaint?: StyledCitizenLook['capePaint'];
+  readonly rig: typeof AVATAR_RIG; readonly headBounds: THREE.Box3 | undefined;
+  /** Library looks start with a few instance slots and grow; `used` is the last update that asked for them. */
+  readonly library?: { instances: number; used: number };
+}
+
+/** Library looks start this small: a saved look is usually worn by one person. */
+const LIBRARY_LOOK_INSTANCES = 4;
+const LIBRARY_LOOK_IDLE_MS = 60_000;
 
 /**
  * Meshed voxel parts share one draw per part/look, not one draw per person.
@@ -70,26 +86,38 @@ interface LookBatch { readonly batches: readonly Batch[]; readonly cape: AvatarC
 export async function createCitizenRenderer(scene: THREE.Scene, options: CitizenRendererOptions) {
   const capacity = options.capacity ?? 256;
   if (!Number.isSafeInteger(capacity) || capacity < 1) throw new Error('Citizen capacity must be a positive integer.');
+  const libraryLooks = options.libraryLooks ?? 96;
+  const library = options.library;
   let pool = options.pool;
   const ownsPool = !options.pool;
   const group = new THREE.Group();
   const looks = new Map<string, LookBatch>();
-  const geometries: THREE.BufferGeometry[] = [];
-  const meshes: THREE.InstancedMesh[] = [];
+  const meshes = new Set<THREE.InstancedMesh>();
   const paintedMaterials = new Map<'solid' | 'glass', THREE.ShaderMaterial>();
-  function addBatch(geometry: THREE.BufferGeometry, material: THREE.Material, attachment: AvatarAttachmentId, pivotCells: readonly number[], name: string, seatedHem = false): Batch {
-    geometry.setAttribute('aLodFade', new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1));
-    const mesh = new THREE.InstancedMesh(geometry, material, capacity);
+  const broken = new Set<string>();
+  function instanced(geometry: THREE.BufferGeometry, material: THREE.Material, instances: number, name: string) {
+    geometry.setAttribute('aLodFade', new THREE.InstancedBufferAttribute(new Float32Array(instances).fill(1), 1));
+    const mesh = new THREE.InstancedMesh(geometry, material, instances);
     mesh.name = name;
     mesh.count = 0;
+    mesh.visible = false;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     // Instance bounds change with every sample; cull the complete citizen below.
     mesh.frustumCulled = false;
     mesh.castShadow = false;
     if (material.transparent) mesh.renderOrder = 1;
-    group.add(mesh); geometries.push(geometry); meshes.push(mesh);
+    group.add(mesh); meshes.add(mesh);
+    return mesh;
+  }
+  function addBatch(geometry: THREE.BufferGeometry, material: THREE.Material, attachment: AvatarAttachmentId, pivotCells: readonly number[], name: string, seatedHem = false, instances = capacity): Batch {
+    const mesh = instanced(geometry, material, instances, name);
     const pivot = new THREE.Matrix4().makeTranslation(...pivotCells.map(n => -n * VOXEL_METRES.avatar) as [number, number, number]);
     return { attachment, mesh, pivot, seatedHem };
+  }
+  function release(mesh: THREE.InstancedMesh, geometry: boolean) {
+    group.remove(mesh); meshes.delete(mesh);
+    if (geometry) mesh.geometry.dispose();
+    mesh.dispose();
   }
   // Union head-attached geometry in head-local metres once per look. Sockets
   // inherit the head pose; body parts and cloth must not affect this anchor.
@@ -124,19 +152,26 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     }
     return bounds.isEmpty() ? undefined : bounds;
   }
-  try {
-    for (const look of options.looks) {
-      if (looks.has(look.id)) throw new Error(`Duplicate citizen look ${look.id}.`);
-      const batches: Batch[] = [];
-      if ('kind' in look) {
-        for (const part of meshStyledCitizen(look)) {
-          let material = paintedMaterials.get(part.surface);
-          if (!material) { material = createStyledCitizenMaterial(options.material, part.surface); paintedMaterials.set(part.surface, material); }
-          batches.push(addBatch(styledCitizenGeometry(part.mesh, part.surface), material, part.attachment, part.pivot, `Citizen ${look.id} ${part.seatedHem ? 'hem' : part.attachment} ${part.surface}`, part.seatedHem));
-        }
-        looks.set(look.id, { batches, cape: look.cape, ...(look.capePaint ? { capePaint: look.capePaint } : {}), rig: STYLED_CITIZEN_RIG, headBounds: headBoundsFor(batches) });
-        continue;
+  // Painted looks mesh synchronously, so a library look can be built the first frame it is wanted.
+  function preparePainted(look: StyledCitizenLook, instances = capacity): LookBatch {
+    const batches: Batch[] = [];
+    try {
+      for (const part of meshStyledCitizen(look)) {
+        let material = paintedMaterials.get(part.surface);
+        if (!material) { material = createStyledCitizenMaterial(options.material, part.surface); paintedMaterials.set(part.surface, material); }
+        batches.push(addBatch(styledCitizenGeometry(part.mesh, part.surface), material, part.attachment, part.pivot, `Citizen ${look.id} ${part.seatedHem ? 'hem' : part.attachment} ${part.surface}`, part.seatedHem, instances));
       }
+    } catch (error) {
+      for (const batch of batches) release(batch.mesh, true);
+      throw error;
+    }
+    return { batches, cape: look.cape, ...(look.capePaint ? { capePaint: look.capePaint } : {}), rig: STYLED_CITIZEN_RIG, headBounds: headBoundsFor(batches) };
+  }
+  try {
+    for (const look of options.looks ?? []) {
+      if (looks.has(look.id)) throw new Error(`Duplicate citizen look ${look.id}.`);
+      if ('kind' in look) { looks.set(look.id, preparePainted(look)); continue; }
+      const batches: Batch[] = [];
       // Painted-only scenes need no voxel worker. Legacy assets keep their
       // established worker/registry path, including keepers and saved v1 looks.
       pool ??= new VoxelWorkerPool({ size: 2 });
@@ -150,11 +185,57 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
       looks.set(look.id, { batches, cape: look.cape, rig: AVATAR_RIG, headBounds: headBoundsFor(batches) });
     }
   } catch (error) {
-    for (const geometry of geometries) geometry.dispose();
-    for (const mesh of meshes) mesh.dispose();
+    for (const mesh of [...meshes]) release(mesh, true);
     for (const material of paintedMaterials.values()) material.dispose();
     if (ownsPool) pool?.dispose();
     throw error;
+  }
+  /** The look to draw for a token now, building a library look on first use; otherwise asks the library and skips. */
+  function lookFor(token: string, now: number): LookBatch | undefined {
+    const known = looks.get(token);
+    if (known) {
+      if (known.library) known.library.used = now;
+      return known;
+    }
+    if (!library || broken.has(token)) return undefined;
+    const recipe = library.has(token) ? library.recipe(token) : null;
+    if (!recipe) { library.request(token); return undefined; }
+    try {
+      const built: LookBatch = { ...preparePainted(citizenLookFor(token, recipe), Math.min(capacity, LIBRARY_LOOK_INSTANCES)),
+        library: { instances: Math.min(capacity, LIBRARY_LOOK_INSTANCES), used: now } };
+      looks.set(token, built);
+      return built;
+    } catch (error) {
+      // A recipe the library accepted but this build cannot draw stays a simple figure rather than failing every frame.
+      broken.add(token);
+      console.warn(`Citizen look ${token} could not be built.`, error);
+      return undefined;
+    }
+  }
+  function grow(look: LookBatch & { library: { instances: number } }, needed: number) {
+    const instances = Math.min(capacity, Math.max(needed, look.library.instances * 2));
+    for (const batch of look.batches) {
+      const old = batch.mesh;
+      release(old, false);
+      batch.mesh = instanced(old.geometry, old.material as THREE.Material, instances, old.name);
+    }
+    look.library.instances = instances;
+  }
+  let lastSweep = -Infinity;
+  // GPU memory stays bounded: beyond the resident count, library looks idle for a minute are released, oldest first.
+  function sweep(now: number) {
+    if (now - lastSweep < 1000) return;
+    lastSweep = now;
+    const resident = [...looks].filter(([, look]) => look.library);
+    if (resident.length <= libraryLooks) return;
+    resident.sort(([, a], [, b]) => a.library!.used - b.library!.used);
+    let excess = resident.length - libraryLooks;
+    for (const [token, look] of resident) {
+      if (excess <= 0 || now - look.library!.used < LIBRARY_LOOK_IDLE_MS) break;
+      for (const batch of look.batches) release(batch.mesh, true);
+      looks.delete(token);
+      excess--;
+    }
   }
   scene.add(group);
   const capes = createCitizenCapeRenderer(scene, { registry: options.registry, material: options.material, capacity });
@@ -291,9 +372,23 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     get heads(): ReadonlyMap<string, THREE.Vector3> { return heads; },
     /** Touchdowns for the most recent update only; consumed synchronously by presentation. */
     get footfalls(): readonly CitizenFootfall[] { return footfalls; },
+    /** True when this token can be drawn now; otherwise it is asked for and the caller draws a simple figure meanwhile. */
+    ready(token: string): boolean {
+      if (looks.has(token)) return true;
+      if (library && !broken.has(token)) {
+        if (library.has(token)) return true;
+        library.request(token);
+      }
+      return false;
+    },
+    /** Never throws for an unknown look: that sample is skipped this frame and its look asked of the library. */
     update(samples: readonly CitizenSample[], camera?: THREE.Camera, now = performance.now()) {
       if (samples.length > capacity) throw new Error(`Citizen count exceeds capacity ${capacity}.`);
       for (const mesh of meshes) mesh.count = 0;
+      const drawn = samples.map(sample => lookFor(sample.look, now));
+      const wanted = new Map<LookBatch, number>();
+      for (const look of drawn) if (look?.library) wanted.set(look, (wanted.get(look) ?? 0) + 1);
+      for (const [look, count] of wanted) if (count > look.library!.instances) grow(look as LookBatch & { library: { instances: number } }, count);
       grips.clear(); heads.clear(); footfalls.length = 0;
       capes.beginFrame(samples[0]?.time ?? 0);
       if (camera) {
@@ -302,7 +397,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
         frustum.setFromProjectionMatrix(projectionView, camera.coordinateSystem);
       }
       const seen = new Set<string>();
-      for (const sample of samples) {
+      for (const [index, sample] of samples.entries()) {
         seen.add(sample.id);
         const target = sample.posture === 'seated' || (sample.gesture === 'sit' && sample.moving < .1) ? 1 : 0;
         let transition = animationById.get(sample.id);
@@ -321,9 +416,9 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
           transition.weights[name] += Math.max(-step, Math.min(step, goal - transition.weights[name]));
         }
         transition.last = now;
-        const look = looks.get(sample.look);
-        if (!look) throw new Error(`Unknown citizen look ${sample.look}.`);
         if (![...sample.position, sample.heading, sample.distance, sample.moving, sample.speed ?? sample.moving * 1.2, sample.opacity ?? 1, sample.lookYaw ?? 0, sample.lookPitch ?? 0, sample.waveWeight ?? 1, sample.time ?? 0, sample.tiptoe ?? 0].every(Number.isFinite)) throw new Error(`Invalid citizen sample ${sample.id}.`);
+        const look = drawn[index];
+        if (!look) continue;
         if (camera) {
           citizenBounds.center.set(sample.position[0], sample.position[1] + .75, sample.position[2]);
           if (!frustum.intersectsSphere(citizenBounds)) {
@@ -359,21 +454,24 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
       for (const id of animationById.keys()) if (!seen.has(id)) animationById.delete(id);
       capes.endFrame();
       for (const mesh of meshes) {
+        mesh.visible = mesh.count > 0;
         mesh.instanceMatrix.needsUpdate = true;
         mesh.geometry.getAttribute('aLodFade').needsUpdate = true;
       }
+      sweep(now);
     },
     dispose() {
       grips.clear(); heads.clear(); footfalls.length = 0;
       animationById.clear();
       capes.dispose(); scene.remove(group);
-      for (const geometry of geometries) geometry.dispose();
-      for (const mesh of meshes) mesh.dispose();
+      for (const mesh of [...meshes]) release(mesh, true);
+      looks.clear(); broken.clear();
       for (const material of paintedMaterials.values()) material.dispose();
       if (ownsPool) pool?.dispose();
     },
   };
 }
 
-export { createDefaultCitizenLooks } from './default-look';
+export { citizenLookFor, createDefaultCitizenLook, createDefaultCitizenLooks } from './default-look';
+export { createCitizenLookLibrary, sharedCitizenLooks, lookTokenFor, type CitizenLookLibrary, type CitizenLookStatus } from './look-library';
 export { createStyledCitizenLook, createWornCitizenLook, type StyledCitizenLook, type StyledCitizenRecipe } from './style-adapter';

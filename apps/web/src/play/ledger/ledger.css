@@ -357,6 +357,15 @@
 .pl-mark .pl-mark-fill { fill: currentColor; fill-opacity: .2; }
 .pl-mark .pl-mark-faint { opacity: .5; }
 .pl-mark .pl-mark-dot { fill: currentColor; }
+.pl-mark .pl-mark-dash { stroke-dasharray: 1.4 2.2; }
+
+/* The lantern path home, on the Way home page. */
+.pl-way-lights { margin-top: 6px; }
+.pl-way-streets { margin-top: 10px; font: var(--cd-type-body)/1.4 var(--cd-face-body); color: var(--pl-ink); }
+.pl-way-light .pl-mark-lantern .pl-mark-fill { fill: #ffd27a; fill-opacity: .9; }
+.pl-way-lit { display: flex; align-items: center; gap: 10px; color: #8a5a1c; font-style: italic; }
+.pl-way-lit .pl-mark { color: #b5741f; }
+.pl-way-lit .pl-mark-fill { fill: #ffbe55; fill-opacity: .85; }
 
 /* ------------------------------------------------------------------ Phones: one leaf, the contents as a rail */
 @media (max-width: 820px), (max-height: 560px) {
