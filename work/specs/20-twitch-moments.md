@@ -53,8 +53,8 @@ application rules, Helix endpoint semantics and dispatch/reconciliation logic in
 1. **R1 — Cause first, show second.** Only a validated projection, existing presence/chat cue, `AtlasRaid`, or
    authoritative gameplay result starts an effect. No frame loop, cheer threshold, local timer or successful
    fetch invents a Twitch event, person, subscription, gift recipient, strike, dragon victory or public action.
-   Simulation exercises the same parser/controller/view with explicit `simulated` origin and visible SIMULATED
-   on every surface. A real connection that fails remains unavailable; it never selects fixtures automatically.
+   Simulation exercises the same parser/controller/view with explicit `simulated` origin on private `/-/`
+   benches, with no visible simulation chip. A real connection that fails remains unavailable; it never selects fixtures automatically.
 2. **R2 — Public projection, private authority.** Bodies carry only permitted display names, public visual slots
    and public channel IDs. A named source may credit its public act; an anonymous giver/cheerer is “a friend of the
    realm”. Quiet citizens are never identified, tinted or individually thanked. Actor is null on the system
@@ -108,8 +108,7 @@ application rules, Helix endpoint semantics and dispatch/reconciliation logic in
    `id` with its original evidence/time. Compose logarithmically many wagon/banner units: 3 viewers is a small
    treasured welcome; 10,000 is a column passing for up to a minute. Wagons carry no invented avatar or rider
    name. Only main's genuinely present real people appear as citizens/guests. Unknown source kingdom is its real
-   public channel land, not a forged founded kingdom. An approved tribute may be shown for the night after the
-   Forge authority supplies it; never generate a substitute through the house-part Forge. A dated visitor pennant
+   public channel land, not a forged founded kingdom. The caravan carries lanterns, banners and cloth. A dated visitor pennant
    is projected for the gate wall; persistence belongs to authority. Raid-chain carriage banners require an
    explicit observed ordered chain supplied by the travel/Atlas owner; isolated raid records do not prove a chain.
    No caravan-side road ledger, passport stamp, ride claim, gift entitlement, automatic chat write or Start Raid
@@ -122,7 +121,7 @@ application rules, Helix endpoint semantics and dispatch/reconciliation logic in
    when the authoritative game port says so, while Twitch-clock spectacles continue. Preserve host safe rectangles.
    Player/build/Forge/royal camera ownership outranks this director. Every completion/cancel/failure releases the
    camera lease and returns to the actual prior view. A replay at the next break is reconstructed presentation,
-   labelled EARLIER TONIGHT and SIMULATED if applicable, about 20 s, with no re-awards, commands or second public
+   labelled EARLIER TONIGHT, about 20 s, with no re-awards, commands or second public
    witnessed-beat emission. Store only bounded approved projection/choreography state; no video capture/export.
 10. **R10 — Writes are deliberate, authorized and honest.** Every royal action is an authenticated streamer press
     or an explicitly authorized saved standing permission checked by the lane application executor through the
@@ -160,7 +159,7 @@ application rules, Helix endpoint semantics and dispatch/reconciliation logic in
 | Goal | Weave/raise banner and dated ribbon | Goal state; never a wonder/progression mutation |
 | Poll/decree | Inked proclamation, choices, authoritative winner | Preview/create/end poll; no channel-points extra voting |
 | Prediction/match | Tavern odds board, lock, outcome or cancellation | Preview/create/lock/resolve/refund prediction; authority binds real match result |
-| Incoming raid/observed chain | Caravan, source colours, dated pennant, approved tribute | `AtlasRaid`; Spec 23 private riders/travel; Atlas roads |
+| Incoming raid/observed chain | Caravan, source colours, lanterns, dated pennant | `AtlasRaid`; Spec 23 private riders/travel; Atlas roads |
 | Shared chat | Session bridge/banners; source crest on authorized public speech | Session owner supplies channels, active bridges and shared battle identity |
 | Shoutout given/received | Crossroads signpost / arriving pennant and crier line | Preview and Send Shoutout; persistent signpost authority |
 | Ad/category/title | Calm wide/ad-rest state; authored weather/music request; gate proclamation | Main applies allowed weather/sky and game vote-pause policies |
@@ -300,7 +299,7 @@ interface ActionPort<I> {
 Use an appropriate TypeScript generic constraint for `I`; this illustrative signature is not a new shared type.
 Backend permission remains authoritative on every submit/reconcile. The lane builds the real executor/handler
 and client adapter described below; main supplies authenticated root/Helix/record bindings. Default unbound ports
-are unavailable. Explicit fixture transports exercise those same executors/schemas and label results SIMULATED.
+are unavailable. Explicit fixture transports exercise those same executors/schemas on private `/-/` benches and retain internal simulated provenance without visible simulation chips.
 No browser persistence of private action arguments, token storage, inferred success or blind retries. Gate
 commands use a main-converted facade to Spec 23's local `RaidGateApi.request(command,signal)` and
 `subscribe(requestId,onReply,signal)`: preview/open/cancel maps to its preview/start/cancel/reconcile/read-action
@@ -520,7 +519,7 @@ with different render frame intervals and check equal semantic effect timing. Va
 extra keys fail at the boundary. No schema snapshot catalogue, test per string or self-fulfilling mock success.
 
 The bench's default export at `apps/web/src/twitch-moments-bench/index.tsx` mounts through main's optional
-`/-/twitch-moments` route. It shows SIMULATED on the full bench and clean output; an explicit unavailable-live
+`/-/twitch-moments` route. It retains internal simulated provenance without a visible simulation chip; an explicit unavailable-live
 mode is separate. Task 1 must show a real home banner unfurl in the actual crafted kingdom materials. It
 uses existing scene construction/render APIs and the same exported normalizer/projector/controller/view as
 production integration,
@@ -604,7 +603,7 @@ out-of-scope attribution before use. This spec creates no generated painting or 
 
 Ownership boundaries, not omissions from Moments §§6/12: this lane does not provision live Twitch subscriptions/
 grants, implement root auth/realm durability/signing or the storage engine, allocate homes,
-write road ledgers/passports, build an emote approval pipeline, author arbitrary Forge tributes, run authoritative
+write road ledgers/passports, build an emote approval pipeline, author arbitrary Forge pieces, run authoritative
 combat/game voting or build the throne/panel/OBS scene switcher. It supplies the complete presentations, validated
 projection/command adapters, actual support-event normalizers/projector, authenticated-principal application
 executors, record-backed idempotency/reconciliation and truthful unavailable states for all those causes.
@@ -614,6 +613,8 @@ Main retains the production integration obligations above; no requested moment i
 because it can be demonstrated by a fixture. No auto-clips, video product, external-game control or new paid status.
 
 ## Decisions
+
+- **2026-11-02 — Founder raid-show decisions 25 and 45.** Incoming caravans carry banners, lanterns and cloth; there is no raid tribute. Staged fixtures stay on private `/-/` benches, retain internal simulated provenance and never enter live feeds. No visible SIMULATED chip is required or shown.
 
 - **2026-10-31 — Realm owns live support delivery.** Main adds the optional, existing-chat-grant
   `channel.chat.notification@1` subscription to Herald's verified conduit. Only the existing normalizer's
@@ -648,6 +649,6 @@ because it can be demonstrated by a fixture. No auto-clips, video product, exter
   auth/grants/routers/transports/core; it does not inherit mapper/write application implementation. Existing
   Herald H01–H05/auth files, runtime grants and the Gate raid writer remain untouched.
 
-- **2026-10-31 — Current handoff: events are the physics of the stream.** Stage a readable, crafted real-kingdom response to an actual event when its main-owned feed exists; otherwise visibly label the rehearsal SIMULATED. TM01/TM02 support and TM03 sky spectacle were merged on main; preserve their work and do not claim an observed real cheer or hype train. First refine the merged sky curtains and the gift parcel contrast already requested in progress. The lane implements feature-local adapters and event handling against approved ports. Main owns shared contracts, cross-surface authority and root integration bindings; report only actually missing seams. The stream director must return control after the beat.
+- **2026-10-31 — Current handoff: events are the physics of the stream.** Stage a readable, crafted real-kingdom response to an actual event when its main-owned feed exists; otherwise keep the rehearsal on a private `/-/` bench with internal simulated provenance and no visible simulation chip. TM01/TM02 support and TM03 sky spectacle were merged on main; preserve their work and do not claim an observed real cheer or hype train. First refine the merged sky curtains and the gift parcel contrast already requested in progress. The lane implements feature-local adapters and event handling against approved ports. Main owns shared contracts, cross-surface authority and root integration bindings; report only actually missing seams. The stream director must return control after the beat.
 
 - **2026-10-31 — Current handoff verification and ownership.** For each visual change inspect one stream-first 1920×1080 capture; use typecheck and affected tests for the step. This supersedes the older per-task capture matrix for this handoff. The lane implements feature-local durable adapters and runtime behavior against existing ports; main owns shared contracts and cross-surface authority and integration bindings. Report only actual missing authority or contract seams.

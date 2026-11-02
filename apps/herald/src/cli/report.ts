@@ -15,6 +15,8 @@ const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   follows: 'follows',
   rewards: 'kingdom rewards',
   polls: 'polls and decrees',
+  raids: 'Raid Gate controls',
+  shield: 'Shield Mode notices',
 };
 const CAPABILITY_USE: Readonly<Record<Capability, string>> = {
   chat: 'a message lights its author\'s window; deletes and clears put it out',
@@ -26,6 +28,8 @@ const CAPABILITY_USE: Readonly<Record<Capability, string>> = {
   follows: 'a follower is settled on the edge of town and a sapling is planted by their door',
   rewards: 'channel points ring the bell, call a festival, plant a tree or show your home',
   polls: 'a poll stands as a decree board in the plaza; a colours decree is carried out',
+  raids: 'the monarch may start or cancel a raid from this kingdom',
+  shield: 'the gate follows the channel\'s Shield Mode',
 };
 const FILTER = 'pnpm --filter @chatdom/herald';
 
@@ -65,7 +69,7 @@ export function formatAuthReport(report: AuthReport): string[] {
   }
   const steps = setupSteps(report);
   lines.push('');
-  if (steps.length === 0) lines.push('Every Herald read capability is authorized.');
+  if (steps.length === 0) lines.push('Every Herald capability is authorized.');
   else {
     lines.push('Setup');
     steps.forEach((step, index) => lines.push(`  ${index + 1}. ${step}`));

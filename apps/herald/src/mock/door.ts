@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { KingdomIdSchema, type KingdomId } from '@chatdom/shared';
 import { parseTwitchTime, type DeliveryFrame } from '@chatdom/twitch';
 import { ChatIngest } from '../ingest/ingest';
-import { planSubscriptions, type SubscriptionPlan } from '../ingest/subscriptions';
+import { planSubscriptions, subscriptionIdentity, type SubscriptionPlan } from '../ingest/subscriptions';
 import { MemoryBindingStore } from '../source/bindings';
 import { presentKingdom } from '../source/kingdom';
 import { toPresenceInput, type Observation } from '../source/observations';
@@ -44,6 +44,8 @@ export interface MockDoorOptions {
   readonly host?: string;
   readonly print?: (line: string) => void;
   readonly now?: () => number;
+  /** Recording-only crier diagnostics, never a live chat writer. */
+  readonly crier?: () => unknown;
 }
 
 export interface MockDoor {
@@ -79,7 +81,7 @@ export async function startMockDoor(options: MockDoorOptions): Promise<MockDoor>
   });
   async function handle(request: IncomingMessage, response: ServerResponse) {
     if (request.method === 'GET' && request.url === '/health') {
-      return reply(response, 200, { origin: 'simulated', kingdomId, door: counts, ingest: ingest.health().counters, source: source.health(), realm: options.realm.health() });
+      return reply(response, 200, { origin: 'simulated', kingdomId, door: counts, ingest: ingest.health().counters, source: source.health(), realm: options.realm.health(), ...(options.crier ? { crier: options.crier() } : {}) });
     }
     if (request.method !== 'POST' || request.url !== '/eventsub') return reply(response, 404, { error: 'not found' });
     const body = await readBody(request);
@@ -105,9 +107,10 @@ export async function startMockDoor(options: MockDoorOptions): Promise<MockDoor>
     if (type !== 'notification') return reply(response, 204, null);
     const frame = toFrame(payload, id, at, plans);
     if (!frame) { counts.refused++; return reply(response, 422, { error: 'not a planned subscription' }); }
+    try { await ingest.handle(frame); }
+    catch { counts.refused++; return reply(response, 503, { error: 'evidence could not be durably queued' }); }
     counts.delivered++;
-    ingest.handle(frame);
-    // Twitch only needs a 2xx; the act itself is now in Herald's hands exactly as from the conduit.
+    // Raid evidence is on disk before the webhook is acknowledged; refusals remain retryable.
     reply(response, 204, null);
   }
   await new Promise<void>((resolve, reject) => {
@@ -143,17 +146,25 @@ export function toFrame(payload: unknown, messageId: string, at: number, plans: 
   const { subscription, event } = payload as { subscription?: { type?: unknown; version?: unknown }; event?: unknown };
   if (!subscription || typeof subscription.type !== 'string' || typeof subscription.version !== 'string' || !event || typeof event !== 'object') return null;
   const adapted = adaptCliEvent(subscription.type, subscription.version, event as Record<string, unknown>);
-  const plan = plans.find(candidate => candidate.type === adapted.type && candidate.version === adapted.version);
+  const plan = plans.find(candidate => candidate.type === adapted.type && candidate.version === adapted.version
+    && (candidate.type !== 'channel.raid' || Object.entries(candidate.condition).every(([key, value]) =>
+      (adapted.event as Record<string, unknown>)[key] === value)));
   if (!plan) return null;
   return {
     kind: 'notification', meta: { messageId, at },
-    subscription: { id: `simulated-door-${plan.type}`, status: 'enabled', type: plan.type, version: plan.version, condition: { ...plan.condition }, conduitId: MOCK_CONDUIT_ID },
+    subscription: { id: `simulated-door-${subscriptionIdentity(plan).key}`, status: 'enabled', type: plan.type, version: plan.version, condition: { ...plan.condition }, conduitId: MOCK_CONDUIT_ID },
     event: adapted.event,
   };
 }
 
-/** The CLI's v1 cheer and train shapes, mapped onto what production subscribes to. Anything else passes through. */
+/** CLI cheer/train compatibility and canonical raid logins; all other payloads pass through. */
 export function adaptCliEvent(type: string, version: string, event: Record<string, unknown>): { type: string; version: string; event: unknown } {
+  // CLI 1.1.24 emits mixed-case placeholder logins. Only this simulated adapter canonicalizes them;
+  // production keeps its strict lowercase Twitch-login reader. Display names and IDs remain unchanged.
+  if (type === 'channel.raid' && version === '1') return { type, version, event: { ...event,
+    from_broadcaster_user_login: typeof event.from_broadcaster_user_login === 'string' ? event.from_broadcaster_user_login.toLowerCase() : event.from_broadcaster_user_login,
+    to_broadcaster_user_login: typeof event.to_broadcaster_user_login === 'string' ? event.to_broadcaster_user_login.toLowerCase() : event.to_broadcaster_user_login,
+  } };
   if (type === 'channel.cheer' && version === '1') {
     const anonymous = event.is_anonymous === true;
     return { type: 'channel.bits.use', version: '1', event: {

@@ -2,7 +2,7 @@
  * The Raid Gate in the browser (spec 23). Hosts compose `createRaidGateController` with their own ports and mount
  * `RaidGatePane`; the default export is the `/-/raid-gate` route, which stands the gate board beside a real
  * kingdom. Without a bound authority the board says the gate is shut here. `?bench=simulated` runs the real
- * application in the page, labelled SIMULATED throughout.
+ * application with private fixtures and internal simulated provenance; no visible provenance chip.
  */
 import { createSignal, For, lazy, onCleanup, onMount, Show } from 'solid-js';
 import type { KingdomId } from '../../../api/src/raid-gate/contracts';
@@ -37,9 +37,15 @@ const WELCOME_HOST = { kingdomId: '41000002' as KingdomId, name: 'Fernhollow', s
  * destination's welcome, between two real holdings, with the raid itself SIMULATED (see `road/RaidRoad.tsx`).
  */
 const RaidRoad = lazy(() => import('./road/RaidRoad'));
+const IncomingRaid = lazy(() => import('./incoming'));
+const NoticeBench = lazy(() => import('./entry/notice-bench'));
+const GuestInsigniaBench = lazy(() => import('./guest-insignia-bench'));
 
 export default function RaidGatePage() {
   const query = new URLSearchParams(location.search);
+  if (query.get('guestInsignia') === '1') return <GuestInsigniaBench />;
+  if (query.get('entryNotice') === '1') return <NoticeBench />;
+  if (query.get('incoming') === '1') return <IncomingRaid />;
   return <Show when={query.get('road') === '1' && query.get('bench') === 'simulated'} fallback={<RaidGateRoute />}><RaidRoad /></Show>;
 }
 
@@ -187,7 +193,6 @@ function RaidGateRoute() {
     <header class="rg-realm">
       <Seal kingdomId={here().kingdomId} size={44} />
       <div><p>{welcome() ? 'Guests at the gate' : 'A kingdom at dusk'}</p><h1>{here().name}</h1></div>
-      <span class="rg-ribbon"><span class="rg-pip" />SIMULATED citizens</span>
     </header>
     <Show when={welcome()}>{state => <GuestArrivalPane welcome={state().welcome} homeName={state().snap.source.name} homeKingdomId={state().snap.source.kingdomId}
       hostName={state().snap.journey?.destination?.channel?.kingdomName ?? WELCOME_HOST.name} hostKingdomId={state().snap.journey!.to} />}</Show>
@@ -204,8 +209,7 @@ function BenchFinder(props: { bench: GateBench }) {
   let first: HTMLButtonElement | undefined;
   onMount(() => first?.focus());
   const groups = [['road', 'Along your roads'], ['realm', 'Live in your realm']] as const;
-  return <section class="rg-finder" aria-label="Choose a destination (SIMULATED map)">
-    <p class="rg-finder-label"><span class="rg-pip" />SIMULATED · stands in for the Atlas finder</p>
+  return <section class="rg-finder" aria-label="Choose a destination">
     <For each={groups}>{([group, label]) => <>
       <h3>{label}</h3>
       <ul>

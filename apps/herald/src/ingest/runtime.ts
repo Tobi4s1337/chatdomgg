@@ -6,7 +6,7 @@ import type { Capability, Role } from '../auth/grants';
 import type { PresenceSource } from '../source/source';
 import { ChatIngest, type IngestHealth, type IngestOptions } from './ingest';
 import {
-  type CoverageState, type HeraldEventType, planSubscriptions, reconcileSubscriptions, type SubscriptionCoverage, type SubscriptionPlan,
+  type CoverageState, planSubscriptions, reconcileSubscriptions, subscriptionIdentity, type SubscriptionCoverage, type SubscriptionPlan,
 } from './subscriptions';
 
 /** What the runtime needs from the authorization authority. */
@@ -100,7 +100,7 @@ export class DeliveryRuntime {
     this.#now = options.now ?? Date.now;
     this.#log = options.log ?? (() => undefined);
     this.plans = planSubscriptions({ broadcasterId: options.broadcasterId, readerId: options.readerId, clientId: options.clientId });
-    this.#coverage = this.plans.map(plan => ({ type: plan.type, required: plan.required, state: 'unknown', reason: null }));
+    this.#coverage = this.plans.map(plan => ({ ...subscriptionIdentity(plan), type: plan.type, required: plan.required, state: 'unknown', reason: null }));
     this.#shard = new ConduitShardConnection({
       admin: options.admin, conduitId: options.conduitId, listener: {
         attached: (reason, gap) => {
@@ -143,7 +143,7 @@ export class DeliveryRuntime {
         this.#recompute();
         this.#scheduleVerify(this.#options.settleMs ?? SETTLE_MS);
       },
-      onSubscriptionRevoked: (type, status) => this.#revoked(type, status),
+      onSubscriptionRevoked: (plan, status) => this.#revoked(plan, status),
       ...(options.stream ? { stream: options.stream } : {}),
       ...(options.forge ? { forge: options.forge } : {}),
       ...(options.realm ? { realm: options.realm } : {}),
@@ -221,13 +221,14 @@ export class DeliveryRuntime {
 
   #frame(frame: DeliveryFrame): void {
     if (this.#stopped) return;
-    this.#ingest.handle(frame);
+    void this.#ingest.handle(frame)?.catch(() => this.#log('evidence could not be durably queued; see ingest and realm delivery health'));
   }
 
-  #revoked(type: HeraldEventType, status: string): void {
+  #revoked(plan: SubscriptionPlan, status: string): void {
     this.#verificationGeneration++;
-    this.#coverage = this.#coverage.map(entry => entry.type === type ? { ...entry, state: 'disabled' as CoverageState, reason: status } : entry);
-    this.#log(`${type} subscription disabled by Twitch (${status})`);
+    const { key } = subscriptionIdentity(plan);
+    this.#coverage = this.#coverage.map(entry => entry.key === key ? { ...entry, state: 'disabled' as CoverageState, reason: status } : entry);
+    this.#log(`${key} subscription disabled by Twitch (${status})`);
     this.#recompute();
     void this.#options.authority.refresh().catch(() => undefined);
     this.#scheduleVerify(this.#options.settleMs ?? SETTLE_MS);

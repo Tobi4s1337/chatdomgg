@@ -1,5 +1,6 @@
-import { For, Show } from 'solid-js';
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import type { ScreenCaption } from './view';
+import { boundCaptionPoint } from './caption-bounds';
 import './sky-captions.css';
 
 /**
@@ -10,13 +11,25 @@ import './sky-captions.css';
  */
 export function SkyCaptions(props: { captions: readonly ScreenCaption[] }) {
   return <div class="sky-captions" aria-live="polite">
-    <For each={props.captions}>{caption =>
-      <div class="sky-caption" style={{ left: `${caption.x}px`, top: `${caption.y}px`, opacity: caption.opacity }}>
-        <i class="sky-caption-pin" aria-hidden="true" />
-        <strong>{caption.title}</strong>
-        <span>{caption.line}</span>
-        <Show when={caption.detail}><em>{caption.detail}</em></Show>
-      </div>}
-    </For>
+    <For each={props.captions}>{caption => <Caption caption={caption} />}</For>
   </div>;
+}
+
+function Caption(props: { caption: ScreenCaption }) {
+  let element!: HTMLDivElement;
+  const [point, setPoint] = createSignal({ x: props.caption.x, y: props.caption.y });
+  onMount(() => {
+    const picture = element.parentElement!;
+    const update = () => setPoint(boundCaptionPoint(props.caption,
+      { width: element.offsetWidth, height: element.offsetHeight }, { width: picture.clientWidth, height: picture.clientHeight }));
+    const observer = new ResizeObserver(update); observer.observe(element); observer.observe(picture);
+    createEffect(update);
+    onCleanup(() => observer.disconnect());
+  });
+  return <div ref={node => { element = node; }} class="sky-caption" style={{ left: `${point().x}px`, top: `${point().y}px`, opacity: props.caption.opacity }}>
+        <i class="sky-caption-pin" aria-hidden="true" />
+        <strong>{props.caption.title}</strong>
+        <span>{props.caption.line}</span>
+        <Show when={props.caption.detail}><em>{props.caption.detail}</em></Show>
+      </div>;
 }

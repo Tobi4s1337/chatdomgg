@@ -136,13 +136,13 @@ road ledger, caravan rendering and map/world hand-off. Both must work together b
     civic gateway is open: use banners, a gathered party and the signal to set out; animate doors only if a future
     host supplies genuine articulated doors. Never block public egress or modify lots/collision to make a shot.
     Sound comes through the host's mix, with one physical gate/party/return cue per current event, no replayed
-    backlog. Twitch-moments owns incoming wagons/tribute/pennants and its welcome cue; do not double them.
+    backlog. Twitch-moments owns incoming wagons/lanterns/pennants and its welcome cue; do not double them.
 14. **R14 — Truth and failure are visible.** Design idle, no live targets, preview, denied, expired, gathering,
     pending, unknown, cancelled, reserving, loading/overrun, full, destination denied, arrived, waiting land,
     returning and reconnect states. Keep identity/private errors out of stream projections. No tokens, private
-    rider list or recipient inventory enters Atlas/OBS caches, URLs or logs. Synthetic runs have SIMULATED on every
-    visible surface, not only in developer controls. Replay is dated. Missing live authority disables the relevant
-    action honestly; a labelled bench can exercise it, but cannot satisfy real integration acceptance.
+    rider list or recipient inventory enters Atlas/OBS caches, URLs or logs. Synthetic runs remain on private `/-/` benches with internal simulated
+    provenance and no visible simulation chip. Replay is dated. Missing live authority disables the relevant
+    action honestly; a private bench can exercise it, but cannot satisfy real integration acceptance.
 
 ## Contracts
 
@@ -347,7 +347,7 @@ not a substitute for the specific behaviors below.
   Assert exactly one raid write, one committed walking location, one arrival/stamp/reward claim and no source
   release before destination acknowledgment. Finish with an accepted gift retry and hidden-passport projection;
   assert one ownership transfer, retained provenance and no public travel data after hiding. This exercises
-  actual owned server logic, not a duplicate UI state simulator. Label its transport observations SIMULATED.
+  actual owned server logic, not a duplicate UI state simulator. Retain simulated provenance in its transport observations.
 - Add focused guard cases only where they protect distinct invariants: foreign/non-monarch command rejected
   before dispatch; mismatched/ambiguous raid cannot land; cancellation releases a known uncommitted lease;
   destination denial preserves source; false/late rider proof cannot stamp; bound/paid item cannot transfer;
@@ -361,7 +361,7 @@ not a substitute for the specific behaviors below.
   `gate-phone.png` at 390×844, `departure-stream.png` at 1920×1080; founded arrival, waiting land, return, unknown,
   denial/full, overrun and reduced-motion sheets at the applicable sizes. Check five-person and 50,000-person
   contexts, with actual consenting avatar representatives, legible crests, clear action focus and no clipped phone
-  sheet. All controlled fixtures remain visibly SIMULATED. Inspect motion and listen to the host-mixed cues;
+  sheet. All controlled fixtures stay on private `/-/` benches with internal simulated provenance and no visible simulation chip. Inspect motion and listen to the host-mixed cues;
   report listening or real-GPU limitations plainly.
 - Real integration acceptance requires these owned server handlers, main's authenticated storage/transport
   bindings and Atlas module working
@@ -405,11 +405,13 @@ needed; any proposed sample must be permissively licensed with a root-ready cred
 ## Not now
 
 No duplicate Atlas, road ledger, map finder, entry renderer or raid-train detector; no direct Twitch writer,
-new OAuth flow, kingdom founding, incoming caravan/tribute show, citizen-card ownership, duplicate inventory/world stores,
+new OAuth flow, kingdom founding, incoming caravan show, citizen-card ownership, duplicate inventory/world stores,
 cross-kingdom swap engine or contest scoring. Those remain their named owners. Their required integration is
 part of acceptance, not permission to replace them or defer the gate's full travel/gift/history experience.
 
 ## Decisions
+
+- **2026-11-02 — Founder raid-show decisions 25 and 45.** Incoming caravans carry banners, lanterns and cloth; there is no raid tribute. Staged fixtures stay on private `/-/` benches, retain internal simulated provenance and never enter live feeds. No visible SIMULATED chip is required or shown.
 
 - **2026-10-30 — Preserve existing Atlas ownership.** Main explicitly retains A07/A12/A13/A14 in the Atlas lane.
   This lane supplies the kingdom gate and personal travel adapters; main coordinates the `AtlasGateHost` seam.
@@ -437,7 +439,7 @@ part of acceptance, not permission to replace them or defer the gate's full trav
   different destination needs a new request ID. Once a preview lapses its request is over and cannot be revived.
   The opted-in count lives on the action and changes in the same transaction as the member record.
 - **2026-10-30 — RG01: browser composition details.** `RaidGateApi.origin` and `AtlasGateHost.origin` carry
-  `live | simulated`, so SIMULATED follows the transport rather than a page flag. `AtlasGateHost.resolve` lets a
+  `live | simulated`, so internal provenance follows the transport rather than a page flag. `AtlasGateHost.resolve` lets a
   walker see the destination's name under Atlas visibility rules. The wax seals draw the Atlas's own
   `heraldry` module (a public drawing utility, not its model/view), so the gate and the map show identical arms.
   `apps/api` has no package manifest, so lane files import shared validators by relative path and validate

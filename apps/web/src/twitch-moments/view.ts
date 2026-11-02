@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
+import type { RaidChatCue, RaidChatFrame, RaidPennantFrame, Vec3, VoxelBlueprint } from '@chatdom/shared';
 import {
   BANNER_CELLS, BANNER_TIERS, CELL, RIBBON_SLOTS, SHIMMER_PHASES, SWAG_CELLS, bannerBracket, bannerParts, bannerRibbon, type BannerKit, type BannerTier,
 } from './banner';
@@ -8,7 +8,9 @@ import { CameraPoseSchema, type CameraPose } from './contracts';
 import type { FocusFrame, HomeDressFrame, MomentCue, MomentFrame, MomentPlace, MomentSubject, Tint } from './controller';
 import { createDragonLayer } from './dragon-view';
 import { createGiftLayer, type DoorAnchor, type GiftRoute, type PlaceAnchor } from './gift-view';
-import { createRaidLayer } from './raid-view';
+import { createRaidLayer, type RaidChatGround } from './raid-view';
+import type { RaidShotClear } from './raid-shot';
+import { createRaidPennantWall } from './raid-pennant-wall';
 import { createSkyFlightLayer } from './sky-flight-view';
 import { createSkyLightLayer } from './sky-light-view';
 import type { CrowdCall } from './stage-beat';
@@ -104,6 +106,8 @@ export function mergeGlow(a: SkyGlow, b: SkyGlow): SkyGlow {
   const total = a.strength + b.strength, mixed = (i: 0 | 1 | 2) => total > 0 ? (a.colour[i] * a.strength + b.colour[i] * b.strength) / total : 0;
   return { colour: [mixed(0), mixed(1), mixed(2)], strength: Math.min(0.6, 1 - (1 - a.strength) * (1 - b.strength)), night: Math.max(a.night ?? 0, b.night ?? 0) };
 }
+export interface RaidChatLabel { readonly cue: RaidChatCue; readonly x: number; readonly y: number; readonly distance: number; readonly opacity: number }
+
 export interface ScreenNameplate { readonly id: string; readonly name: string; readonly x: number; readonly y: number }
 
 const NO_PLACES: SpectaclePlaces = {
@@ -167,6 +171,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
     /** The followed subject's shot, once the shot has moved on to it; undefined until then, null when it has none. */
     second?: CameraPose | null } | null = null;
   let lastFrame: MomentFrame | null = null, disposed = false;
+  const disposeListeners = new Set<() => void>();
 
   function geometry(blueprint: VoxelBlueprint): Promise<THREE.BufferGeometry> {
     let promise = geometries.get(blueprint.id);
@@ -191,6 +196,8 @@ export function createTwitchMomentView(host: MomentViewHost) {
   // The Raid Gate and its caravan, on the same supplied gate and road as the gift cart.
   const raid = createRaidLayer(root, { kit: host.kit, material: host.material, mesh: (blueprint, offset) => meshOf(blueprint, offset),
     place: place => host.placeAnchor?.(place) ?? null, route: () => host.giftRoute?.() ?? null });
+  const pennantWall = createRaidPennantWall(root, { kit: host.kit, material: host.material, mesh: (blueprint, offset) => meshOf(blueprint, offset),
+    place: place => host.placeAnchor?.(place) ?? null, route: () => host.giftRoute?.() ?? null });
 
   // The spectacle layers: the sky's light, what flies through it, the festival train and the dragon.
   const places = host.places ?? NO_PLACES;
@@ -207,7 +214,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
 
   /** Mesh every banner and gift part before the first meaningful frame, so no beat waits on a worker. */
   async function prepare(): Promise<void> {
-    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints(), ...raid.blueprints(), ...spectacles.flatMap(layer => layer.blueprints()),
+    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints(), ...raid.blueprints(), ...pennantWall.blueprints(), ...spectacles.flatMap(layer => layer.blueprints()),
       ...townLayer.blueprints(), ...decree.blueprints()];
     for (const tier of BANNER_TIERS) {
       const p = bannerParts(tier, host.kit);
@@ -661,7 +668,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
   const raidShot = () => {
     if (!lastFrame?.visible || lastFrame.raids.length === 0) return null;
     const { width, height } = host.viewport();
-    return first(raid.shots(height > width));
+    return first(raid.shots(width > 0 && height > 0 ? width / height : height > width));
   };
   /** Pixels between two pennant labels' centres below which the board is too far away to label each pennant. */
   const BOARD_LABEL_GAP = 150;
@@ -776,6 +783,37 @@ export function createTwitchMomentView(host: MomentViewHost) {
 
   return {
     prepare,
+    /** Caller has checked the frame's origin and destination against this kingdom. */
+    receiveRaidChat(frame: RaidChatFrame): void { if (!disposed) raid.chat(frame.cues, frame.lights); },
+    /** The feature host supplies its adopted surface; no sampler means no stationary fixtures. */
+    setRaidChatGround(sample: RaidChatGround | undefined): void { if (!disposed) raid.ground(sample); },
+    /** The adopted world's standing check for the gate shot: houses, the castle and the ground the eye may not enter. */
+    setRaidShotClear(check: RaidShotClear | undefined): void { if (!disposed) raid.setShotClear(check); },
+    raidPennantSites: () => pennantWall.sites(),
+    /** The torch posts the current raid has actually drawn beside the street, for the scene's occupancy and light field. */
+    raidTorchSites: () => raid.torchSites(),
+    receiveRaidPennants(frame: RaidPennantFrame | null): void { if (!disposed) pennantWall.receive(frame); },
+    setRaidPennantGround(sample: RaidChatGround | undefined): void { if (!disposed) pennantWall.ground(sample); },
+    onDispose(listener: () => void): () => void {
+      if (disposed) { listener(); return () => {}; }
+      disposeListeners.add(listener);
+      return () => { disposeListeners.delete(listener); };
+    },
+    raidChatLabels(camera: THREE.Camera): RaidChatLabel[] {
+      if (!lastFrame?.visible) return [];
+      const { width, height } = host.viewport(), eye = camera.getWorldPosition(new THREE.Vector3());
+      const candidates = raid.chatAnchors().flatMap(({ cue, position, opacity }) => {
+        const distance = eye.distanceTo(position), p = position.clone().project(camera);
+        if (p.z < -1 || p.z > 1 || Math.abs(p.x) > 0.95 || Math.abs(p.y) > 0.95) return [];
+        return [{ cue, x: (p.x + 1) * width / 2, y: (1 - p.y) * height / 2, distance, opacity }];
+      }).sort((a, b) => a.distance - b.distance);
+      const out: RaidChatLabel[] = [];
+      for (const candidate of candidates) {
+        if (out.every(other => Math.abs(other.x - candidate.x) >= 180 || Math.abs(other.y - candidate.y) >= 76)) out.push(candidate);
+        if (out.length === 3) break;
+      }
+      return out;
+    },
     apply(frame: MomentFrame): void {
       if (disposed) return;
       lastFrame = frame;
@@ -796,6 +834,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       syncEdges(frame);
       gifts.apply(frame);
       raid.apply(frame.visible ? frame.raids : [], frame.atMs);
+      pennantWall.apply(frame.atMs, frame.visible);
       skyLight.apply(frame.visible ? frame.sky : [], frame.atMs);
       flight.apply(frame.visible ? frame.sky : [], frame.atMs);
       trainLayer.apply(frame.visible ? frame.train : null, frame.atMs);
@@ -850,12 +889,17 @@ export function createTwitchMomentView(host: MomentViewHost) {
     glow: glowNow,
     stats: (): Record<string, number | boolean> => ({ banners: banners.size, meshes: [...banners.values()].reduce((n, b) => n + b.root.children.length, 0), edges: edges.size,
       ...gifts.stats(), ...prefixed('sky', skyLight.stats()), ...prefixed('flight', flight.stats()), ...prefixed('train', trainLayer.stats()),
-      ...prefixed('dragon', dragon.stats()), ...prefixed('raid', raid.stats()),
+      ...prefixed('dragon', dragon.stats()), ...prefixed('raid', raid.stats()), ...prefixed('pennantWall', pennantWall.stats()),
       ...prefixed('town', townLayer.stats()), ...prefixed('decree', decree.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent,
       'stage.watchers': lastFrame?.visible && lastFrame.stage ? lastFrame.stage.watchers : 0, crowd: crowdCalled }),
     dispose(): void {
       if (disposed) return;
       disposed = true;
+      const listeners = [...disposeListeners];
+      disposeListeners.clear();
+      for (const listener of listeners) {
+        try { listener(); } catch (error) { console.error('Moment view disposal listener failed', error); }
+      }
       release();
       if (crowdCalled) { host.crowd?.(null); crowdCalled = false; }
       host.light?.({ colour: [0, 0, 0], strength: 0, hush: 0 });
@@ -863,7 +907,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       playing.clear();
       for (const slot of [...banners.keys()]) remove(slot);
       for (const edge of edges.values()) root.remove(edge.group);
-      edges.clear(); gifts.dispose(); raid.dispose();
+      edges.clear(); gifts.dispose(); raid.dispose(); pennantWall.dispose();
       for (const layer of spectacles) layer.dispose();
       townLayer.dispose(); decree.dispose();
       host.parent.remove(root);

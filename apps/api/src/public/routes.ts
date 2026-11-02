@@ -42,8 +42,12 @@ export function classify(pathname: string, search: string): PublicRoute {
   if (pathname === '/healthz') return { kind: 'health' };
   if (pathname.startsWith('/internal/') || pathname === '/internal') return { kind: 'not-found', api: true };
   if (AUTH.test(pathname)) return { kind: 'auth' };
+  if (/^\/api\/raid-gate\/crier\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
+  if (/^\/api\/raid-gate\/guest\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/dock\/(?:status|actions|presentations|witness)$/.test(pathname)) return { kind: 'dock' };
   if (REALM_READ.test(pathname)) return { kind: 'realm' };
+  if (/^\/(?:live-realm-data\/)?realm\/(?:raid-roads|raid-pennants\/[1-9][0-9]{0,31})$/.test(pathname)) return { kind: 'realm' };
+  if (/^\/(?:live-realm-data\/)?realm\/raid-chat\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'realm' };
   if (pathname === REALM_PREFIX || pathname.startsWith(`${REALM_PREFIX}/`)) {
     const upstream = pathname.slice(REALM_PREFIX.length);
     // Literal route grammar deliberately accepts no percent escapes, repeated prefixes or arbitrary tails:
@@ -66,5 +70,6 @@ export function classify(pathname: string, search: string): PublicRoute {
     return [...params.keys()].length === 0 ? { kind: 'door' } : { kind: 'page' };
   }
   if (PAGES.test(pathname)) return { kind: 'page' };
+  if (/^\/raid\/[1-9][0-9]{0,31}\/[a-f0-9]{32}\/[a-f0-9]{32}$/.test(pathname)) return { kind: 'page' };
   return { kind: 'file' };
 }

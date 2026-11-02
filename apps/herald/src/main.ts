@@ -18,6 +18,7 @@ import { PresenceSource } from './source/source';
 import { configuredRealmDelivery } from './realm-delivery/config';
 import { RealmDelivery } from './realm-delivery/delivery';
 import { startMockDoor } from './mock/door';
+import { createMockRaidCrier } from './mock/crier';
 
 const USAGE = [
   'Usage: herald <command>',
@@ -135,10 +136,12 @@ export async function main(argv: readonly string[]): Promise<number> {
       return 2;
     }
     const realm = await RealmDelivery.open({ url, secret: process.env.REALM_INGRESS_HERALD_SECRET ?? '', directory, repositoryRoot: repositoryRoot(), origin: 'simulated' });
+    const crier = createMockRaidCrier({ kingdomId: kingdom.data, realm });
     try {
-      const door = await startMockDoor({ kingdomId: kingdom.data, secret, realm, port, print });
-      return await untilSignal(async () => { await door.stop(); await realm.close(); });
-    } catch (error) { await realm.close(); throw error; }
+      const door = await startMockDoor({ kingdomId: kingdom.data, secret, realm, port, print, crier: crier.health });
+      crier.worker.start();
+      return await untilSignal(async () => { await crier.worker.close(); await door.stop(); await realm.close(); });
+    } catch (error) { await crier.worker.close(); await realm.close(); throw error; }
   }
 
   if (command === 'replay') {

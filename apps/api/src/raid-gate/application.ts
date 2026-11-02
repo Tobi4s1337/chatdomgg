@@ -23,7 +23,6 @@
  *
  * Commands that later tasks own (passport) answer `unavailable`: honest, never success.
  */
-import { AtlasRaidSchema } from '../../../../packages/shared/src/atlas-raids';
 import { kingdomForBroadcaster } from '../../../../packages/shared/src/identity';
 import {
   GATE_LIMITS, readGateCommand,
@@ -31,6 +30,7 @@ import {
   type GatePrincipal, type GateReply, type GateStatusView, type OpenGateView, type PartyView,
 } from './contracts';
 import type { GiftCommand, VisitorGiftApplication } from './gifts';
+import { RaidObservationConflict, recordObservedRaid } from './observed-raid';
 import { epoch, fields, kingdom, oneOf, person, token } from './guard';
 import type {
   GateNotifier, RaidGateDeps, RaidGateRecovery, RaidMarchCheck, RaidMarchVerdict, RaidObservationReceipt, RaidTravel, RaidWrite, RaidWriteOutcome,
@@ -161,17 +161,6 @@ function readOutcome(value: unknown): RaidWriteOutcome {
     return { kind, code: token(f.code) ?? 'refused' };
   }
   return { kind: 'unknown' };
-}
-
-function readObservation(value: unknown): TrustedRaidObservation | undefined {
-  const f = fields(value, ['raid', 'upstreamEventId', 'actionRequestId', 'receivedAt']);
-  if (!f) return undefined;
-  const raid = AtlasRaidSchema.safeParse(f.raid);
-  const upstreamEventId = f.upstreamEventId === null ? null : token(f.upstreamEventId);
-  const actionRequestId = f.actionRequestId === null ? null : token(f.actionRequestId);
-  const receivedAt = epoch(f.receivedAt);
-  if (!raid.success || upstreamEventId === undefined || actionRequestId === undefined || receivedAt === undefined) return undefined;
-  return { raid: raid.data, upstreamEventId, actionRequestId, receivedAt };
 }
 
 /** How long after the party set out a marcher may still follow it through the gate. */
@@ -661,45 +650,15 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
 
   // ---- Server-only ingress and recovery ----------------------------------------------------------------------------
 
-  const ignored = (reason: Extract<RaidObservationReceipt, { kind: 'ignored' }>['reason']): RaidObservationReceipt => ({ kind: 'ignored', reason });
-
   async function ingestRaid(input: TrustedRaidObservation): Promise<RaidObservationReceipt> {
-    const observation = readObservation(input);
-    if (!observation) return ignored('invalid');
-    const { raid, upstreamEventId, actionRequestId } = observation;
-    // A live gate lands only on Chatdom's own verified EventSub; a simulated one only on a labelled simulation.
-    // Replays and legacy feeds are history, never a departure.
-    const trusted = deps.origin === 'live' ? raid.source === 'herald' && raid.evidence.kind === 'observed' : raid.source === 'simulation';
-    if (!trusted) return ignored('untrusted');
-    if (actionRequestId === null || upstreamEventId === null) return ignored('uncorrelated');
     const now = clock();
-    const outcome = await transact(async (tx): Promise<Readonly<{ receipt: RaidObservationReceipt; landed: RaidActionRecord | null }>> => {
-      const action = await tx.getAction(actionRequestId);
-      if (!action) return { receipt: ignored('unknown-request'), landed: null };
-      if (action.from !== raid.fromKingdomId || action.to !== raid.toKingdomId) return { receipt: ignored('mismatch'), landed: null };
-      if (action.state === 'landed') {
-        const same = action.raidEventId === upstreamEventId || action.raid?.id === raid.id;
-        return { receipt: same ? { kind: 'duplicate', requestId: action.requestId } : ignored('conflict'), landed: null };
+    const outcome = await transact(async tx => {
+      try {
+        return await recordObservedRaid(tx, input, { origin: deps.origin, now });
+      } catch (error) {
+        if (error instanceof RaidObservationConflict) throw new Conflict();
+        throw error;
       }
-      // A confirmed cancel or a refusal already settled this request; a raid seen now is not the one it asked for.
-      if (!TWITCH_HOLDS.has(action.state) || action.dispatchedAt === null) return { receipt: ignored('settled'), landed: null };
-      const startItem = await tx.getOutbox(outboxId(action.requestId, 'start'));
-      // Twitch cannot have acted on a write that never left.
-      if (!startItem || startItem.attempts === 0) return { receipt: ignored('uncorrelated'), landed: null };
-      // The raid happened after this press and no later than this request's countdown allows.
-      const at = raid.occurredAt ?? raid.observedAt;
-      const base = Math.max(action.acceptedAt ?? 0, action.dispatchedAt);
-      const latest = base + GATE_LIMITS.twitchCountdownMs + (raid.occurredAt === null ? GATE_LIMITS.observationGraceMs : GATE_LIMITS.clockSkewMs);
-      if (at < action.dispatchedAt - GATE_LIMITS.clockSkewMs || at > latest) return { receipt: ignored('out-of-window'), landed: null };
-
-      const landed = await advance(tx, action, { state: 'landed', raid, raidEventId: upstreamEventId, observedAt: now, endReason: null }, now);
-      if (startItem.state === 'claimed') await advanceOutbox(tx, startItem, { state: 'settled', settledAt: now, outcome: 'accepted' });
-      const cancelItem = await tx.getOutbox(outboxId(action.requestId, 'cancel'));
-      // The raid left before any cancel could hold it: there was nothing left to cancel.
-      if (cancelItem?.state === 'claimed') await advanceOutbox(tx, cancelItem, { state: 'settled', settledAt: now, outcome: 'rejected' });
-      else if (cancelItem?.state === 'queued') await advanceOutbox(tx, cancelItem, { state: 'settled', settledAt: now, outcome: 'lapsed' });
-      await queue(tx, action.requestId, 'road', now);
-      return { receipt: { kind: 'landed', requestId: action.requestId }, landed };
     }, OWN);
     if (outcome.landed) {
       announce(outcome.landed);

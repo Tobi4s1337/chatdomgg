@@ -51,7 +51,11 @@ export function spectacleNotice(type: HeraldEventType, event: unknown, kingdomId
     case 'channel.hype_train.end': return fromNormalizer(hypeTrainEnd, event, kingdomId, hype);
     case 'channel.raid': {
       const parsed = RaidEvent.safeParse(event);
-      if (!parsed.success || parsed.data.to_broadcaster_user_id !== kingdomId) return null;
+      if (!parsed.success) return null;
+      // Outgoing observations belong to the gate authority, never the incoming caravan renderer.
+      if (parsed.data.from_broadcaster_user_id === kingdomId && parsed.data.to_broadcaster_user_id !== kingdomId
+        && KingdomIdSchema.safeParse(parsed.data.to_broadcaster_user_id).success) return IGNORED;
+      if (parsed.data.to_broadcaster_user_id !== kingdomId) return null;
       const e = parsed.data, from = KingdomIdSchema.safeParse(e.from_broadcaster_user_id);
       if (!from.success || from.data === kingdomId) return null;
       // Twitch can report a raid that brought nobody; there is no caravan to draw.

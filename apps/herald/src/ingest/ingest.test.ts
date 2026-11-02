@@ -25,8 +25,8 @@ const BROADCASTER = { id: '129634568', login: 'tobi4s_', displayName: 'tobi4s_' 
 const READER = { id: '900000001', login: 'herald_reader', displayName: 'HeraldReader' };
 const READER_SCOPES = ['user:read:chat', 'user:bot'];
 const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train',
-  'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls'];
-const PLANNED = HERALD_EVENT_TYPES.length;
+  'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls', 'channel:manage:raids', 'moderator:read:shield_mode'];
+const PLANNED = HERALD_EVENT_TYPES.length + 1;
 const FULL_GRANTS = { [READER.id]: READER_SCOPES, [BROADCASTER.id]: BROADCASTER_SCOPES };
 const KINGDOM = KingdomIdSchema.parse(BROADCASTER.id);
 const SLOTS = presentKingdom({ seed: 'tobi4s_', tier: 'hamlet', firstYear: 2026, year: 2026 }).slots;
@@ -205,10 +205,10 @@ describe('subscription reconciliation', () => {
   it('creates exactly the planned subscriptions on the configured conduit, once', async () => {
     const r = await started();
     const ours = r.eventsub.subscriptions.filter(entry => entry.transport.method === 'conduit' && entry.transport.conduit_id === r.conduitId);
-    expect(ours.map(entry => entry.type).sort()).toEqual([...HERALD_EVENT_TYPES].sort());
+    expect(ours.map(entry => entry.type).sort()).toEqual([...HERALD_EVENT_TYPES, 'channel.raid'].sort());
     expect(ours.every(entry => entry.version === (entry.type.startsWith('channel.hype_train.') || entry.type === 'channel.follow' ? '2' : '1'))).toBe(true);
     expect(ours.find(entry => entry.type === 'channel.follow')!.condition).toEqual({ broadcaster_user_id: BROADCASTER.id, moderator_user_id: BROADCASTER.id });
-    expect(ours.find(entry => entry.type === 'channel.raid')!.condition).toEqual({ to_broadcaster_user_id: BROADCASTER.id });
+    expect(ours.filter(entry => entry.type === 'channel.raid').map(entry => entry.condition)).toEqual([{ to_broadcaster_user_id: BROADCASTER.id }, { from_broadcaster_user_id: BROADCASTER.id }]);
     expect(ours.find(entry => entry.type === 'channel.bits.use')!.condition).toEqual({ broadcaster_user_id: BROADCASTER.id });
     expect(ours.find(entry => entry.type === 'channel.chat.message')!.condition).toEqual({ broadcaster_user_id: BROADCASTER.id, user_id: READER.id });
     expect(ours.find(entry => entry.type === 'user.authorization.revoke')!.condition).toEqual({ client_id: CLIENT_ID });
@@ -225,18 +225,55 @@ describe('subscription reconciliation', () => {
     const r = await rig({ grants: {} });
     await r.runtime.start();
     await r.until(() => r.runtime.health().verifiedAt !== null);
-    const coverage = Object.fromEntries(r.runtime.health().coverage.map(entry => [entry.type, entry.state]));
+    const coverage = Object.fromEntries(r.runtime.health().coverage.map(entry => [entry.key, entry.state]));
     expect(coverage).toEqual({
       'channel.chat.message': 'unauthorized', 'channel.chat.notification': 'unauthorized', 'channel.chat.message_delete': 'unauthorized', 'channel.chat.clear': 'unauthorized',
       'channel.chat.clear_user_messages': 'unauthorized', 'stream.online': 'enabled', 'stream.offline': 'enabled', 'user.authorization.revoke': 'enabled',
       'channel.bits.use': 'unauthorized', 'channel.hype_train.begin': 'unauthorized', 'channel.hype_train.progress': 'unauthorized',
-      'channel.hype_train.end': 'unauthorized', 'channel.raid': 'enabled', 'channel.follow': 'unauthorized',
+      'channel.hype_train.end': 'unauthorized', 'channel.raid:incoming': 'enabled', 'channel.raid:outgoing': 'enabled', 'channel.follow': 'unauthorized',
       'channel.channel_points_custom_reward_redemption.add': 'unauthorized', 'channel.poll.begin': 'unauthorized', 'channel.poll.progress': 'unauthorized',
       'channel.poll.end': 'unauthorized',
     });
     expect(r.fake.calls.filter(call => call.status === 403)).toEqual([]);
     expect(r.source.available).toBe(false);
     expect(r.source.health()).toMatchObject({ condition: 'unauthorized', reason: 'unauthorized' });
+  });
+
+  it('old grants retain chat and incoming raids while reporting each missing new capability', async () => {
+    const old = BROADCASTER_SCOPES.filter(scope => scope !== 'channel:manage:raids' && scope !== 'moderator:read:shield_mode');
+    const r = await started({ grants: { [READER.id]: READER_SCOPES, [BROADCASTER.id]: old } });
+    const coverage = r.runtime.health().coverage;
+    expect(r.authority.available('raids')).toBe(false);
+    expect(r.authority.available('shield')).toBe(false);
+    expect(coverage.find(entry => entry.key === 'channel.raid:incoming')).toMatchObject({ direction: 'incoming', state: 'enabled' });
+    expect(coverage.find(entry => entry.key === 'channel.raid:outgoing')).toMatchObject({ direction: 'outgoing', state: 'enabled' });
+    expect(coverage.find(entry => entry.type === 'stream.online')).toMatchObject({ key: 'stream.online', direction: null, state: 'enabled' });
+    r.live(); r.say(PEOPLE.juniper, 'old-grant-chat'); await r.settle();
+    expect(r.present().map(person => person.publicName)).toContain('Juniper');
+  });
+
+  it('reports a foreign outgoing conflict without masking the enabled incoming subscription', async () => {
+    const r = await rig();
+    r.eventsub.addForeignSubscription('channel.raid', { from_broadcaster_user_id: BROADCASTER.id });
+    await r.runtime.start();
+    await r.until(() => r.runtime.health().verifiedAt !== null);
+    const coverage = r.runtime.health().coverage;
+    expect(coverage.find(entry => entry.key === 'channel.raid:incoming')).toMatchObject({ direction: 'incoming', state: 'enabled' });
+    expect(coverage.find(entry => entry.key === 'channel.raid:outgoing')).toMatchObject({ direction: 'outgoing', state: 'conflict' });
+    expect(r.source.available).toBe(true);
+  });
+
+  it.each(['incoming', 'outgoing'] as const)('revokes only the %s raid subscription', async direction => {
+    const r = await started();
+    const conditionKey = direction === 'incoming' ? 'to_broadcaster_user_id' : 'from_broadcaster_user_id';
+    const raid = r.eventsub.subscriptions.find(entry => entry.type === 'channel.raid' && conditionKey in entry.condition)!;
+    raid.status = 'authorization_revoked';
+    r.eventsub.sendFrame(r.socket(), 'revocation', { subscription: raid });
+    const coverage = r.runtime.health().coverage;
+    expect(coverage.find(entry => entry.key === `channel.raid:${direction}`)).toMatchObject({ state: 'disabled', reason: 'authorization_revoked', direction });
+    const other = direction === 'incoming' ? 'outgoing' : 'incoming';
+    expect(coverage.find(entry => entry.key === `channel.raid:${other}`)).toMatchObject({ state: 'enabled', direction: other });
+    expect(r.source.available).toBe(true);
   });
 
   it('accepts a 409 only when the matching subscription is on its own conduit', async () => {
@@ -698,7 +735,9 @@ describe('provision:source', () => {
     const outcome = await p.run(conduitId, false);
     expect(outcome.status).toBe('incomplete');
     expect(p.eventsub.conduits.get(conduitId)).toHaveLength(1);
-    expect(outcome.coverage.filter(entry => entry.state === 'enabled').map(entry => entry.type).sort()).toEqual(['channel.raid', 'stream.offline', 'stream.online', 'user.authorization.revoke']);
+    expect(outcome.coverage.filter(entry => entry.state === 'enabled').map(entry => entry.type).sort()).toEqual(['channel.raid', 'channel.raid', 'stream.offline', 'stream.online', 'user.authorization.revoke']);
+    expect(p.lines.join('\n')).toMatch(/channel\.raid:incoming\s+enabled/);
+    expect(p.lines.join('\n')).toMatch(/channel\.raid:outgoing\s+enabled/);
     expect(p.lines.join('\n')).toMatch(/channel\.chat\.message\s+not created: its grant is not verified \(run check:auth\)/);
   });
 

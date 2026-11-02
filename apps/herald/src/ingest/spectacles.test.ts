@@ -109,6 +109,10 @@ describe('spectacleNotice', () => {
     expect(spectacleNotice('channel.raid', raid({ viewers: 50_000_000 }), K)).toMatchObject({ viewers: 10_000_000 });
   });
 
+  it('ignores a valid outgoing raid without creating an incoming caravan', () => {
+    expect(spectacleNotice('channel.raid', raid({ from_broadcaster_user_id: K, to_broadcaster_user_id: NEIGHBOUR }), K)).toBe(IGNORED);
+  });
+
   it('ignores a raid that brought nobody and refuses one addressed elsewhere, from itself or malformed', () => {
     expect(spectacleNotice('channel.raid', raid({ viewers: 0 }), K)).toBe(IGNORED);
     expect(spectacleNotice('channel.raid', raid({ to_broadcaster_user_id: NEIGHBOUR, from_broadcaster_user_id: '616161' }), K)).toBeNull();

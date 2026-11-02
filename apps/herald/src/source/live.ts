@@ -16,6 +16,7 @@ import type { RealmDelivery } from '../realm-delivery/delivery';
 import { RealmMomentObservationSchema } from '@chatdom/shared/realm';
 import { streamNotice } from '../ingest/spectacles';
 import { providerToken } from '../twitch-moments/credit';
+import { HelixRaidCrierTransport, RaidCrierWorker } from '../raid-gate/crier';
 
 export interface LiveSourceHandle {
   readonly server: PresenceServer;
@@ -26,11 +27,11 @@ export interface LiveSourceHandle {
 /** The capabilities a live source cannot publish without: chat and its cleanup are one delivery family. */
 const REQUIRED: readonly Capability[] = ['chat'];
 /** Grants a running source waits for. While one is missing it is reread each minute, not only hourly. */
-const AWAITED: readonly Capability[] = ['chat', 'chatters', 'bits', 'hype', 'follows', 'rewards', 'polls'];
+const AWAITED: readonly Capability[] = ['chat', 'chatters', 'bits', 'hype', 'follows', 'rewards', 'polls', 'raids', 'shield'];
 const GRANT_READY: Partial<Record<Capability, string>> = { chat: 'attaching chat delivery', chatters: 'sweeping Chatters', bits: 'enabling cheers and Power-ups', hype: 'enabling hype trains',
-  follows: 'enabling follows', rewards: 'enabling kingdom rewards', polls: 'enabling polls and decrees' };
+  follows: 'enabling follows', rewards: 'enabling kingdom rewards', polls: 'enabling polls and decrees', raids: 'raid grant verified', shield: 'Shield Mode grant verified' };
 const GRANT_MISSING: Partial<Record<Capability, string>> = { chat: 'not publishing', chatters: 'not sweeping Chatters', bits: 'cheers and Power-ups unavailable', hype: 'hype trains unavailable',
-  follows: 'follows unavailable', rewards: 'kingdom rewards unavailable', polls: 'polls and decrees unavailable' };
+  follows: 'follows unavailable', rewards: 'kingdom rewards unavailable', polls: 'polls and decrees unavailable', raids: 'raid grant missing; reconnect the broadcaster', shield: 'Shield Mode grant missing; reconnect the broadcaster' };
 const GRANT_RECHECK_MS = 60_000;
 
 /**
@@ -70,10 +71,13 @@ export async function startLiveSource(options: {
   let runtime: DeliveryRuntime | null = null;
   let reconciler: Reconciler | null = null;
   let grantWatch: ReturnType<typeof setInterval> | null = null;
+  let raidCrier: RaidCrierWorker | null = null;
+  const crierEnabled = process.env.HERALD_RAID_CRIER_ENABLED === '1';
   const stop = async () => {
     if (grantWatch) clearInterval(grantWatch);
     runtime?.stop();
     reconciler?.stop();
+    await raidCrier?.close();
     authority?.stop();
     tokens?.close();
     await source?.close();
@@ -115,7 +119,9 @@ export async function startLiveSource(options: {
     ...(options.realm ? { realm: options.realm } : {}),
   });
   const live = source;
-  const health = () => ({ ...live.health(), ...(options.realm ? { realm: options.realm.health() } : {}) });
+  const health = () => ({ ...live.health(), ...(options.realm ? { realm: options.realm.health() } : {}),
+    raidCrier: raidCrier?.health() ?? { origin: 'live', enabled: crierEnabled, ready: false, reason: 'realm_unconfigured' },
+    authorization: authority?.report?.capabilities.filter(entry => entry.capability === 'raids' || entry.capability === 'shield') ?? null });
   host = { get current() { return live.current; }, subscribe: listener => live.subscribe(listener), health };
   try {
     await live.open();
@@ -124,6 +130,13 @@ export async function startLiveSource(options: {
     return { server, source, stop };
   }
   print(`  kingdom ${kingdomId.data} · ${kingdom.config.tier} ${kingdom.config.firstYear}–${kingdom.config.year} · ${kingdom.slots.length} home slots · bindings kept in ${config.dataDir}`);
+  if (options.realm) {
+    const crierAuthority = authority;
+    raidCrier = new RaidCrierWorker({ origin: 'live', kingdomId: kingdomId.data, login: config.channelLogin, enabled: crierEnabled,
+      report: () => crierAuthority.report, refreshReport: () => crierAuthority.refresh(), realm: options.realm.options,
+      transport: new HelixRaidCrierTransport(helix.session), ...(options.realm.options.fetch ? { fetch: options.realm.options.fetch } : {}) });
+    raidCrier.start();
+  }
 
   // Stream state needs only the app token, so it is observed even while chat delivery is not authorized.
   const observed = new Reconciler({ kingdomId: kingdomId.data, helix, authority, source: live, log: line => print(`  ${line}`),
