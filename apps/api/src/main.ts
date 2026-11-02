@@ -49,6 +49,7 @@ const server = createServer((request, response) => {
     if (await (await import('./dock')).handleDock(request, response, { pool, config })) return;
     if (await handleRaidCrierSetting(request, response, { pool, config })) return;
     if (await (await import('./raid-gate/guests-http')).handleRaidGuest(request, response, { pool, config })) return;
+    if (await (await import('./raid-gate/passport-http')).handleRaidPassport(request, response, { pool, config })) return;
     if (await serveRaidGate(raidGate, request, response)) return;
     if (!await routes(request, response)) {
       response.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })

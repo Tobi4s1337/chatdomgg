@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, For, Show, type JSX } from 'solid-js';
 import {
   PASSPORT_FIXTURE_NAMES, PASSPORT_FIXTURE_TITLES, PassportReading, createPassportReading,
   type BookLayout, type PassportDisclosureView, type PassportFixtureName, type PassportTransport,
@@ -20,7 +20,8 @@ import './bench.css';
  * `?surface=card` shows the book as the citizen card's page carries it, with the share shelf; its picture comes from
  * `/-/passport/share.png`, which only the capture runner serves (through the real share handler and renderer).
  * `&owner=1` gives the card its holder's clasp, answered by the SIMULATED person authority after a short wait
- * (`&owner=fail` refuses every change), so the acknowledged change can be watched.
+ * (`&owner=fail` refuses every change), so the acknowledged change can be watched. `&source=gate` reads the Raid
+ * Gate's stamps instead, through the gate's own passport ports (see `gate-bench.ts`).
  */
 type BenchState = 'shown' | 'unsigned' | 'hidden' | 'revised' | 'malformed' | 'pending';
 const STATES: readonly BenchState[] = ['shown', 'unsigned', 'hidden', 'revised', 'malformed', 'pending'];
@@ -120,6 +121,33 @@ function BenchCard(props: { fixture: PassportFixtureName; state: BenchState; ini
   </div>;
 }
 
+/**
+ * The card page with the Raid Gate's own stamps (`&source=gate`): the gate's passport ports and the real reader over
+ * what the gate's authority recorded, with the holder's clasp answered by the gate's record of the choice.
+ */
+function GateCard(props: { initialView: number }): JSX.Element {
+  const [source] = createResource(async () => {
+    const { gateBenchSource } = await import('./gate-bench');
+    const gate = gateBenchSource();
+    return { gate, disclosure: await gate.disclosure(), places: disclosedPlaces(projectCard(gate.authorities.card())) };
+  });
+  const [settled, setSettled] = createSignal(false);
+  markReady(settled);
+  return <div class="ppb-card">
+    <Show when={source()}>{loaded => <>
+      <header class="ppb-card-head">
+        <span class="ppb-card-mark">Chatdom</span>
+        <span class="ppb-card-kingdom">A citizen of {loaded().gate.home.name}</span>
+      </header>
+      <CardPassport transport={passportLocalTransport(loaded().gate.reader, { key: loaded().gate.authorities.key, now: loaded().gate.authorities.now })}
+        places={loaded().places} disclosure={loaded().disclosure} initialView={props.initialView}
+        {...(param('owner') === '1' ? { owner: loaded().gate.owner } : {})}
+        onState={state => { if (state.kind !== 'pending') setSettled(true); }} />
+    </>}</Show>
+    <div class="ppb-card-roofs" aria-hidden="true" />
+  </div>;
+}
+
 export default function PassportBench(): JSX.Element {
   const initial = param('fixture'), initialState = param('state');
   const [fixture, setFixture] = createSignal<PassportFixtureName>(isFixture(initial) ? initial : 'many');
@@ -155,7 +183,7 @@ export default function PassportBench(): JSX.Element {
     </Show>
     {/* A different book or a different answer is a different reading: the previous one closes and drops late replies. */}
     <Show when={reading()} keyed>{r => surface === 'card'
-      ? <BenchCard fixture={r.fixture} state={r.state} initialView={initialView} />
+      ? param('source') === 'gate' ? <GateCard initialView={initialView} /> : <BenchCard fixture={r.fixture} state={r.state} initialView={initialView} />
       : <BenchReading fixture={r.fixture} state={r.state} layout={layout()} initialView={initialView} />}</Show>
   </main>;
 }
