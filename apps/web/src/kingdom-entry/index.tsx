@@ -4,7 +4,7 @@ import { REALM_ENTRY_ROUTE } from '@chatdom/shared/realm';
 import { Icon, SignInSeal, SiteFooter } from '@chatdom/ui';
 import { announceSignInOutcome, brandLink, readSealSession, refreshSeals, SESSION_EVENT, walkReturnView, type Session } from '@chatdom/ui/site';
 import { RealmEntryError, realmEntryFailureMessage } from '../realm/adapters/entry';
-import { gateKingdom, gateName, gateWords, type GateState } from './gate';
+import { gateKingdom, gateName, gateWords, type GateNaming, type GateState } from './gate';
 import type { KingdomEntryArrival, KingdomEntryConnection, KingdomEntrySource } from './types';
 import '@chatdom/ui/kit.css';
 import '@chatdom/ui/fonts.css';
@@ -18,11 +18,11 @@ export { gateKingdom, gateWords, type GateState } from './gate';
 const DOOR_LEAVE_MS = 8_000;
 
 /** The kingdom's approved name as the realm says it (see `gateName`); the gate reads well without it. */
-async function kingdomName(kingdomId: string, signal: AbortSignal): Promise<string | null | 'nowhere'> {
+async function kingdomName(kingdomId: string, signal: AbortSignal): Promise<GateNaming> {
   try {
     const response = await fetch(REALM_ENTRY_ROUTE.replace(':kingdomId', kingdomId), { signal, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } });
     return gateName(kingdomId, response.status, response.ok ? await response.json() : null);
-  } catch { return null; }
+  } catch { return { kind: 'unknown' }; }
 }
 
 /**
@@ -123,8 +123,8 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
   async function begin() {
     if (state() === 'lost') return;
     if (kingdomId) void kingdomName(kingdomId, naming.signal).then(found => {
-      if (found === 'nowhere') { if (!closed) { release(); setState('nowhere'); } }
-      else if (found) setName(found);
+      if (found.kind === 'missing') { if (!closed) { release(); setState('nowhere'); } }
+      else if (found.kind === 'named') setName(found.name);
     });
     // The staged rehearsal is a development bench with its own reference sign-in; it skips the session check.
     if (!staged) {
