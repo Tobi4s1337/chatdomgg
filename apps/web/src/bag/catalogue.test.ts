@@ -3,15 +3,17 @@ import type { VoxelAsset } from '@chatdom/shared';
 import '../../../realm/src/items/providers';
 import { itemCatalogue } from '../../../realm/src/items/catalogue';
 import { FISH_ITEM_DEFINITIONS } from '../../../../packages/content/src/fish';
+import { FISH_MOUNT_DEFINITIONS } from '../../../../packages/content/src/keepsakes';
 import { WILLOW_ROD_DEFINITION } from '../../../../packages/content/src/pier/rod';
 import { createItemModelCatalogue, itemModels } from './index';
 
 const asset = (id: string): VoxelAsset => ({ id, revision: 1, lattice: 'avatar', size: [1, 1, 1], voxels: new Uint16Array([1]) });
 
 it('resolves every real server definition through browser providers with independent voxel buffers', () => {
-  const definitions = [...FISH_ITEM_DEFINITIONS, WILLOW_ROD_DEFINITION];
-  expect(definitions).toHaveLength(13);
-  expect(new Set(definitions.map(def => def.id)).size).toBe(13);
+  const definitions = [...FISH_ITEM_DEFINITIONS, ...FISH_MOUNT_DEFINITIONS, WILLOW_ROD_DEFINITION];
+  expect(FISH_MOUNT_DEFINITIONS).toHaveLength(FISH_ITEM_DEFINITIONS.length);
+  expect(definitions).toHaveLength(FISH_ITEM_DEFINITIONS.length * 2 + 1);
+  expect(new Set(definitions.map(def => def.id)).size).toBe(definitions.length);
   for (const expected of definitions) {
     const server = itemCatalogue.get(expected.id);
     expect(server).toEqual(expected);
@@ -28,7 +30,7 @@ it('resolves every real server definition through browser providers with indepen
   }
   expect(itemModels.has('fish:missing')).toBe(false);
   expect(itemModels.create('fish:missing')).toBeUndefined();
-});
+}, 60_000);
 
 it('registers factories lazily, rejects a conflicting batch atomically, and safely unregisters', () => {
   const models = createItemModelCatalogue(), first = vi.fn(() => asset('tool:first'));

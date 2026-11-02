@@ -1,6 +1,6 @@
 import { FISHING_CHANNEL, FISHING_PRIVATE_BYTES, FISHING_PUBLIC_BYTES, FishingChannelRequestSchema,
   kingdomFishingHour, kingdomWaterMood, type FishingOwnerCast, type FishingPrivateReply, type FishingPublicBeat,
-  type FishingPublicCast, type FishingPublicReply, type FishingPublicRod, type ItemRecord, type PersonId } from '@chatdom/shared';
+  type FishingPublicCast, type FishingPublicReply, type FishingPublicRod, type ItemRecord, type PersonId, type PierAlmanacMark } from '@chatdom/shared';
 import type { RealmChannelRoom, RealmChannelSender, RealmRoomChannel } from '../room-channels';
 import type { CastBeat, CastView, createFishingCasts } from './cast';
 import type { FishingCatchResult } from './catches';
@@ -18,6 +18,10 @@ export interface FishingRoomRuntime {
   keep(from: RealmChannelSender, castId: string): Promise<FishingCatchResult>;
   /** The binding invalidates its cached fact before calling this listener. */
   onRodChange(listener: (personId: PersonId) => void): () => void;
+  /** Your own Almanac marks: every species you have caught in this kingdom. */
+  marks?(from: RealmChannelSender): Promise<readonly PierAlmanacMark[]>;
+  /** A newly kept walker catch, for the pier's public feed and the stream. */
+  announce?(kept: Extract<FishingCatchResult, { status: 'kept' }>): void;
   dispose(): void;
 }
 
@@ -173,6 +177,7 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
         && room.person(person.owner)?.walkerId === person.walkerId) rods.push({ walkerId: person.walkerId, model: 'tool:rod.willow' });
       privateSend(from, { type: 'pier.state', id, at, revision: installation?.revision ?? room.world().revision,
         site: installation?.site ?? null, rack: installation?.rack ?? null, ...(installation?.lights ? { lights: installation.lights } : {}),
+        ...(installation?.almanac ? { almanac: installation.almanac } : {}),
         water: installation ? { hour: kingdomFishingHour(at), mood: kingdomWaterMood(room.kingdomId, at) } : null,
         casts: publicCasts(), rods, self: { rod: fisher.rod, cast: ownCast(fisher.owner), pendingCastId: fisher.pendingCastId } });
     };
@@ -264,9 +269,13 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
       }
       const fish = { speciesId: kept.catch.speciesId, lengthMm: kept.catch.fish.lengthMm, weightG: kept.catch.fish.weightG };
       privateSend(from, { type: 'pier.kept', ...(id ? { id } : {}), castId, item: kept.item, fish,
-        personalFirst: kept.catch.personalFirst, kingdomFirst: kept.catch.kingdomFirst, replayed: kept.replayed });
-      if (!kept.replayed) publicSend({ type: 'pier.caught', at: kept.catch.caughtAt, castId, walkerId: from.walkerId,
-        fish, kingdomFirst: kept.catch.kingdomFirst });
+        personalFirst: kept.catch.personalFirst, kingdomFirst: kept.catch.kingdomFirst, replayed: kept.replayed,
+        keepsake: kept.keepsake && kept.keepsake.ownerId === fisher.owner ? kept.keepsake : null });
+      if (!kept.replayed) {
+        publicSend({ type: 'pier.caught', at: kept.catch.caughtAt, castId, walkerId: from.walkerId,
+          fish, kingdomFirst: kept.catch.kingdomFirst });
+        try { runtime.announce?.(kept); } catch { /* The stream misses one tag; the catch is kept. */ }
+      }
       publicDirty = true;
     };
     function pump() {
@@ -356,6 +365,13 @@ export function createFishingRoomChannel(options: FishingRoomChannelOptions): Re
           }
           if (!currentFisher(from, fisher)) return;
           fisher.selectionVersion++; fisher.selectedId = request.itemId; rodEvent(fisher, true); pump(); state(from, fisher, request.id);
+        });
+        return;
+      }
+      if (request.type === 'pier.marks') {
+        await requestJob(async () => {
+          const marks = runtime.marks ? await runtime.marks(from) : [];
+          if (await authenticated(from) && currentFisher(from, fisher)) privateSend(from, { type: 'pier.marks', id: request.id, marks: [...marks] });
         });
         return;
       }

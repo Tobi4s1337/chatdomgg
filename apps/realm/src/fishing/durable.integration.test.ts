@@ -8,6 +8,7 @@ import { generateSettlementPlan } from '@chatdom/world';
 import { compileFoundedScene } from '@chatdom/world/founded-collision';
 import { createRealmState } from '@chatdom/world/realm';
 import { FISH_ITEM_DEFINITIONS, FISH_SPECIES } from '../../../../packages/content/src/fish';
+import { FISH_MOUNT_DEFINITIONS } from '../../../../packages/content/src/keepsakes';
 import { WILLOW_ROD_DEFINITION } from '../../../../packages/content/src/pier/rod';
 import { assembleFoundedScene } from '../founded/scene';
 import { PostgresOutboxStore } from '../outbox';
@@ -46,7 +47,7 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('durable fishing room o
       kingdom: () => ({ world, layoutRevision: 'founded-test', spawn: () => installation.rack }) });
     let hold = await services.retain(kingdomId);
     const owner = await sender(pool, kingdomId), observer = await sender(pool, kingdomId);
-    const store = createPostgresItemStore({ pool }), catalogue = createItemCatalogue([...FISH_ITEM_DEFINITIONS, WILLOW_ROD_DEFINITION]);
+    const store = createPostgresItemStore({ pool }), catalogue = createItemCatalogue([...FISH_ITEM_DEFINITIONS, ...FISH_MOUNT_DEFINITIONS, WILLOW_ROD_DEFINITION]);
     const items = createRealmItems({ store, catalogue, clock: Date.now });
     let now = Date.now(), visible = true, pose: RealmChannelPose = { position: installation.rack, yaw: 0, grounded: true, collisionRevision: 7 };
     const from = { ...owner.from, pose: () => pose }, other = observer.from;

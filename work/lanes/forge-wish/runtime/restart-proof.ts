@@ -74,7 +74,7 @@ export async function runRestartRealm(directory: string, port: number, seed: boo
         subject: { motif: 'sleeping-dragon', slot: 'chimney' } });
     }
     return warm({ ...input, onComplete: metric => {
-      mark({ type: 'call-done', stage, outcome: metric.outcome, ms: Math.round(metric.elapsedMs), warm: warm.state,
+      mark({ type: 'call-done', stage, outcome: metric.outcome, failure: metric.failure ?? null, ms: Math.round(metric.elapsedMs), warm: warm.state,
         tokens: metric.usage?.totalTokens ?? null, input: metric.usage?.inputTokens ?? null, output: metric.usage?.outputTokens ?? null });
       input.onComplete?.(metric);
     } });
@@ -95,7 +95,8 @@ export async function runRestartRealm(directory: string, port: number, seed: boo
         ...('attachmentId' in observation ? { attachmentId: observation.attachmentId, committedAt: observation.committedAt } : {}) });
     } });
   evening.use(boot.services);
-  if (seed) await adoptProofLayout(boot, kingdomId);
+  const fiftyRun = (process.env.PROOF_PHASES ?? '').split(',').includes('fifty');
+  if (seed) await adoptProofLayout(boot, kingdomId, fiftyRun ? 'town' : 'hamlet');
   await boot.readiness.start();
   await evening.start();
   const runtime = boot.createServer({ mountIngress: app => mountEveningRoutes(app, evening) });
@@ -131,8 +132,7 @@ export async function runRestartRealm(directory: string, port: number, seed: boo
     await post(INGRESS_ROUTE, stream(Math.floor(kingdom.databaseNow()) - 25));
     await committed();
     // One citizen per wish: eight restart cases, six typical wishes and three together; or the fifty.
-    const fifty = (process.env.PROOF_PHASES ?? '').split(',').includes('fifty');
-    const ids = Array.from({ length: fifty ? FW11_WISHES.length : 17 }, () => PersonIdSchema.parse((BigInt('0x' + randomBytes(12).toString('hex')) + 1n).toString()));
+    const ids = Array.from({ length: fiftyRun ? FW11_WISHES.length : 17 }, () => PersonIdSchema.parse((BigInt('0x' + randomBytes(12).toString('hex')) + 1n).toString()));
     const people = await settleProofPeople(boot, citizens, kingdomId, ids, false);
     await qualifyProofPeople(boot, kingdomId, people, sessionId);
     await writeFile(join(directory, 'realm.json'), JSON.stringify({ kingdomId, people }), { mode: 0o600 });
@@ -270,12 +270,21 @@ export async function runRestartSupervisor(port: number, entry: string): Promise
       const callsBefore = calls.length, waiting = [...FW11_WISHES], rows: Record<string, unknown>[] = [];
       const lane = async () => {
         for (let wish = waiting.shift(); wish; wish = waiting.shift()) {
-          const sent = await send(wish.words);
-          const outcome = await settle(sent, { target: 'none', stage: 'fifty', id: wish.id });
+          // One wish that misbehaves is a row, not the end of the run; only a usage limit stops the fifty.
+          let sent: Awaited<ReturnType<typeof send>>, outcome: Mark;
+          try { sent = await send(wish.words); outcome = await settle(sent, { target: 'none', stage: 'fifty', id: wish.id }); }
+          catch (error) {
+            if (summary.blocked) throw error;
+            rows.push({ id: wish.id, category: wish.category, status: 'proof-fault', fault: error instanceof Error && error.message.startsWith('Proof:') ? error.message : 'unexpected failure' });
+            await flush(); continue;
+          }
           const key = forgeMessageKey(KingdomIdSchema.parse(realm.kingdomId), sent.messageId);
           const audit = marks().filter(m => m.type === 'audit' && m.key === key).at(-1);
+          // The split: the Forge's own work (words, draft, sheet, gates) up to approval, then the realm's commit.
+          const approved = marks().find(m => m.type === 'approved' && m.key === key);
+          const forgeSeconds = approved ? Math.round((approved.at - sent.sentAt) / 100) / 10 : null;
           const row = (summary.cases as Record<string, unknown>[]).find(item => item.id === wish.id);
-          rows.push({ id: wish.id, category: wish.category, status: outcome.status, seconds: row?.seconds ?? null, judgment: audit?.judgment ?? null,
+          rows.push({ id: wish.id, category: wish.category, status: outcome.status, seconds: row?.seconds ?? null, forgeSeconds, judgment: audit?.judgment ?? null,
             calls: audit?.calls ?? null, attempts: audit?.attempts ?? null, delivery: audit?.delivery ?? null, shared: audit?.shared ?? null,
             reason: audit?.reason ?? null, quality: audit?.quality ?? null });
           await flush();
@@ -288,10 +297,14 @@ export async function runRestartSupervisor(port: number, entry: string): Promise
       const at = (q: number) => seconds.length ? seconds[Math.min(seconds.length - 1, Math.ceil(q * seconds.length) - 1)]! : null;
       summary.fifty = { rows, landed: seconds.length, total: rows.length, median: at(.5), p95: at(.95),
         refusedForQuality: rows.filter(row => row.status !== 'delivered' && row.reason === 'quality').length,
+        knownAsAsked: rows.filter(row => row.category === 'known' && row.status === 'delivered' && row.delivery !== 'softened').length,
+        known: rows.filter(row => row.category === 'known').length,
+        statuses: rows.reduce<Record<string, number>>((all, row) => ({ ...all, [String(row.status)]: (all[String(row.status)] ?? 0) + 1 }), {}),
         calls: done.length, completeCalls: done.filter(m => m.outcome === 'complete').length, warmCalls: done.filter(m => m.warm === 'warm').length,
+        forgeMedian: (() => { const all = rows.map(row => row.forgeSeconds).filter((v): v is number => typeof v === 'number').sort((a, b) => a - b); return all[Math.floor(all.length / 2)] ?? null; })(),
         tokens: done.reduce((sum, m) => sum + Number(m.tokens ?? 0), 0), callMedianMs: done.map(m => Number(m.ms)).sort((a, b) => a - b)[Math.floor(done.length / 2)] ?? null };
-      const table = ['| wish | kind | outcome | calls | seconds to reveal | quality | delivery |', '|---|---|---|---|---|---|---|',
-        ...rows.map(row => `| ${row.id} | ${row.category} | ${row.status} | ${row.calls ?? '—'} | ${row.seconds ?? '—'} | ${row.quality ?? '—'} | ${row.delivery ?? '—'}${row.reason ? ` (${row.reason}: shares ${row.shared})` : ''} |`)];
+      const table = ['| wish | kind | outcome | calls | seconds to reveal | of which to approval | quality | delivery |', '|---|---|---|---|---|---|---|---|',
+        ...rows.map(row => `| ${row.id} | ${row.category} | ${row.status} | ${row.calls ?? '—'} | ${row.seconds ?? '—'} | ${row.forgeSeconds ?? '—'} | ${row.quality ?? '—'} | ${row.delivery ?? '—'}${row.reason ? ` (${row.reason}: shares ${row.shared})` : ''} |`)];
       await writeFile(join(directory, 'fifty.md'), table.join('\n') + '\n', { mode: 0o600 });
     }
     summary.ok = (!phases.has('three') || (summary.threeInOrder === true && summary.threeLanded === 3))
@@ -300,7 +313,7 @@ export async function runRestartSupervisor(port: number, entry: string): Promise
     summary.ok = false; summary.error = error instanceof Error && error.message.startsWith('Proof:') ? error.message : 'unexpected failure';
     // The cause, with every fixture wish's words taken out: never words in the summary.
     if (error instanceof Error && !error.message.startsWith('Proof:'))
-      summary.detail = FW10_WISHES.reduce((text, wish) => text.split(wish.words).join('[wish]'), `${error.name}: ${error.message}`).slice(0, 200);
+      summary.detail = [...FW10_WISHES, ...FW11_WISHES].reduce((text, wish) => text.split(wish.words).join('[wish]'), `${error.name}: ${error.message}`).slice(0, 200);
     process.exitCode = 1;
   } finally {
     if (child && child.exitCode === null) {

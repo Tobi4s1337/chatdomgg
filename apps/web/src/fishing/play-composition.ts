@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { kingdomAudioHost, type KingdomAudio } from '@chatdom/audio';
-import { kingdomWaterMood, type KingdomId, type Vec3 } from '@chatdom/shared';
+import { kingdomWaterMood, type KingdomId, type PierAlmanac, type PierAlmanacMark, type Vec3 } from '@chatdom/shared';
+import { mountAlmanac, type AlmanacHandle, type AlmanacOptions } from '../almanac/book';
+import { almanacFailure, loadAlmanac } from '../almanac/fetch';
+import { createAlmanacSound } from '../almanac/sound';
 import { createBagStore, hotbarSlots, mountBag, mountHotbar, itemPortrait, type BagSound, type BagStore } from '../bag';
 import { createFishingController, type FishingController } from './controller';
 import { mountPierLayer, type PierLayer, type PierWalker } from './layer';
@@ -79,6 +82,8 @@ export interface PierWalk {
   readonly store: BagStore;
   readonly ui: FishingUi;
   layer(): PierLayer | null;
+  /** Opens the kingdom's Almanac over the walk, at the contents or a species' page; your own marks inside. */
+  openAlmanac(page?: string): void;
   /** Select a hotbar thing: the rod goes into the hand, nothing empties it. */
   select(itemId: string | null): void;
   toggleBag(): void;
@@ -93,11 +98,15 @@ export interface PierViews {
   bag: typeof mountBag;
   hotbar: typeof mountHotbar;
   portrait(defId: string): Promise<CanvasImageSource | null>;
+  /** The book and where its facts come from. */
+  almanac(host: HTMLElement, options: AlmanacOptions): AlmanacHandle;
+  loadAlmanac(kingdomId: string, signal: AbortSignal): Promise<PierAlmanac>;
 }
 const VIEWS: PierViews = { ui: mountFishingUiStaged, layer: mountPierLayer, sound: createPierSound, bag: mountBag, hotbar: mountHotbar,
-  portrait: defId => itemPortrait(defId, 288).catch(() => null) };
+  portrait: defId => itemPortrait(defId, 288).catch(() => null), almanac: mountAlmanac,
+  loadAlmanac: (kingdomId, signal) => loadAlmanac(kingdomId, { signal }) };
 
-const RACK_REACH = 2.25, RACK_RISE = .75;
+const RACK_REACH = 2.25, RACK_RISE = .75, LECTERN_REACH = 2.4;
 const compact = () => typeof matchMedia === 'function' && matchMedia('(max-width: 640px)').matches;
 const isRod = (defId: string | undefined) => !!defId?.startsWith('tool:rod.');
 
@@ -112,6 +121,19 @@ function walkPier(ctx: PierWalkContext, slots: PierPlaySlots, views: PierViews):
     onBeat: beat => sound.cue(beat === 'dismiss' ? 'tag' : beat, { intensity: beat === 'dismiss' ? .25 : .5 }) });
   let layer: PierLayer | null = null, mounting = false, disposed = false, closeBag: (() => void) | null = null, unclaim = () => {};
   let bagHost: HTMLDivElement | null = null;
+  // The open book over the walk, with what it needs to close cleanly and to refresh after a catch.
+  interface OpenBook { handle: AlmanacHandle | null; close(): void; refresh(): void }
+  let book: OpenBook | null = null;
+  const almanacSound = () => {
+    const host = ctx.audio() ? kingdomAudioHost(ctx.audio()!) : null;
+    return host ? createAlmanacSound(host.context, host.destination) : undefined;
+  };
+  /** The public facts and your own marks, together; a missing mark list leaves the book without your hand. */
+  const readAlmanac = async (signal: AbortSignal) => {
+    const [almanac, marks] = await Promise.all([views.loadAlmanac(ctx.kingdomId, signal),
+      controller.marks().catch((): readonly PierAlmanacMark[] | null => null)]);
+    return { almanac, marks };
+  };
   const camera = ctx.camera instanceof THREE.PerspectiveCamera ? ctx.camera : null;
   const self = () => ctx.selfWalkerId();
   const mountLayer = () => {
@@ -147,11 +169,39 @@ function walkPier(ctx: PierWalkContext, slots: PierPlaySlots, views: PierViews):
     if (event.kind === 'state') mountLayer();
     // A rod taken from the rack goes straight into the hand, as it lands in the first slot.
     if (event.kind === 'taken') slots.equipTool('rod');
+    // A kept fish writes itself into an open Almanac.
+    if (event.kind === 'kept' && !event.replayed) book?.refresh();
   });
   const stopFrame = ctx.onFrame((_dt, now) => { layer?.update(now / 1000); poseOthers(); });
   controller.sync();
   return {
     controller, store, ui, layer: () => layer,
+    openAlmanac(page) {
+      if (disposed) return;
+      if (book) { if (page) book.handle?.show(page); return; }
+      const cursor = ctx.requestCursor('almanac');
+      const host = Object.assign(document.createElement('div'), { className: 'pier-almanac-layer' });
+      Object.assign(host.style, { position: 'absolute', inset: '0', pointerEvents: 'auto' });
+      ctx.overlay.append(host);
+      const abort = new AbortController();
+      const mine: OpenBook = {
+        handle: null,
+        close() {
+          if (book !== mine) return;
+          book = null; abort.abort(); mine.handle?.dispose(); host.remove(); cursor.release();
+        },
+        refresh() {
+          void readAlmanac(abort.signal).then(({ almanac, marks }) => { if (book === mine) mine.handle?.update(almanac, marks); }).catch(() => {});
+        },
+      };
+      book = mine;
+      void readAlmanac(abort.signal).then(({ almanac, marks }) => {
+        if (book !== mine) return;
+        const sound = almanacSound();
+        mine.handle = views.almanac(host, { almanac, marks, mode: 'walker', ...(page ? { open: page } : {}), onClose: () => mine.close(),
+          ...(sound ? { sound } : {}) });
+      }).catch(error => { if (book === mine) { mine.close(); ui.note(almanacFailure(error), 'warn'); } });
+    },
     select(itemId) {
       const item = itemId ? store.item(itemId) : undefined;
       if (item && isRod(item.defId)) { controller.equip(item.id); slots.equipTool('rod'); return; }
@@ -171,7 +221,7 @@ function walkPier(ctx: PierWalkContext, slots: PierPlaySlots, views: PierViews):
     dispose() {
       if (disposed) return;
       disposed = true;
-      closeBag?.(); stopFrame(); stopEvents();
+      closeBag?.(); book?.close(); stopFrame(); stopEvents();
       for (const walkerId of posed.keys()) slots.observedWalkerPose(walkerId, null);
       posed.clear();
       layer?.dispose(); layer = null; unclaim();
@@ -224,6 +274,23 @@ export function registerPierInPlay(slots: PierPlaySlots, views: PierViews = VIEW
       if (!mine) return () => {};
       return views.bag(host, mine.store, { ...(ctx.self ? { viewerPersonId: ctx.self.personId } : {}), compact: compact(), onClose: () => ctx.closeLedger() });
     } }),
+    slots.registerLedgerPage({ id: 'almanac', title: 'Almanac', order: 35, available: () => true, mount(host, ctx) {
+      // Walking, the book carries your own marks from the room; watching, it is the kingdom's public book.
+      const abort = new AbortController(), mine = ctx.mode === 'walking' ? walk : null;
+      let handle: AlmanacHandle | null = null, gone = false;
+      void Promise.all([views.loadAlmanac(ctx.kingdomId, abort.signal),
+        mine ? mine.controller.marks().catch((): readonly PierAlmanacMark[] | null => null) : Promise.resolve(null)])
+        .then(([almanac, marks]) => {
+          if (gone) return;
+          handle = views.almanac(host, { almanac, marks, mode: mine ? 'walker' : 'watcher', onClose: () => ctx.closeLedger() });
+        })
+        .catch(error => {
+          if (gone) return;
+          const note = Object.assign(document.createElement('p'), { className: 'pier-almanac-unavailable', textContent: almanacFailure(error) });
+          host.append(note);
+        });
+      return () => { gone = true; abort.abort(); handle?.dispose(); host.replaceChildren(); };
+    } }),
     slots.registerActionBinding({ id: 'bag', label: 'Open your bag', defaultCode: 'KeyB', onPress(ctx) { if (walking(ctx)) walk!.toggleBag(); } }),
     slots.registerActionBinding({ id: 'hotbar.1', label: 'Hold the first thing on your belt', defaultCode: 'Digit1', onPress(ctx) {
       if (!walking(ctx)) return;
@@ -239,6 +306,15 @@ export function registerPierInPlay(slots: PierPlaySlots, views: PierViews = VIEW
         return near ? { label: 'Take a willow rod', at: rack as Vec3 } : null;
       },
       use(ctx) { if (walking(ctx)) walk!.controller.take(); } }),
+    slots.registerWorldPrompt({ id: 'pier.almanac',
+      prompt(pose) {
+        const lectern = walk?.controller.state().almanac;
+        if (!lectern) return null;
+        const near = Math.abs(pose.position[1] - lectern[1]) <= RACK_RISE + .5
+          && Math.hypot(pose.position[0] - lectern[0], pose.position[2] - lectern[2]) <= LECTERN_REACH;
+        return near ? { label: 'Read the Almanac', at: lectern as Vec3 } : null;
+      },
+      use(ctx) { if (walking(ctx)) walk!.openAlmanac(); } }),
   ];
   return () => { for (const stop of stops.reverse()) stop(); walk?.dispose(); walk = null; };
 }

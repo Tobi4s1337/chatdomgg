@@ -406,6 +406,16 @@ not in this lane's folders. Proposal, either is enough:
    `worker_threads` worker and pass the compiled world back as transferable buffers; the room keeps serving walks
    on the current world until adoption.
 
+**It grows with the kingdom (FW11, 2026-11-02).** The fifty-wish proof needs one citizen per wish, so it seeds a
+town (48 homes a quarter) instead of the hamlet. In its zero-call rehearsal (controlled model, load about 8), a
+piece took a median of about 10 s from its approval to its delivery, all of it the commit and this rebuild,
+against about 2 s in the hamlet. Commits are serial, so two wishes in flight wait for each other's rebuild: the
+rehearsal's median submit-to-reveal was 31 s with only about 6 s of (simulated) model time. In a town the rebuild,
+not the Forge, decides how quick a wish is, and it blocks the room for that long on every commit. The real fifty
+in the same town (warm model, two in flight) confirmed it: the Forge's own part had a median of 21.0 s (p95 33.1),
+approval to reveal a median of 16.5 s, so submit to reveal was 35.8 s (p95 71.6) against FW11's 25 s / 60 s bar
+(`work/evidence/forge-wish/fw11-wishes.md`). Either proposal above brings the commit back to a few seconds.
+
 Until one exists, any commit on a busy host can drop the walkers who are standing in the kingdom, not only the
 maker. Section 12 (no reload on a Forge commit) is still needed after this. Without §13, §12's hot adoption would
 keep the session but still get it kicked.

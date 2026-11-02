@@ -8,6 +8,7 @@ import { createDurableRealmServices, PostgresRealmRepository, REALM_DATABASE_LIM
 import type { RealmChannelSender } from '../room-channels';
 import { createFishingCasts } from './cast';
 import { createFishingSpecies } from './species';
+import { fishMountId } from '../../../../packages/content/src/keepsakes';
 
 /** The suite owns these isolated connections; the host's other services are untouched. */
 export function pierTestPool(connectionString: string, size: number): Pool {
@@ -25,6 +26,10 @@ export const common: FishSpecies = { id: 'fish:test-perch', name: 'Perch', lore:
 export const rare: FishSpecies = { ...common, id: 'fish:test-rare', name: 'Rare fish', rarity: 'rare' };
 export const definition = (fish: FishSpecies): ItemDefinition => ({ id: fish.id, branch: 'gathered', title: fish.name, lore: fish.lore,
   stack: fish.rarity === 'rare' ? null : 99, keepsake: false, model: fish.id, places: ['bag', 'away'] });
+/** Rare catches and kingdom firsts become numbered mounts, so a catch catalogue carries the mount too. */
+export const mountDefinition = (fish: FishSpecies): ItemDefinition => ({ id: fishMountId(fish.id), branch: 'kept', title: `${fish.name}, mounted`,
+  lore: fish.lore, stack: null, keepsake: true, model: fishMountId(fish.id), places: ['shelf', 'bag', 'away'] });
+export const definitions = (...fish: FishSpecies[]): ItemDefinition[] => fish.flatMap(entry => [definition(entry), mountDefinition(entry)]);
 const site: FishingPierSite = { version: 1, id: 'pier:lake', root: [0, 0, 0], turn: 0, deckY: 1, waterY: 0, walk: 20, water: 'lake', biome: 'unknown', depth: [] };
 export async function retained(pool: Pool, kingdomId: KingdomId, origin: 'live' | 'simulated' = 'simulated') {
   const repository = new PostgresRealmRepository(pool, { origin });

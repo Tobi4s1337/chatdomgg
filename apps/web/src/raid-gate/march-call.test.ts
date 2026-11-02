@@ -4,7 +4,7 @@ import type { AtlasRaid, KingdomId } from '../../../api/src/raid-gate/contracts'
 import type { GateDestination, GateSnapshot, JourneySnapshot } from './controller';
 import {
   countdownSeconds, countdownShare, isStreamPath, MARCH_NEWS_MS, MARCH_SETBACK_MS, marchActions, marchCallShows, marchDestinationName, marchNews,
-  marchNotice, marchPartyLine, marchWords, mountRaidMarchCall, twitchChannelUrl, watchLogin,
+  marchNotice, marchPartyLine, marchWords, monarchName, mountRaidMarchCall, twitchChannelUrl, watchLogin,
 } from './march-call';
 import type { RaidGateApi } from './ports';
 
@@ -226,5 +226,22 @@ describe('march call: mounting', () => {
     life.abort();
     mountRaidMarchCall({ kingdomId: SOURCE.kingdomId, source: SOURCE, origin: 'live', signal: life.signal, api })();
     expect(api.request).not.toHaveBeenCalled();
+  });
+});
+
+describe('march call: a host that is not told the login', () => {
+  it('names the monarch plainly rather than leaving a gap', () => {
+    expect(monarchName({ ...SOURCE, login: '' })).toBe('The monarch');
+    expect(monarchName(SOURCE)).toBe('tobi4s_');
+  });
+});
+
+describe('march call: titles', () => {
+  it('capitalises our own plain phrases at the start of a title, never a login', () => {
+    const unnamed = { ...toFern, channel: null };
+    const trip = { kind: 'raid' as const, ticket: 't', state: 'preparing' as const, from: SOURCE.kingdomId, to: FERN, destination: unnamed, role: null,
+      arrivalId: null, overrun: true, refusal: null, busy: null };
+    expect(marchWords(snap({ journey: trip }), T0).title).toBe('A neighbouring kingdom is still drawing its world');
+    expect(marchWords(snap({ phase: 'gathering' }), T0).title.startsWith('tobi4s_')).toBe(true);
   });
 });
