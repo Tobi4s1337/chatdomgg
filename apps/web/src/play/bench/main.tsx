@@ -5,7 +5,7 @@
  *
  * Query: cursor=idle|cooldown|touch|locked|unavailable · page=settings|way-home|build|help|look ·
  * home=none|inside · angle=<degrees> · build=closed · slots=1 (a sample look page, Forge entry, bag key, map piece) ·
- * prompt=1 · reduced=1 · store=device (keep settings in this browser).
+ * prompt=1 · reduced=1 · store=device (keep settings in this browser) · drift=1 (the browser lets the cursor drift).
  */
 import { createKingdomAudio } from '@chatdom/audio';
 import type { KingdomId } from '@chatdom/shared';
@@ -37,6 +37,7 @@ const touch = query.get('cursor') === 'touch';
 let cursor: CursorView = {
   state: (query.get('cursor') as CursorState | null) ?? 'idle', fullscreen: !!document.fullscreenElement, keyboardLocked: false,
   canFullscreen: !touch && typeof document.documentElement.requestFullscreen === 'function', canLockKeyboard: !touch && 'keyboard' in navigator,
+  ...(query.get('drift') === '1' ? { drifting: true } : {}),
 };
 const cursorListeners = new Set<(view: CursorView) => void>();
 const setCursor = (patch: Partial<CursorView>) => { cursor = { ...cursor, ...patch }; for (const listener of cursorListeners) listener(cursor); };

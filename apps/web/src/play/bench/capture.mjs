@@ -34,6 +34,8 @@ const check = (name, ok, detail) => { report.checks.push({ name, ok: !!ok, ...(d
 
 const shots = [
   ['hud-idle', ''],
+  ['hud-drift', '?drift=1'],
+  ['ledger-drift', '?page=settings&drift=1'],
   ['hud-touch', '?cursor=touch&prompt=1&slots=1'],
   ['hud-prompt', '?cursor=locked&prompt=1&slots=1'],
   ['settings', '?page=settings'],

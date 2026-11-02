@@ -122,6 +122,7 @@
 .pl-back-title { font: 21px/1.05 var(--cd-face-story); color: var(--cd-cream); text-shadow: 0 1px 0 #1d1109; white-space: nowrap; }
 .pl-back-hint { font: var(--cd-type-min)/1.1 var(--cd-face-label); letter-spacing: .09em; color: var(--cd-cream-soft); }
 .pl-escape-hint { text-align: center; font: italic var(--cd-type-small)/1.2 var(--cd-face-body); color: var(--pl-ink-soft); }
+.pl-drift-note { margin: 0; text-align: center; font: italic var(--cd-type-small)/1.35 var(--cd-face-body); color: var(--pl-ink); text-wrap: balance; }
 
 /* ------------------------------------------------------------------ The open page (the right leaf) */
 .pl-page-head { position: relative; padding: 0 0 12px; margin-bottom: 14px; z-index: 1; }

@@ -11,6 +11,7 @@ import { keyName, readKeyLayout, type KeyLayout } from '../ledger/keys';
 import { LedgerBook, type LedgerPhase } from '../ledger/Ledger';
 import { bookMark, mouseMark } from '../ledger/marks';
 import { createLedger, type Ledger, type LedgerState } from '../ledger/model';
+import { DRIFT_LINE } from '../ledger/words';
 import { Minimap } from '../map/Minimap';
 import '../map/map.css';
 
@@ -140,6 +141,7 @@ function HudView(props: { play: PlayHost; ledger: Ledger }): JSX.Element {
     </Region>}</For>
     <Show when={calm()}>
       <p class="pl-walk-slip cd-slip" data-state={cursor().state} role="status">{mouseMark()}<span>Click to walk</span></p>
+      <Show when={cursor().drifting}><p class="pl-quiet-line pl-drift-line" role="note">{DRIFT_LINE}</p></Show>
     </Show>
     <Show when={unavailable() && !ledgerShown()}>
       <p class="pl-quiet-line" role="status">This window cannot hold the mouse. Open the kingdom in its own tab to walk.</p>
@@ -155,6 +157,7 @@ function HudView(props: { play: PlayHost; ledger: Ledger }): JSX.Element {
  * HUD draws them and asks for changes through `play`. Returns the verbs the walk binds (open on the unlock Escape
  * causes, on the ledger key and from the phone's book button; Escape peels the top layer).
  */
+
 export function mountPlayHud(host: HTMLElement, play: PlayHost): PlayHud {
   const container = document.createElement('div');
   container.className = 'pl-root';

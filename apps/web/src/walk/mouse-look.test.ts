@@ -9,7 +9,7 @@ import { wrapAngle } from './input/direction';
  * frames. The realm walks the citizen where the input says, as the server does, so camera-relative walking and
  * the camera's auto-follow can meet.
  */
-function setup(coarse = false) {
+function setup(coarse = false, echoFilter = false) {
   const keyboard = new EventTarget(), page = Object.assign(new EventTarget(), { hidden: false });
   const lockDocument = Object.assign(new EventTarget(), { pointerLockElement: null as unknown, exitPointerLock() {} });
   const surface = Object.assign(new EventTarget(), {
@@ -30,7 +30,7 @@ function setup(coarse = false) {
   };
   const clock = { now: 0 };
   const controller = createWalkController({ camera: new THREE.PerspectiveCamera(), surface, realm, keyboard, page, lockDocument, coarse,
-    clock: () => clock.now, heading: 0, keyboardLock: null });
+    clock: () => clock.now, heading: 0, keyboardLock: null, echoFilter });
   const mouse = (movementX: number, movementY: number) => lockDocument.dispatchEvent(Object.assign(new Event('mousemove'), { movementX, movementY }));
   const key = (type: 'keydown' | 'keyup', code: string) => keyboard.dispatchEvent(Object.assign(new Event(type), { code, repeat: false }));
   /** Run `ms` of 1 ms ticks, drawing a frame every 1000/hz ms. */
@@ -84,6 +84,28 @@ describe('mouse look end to end', () => {
     });
     expect(turned(start, controller.debug.camera.yaw)).toBeCloseTo(wrapAngle(hand * LOOK.radiansPerPx), 9);
   });
+  for (const hz of [60, 144, 343]) {
+    it(`turns only as far as the hand when Firefox on X11 echoes the hidden cursor after every move (${hz} Hz)`, () => {
+      // Tobias's machine: each real count is followed by a fake event, the cursor's offset from the centre, which
+      // drifts with the hand. 2 s of a 500 Hz mouse moving 1 count right and 1 down, then 2 s still.
+      const { controller, mouse, run, capture } = setup(false, true);
+      controller.frame(0); capture();
+      const start = { yaw: controller.debug.camera.yaw, pitch: controller.debug.camera.pitch };
+      let offset = { x: -978, y: 105 }, hand = { x: 0, y: 0 };
+      const at = run(0, 2000, hz, ms => {
+        if (ms % 2) return;
+        const real = ms % 4 ? { x: 1, y: 0 } : { x: 0, y: 1 };
+        mouse(real.x, real.y); hand = { x: hand.x + real.x, y: hand.y + real.y };
+        offset = { x: offset.x + real.x, y: offset.y + real.y };
+        mouse(offset.x, offset.y);
+      });
+      expect(turned(start.yaw, controller.debug.camera.yaw)).toBeCloseTo(hand.x * LOOK.radiansPerPx, 9);
+      const after = controller.debug.camera.yaw;
+      run(at, 2000, hz);
+      expect(controller.debug.camera.yaw).toBe(after);
+      expect(controller.cursor.drifting).toBe(true);
+    });
+  }
   it('a small nudge on a 1600 DPI mouse is a small turn (1 cm, 630 raw counts, under 40°)', () => {
     const { controller, mouse, capture } = setup();
     controller.frame(0); capture();

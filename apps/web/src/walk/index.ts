@@ -29,7 +29,7 @@ export type { ThumbSlot, WalkHud, WalkHudState } from './input/hud';
 export { createWalkKeys, DEFAULT_WALK_BINDINGS, isEditableTarget, isKeyboardControl } from './input/keyboard';
 export type { WalkBindings } from './input/keyboard';
 export { createWalkLook, LOOK } from './input/look';
-export type { KeyboardLockLike, LockDocument, LockSurface, LookMode, WalkLook, WalkLookView } from './input/look';
+export type { KeyboardLockLike, LetGo, LockDocument, LockSurface, LookMode, WalkLook, WalkLookView } from './input/look';
 export { CLICK_MS, CLICK_SLOP_PX, createWalkPointer, isClickPress, wheelPixels } from './input/pointer';
 export { createWalkTouch, stickIntent, stickRegion, TOUCH } from './input/touch';
 export type { TouchStick, WalkTouch } from './input/touch';
@@ -69,6 +69,8 @@ export interface WalkControllerOptions {
   readonly lockDocument?: LockDocument;
   /** Keyboard lock for fullscreen. Defaults to `navigator.keyboard` where the browser has it; null for none. */
   readonly keyboardLock?: KeyboardLockLike | null;
+  /** Drop Firefox's re-centre echoes from locked movement. Defaults to on in Firefox only (input/look.ts). */
+  readonly echoFilter?: boolean;
   /**
    * The device's play settings (sensitivity, invert, field of view, first or third person, key bindings, reduced
    * motion), read live. Without it the defaults apply.
@@ -198,7 +200,8 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
   const pointer = createWalkPointer(surface, keyboard);
   const touch = createWalkTouch(surface, keyboard);
   const look = createWalkLook(surface, options.lockDocument ?? document, keyboard, {
-    ...(options.keyboardLock !== undefined ? { keyboardLock: options.keyboardLock } : {}), ...(options.clock ? { clock: options.clock } : {}) });
+    ...(options.keyboardLock !== undefined ? { keyboardLock: options.keyboardLock } : {}), ...(options.clock ? { clock: options.clock } : {}),
+    ...(options.echoFilter !== undefined ? { echoFilter: options.echoFilter } : {}) });
   const gestures = createGestureState(gesture => options.gestures?.publish(gesture));
   const selector = options.hud && options.gestures ? mountGestureSelector(options.hud, {
     state: gestures, available: options.gestures.available(),

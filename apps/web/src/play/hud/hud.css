@@ -33,6 +33,9 @@
   margin: 0; text-align: center; font: italic var(--cd-type-body)/1.4 var(--cd-face-body); color: var(--cd-cream);
   text-shadow: 0 1px 2px #0b0716, 0 0 12px #0b0716cc; animation: pl-quiet 9s ease both; pointer-events: none; }
 @keyframes pl-quiet { 0% { opacity: 0; } 6%, 88% { opacity: 1; } 100% { opacity: 0; } }
+/* Under the slip while the browser lets the cursor drift: it stays as long as the slip does. */
+.pl-drift-line { bottom: calc(16% - 58px + env(safe-area-inset-bottom)); max-width: min(520px, calc(100% - 40px)); font-size: 16px; text-wrap: balance;
+  text-shadow: 0 1px 2px #0b0716, 0 0 6px #0b0716, 0 0 16px #0b0716e6; animation: pl-fade-in .4s .3s ease-out both; }
 
 /* The book button on touch screens: carved walnut, a brass ring, an inked ledger. */
 .pl-ledger-button { position: relative; display: grid; place-items: center; width: 60px; height: 60px; margin: 0; padding: 0; border-radius: 50%; cursor: pointer;
@@ -50,6 +53,7 @@
 
 .pl-hud[data-reduced='true'] .pl-walk-slip { animation: pl-fade-in .16s ease-out both; }
 .pl-hud[data-reduced='true'] .pl-quiet-line { animation: pl-quiet 9s steps(1, end) both; }
+.pl-hud[data-reduced='true'] .pl-drift-line { animation: none; }
 .pl-hud[data-reduced='true'] .pl-ledger-button { transition: none; }
 @media (forced-colors: active) { .pl-walk-slip, .pl-ledger-button { border: 1px solid CanvasText; } }
 
