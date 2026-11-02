@@ -41,9 +41,13 @@ if (!process.argv.includes('--worker')) {
     const web = await serve('web'), dock = await serve('dock');
     console.log(`Owned UI previews: ${web}, ${dock}`);
     browser = await chromium.launch({ channel: 'chrome', headless: true,
-      args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+      args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox',
+      // The sheet's own page is route-fulfilled and has no address space; its loopback frames are not a public-to-local request.
+      '--disable-features=LocalNetworkAccessChecks,BlockInsecurePrivateNetworkRequests'] });
     const page = await browser.newPage({ viewport: { width: 2880, height: 1792 }, deviceScaleFactor: 1 });
     page.on('pageerror', error => report.errors.push(error.message));
+    // Iframe console errors explain a surface that never becomes ready.
+    page.on('console', message => { if (message.type() === 'error') (report.console ??= []).push(`${message.location()?.url ?? ''}: ${message.text()}`.slice(0, 400)); });
     // The dock's read-only private HTTP fixtures retain their actual simulated response mode.
     await page.route('**/api/**', route => {
       const url = new URL(route.request().url());
@@ -75,6 +79,10 @@ if (!process.argv.includes('--worker')) {
       { name: 'authority-phone', width: 390, height: 844, url: gate('bench=simulated&authority=revoked'), phase: 'authority' },
       { name: 'unbound-phone', width: 390, height: 844, url: gate(''), phase: 'unbound' },
     ];
+    // The contact sheet lives on the preview's own origin: an about:blank parent is not a secure context, so its
+    // frames would lack crypto.randomUUID and the walker bench would stop before it is ready.
+    await page.route(`${web}/__contact`, route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Contact</title>' }));
+    await page.goto(`${web}/__contact`);
     await page.setContent('<style>body{margin:0;background:#171b27;color:#f5e5c6;font:14px Georgia}main{display:flex;flex-wrap:wrap;width:2880px}section{margin:0}p{height:24px;margin:0}iframe{border:0;display:block}</style><main></main>');
     for (const surface of surfaces) {
       await page.evaluate(surface => {
@@ -86,7 +94,14 @@ if (!process.argv.includes('--worker')) {
       const frame = await page.waitForEvent('framenavigated', { predicate: frame => frame.name() === surface.name, timeout: 20000 }).catch(() => page.frame(surface.name));
       assert.ok(frame);
       console.log(`[capture] ${surface.name}`);
-      await frame.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 90000 });
+      try {
+        await frame.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 90000 });
+      } catch (error) {
+        report.stuck = { surface: surface.name, url: frame.url(), state: await frame.evaluate(() => ({ ready: window.__chatdomReady,
+          gate: window.__chatdomRaidGate?.snapshot?.() ?? null, text: document.body?.innerText?.slice(0, 600) })).catch(cause => String(cause)) };
+        await writeFile('work/evidence/raid-show/copy-surfaces.json', JSON.stringify(report, null, 2));
+        throw error;
+      }
       if (surface.finder) {
         await frame.getByRole('button', { name: 'Choose where to ride' }).click();
         await frame.waitForFunction(() => window.__chatdomRaidGate?.snapshot().phase === 'choosing');

@@ -6,7 +6,7 @@ import { breeze } from './choreography';
 import { CART_CELLS, PONY_CELLS, ponyLegBlueprint, ponyTailBlueprint, wheelBlueprint } from './gift-art';
 import { Path, type GiftRoute, type PlaceAnchor } from './gift-view';
 import {
-  BRAZIER_CELLS, GATE_CELLS, TORCH_CELLS, skyLanternsPerWagon, torchPairs, torchPostBlueprint, RAID_WAGON_CELLS, RAID_WAGON_ORIGIN, ADORNMENT_CELLS, bannerRuns, brazierBlueprint, dyeBlueprint, gatePoleBlueprint, raidParts,
+  BANNER_PONY_CELLS, BRAZIER_CELLS, GATE_CELLS, TORCH_CELLS, bannerPoleBlueprint, bannerPonyRows, skyLanternsPerWagon, torchPairs, torchPostBlueprint, RAID_WAGON_CELLS, RAID_WAGON_ORIGIN, ADORNMENT_CELLS, bannerRuns, brazierBlueprint, dyeBlueprint, gatePoleBlueprint, raidParts,
   raidPonyBlueprint, raidWagonBlueprint, raiderArms, adornmentBlueprint, adornmentsOf, type RaiderArms, type Run,
 } from './raid-art';
 import { Pool } from './train-view';
@@ -18,7 +18,12 @@ export const RAID_VIEW_LIMITS = {
   wagons: RAID_LIMITS.units * RAID_LIMITS.caravans, dye: 1400, adornments: 3 * RAID_LIMITS.units * RAID_LIMITS.caravans, cores: 96, glows: 40, pools: 40, arms: 8,
   /** Torch posts along the street (six pairs per caravan) and the sky lanterns over the biggest columns. */
   torches: 12 * RAID_LIMITS.caravans, torchCores: 36 * RAID_LIMITS.caravans, sky: 96,
+  /** Every pony drawn at once: one per wagon plus the banner ponies, two abreast in at most two rows per gap. */
+  ponies: RAID_LIMITS.units * RAID_LIMITS.caravans * 5,
 } as const;
+
+/** Banner ponies keep at least this much air (m) to the wagon ahead, the wagon behind and each other, and walk this far either side of the road's middle. */
+export const RAID_PONY_LAYOUT = { clear: 0.3, abreast: 0.56 } as const;
 
 /** The torch avenue in metres: the first pair this far inside the gate, then one pair every `spacing` along the street. */
 export const RAID_TORCH_LAYOUT = { start: 4.2, spacing: 3.4, aside: [2.75, 3.05, 3.35] as const, ignite: 520, step: 240 } as const;
@@ -155,7 +160,7 @@ const SKY = { from: 1600, every: 850, life: 11_000, rise: 0.62 } as const;
 /** The gate as the road supplies it: its ground point, the way into the town, and the side its standard stands. */
 export interface RaidGateSite { readonly position: THREE.Vector3; readonly facing: THREE.Vector3; readonly side: THREE.Vector3 }
 
-interface Banners { readonly arms: RaiderArms; readonly gate: Run[][]; readonly standard: Run[][]; readonly pennant: Run[][] }
+interface Banners { readonly arms: RaiderArms; readonly gate: Run[][]; readonly standard: Run[][]; readonly pennant: Run[][]; readonly pony: Run[][] }
 
 /**
  * The Raid Gate and the caravan. The gate (two braziers and the raider's standard on its pole) gathers at the
@@ -203,7 +208,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
   const banners = new Map<string, Banners | null>();
   let road: Path | null | undefined;
   let gate: { site: RaidGateSite; caption: THREE.Vector3 } | null = null;
-  let counts = { caravans: 0, wagons: 0, torches: 0, skyLanterns: 0 };
+  let counts = { caravans: 0, wagons: 0, ponies: 0, torches: 0, skyLanterns: 0 };
 
   const m = new THREE.Matrix4(), w = new THREE.Matrix4(), p = new THREE.Matrix4(), c = new THREE.Matrix4(), t = new THREE.Matrix4(), r = new THREE.Matrix4();
   const q = new THREE.Quaternion(), e = new THREE.Euler(), one = new THREE.Vector3(1, 1, 1), a = new THREE.Vector3(), b = new THREE.Vector3();
@@ -254,6 +259,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
       gate: bannerRuns(arms.design, { width: GATE_CELLS.cloth.width, rows: GATE_CELLS.cloth.rows, tail: GATE_CELLS.cloth.tail, charges: true }),
       standard: bannerRuns(arms.design, { ...RAID_WAGON_CELLS.standard, charges: true }),
       pennant: bannerRuns(arms.design, { ...RAID_WAGON_CELLS.pennant, charges: false }),
+      pony: bannerRuns(arms.design, { ...BANNER_PONY_CELLS.pennant, charges: false }),
     } : null;
     banners.set(kingdomId, made);
     if (banners.size > RAID_VIEW_LIMITS.arms) banners.delete(banners.keys().next().value!);
@@ -408,6 +414,67 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     }
   }
 
+  /** One pony walking in frame `at` (its pivot on the ground), legs in a trot at `step`, tail swinging on `swish`. */
+  function pony(at: THREE.Matrix4, colour: RaiderArms['colour'], step: number, swish: number, fade: number): void {
+    const [qx, , qz] = PONY_CELLS.pivot, limit = RAID_VIEW_LIMITS.ponies;
+    pool(raidPonyBlueprint(host.kit, colour), limit).push(m.copy(at).multiply(t.makeTranslation(cells(-qx, 0, -qz))), fade);
+    PONY_CELLS.legs.forEach(([x, y, z], i) => {
+      m.copy(at).multiply(t.makeTranslation(cells(x - qx, y, z - qz))).multiply(r.makeRotationZ(Math.sin(step + (i === 0 || i === 3 ? 0 : Math.PI)) * 0.42))
+        .multiply(t.makeTranslation(cells(-1, -6, -0.5)));
+      pool(ponyLegBlueprint(host.kit), limit * 4).push(m, fade);
+    });
+    const [tx, ty, tz] = PONY_CELLS.tail;
+    m.copy(at).multiply(t.makeTranslation(cells(tx - qx, ty, tz - qz))).multiply(r.makeRotationX(Math.sin(swish) * 0.3))
+      .multiply(t.makeTranslation(cells(-0.5, -5, -0.5)));
+    pool(ponyTailBlueprint(host.kit), limit).push(m, fade);
+  }
+
+  /**
+   * The banner ponies led behind wagon `index`, two abreast, in as many rows (up to the column's design) as fit in
+   * the air between this wagon's tailboard and the next wagon's pony on the actual road. They share the column's
+   * pace and road, so they never close on a wagon; a gap too short for a row simply has none.
+   */
+  function drawBannerPonies(frame: RaidFrame, set: Banners, index: number, line: Path, atMs: number): void {
+    const wanted = bannerPonyRows(frame.units);
+    if (!wanted || index >= Math.min(frame.units, RAID_LIMITS.units) - 1) return;
+    const lead = frame.t - RAID_BEAT.arrive - index * frame.timing.pitch;
+    const speed = wagonPose(0, line.length, frame.timing).speed, gap = frame.timing.pitch / 1000 * speed;
+    const P = BANNER_PONY_CELLS, L = RAID_PONY_LAYOUT;
+    // The wagon ahead reaches back past its pivot to its tailboard; the one behind reaches forward to its pony's nose.
+    const tail = RAID_WAGON_CELLS.pivot[0] * CELL;
+    const nose = (CART_CELLS.pony[0] - RAID_WAGON_CELLS.pivot[0] + PONY_CELLS.size[0] - PONY_CELLS.pivot[0]) * CELL;
+    const free = gap - tail - nose, length = P.back + P.front;
+    let rows = wanted;
+    while (rows > 0 && free - rows * length < (rows + 1) * L.clear) rows--;
+    if (!rows) return;
+    const air = (free - rows * length) / (rows + 1);
+    const [ox, oy, oz] = P.origin, spec = P.pennant, [qx, , qz] = PONY_CELLS.pivot;
+    for (let row = 0; row < rows; row++) {
+      const behind = tail + air * (row + 1) + row * length + P.front;
+      const elapsed = lead - behind / speed * 1000;
+      if (elapsed < 0 || elapsed >= frame.timing.travel) continue;
+      const pose = wagonPose(elapsed, line.length, frame.timing), fade = pose.presence;
+      if (fade <= 0.01) continue;
+      const d = pose.distance, ahead = line.at(d + 1).position, back = line.at(d - 1).position, at = line.at(d).position;
+      const dx = ahead.x - back.x, dz = ahead.z - back.z;
+      e.set(0, Math.atan2(-dz, dx), Math.atan2(ahead.y - back.y, Math.hypot(dx, dz)), 'YZX');
+      q.setFromEuler(e);
+      s3.set(-dz, 0, dx).normalize();
+      for (const sign of [-1, 1]) {
+        // Each pony keeps its own stride, a little out of step with its partner.
+        const step = ((d / 1.1 + (sign > 0 ? 0.37 : 0) + row * 0.21) % 1) * TAU;
+        p.compose(a.copy(at).addScaledVector(s3, L.abreast * sign), q, one).multiply(t.makeTranslation(0, Math.abs(Math.sin(step)) * 0.035, 0));
+        pony(p, set.arms.colour, step, atMs / 1000 * 2.3 + index * 1.7 + row + sign, fade);
+        pool(bannerPoleBlueprint(host.kit), RAID_VIEW_LIMITS.ponies).push(m.copy(p).multiply(t.makeTranslation(cells(ox - qx, oy, oz - qz))), fade);
+        c.copy(p).multiply(t.makeTranslation(cells(spec.x - qx, spec.top, spec.z + spec.width - qz)))
+          .multiply(r.makeBasis(new THREE.Vector3(0, 0, -1), UP, new THREE.Vector3(1, 0, 0)));
+        const breath = breeze(atMs, (frame.seed + index * 31 + row * 7 + (sign > 0 ? 3 : 0)) % 997);
+        cloth(c, set.pony, spec.rows, k => 0.01 + (0.025 + breath * 0.02 + Math.sin(step * 2) * 0.012) * ((k + 1) / spec.rows) ** 1.3, fade);
+        counts.ponies++;
+      }
+    }
+  }
+
   function drawWagon(frame: RaidFrame, set: Banners, index: number, line: Path, atMs: number): boolean {
     const elapsed = wagonElapsed(frame, index);
     if (elapsed === null) return false;
@@ -444,19 +511,10 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
       pool(wheelBlueprint(host.kit), capacity * 4).push(m, fade);
     }
     // The pony walks on: a trot, diagonal pairs together, the body bobbing twice a stride.
-    const [qx, , qz] = PONY_CELLS.pivot, step = ((d / 1.1) % 1) * TAU;
+    const step = ((d / 1.1) % 1) * TAU;
     p.copy(w).multiply(t.makeTranslation(cells(CART_CELLS.pony[0] - px, 0, CART_CELLS.pony[2] - pz)))
       .multiply(t.makeTranslation(0, Math.abs(Math.sin(step)) * 0.035, 0));
-    pool(raidPonyBlueprint(host.kit, colour), capacity).push(m.copy(p).multiply(t.makeTranslation(cells(-qx, 0, -qz))), fade);
-    PONY_CELLS.legs.forEach(([x, y, z], i) => {
-      m.copy(p).multiply(t.makeTranslation(cells(x - qx, y, z - qz))).multiply(r.makeRotationZ(Math.sin(step + (i === 0 || i === 3 ? 0 : Math.PI)) * 0.42))
-        .multiply(t.makeTranslation(cells(-1, -6, -0.5)));
-      pool(ponyLegBlueprint(host.kit), capacity * 4).push(m, fade);
-    });
-    const [tx, ty, tz] = PONY_CELLS.tail;
-    m.copy(p).multiply(t.makeTranslation(cells(tx - qx, ty, tz - qz))).multiply(r.makeRotationX(Math.sin(atMs / 1000 * 2.1 + index) * 0.3))
-      .multiply(t.makeTranslation(cells(-0.5, -5, -0.5)));
-    pool(ponyTailBlueprint(host.kit), capacity).push(m, fade);
+    pony(p, colour, step, atMs / 1000 * 2.1 + index, fade);
     // Festival lamps and cloth are permanent wagon fittings.
     for (const seat of adornmentsOf(kind, frame.seed, index)) {
       const size = ADORNMENT_CELLS[seat.kind];
@@ -514,7 +572,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     apply(frames: readonly RaidFrame[], atMs: number): void {
       for (const instances of pools.values()) instances.count = 0;
       cores.count = 0; glows.count = 0; lightPools.count = 0; gate = null;
-      counts = { caravans: 0, wagons: 0, torches: 0, skyLanterns: 0 };
+      counts = { caravans: 0, wagons: 0, ponies: 0, torches: 0, skyLanterns: 0 };
       torchCores.count = 0; torchGlows.count = 0; torchPools.count = 0; skyCores.count = 0; skyGlows.count = 0; torchSites = [];
       anchors = []; drawnLights = []; gateLanterns = 0;
       cues = cues.filter(cue => cue.expiresAt > atMs);
@@ -561,6 +619,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
         }
         if (line) for (let i = 0; i < Math.min(frame.units, RAID_LIMITS.units); i++) {
           if (drawWagon(frame, set, i, line, atMs)) counts.wagons++;
+          drawBannerPonies(frame, set, i, line, atMs);
           drawSkyLanterns(frame, i, line, atMs);
         }
       }
@@ -663,7 +722,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
       for (const p of pools.values()) instances += p.count;
       const points = drawnLights.filter(light => light.stand).map(light => v3(light.position));
       const bounds = new THREE.Box3().setFromPoints(points), centre = points.length ? bounds.getCenter(new THREE.Vector3()) : new THREE.Vector3();
-      return { caravans: counts.caravans, wagons: counts.wagons, gate: gate ? 1 : 0, instances,
+      return { caravans: counts.caravans, wagons: counts.wagons, ponies: counts.ponies, gate: gate ? 1 : 0, instances,
         chatLanterns: chatLights.stats().lanterns, chatGateLanterns: gateLanterns,
         chatGateX: centre.x, chatGateY: centre.y, chatGateZ: centre.z,
         chatGateSpan: points.length ? Math.hypot(bounds.max.x - bounds.min.x, bounds.max.z - bounds.min.z) : 0,

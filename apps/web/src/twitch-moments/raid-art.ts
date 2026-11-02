@@ -335,11 +335,13 @@ export function brazierBlueprint(kit: BannerKit): VoxelBlueprint {
 export const TORCH_CELLS = { size: [5, 18, 5] as const, pivot: [2.5, 0, 2.5] as const, fire: [2.5, 16.6, 2.5] as const } as const;
 
 export function torchPostBlueprint(kit: BannerKit): VoxelBlueprint {
-  const iron = MAT.darkStone, boxes: Box[] = [];
+  const boxes: Box[] = [];
   boxes.push(box(0, 0, 0, 5, 1, 5, MAT.limestone), box(1, 1, 1, 4, 2, 4, MAT.limestone));
   boxes.push(box(2, 2, 2, 3, 15, 3, MAT.timber), box(1, 9, 1, 4, 10, 4, MAT.brass));
-  boxes.push(box(1, 14, 1, 4, 15, 4, iron), box(2, 15, 2, 3, 16, 3, MAT.hairCopper));
-  for (const [x, z] of [[1, 1], [3, 1], [1, 3], [3, 3]] as const) boxes.push(box(x, 15, z, x + 1, 18, z + 1, iron));
+  // The cage is blackened timber and copper, so it reads warm beside its own fire rather than as cold stone.
+  boxes.push(box(1, 14, 1, 4, 15, 4, MAT.hairBlack), box(2, 15, 2, 3, 16, 3, MAT.hairCopper));
+  for (const [x, z] of [[1, 1], [3, 1], [1, 3], [3, 3]] as const) boxes.push(box(x, 15, z, x + 1, 18, z + 1, MAT.bark));
+  for (const [x, z] of [[1, 1], [3, 1], [1, 3], [3, 3]] as const) boxes.push(box(x, 17, z, x + 1, 18, z + 1, MAT.hairCopper));
   return blueprint(`moment-raid-torch-${kit}`, kit, [5, 18, 5], boxes);
 }
 
@@ -373,12 +375,40 @@ export function gatePoleBlueprint(kit: BannerKit): VoxelBlueprint {
   return blueprint(`moment-raid-gate-pole-${kit}`, kit, [16, 64, 6], boxes);
 }
 
+/**
+ * Banner ponies walk in pairs between the wagons of a longer column, so the street reads as one procession rather
+ * than wagons with gaps. They are caparisoned and led riderless (never people): each wears the raider's saddle cloth
+ * and carries a pennant of its arms on a pole strapped to the saddle. The most a gap is designed to hold; the view
+ * keeps only as many rows as fit between the wagons on the actual road.
+ */
+export const bannerPonyRows = (units: number): number => (units <= 1 ? 0 : units <= 5 ? 1 : 2);
+
+/**
+ * The saddle pole, in pony cells (front +x, pivot as PONY_CELLS): its own cell (0, 0, 0) sits at `origin` on the
+ * saddle. The pennant hangs forward of the pole from under the crossbar, above the pony's head.
+ */
+export const BANNER_PONY_CELLS = {
+  origin: [4.5, 13, -2] as const,
+  pennant: { x: 6.5, top: 29, z: -1, width: 7, rows: 9, tail: 2 },
+  /** Metres from the pony's pivot to its tail and to its nose, along the road. */
+  back: 0.69, front: 1.44,
+} as const;
+
+export function bannerPoleBlueprint(kit: BannerKit): VoxelBlueprint {
+  const boxes: Box[] = [];
+  // A leather socket strapped over the saddle cloth, the pole, a brass collar, the crossbar and a gilt finial.
+  boxes.push(box(0, 0, 3, 3, 2, 6, MAT.bark), box(1, 2, 4, 2, 18, 5, MAT.timber), box(0, 7, 3, 3, 8, 6, MAT.brass));
+  boxes.push(box(1, 16, 0, 2, 17, 9, MAT.timber), box(1, 15, 0, 2, 18, 1, MAT.brass), box(1, 15, 8, 2, 18, 9, MAT.brass));
+  boxes.push(box(1, 18, 4, 2, 19, 5, MAT.goldLeaf));
+  return blueprint(`moment-raid-banner-pole-${kit}`, kit, [3, 19, 9], boxes);
+}
+
 /** Every raid part, meshed up front: dyes, wagons and ponies in each colour, festival fittings, the brazier, the torch post and the pole. */
 export function raidParts(kit: BannerKit): VoxelBlueprint[] {
   return [
     ...TINCTURE_LIST.map(t => dyeBlueprint(kit, t)),
     ...COLOURS.flatMap(c => [...(['lead', 'covered', 'lantern'] as const).map(k => raidWagonBlueprint(kit, k, c)), raidPonyBlueprint(kit, c)]),
     ...(['lantern-rack', 'banner-bundle', 'cloth-roll'] as const).map(k => adornmentBlueprint(kit, k)),
-    brazierBlueprint(kit), torchPostBlueprint(kit), gatePoleBlueprint(kit),
+    brazierBlueprint(kit), torchPostBlueprint(kit), bannerPoleBlueprint(kit), gatePoleBlueprint(kit),
   ];
 }

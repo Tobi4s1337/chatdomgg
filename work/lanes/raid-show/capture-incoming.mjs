@@ -21,6 +21,7 @@ if (!process.argv.includes('--worker')) {
     let base;
     // Highest free lane port first: another worker's cleanup has reclaimed 5171 under a running capture.
     for (let port = 5186; port >= 5170; port--) {
+      if (port === 5175) continue; // Shared with another worker's wildcard listener.
       controller.signal.throwIfAborted();
       process.env.CHATDOM_RAID_SHOW_PORT = String(port);
       try {

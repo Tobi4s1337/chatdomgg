@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { KingdomIdSchema, type KingdomId, type RaidPennantFeed, type RaidPennantFrame, type TwitchMomentFeed } from '@chatdom/shared';
+import { KingdomIdSchema, type KingdomId, type RaidPennantFeed, type RaidPennantFrame } from '@chatdom/shared';
+import type { TwitchMomentFeed } from '../twitch-moments/contracts';
 import { mountKingdomRaidPennants, type KingdomRaidPennantOptions } from '../kingdom/moments/raid-pennants';
 
 const now = 1_800_000_000_000, kingdomId = KingdomIdSchema.parse('202'), neighbourId = KingdomIdSchema.parse('303');
@@ -43,7 +44,7 @@ function fakeSource(origin: RaidPennantFeed['origin'] = 'live') {
 function mount(view: ReturnType<typeof fakeView>, source: RaidPennantFeed, signal: AbortSignal, destination: KingdomId = kingdomId) {
   const feed: TwitchMomentFeed = { origin: 'live', raidPennants: source, subscribe: vi.fn(() => () => {}) };
   // This fake implements exactly the three view methods consumed by this mount.
-  return mountKingdomRaidPennants({ view: view.methods as View, feed, signal, kingdomId: destination, clock: () => now });
+  return mountKingdomRaidPennants({ view: view.methods as unknown as View, feed, signal, kingdomId: destination, clock: () => now });
 }
 
 describe('injected pennant history mount', () => {
@@ -51,7 +52,7 @@ describe('injected pennant history mount', () => {
     const view = fakeView(), source = fakeSource(), controller = new AbortController();
     const sites = vi.fn(() => []), release = vi.fn(() => { if (throws) throw new Error('retired host'); });
     let canOpen = false;
-    const stop = mountKingdomRaidPennants({ view: { ...view.methods, raidPennantSites: sites } as View,
+    const stop = mountKingdomRaidPennants({ view: { ...view.methods, raidPennantSites: sites } as unknown as View,
       feed: { origin: 'live', raidPennants: source.source, subscribe: vi.fn(() => () => {}) }, kingdomId,
       clock: () => now, signal: controller.signal, reading(port) {
         expect(port.sites()).toEqual([]);
@@ -66,7 +67,7 @@ describe('injected pennant history mount', () => {
 
   it('releases a reading adapter returned after synchronous abort without starting its feed', () => {
     const view = fakeView(), source = fakeSource(), controller = new AbortController(), release = vi.fn();
-    const stop = mountKingdomRaidPennants({ view: view.methods as View,
+    const stop = mountKingdomRaidPennants({ view: view.methods as unknown as View,
       feed: { origin: 'live', raidPennants: source.source, subscribe: vi.fn(() => () => {}) }, kingdomId,
       clock: () => now, signal: controller.signal, reading() { controller.abort(); return release; } });
     stop(); expect(release).toHaveBeenCalledTimes(1); expect(source.source.subscribe).not.toHaveBeenCalled();
