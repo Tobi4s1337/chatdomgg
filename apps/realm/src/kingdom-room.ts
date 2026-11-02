@@ -15,15 +15,6 @@ type FullStateSender = { sendFullState(client: Client): void };
 import { REALM_ROOM_LIMITS as LIMITS, within } from './limits';
 import type { RealmRoomObserver } from './diagnostics';
 import { portalArrivalsFor } from './portals/arrivals';
-import { DEFAULT_MONARCH_TITLE, isVerifiedMonarch, monarchCrownOf } from '@chatdom/shared/realm';
-
-/** The yaw byte that faces a world (x, z) from a position, or undefined without a point (headings face (sin h, cos h)). */
-function facingYaw(toward: readonly [number, number] | undefined, from: readonly [number, number, number]): number | undefined {
-  if (!toward) return undefined;
-  const dx = toward[0] - from[0], dz = toward[1] - from[2];
-  if (!Number.isFinite(dx) || !Number.isFinite(dz) || Math.hypot(dx, dz) < 1e-3) return undefined;
-  return ((Math.round(Math.atan2(dx, dz) / (Math.PI * 2) * 256) % 256) + 256) % 256;
-}
 
 const UNOBSERVED: RealmRoomObserver = { inputDepth() {}, actionStarted() {}, actionRefused() {}, closed() {} };
 /** Colyseus closes a sender past `maxMessagesPerSecond` (and the room ends invalid input) with this code. */
@@ -171,12 +162,6 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         world: () => this.world, end: (id, reason) => this.seats.end(id, reason),
       }).dispose);
       // The campfire (gather): its own messages; a seat's secrets go to that person's current session only.
-      // A new title reaches the walking monarch at once; the crown stays only on the verified broadcaster's seat.
-      if (services.monarch) this.unbind.push(services.monarch.watch(kingdomId, title => {
-        const sid = this.control.get(kingdomId), walker = sid ? this.state.walkers.get(sid) : undefined;
-        const principal = sid ? this.viewers.get(sid)?.auth : undefined;
-        if (this.accepting && walker && principal && isVerifiedMonarch(principal)) walker.crown = title;
-      }));
       this.unbind.push(attachCampfireRoom(services, kingdomId, { on: (type, handler) => this.onMessage(type, (client, raw) => { if (this.accepting && client.auth && this.control.get(client.auth.personId) === client.sessionId) handler(client.auth, raw); }),
         send: (person, type, message) => { const sid = this.control.get(person); if (this.accepting && sid) this.clients.getById(sid)?.send(type, message); },
         broadcast: (type, message) => { if (this.accepting) this.broadcast(type, message); },
@@ -224,12 +209,6 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         if (this.world !== world || this.world.revision !== world.revision || this.state.layoutRevision !== layoutRevision
           || this.state.writerEpoch !== writerEpoch) throw new ServerError(503, 'The kingdom gate changed. Try entering again.');
       }
-      // The verified broadcaster wears the crown and their chosen title (monarch/); nobody else ever does.
-      let crown = '';
-      if (isVerifiedMonarch(auth) && auth.kingdomId === this.state.kingdomId) {
-        try { crown = services.monarch ? await services.monarch.title(auth.kingdomId) : DEFAULT_MONARCH_TITLE; } catch { crown = DEFAULT_MONARCH_TITLE; }
-        if (!this.accepting || client.auth !== auth) throw new ServerError(403, 'Entry expired');
-      }
       // No awaits below: re-read both this person's current seat and every actual walker before choosing a gap.
       const previous = this.seats.seatOf(auth.personId), resume = carriedPose();
       // Back through a door (play's: named on the join, bound to a leave at that door) or just out of the tavern
@@ -262,7 +241,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       const replaced = this.seats.seat(auth, client.sessionId);
       if (replaced) this.removeWalker(replaced, replacedPrincipal);
       const walker = new WalkerSchema({ name: auth.publicName, look: auth.look, district: '', x: position[0], y: position[1], z: position[2],
-        vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? back?.yaw ?? facingYaw(!resume && !back ? preparation?.faceToward : undefined, position) ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision, crown });
+        vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? back?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
       this.state.walkers.set(client.sessionId, walker);
       // Attached to state first, then shared: Colyseus sends this socket the full state of its view after the join.
       client.view = this.districts.enter(client.sessionId, walker);
@@ -349,10 +328,9 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         walkers: [...this.state.walkers].map(([id, p]) => {
           const raidGuest = parseRaidGuestVisualMark(p.raidGuest, sampledAt);
           if (!raidGuest && p.raidGuest) p.raidGuest = '';
-          const crown = monarchCrownOf(p.crown);
           return { id, name: p.name, look: p.look, homeSlot: p.homeSlot,
             x: p.x, y: p.y, z: p.z, yaw: p.yaw, distance: p.distance, speed: Math.hypot(p.vx, p.vz), placement: p.placement,
-            ...(raidGuest ? { raidGuest } : {}), ...(crown ? { crown } : {}) };
+            ...(raidGuest ? { raidGuest } : {}) };
         }),
       });
     }

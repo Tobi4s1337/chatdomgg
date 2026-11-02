@@ -18,9 +18,6 @@ export const WalkerSchema = schema({
   homeSlot: t.uint16().default(REALM_NO_HOME_SLOT),
   // Append-only visual lease; bounded strict JSON via raid-show's codec, empty means no insignia.
   raidGuest: t.string().default(''),
-  // Append-only: the title ("Monarch", "King", "Queen") while this walker is the kingdom's verified broadcaster,
-  // set by the room from the verified principal only; empty for everyone else (monarch.ts).
-  crown: t.string().default(''),
 }, 'ChatdomWalkerV1');
 export type WalkerSchema = SchemaType<typeof WalkerSchema>;
 

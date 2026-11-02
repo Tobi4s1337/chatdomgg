@@ -2,7 +2,6 @@ import type { KingdomId, RaidGuestVisualMark } from '@chatdom/shared';
 import type { RealmWalkerFrame, RealmWalkerPresentation } from '@chatdom/shared/realm';
 import type { CollisionWorld, PlayerState, RealmAuthenticator, RealmIntent, RealmPrincipal, RealmReceipt, RealmPublicDelivery, RealmTransientMessage, RealmPrivateMessage, RealmBootstrap } from '@chatdom/shared/realm';
 import type { RealmRoomChannel } from './room-channels';
-import type { RealmMonarchTitles } from './monarch/titles';
 
 export interface RealmIntentContext {
   readonly principal: RealmPrincipal; readonly walkerId: string;
@@ -51,8 +50,6 @@ export interface RealmRoomServices {
   readonly channels?: readonly RealmRoomChannel[];
   /** Read-only admission preparation. Null keeps ordinary/owned-door entry. No seat or arrival is committed here. */
   readonly prepareSpawn?: (principal: RealmPrincipal, context: RealmSpawnContext) => Promise<RealmSpawnPreparation | null>;
-  /** The monarch's chosen title (default "Monarch"); the room crowns only the verified broadcaster (monarch/). */
-  readonly monarch?: Pick<RealmMonarchTitles, 'title' | 'watch'>;
   /** Acquires the exclusive durable writer lease before returning. Rejects a second active writer. */
   open(kingdomId: KingdomId): Promise<RealmRoomHandle>;
 }
@@ -66,6 +63,4 @@ export interface RealmSpawnPreparation {
   readonly expiresAt: number;
   /** Recheck the retained authority synchronously after all awaits, immediately before selecting and seating. */
   current(): boolean;
-  /** World (x, z) the arriving walker turns to face; absent keeps the room's default facing. */
-  readonly faceToward?: readonly [number, number];
 }

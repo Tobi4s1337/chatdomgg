@@ -194,6 +194,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         // The kingdom page always lends its hour; dusk is the page's own opening hour when a host lends none.
         hour: () => binding.play?.hour?.() ?? 19.5,
         kingdomName: binding.play?.kingdomName ?? '',
+        founded, world: currentWorld,
         audio: () => sound.audio?.() ?? null,
         overlayHost: host,
         ownHome: ownHomeInside,

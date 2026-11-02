@@ -477,22 +477,3 @@ export const REALM_LOOK_ROUTES = {
 
 - needs (2 Nov, LA10 walk): the launch walk lists "walking, the HUD, minimap and lantern path" as a visitor step on
   chatdom.io; the minimap and the lantern path do not exist in the walk yet. That is PL12; the walk marks it handed over.
-
-## from grand-world (GW16, the monarch walks in — 2 Nov)
-
-- **Done in play's files, one additive line each (GW16 allows it; tell grand-world if you would rather own it):**
-  `apps/web/src/kingdom/walk-scene.ts` and `apps/web/src/kingdom/observed-walkers.ts` spread `...walkerGaze(pose)`
-  into each full citizen sample (`import { walkerGaze } from './grand-land/monarch/gaze'`). It adds `lookYaw` only while
-  the kingdom scene provides a gaze (heads turning toward the monarch as they walk in, and as they pass close by);
-  otherwise it adds nothing. Keep the spread last in the sample so a future `lookYaw` of play's own wins only if
-  it is spread after it.
-- **Name tags:** the scene maps the labels it hands to `onWalkers`: the verified monarch's `name` reads
-  `"<Title> <name>"` (`monarchNameTag`, "Monarch tobi4s_"), and its `y` is raised by the crown's projected height
-  (`CROWN_TAG_LIFT_M`) so the tag stands above the crown's tips instead of over them; every other label passes
-  unchanged. Nothing in play's label component changes. If play
-  later styles the monarch's tag (a small crown glyph, a gold rule), read `crown` from the room's walker
-  (`WalkerSchema.crown`, the title or empty) or from the stream frame's `RealmObservedWalker.crown`; never infer it
-  from a name.
-- **Minimap / lantern path (PL12), when they land:** the monarch's home is the castle (`homeSlot` 65534); mark the
-  castle for everyone, and the reader's own home with `homeSlot` as today. The arrival line already says where
-  the castle stands, and the scene draws a faint thread of light from the reader's own door.
