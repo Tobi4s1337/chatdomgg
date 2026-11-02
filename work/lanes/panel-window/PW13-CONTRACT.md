@@ -16,6 +16,15 @@
   At most two claims run across all replicas. Dirty preferences and rebinding take priority over routine audits;
   audit latency includes backlog and provider recovery, so the 60-second audit target is not a convergence promise.
 - Connection is derived by the realm and included in the published reading, never accepted as a saved preference.
+- **The switch-on values (settled 2 November 2026).** The Client ID and the Extension Secret switch on token
+  verification, CORS for `https://<client id>.ext-twitch.tv`, reading, joining, light, presence, privacy and the config
+  pages. Twitch's external JWT for Extension PubSub and the Configuration Service must carry the extension owner's
+  numeric ID as `user_id`, and neither value contains it. So PubSub and publication also need
+  `TWITCH_EXTENSION_OWNER_ID`, the ID of the account that owns the extension in the console. Gift reconciliation and
+  the product and webhook tools also need the OAuth `TWITCH_EXTENSION_CLIENT_SECRET`. Every one of them is an
+  environment value: no code changes, and `/api/panel/v1/health` names each missing value plainly. The owner is never
+  guessed from a channel. This replaces the earlier request for main to approve the setting. It is a fact of Twitch's
+  signing rules, so this lane owns the decision.
 
 The owned shared types `PanelSettings`, `PanelSettingsReading` and `PanelSettingsSync` plus
 `apps/panel/src/settings/schema.ts` define the public channel preferences. Kingdom stays available as the safe
