@@ -137,8 +137,12 @@ for it.
   `unadjustedMovement` and keeps OS acceleration; that is accepted, not retried.
 - **Flicks survive.** `createSpikeFilter` keeps every event of a real fast turn (traces of 400 to 900 px per event
   at 60 to 1000 Hz pass whole) and drops only an isolated warp: an event of 160 px or more that is over six times
-  both neighbours, or that flips sign in the middle of steady motion. A big event is held for its next neighbour or
-  24 ms at most, so a flick is at worst one frame late and never lost. Nothing is clamped.
+  both neighbours, or that flips sign in the middle of steady motion. A big event the next one carries on in the same
+  direction at a twelfth of its size or more is a flick, not a warp: a snap from a still hand often lands in one
+  coalesced 60 Hz frame and decays over the next (`[0, 1000, 120, 0]`), and a warp has no such tail. A big event is
+  held for its next neighbour or 24 ms at most, so a flick is at worst one frame late and never lost. Nothing is
+  clamped. Where `requestPointerLock` returns a promise, the promise alone answers that request: Chromium without raw
+  input also fires `pointerlockerror` for the refused raw request, which must not end the ordinary retry.
 - **Letting go.** The browser spends Escape on the lock and may never deliver the keydown. The lock's own
   `pointerlockchange` is the signal: `onLetGo('browser')` fires, keys and sticks clear, and the play layer opens the
   ledger. Blur and a hidden page release the same way.
@@ -172,8 +176,9 @@ belong above that band or are hidden while walking (integrator).
 not deliver that keydown to the page at all. If one does arrive while `document.pointerLockElement` is still
 the world surface (it clears only on the following `pointerlockchange`, whatever order the listeners run in),
 it means "give me my cursor": the interaction owner should not also stand the citizen up with it, and the ledger
-opens from the lock change. With a free cursor Escape goes to whoever owns it first; if nobody took it, it opens
-or closes the ledger.
+opens from the lock change. With a free cursor Escape goes to whoever owns it first: the play session hears it last,
+in the bubble phase on the window, so a gesture panel, a place view, a seat or the ledger's own book closes on it and
+takes it; only an Escape nobody took opens or closes the ledger. While a key plate listens, every key is the plate's.
 
 ## Integration recipe (integrator)
 

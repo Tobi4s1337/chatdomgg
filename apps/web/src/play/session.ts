@@ -68,7 +68,7 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
   const cursor = controller.cursor;
   const settings = options.settings ?? sharedPlaySettings();
   const keyboard = options.keyboard ?? window;
-  let disposed = false, arriving = false, ledgerLease: CursorLease | null = null;
+  let disposed = false, arriving = false;
   // Everything that holds the walk (the ledger, an arrival step, a seated game) by reason: it walks again only when
   // none is left.
   const holds = new Set<string>();
@@ -154,9 +154,10 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
   const tools: ToolRuntime | null = options.world ? createToolRuntime(ctx, options.world) : null;
   const hud = options.mountHud(options.host, play);
   mountedHud.current = hud;
+  // The ledger takes the cursor itself through ctx.requestCursor when it opens; here it only holds the walk.
+  let ledgerHeld = false;
   const stopLedger = hud.onLedger(open => {
-    if (open && !ledgerLease) { ledgerLease = cursor.lease('ledger'); hold('ledger', true); }
-    else if (!open && ledgerLease) { ledgerLease.release(); ledgerLease = null; hold('ledger', false); }
+    if (open !== ledgerHeld) { ledgerHeld = open; hold('ledger', open); }
   });
   const stopCursor = cursor.onChange(announce);
   // The person let the mouse go (the browser ate Escape, or focus left): the ledger opens, as a paused game would.
@@ -172,20 +173,24 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
     return true;
   };
   const keyup = (raw: Event) => { if (!disposed) toInput(raw as unknown as KeyLike, false); };
+  // Escape is heard last, in the bubble phase on the window: the top panel (a gesture panel, a place view, a seat, a
+  // Forge dialog, the ledger's own book) closes first and takes the press, and only an untaken Escape reaches here.
+  const escape = (raw: Event) => {
+    const event = raw as unknown as KeyLike;
+    if (disposed || arriving || controller.owner !== 'walking' || event.code !== 'Escape') return;
+    if (event.defaultPrevented || event.repeat || hud.keyCapture) return;
+    if (hud.ledgerOpen) { if (hud.escape()) event.preventDefault(); return; }
+    if (topInput()) return;
+    // Unlocked with the ledger closed (after Escape closed it, or a cooldown): Escape opens it again.
+    if (cursor.mode !== 'locked' && cursor.mode !== 'requesting') { event.preventDefault(); hud.openLedger(); }
+  };
   const keydown = (raw: Event) => {
     const event = raw as unknown as KeyLike;
-    if (disposed || arriving || controller.owner !== 'walking') return;
+    if (disposed || arriving || controller.owner !== 'walking' || event.code === 'Escape') return;
+    // A key plate listening in the ledger hears every key first, the ledger key too.
+    if (hud.keyCapture) return;
     if (event.code !== settings.get('keys').ledger && toInput(event, true)) return;
     const keys = settings.get('keys');
-    if (event.code === 'Escape') {
-      // Something else (a place view, a seat, a Forge dialog) already took this Escape.
-      if (event.defaultPrevented || event.repeat) return;
-      if (hud.ledgerOpen) { if (hud.escape()) event.preventDefault(); return; }
-      if (topInput()) return;
-      // Unlocked with the ledger closed (after Escape closed it, or a cooldown): Escape opens it again.
-      if (cursor.mode !== 'locked' && cursor.mode !== 'requesting') { event.preventDefault(); hud.openLedger(); }
-      return;
-    }
     if (event.defaultPrevented || !plain(event)) return;
     if (event.code === keys.ledger) {
       event.preventDefault();
@@ -219,6 +224,7 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
   };
   // Capture, so a world prompt can take E before the interaction owner hears it.
   keyboard.addEventListener('keydown', keydown, { capture: true });
+  keyboard.addEventListener('keydown', escape);
   keyboard.addEventListener('keyup', keyup);
 
   // Arrival steps (the mirror first) run once, holding the cursor and the walk, before the walker takes control.
@@ -259,13 +265,13 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
       if (disposed) return;
       disposed = true;
       keyboard.removeEventListener('keydown', keydown, { capture: true });
+      keyboard.removeEventListener('keydown', escape);
       keyboard.removeEventListener('keyup', keyup);
       for (const held of inputs) held.released = true;
       inputs.length = 0; hidden.clear(); holds.clear();
       controller.divertLook(null);
       stopLedger(); stopCursor(); stopLetGo();
       tools?.dispose();
-      ledgerLease?.release(); ledgerLease = null;
       cursorListeners.clear();
       hud.dispose();
       controller.hold(false);

@@ -88,6 +88,8 @@ export interface PlayHud {
   openLedger(page?: string): void;
   closeLedger(): void;
   readonly ledgerOpen: boolean;
+  /** A key plate in the ledger is listening for the next key: every key, the ledger key included, is its. */
+  readonly keyCapture?: boolean;
   onLedger(listener: (open: boolean) => void): () => void;
   /** Escape while the ledger or a panel inside it is open: closes the top layer. True when handled. */
   escape(): boolean;

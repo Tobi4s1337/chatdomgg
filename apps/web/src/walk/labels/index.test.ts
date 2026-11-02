@@ -20,14 +20,16 @@ it('joins only an authoritative slot and retains unmatched speech without invent
   const parts = [{ kind: 'text' as const, text: 'Hi' }];
   expect(peopleFromLabels(walkers, [{ slot: 7, name: null, x: 11, y: 19, distance: 5, parts },
     { slot: 8, name: null, x: 80, y: 20, distance: 6, parts }])).toEqual([
-    { id: 'walker:w', walkerId: 'w', slot: 7, x: 11, y: 19, distance: 5, self: true, name: 'Ash', speech: parts },
-    { id: 'slot:8', slot: 8, x: 80, y: 20, distance: 6, self: false, name: null, speech: parts },
+    // A walker who speaks keeps their name plate and gains a bubble of their own at the cue's head.
+    { id: 'walker:w', walkerId: 'w', slot: 7, x: 10, y: 20, distance: 5, self: true, name: 'Ash' },
     { id: 'walker:v', walkerId: 'v', x: 60, y: 20, distance: 8, self: false, name: 'Other' },
+    { id: 'speech:w', walkerId: 'w', slot: 7, x: 11, y: 19, distance: 5, self: true, name: 'Ash', speech: parts },
+    { id: 'slot:8', slot: 8, x: 80, y: 20, distance: 6, self: false, name: null, speech: parts },
   ]);
   expect(peopleFromLabels(walkers, []).map(person => person.id)).toEqual(['walker:w', 'walker:v']);
 });
 
-it('puts a walker’s line on that walker’s own head label and a chat-only line over their home', () => {
+it('puts a walker’s line in a bubble on that walker’s own head, beside their name, and a chat-only line over their home', () => {
   const parts = [{ kind: 'text' as const, text: 'Evening!' }];
   const people = peopleFromLabels([{ id: 'w', slot: 3, name: 'Wren', x: 300, y: 200, distance: 6, self: false }], []);
   const frame: SpeechFrame = { at: 0, width: 800, height: 600, speech: [
@@ -37,7 +39,8 @@ it('puts a walker’s line on that walker’s own head label and a chat-only lin
     { slot: 4, cueId: 'c', from: 'walker', name: 'Hidden', parts },
   ] };
   expect(joinSpeech(people, frame)).toEqual([
-    { id: 'walker:w', walkerId: 'w', slot: 3, x: 300, y: 200, distance: 6, self: false, name: 'Wren', speech: parts },
+    { id: 'walker:w', walkerId: 'w', slot: 3, x: 300, y: 200, distance: 6, self: false, name: 'Wren' },
+    { id: 'speech:w', walkerId: 'w', slot: 3, x: 300, y: 200, distance: 6, self: false, name: 'Wren', speech: parts },
     { id: 'home:9', slot: 9, x: 500, y: 150, distance: 12, self: false, name: 'Rowan', speech: parts, home: true, visibility: 0 },
   ]);
   expect(joinSpeech(people, null)).toEqual(people);

@@ -87,3 +87,12 @@ it('stands on its soles and feeds every input the kingdom paint shader reads', (
   for (const name of FIGURE_VARYINGS) expect(material.vertexShader).toMatch(new RegExp(`out [^;]*\\b${name}\\b`));
   figures.dispose(); lighting.dispose(); geometry.dispose();
 });
+
+it('draws seated walkers in full however far they are, since a simple figure cannot sit', async () => {
+  const { nearestWalkers } = await import('./walker-figures');
+  const poses = Array.from({ length: 6 }, (_, i) => ({ id: `w${i}`, x: i, y: 0, z: 0 }));
+  const seated = { id: 'fire', x: 90, y: 0, z: 0, posture: 'seated' };
+  const { full, simple } = nearestWalkers([...poses, seated], { x: 0, y: 0, z: 0 }, 3);
+  expect(full.map(pose => pose.id)).toEqual(['fire', 'w0', 'w1']);
+  expect(simple.map(pose => pose.id)).not.toContain('fire');
+});

@@ -68,13 +68,20 @@ describe('the visual ground offset', () => {
     expect(followsDrawnGround({ y: 0, drawnY: GROUND_OFFSET.trust + 1e-6, support: 'terrain' })).toBe(false);
     expect(followsDrawnGround({ y: 0, drawnY: Number.POSITIVE_INFINITY, support: 'terrain' })).toBe(false);
     // A gap past the clamp is drawn as near the surface as allowed, and the gait is not told it is on the surface.
-    const clamped = drive([{ z: 0, y: 0, drawnY: -.5 }, { z: 0, y: 0, drawnY: -.5 }]);
+    const clamped = drive([{ z: 0, y: 0, drawnY: -.7 }, { z: 0, y: 0, drawnY: -.7 }]);
     expect(clamped.drawn).toEqual([-GROUND_OFFSET.clamp, -GROUND_OFFSET.clamp]);
     expect(clamped.offset.following).toBe(false);
     // A sample far from the feet (a cliff, another surface) fades the offset out.
     const { drawn } = drive([{ z: 0, y: 0, drawnY: .2 }, ...Array.from({ length: 60 }, () => ({ z: 0, y: 0, drawnY: 2 }))]);
     for (const y of drawn) expect(Math.abs(y)).toBeLessThanOrEqual(GROUND_OFFSET.clamp);
     expect(drawn.at(-1)).toBe(0);
+  });
+
+  it('keeps a body on the drawn ground when its physical height jumps a whole step in one frame', () => {
+    // An interpolated walker crossing a column edge: physics goes from 0 to .5 at once, the drawn ground stays at .25.
+    const { drawn, offset } = drive([{ z: 0, y: 0, drawnY: .25 }, { z: 0, y: .5, drawnY: .25 }, { z: 0, y: .5, drawnY: .25 }]);
+    expect(drawn).toEqual([.25, .25, .25]);
+    expect(offset.following).toBe(true);
   });
 
   it('starts fresh after a reset, and is frame-rate independent', () => {

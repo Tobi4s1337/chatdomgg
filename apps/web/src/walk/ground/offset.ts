@@ -1,15 +1,17 @@
 import type { WalkerSupport } from './support';
 
 /**
- * - `clamp`: the most the drawn body may differ from its physical feet. Physics rounds terrain to half-metre cells
- *   and stands the body on the highest column under its footprint, so on walkable slopes the drawn surface is
- *   mostly within a quarter metre of it; a larger gap is clamped, the body drawn as near the surface as allowed.
+ * - `clamp`: the most the drawn body may differ from its physical feet: the physics gap. Physics rounds terrain to
+ *   half-metre cells and stands the body on the highest column under its footprint, so the drawn surface is mostly
+ *   within a quarter metre of it and never more than one half-metre step away on walkable ground. The clamp is that
+ *   step, so a body whose physical height changes by a whole step in one frame (an interpolated walker crossing a
+ *   column edge) still lands on the drawn surface instead of popping by the difference.
  * - `trust`: a larger gap than this is not the surface under these feet (a cliff edge, a sample from another
  *   tile); the offset fades out instead.
  * - `seconds`: how quickly the offset fades in on arriving on terrain and out on leaving it (a stair, a floor,
  *   a jump), so neither change pops.
  */
-export const GROUND_OFFSET = { clamp: .3, trust: .75, seconds: .1 } as const;
+export const GROUND_OFFSET = { clamp: .5, trust: .75, seconds: .1 } as const;
 
 export interface GroundOffsetSample {
   /** The feet height the body would otherwise be drawn at (after any step easing). */

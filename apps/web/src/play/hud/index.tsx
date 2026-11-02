@@ -166,6 +166,7 @@ export function mountPlayHud(host: HTMLElement, play: PlayHost): PlayHud {
     openLedger: page => { if (!disposed) ledger.open(page); },
     closeLedger: () => ledger.close(),
     get ledgerOpen() { return ledger.state.open; },
+    get keyCapture() { return ledger.state.open && ledger.state.capture !== null; },
     onLedger(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     escape: () => ledger.escape(),
     dispose() {

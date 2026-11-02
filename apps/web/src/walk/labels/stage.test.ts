@@ -121,3 +121,41 @@ it('hides a home bubble behind a wall by fading it at the home', () => {
   // While fading it still follows its anchor.
   expect(label[32]!.left).toBe(400 + 32 - 75);
 });
+
+it('eases a walker’s bubble in over their name, and crosses back to the name when the line ends', () => {
+  const name: PersonLabel = { id: 'walker:w', walkerId: 'w', x: 400, y: 300, distance: 5, self: false, name: 'Wren' };
+  const bubble: PersonLabel = { ...name, id: 'speech:w', speech: words('Evening!') };
+  const stage = createLabelStage();
+  const step = (people: PersonLabel[], now: number) => new Map(stage.frame({ people, viewport: { width: 800, height: 600 }, limits: labelLimits(),
+    reducedMotion: false, now, size: person => person.speech ? { width: 180, height: 60 } : { width: 80, height: 22 } }).map(item => [item.id, item]));
+  let now = 0, frame = step([name], now);
+  for (let i = 0; i < 30; i++) frame = step([name], now += 16);
+  expect(frame.get('walker:w')!.opacity).toBe(1);
+  // The line arrives: the bubble starts from nothing and rises, the name yields and fades. Nothing pops.
+  frame = step([name, bubble], now += 16);
+  const first = frame.get('speech:w')!;
+  expect(first.opacity).toBeLessThan(.2);
+  expect(frame.get('walker:w')!.shown).toBe(false);
+  expect(frame.get('walker:w')!.opacity).toBeGreaterThan(.8);
+  let last = first.opacity;
+  for (let i = 0; i < 30; i++) { frame = step([name, bubble], now += 16); expect(frame.get('speech:w')!.opacity).toBeGreaterThanOrEqual(last); last = frame.get('speech:w')!.opacity; }
+  expect([frame.get('speech:w')!.opacity, frame.get('walker:w')!.opacity]).toEqual([1, 0]);
+  // The line ends: the bubble fades where it was while the name comes back.
+  frame = step([name], now += 16);
+  expect(frame.get('speech:w')!.opacity).toBeGreaterThan(.8);
+  expect(frame.get('walker:w')!.shown).toBe(true);
+  for (let i = 0; i < 40; i++) frame = step([name], now += 16);
+  expect(frame.get('walker:w')!.opacity).toBe(1);
+  expect(frame.get('speech:w')?.opacity ?? 0).toBe(0);
+});
+
+it('keeps a speaker’s name up when their bubble is out of range or over the cap', () => {
+  const name: PersonLabel = { id: 'walker:w', walkerId: 'w', x: 400, y: 300, distance: 34, self: false, name: 'Wren' };
+  const bubble: PersonLabel = { ...name, id: 'speech:w', speech: words('Far away') };
+  const stage = createLabelStage();
+  let frame = new Map<string, { shown: boolean }>();
+  for (let i = 0; i < 20; i++) frame = new Map(stage.frame({ people: [name, bubble], viewport: { width: 800, height: 600 }, limits: labelLimits(),
+    reducedMotion: true, now: i * 16, size: person => person.speech ? { width: 180, height: 60 } : { width: 80, height: 22 } }).map(item => [item.id, item]));
+  expect(frame.get('speech:w')!.shown).toBe(false);
+  expect(frame.get('walker:w')!.shown).toBe(true);
+});

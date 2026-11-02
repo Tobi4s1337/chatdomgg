@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createSpikeFilter, createWalkLook, LOOK, type KeyboardLockLike } from './look';
 
-type Outcome = 'grant' | 'refuse' | 'throw' | 'no-raw' | 'silent';
+type Outcome = 'grant' | 'refuse' | 'throw' | 'no-raw' | 'no-raw-event' | 'silent';
 function harness(outcomes: Outcome[] = [], options: { keyboardLock?: boolean; fullscreen?: boolean } = {}) {
   let now = 1000;
   const requests: ({ unadjustedMovement?: boolean } | undefined)[] = [];
@@ -27,6 +27,11 @@ function harness(outcomes: Outcome[] = [], options: { keyboardLock?: boolean; fu
       const outcome = outcomes.shift() ?? 'grant';
       if (outcome === 'throw') throw Object.assign(new Error('blocked'), { name: 'SecurityError' });
       if (outcome === 'no-raw') return Promise.reject(Object.assign(new Error('raw'), { name: 'NotSupportedError' }));
+      if (outcome === 'no-raw-event') {
+        // Chromium without raw input: the promise rejects and a pointerlockerror follows a moment later.
+        queueMicrotask(() => queueMicrotask(() => doc.dispatchEvent(new Event('pointerlockerror'))));
+        return Promise.reject(Object.assign(new Error('raw'), { name: 'NotSupportedError' }));
+      }
       if (outcome === 'refuse') {
         // Chrome both rejects the promise and fires pointerlockerror.
         doc.dispatchEvent(new Event('pointerlockerror'));
@@ -72,6 +77,8 @@ const FLICKS: Record<string, number[]> = {
   '1000 Hz, 450 px peak': flick(450, 24),
   'two flicks back to back': [...flick(600, 5), ...flick(820, 5, -1)],
   'flick straight out of a still hand': [0, 0, 470, 880, 640, 210, 12],
+  '60 Hz, a snap from a still hand landing in one frame': [0, 1000, 120, 0],
+  '60 Hz, a shorter snap in one frame': [0, 0, 760, 95, 4],
 };
 
 describe('the flick filter', () => {
@@ -97,6 +104,14 @@ describe('the flick filter', () => {
     sum += filter.flush(LOOK.holdMs).dx;
     expect(sum).toBe(0);
     expect(filter.rejected).toBe(2);
+  });
+
+  it('drops a warp in the middle of a slow steady turn, which no tail follows', () => {
+    const filter = createSpikeFilter();
+    let sum = 0, at = 0;
+    for (const dx of [10, 12, 1500, 11, 10]) { sum += filter.push(dx, 0, at).dx; at += 8; }
+    expect(sum).toBe(43);
+    expect(filter.rejected).toBe(1);
   });
 
   it('drops a sign-flipped spike in the middle of a steady turn, and keeps a real reversal', () => {
@@ -144,6 +159,14 @@ describe('the captured mouse', () => {
     browserRelease(); advance(5000);
     click(); await settle();
     expect(requests.at(-1)).toBeUndefined();
+    expect(look.mode).toBe('locked');
+  });
+
+  it('locks on the first press when the refused raw request also fires pointerlockerror (Chromium without raw input)', async () => {
+    const { look, click, settle, requests } = harness(['no-raw-event', 'grant']);
+    click();
+    await settle();
+    expect(requests).toEqual([{ unadjustedMovement: true }, undefined]);
     expect(look.mode).toBe('locked');
   });
 

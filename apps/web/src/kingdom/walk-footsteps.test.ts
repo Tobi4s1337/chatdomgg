@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createHomeStepMaterial, createStepCueMaterial, createWalkFootsteps, type WalkFootstepFrame } from './walk-footsteps';
+import { createHomeStepMaterial, createPlacementStepSurface, createStepCueMaterial, createWalkFootsteps, type WalkFootstepFrame } from './walk-footsteps';
 import { MATERIALS, MAT } from '@chatdom/content';
 import { VOXEL_FIXTURE } from '@chatdom/shared/world-fixtures';
 import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
@@ -58,6 +58,28 @@ it('reads the retained rotated home floor and respects material overwrites and c
   expect(sample('owned-plot', feet(3.5, 1, 2.5))).toBe('stone'); // Its lower stone support remains.
   expect(sample('unknown-plot', feet(2.5, 2, 2.5))).toBeUndefined();
   expect(sample(null, feet(2.5, 2, 2.5))).toBeUndefined();
+});
+
+it('reads a home garden’s turf as grass, never dirt', () => {
+  const blueprint: VoxelBlueprint = { ...VOXEL_FIXTURE, size: [8, 4, 8], windows: [], boxes: [{ from: [0, 0, 0], to: [8, 1, 8], material: MAT.grass }] };
+  const sample = createHomeStepMaterial({ materials: MATERIALS, assets: [{ assetHash: 'garden', blueprint }],
+    placements: [{ id: 'home', plotId: 'plot', assetHash: 'garden', position: [0, 0, 0], rotation: 0 }] });
+  expect(sample('plot', [.5, .125, .5])).toBe('grass');
+});
+
+it('steps on the deck under the sole, whoever stands there: planks on a bridge over water, stone on stone steps', () => {
+  const deck: VoxelBlueprint = { ...VOXEL_FIXTURE, kind: 'civic', size: [16, 4, 8], windows: [], boxes: [
+    { from: [0, 2, 0], to: [16, 3, 8], material: MAT.timber },
+    { from: [0, 0, 0], to: [2, 3, 8], material: MAT.stone },
+  ] };
+  const step = createPlacementStepSurface({ materials: MATERIALS, assets: [{ assetHash: 'bridge', blueprint: deck }],
+    placements: [{ id: 'civic:bridge', assetHash: 'bridge', position: [10, 1, 20], rotation: 1 }] });
+  // Turn 1 maps local [x, z] to world [z, -x]: the deck runs from z = 20 down to 18 and x = 10 to 11.
+  const feet = (x: number, y: number, z: number): Vec3 => [10 + z * .125, 1 + y * .125, 20 - x * .125];
+  expect(step(feet(8.5, 3, 4.5))).toBe('plank');
+  expect(step(feet(1.5, 3, 4.5))).toBe('stone');
+  expect(step(feet(8.5, 2, 4.5))).toBeUndefined(); // under the deck is not on it
+  expect(step([40, 1.375, 40])).toBeUndefined(); // off every placement the public ground decides
 });
 
 it('steps on what the public ground really is: water, laid stone, cobble, the earth of a trail, and grass by default', async () => {

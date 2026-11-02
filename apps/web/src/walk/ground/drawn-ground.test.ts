@@ -150,6 +150,35 @@ describe('drawn ground from the terrain tiles', () => {
     state.dispose();
   });
 
+  it('forgets tiles whose group left the scene or was hidden, and looks for terrain ever less often once none comes', () => {
+    const { state } = smallField();
+    const scene = new THREE.Scene(), group = new THREE.Group();
+    group.add(tile(state.material, [-2, 1], [1, 3]));
+    scene.add(group);
+    let now = 0;
+    const ground = createDrawnGround({ scene, clock: () => now });
+    expect(ground.at(0, 2)).toBeCloseTo(2.25, 6);
+    group.visible = false;
+    now = 600;
+    expect(ground.at(0, 2)).toBeNull();
+    group.visible = true;
+    ground.refresh();
+    expect(ground.at(0, 2)).toBeCloseTo(2.25, 6);
+    scene.remove(group);
+    now = 1200;
+    expect(ground.at(0, 2)).toBeNull();
+    // No terrain at all (the grand land's blocky ground): twenty looks at .5 s, then ever wider apart.
+    const empty = new THREE.Scene();
+    let scans = 0;
+    const traverse = empty.traverse.bind(empty);
+    empty.traverse = (callback) => { scans++; traverse(callback); };
+    const bare = createDrawnGround({ scene: empty, clock: () => now });
+    for (now = 0; now <= 60_000; now += 100) bare.at(0, 2);
+    expect(scans).toBeGreaterThanOrEqual(20);
+    expect(scans).toBeLessThan(40);
+    state.dispose();
+  });
+
   it('reads a rebuilt height texture without a rescan', () => {
     const { state, width, depth } = smallField();
     const scene = new THREE.Scene();

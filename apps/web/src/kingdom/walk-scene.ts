@@ -10,7 +10,7 @@ import { createWalkController, headingFromByte, type WalkControllerOptions } fro
 import { createFoundedInteractionRegistry, homeZone, STREET_ZONE } from '@chatdom/world/interactions';
 import { interactionSound, mountInteractionController, type InteractionPlaces } from '../interactions';
 import { bindWalkInteractions } from './walk-interactions';
-import { createHomeStepMaterial, createOthersSteps, createPublicStepSurface, createStepCueMaterial, othersStepDistance } from './walk-footsteps';
+import { createHomeStepMaterial, createOthersSteps, createPlacementStepSurface, createPublicStepSurface, createStepCueMaterial, othersStepDistance } from './walk-footsteps';
 import type { createKingdomSound } from './sound';
 import { presentWalkers, type WalkerPresentation } from './walker-presentation';
 import { createWalkerFigures, createWalkerSplit } from './walker-figures';
@@ -21,6 +21,8 @@ import { placeCameraAt, provideObservedWalkerHands } from '../play/slots';
 import { withRegisteredPlaces } from '../play/places';
 import { mountPlayHud } from '../play';
 import { sharedPlaySettings } from '../play/settings';
+import { createWalkerGround } from '../walk/ground';
+import { sampleFoundedTerrain } from '@chatdom/world/founded-collision';
 import type { PlaySettings } from '../play/slots';
 import '../play/providers';
 
@@ -70,7 +72,8 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
     /** The ledger's volumes, applied live; `volumes` names the faders it really honours. Without it there is no Sound section. */
     setVolumes?: (volume: PlaySettings['volume']) => void; volumes?: readonly PlayVolume[];
   }) {
-  const looks = binding.appearances ?? createDefaultCitizenLooks();
+  const looks = binding.appearances ?? createDefaultCitizenLooks(), lookIds = new Set(looks.map(look => look.id));
+  const knownLook = (id: string) => lookIds.has(id);
   const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool });
   // The nearest 64 walkers are drawn in full; everyone further off as one instanced draw of simple figures.
   const split = createWalkerSplit(), figures = createWalkerFigures(scene, material), eye = new THREE.Vector3();
@@ -78,7 +81,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
   const currentWorld = () => 'query' in binding.collision
     ? binding.collision.revision === client.room.state.collisionRevision ? binding.collision : null
     : binding.collision.world(client.room.state.collisionRevision);
-  const controller = createWalkController({ camera, surface: canvas, realm: client, collision: currentWorld,
+  const controller = createWalkController({ camera, surface: canvas, realm: client, collision: currentWorld, settings: sharedPlaySettings(),
     ...(binding.hud ? { hud: binding.hud } : {}), ...(binding.gestures ? { gestures: binding.gestures } : {}), ...(binding.heading !== undefined ? { heading: binding.heading } : {}) });
   controller.resize(canvas.clientWidth, canvas.clientHeight);
   const registry = createFoundedInteractionRegistry(founded, currentWorld()!);
@@ -129,7 +132,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         interactionFocused: () => !!interactions.debug.focus,
       },
     });
-  } catch (error) { interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); figures.dispose(); throw error; }
+  } catch (error) { stopHands(); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); figures.dispose(); throw error; }
   // While the mouse is captured its position is frozen where the lock began: a click uses what the centre of the
   // view highlights, never a pick at that stale point. The first click only captures (the walk takes it first).
   // The ledger's volumes apply live once the kingdom's sound offers them (asked of the sound's owner in play's progress).
@@ -149,7 +152,9 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
   host.addEventListener('pointerdown', lockedPress, { capture: true });
   host.addEventListener('pointerup', lockedPress, { capture: true });
   const homeStepMaterial = createHomeStepMaterial(founded);
-  const publicStep = createPublicStepSurface(founded.plan), stepCue = createStepCueMaterial();
+  const publicStep = createPublicStepSurface(founded.plan), placedStep = createPlacementStepSurface(founded), stepCue = createStepCueMaterial();
+  // A deck, a pier, steps or a floor under the sole decide first; then the public ground under it.
+  const groundStep = (at: readonly [number, number, number]) => placedStep(at) ?? publicStep(at[0], at[2]);
   let lastFootstepContext: { now: number; placement: number; revision: number } | undefined;
   const othersSteps = createOthersSteps();
   const earRight = new THREE.Vector3(), footOffset = new THREE.Vector3();
@@ -157,13 +162,20 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
   document.addEventListener('visibilitychange', resetFootsteps);
   window.addEventListener('blur', resetFootsteps);
   let poses: readonly WalkerPresentation[] = [], walkingPoses: readonly RealmWalkerPose[] = [], connected = true, waiting = false;
-  const left = () => { connected = false; poses = []; resetFootsteps(); controller.release(); people.update([]); figures.update([], performance.now()); split.clear(); };
+  const left = () => { connected = false; poses = []; resetFootsteps(); controller.release(); people.update([]); figures.update([], performance.now()); split.clear(); ground.reset(); };
   const reconnected = () => { connected = true; };
   client.room.onLeave(left);
   client.room.onDrop(left);
   client.room.onReconnect(reconnected);
   const point = new THREE.Vector3();
   let lastPlayFrame: number | null = null;
+  // F07: every drawn body rests on the drawn ground. Presentation only: the camera, prediction, collision, reach and
+  // footstep gating keep the physics pose; the offset is eased and clamped to the physics gap (walk/ground).
+  const terrain = sampleFoundedTerrain(founded.plan);
+  const ground = createWalkerGround({ scene, world: () => connected && !waiting ? currentWorld() : null,
+    terrainFloorY: terrain.origin[1], terrainCeilingY: terrain.ceilingY });
+  const drawnHeights = new Map<string, number>();
+  let lastDraw: number | null = null;
   return {
     controller,
     get poses() { return poses; },
@@ -174,7 +186,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
       const state = client.room.state;
       if (state.layoutRevision !== binding.manifest.layoutRevision || state.collisionRevision !== binding.manifest.collisionRevision) {
         connection.session.disconnect();
-        resetFootsteps(); controller.release(); client.clearInput(); poses = []; people.update([]); figures.update([], now); split.clear();
+        resetFootsteps(); controller.release(); client.clearInput(); poses = []; people.update([]); figures.update([], now); split.clear(); ground.reset();
         if (!waiting) { waiting = true; binding.onSceneNeeded?.(); }
         return false;
       }
@@ -219,16 +231,33 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
     interactionDebug: interactions.debug,
     /** Call after the final camera transform, so frustum culling uses the camera that actually draws. */
     draw(now: number) {
-      const drawn = connected ? poses.filter(pose => looks.some(look => look.id === pose.look)) : [];
-      const { full, simple } = split.split(drawn, eye.setFromMatrixPosition(camera.matrixWorld), now);
-      figures.update(simple.map(({ pose, opacity }) => ({ id: pose.id, position: [pose.x, pose.y, pose.z] as const,
+      // A walker whose look is not here yet is still a person in the street: a simple figure until it is.
+      const parts = split.split(connected ? poses : [], eye.setFromMatrixPosition(camera.matrixWorld), now);
+      const full = parts.full.filter(({ pose }) => knownLook(pose.look));
+      // Your own body is never a stand-in figure: it hides in first person, which a figure cannot.
+      const simple = [...parts.simple, ...parts.full.filter(({ pose }) => !knownLook(pose.look) && !pose.self)];
+      const dt = lastDraw === null ? 0 : Math.max(0, Math.min(.1, (now - lastDraw) / 1000));
+      lastDraw = now;
+      // Once per walker per frame, whichever level (or both, while crossfading) draws them.
+      drawnHeights.clear();
+      const bodyY = (pose: WalkerPresentation) => {
+        let y = drawnHeights.get(pose.id);
+        if (y === undefined) drawnHeights.set(pose.id, y = ground.bodyY(pose.id, { x: pose.x, y: pose.y, z: pose.z, posed: !!pose.posture,
+          ...(pose.self ? { grounded: client.predicted?.grounded ?? true } : {}) }, dt));
+        return y;
+      };
+      const gaitGround = (id: string) => ({ ground: ground.groundFor(id), floor: ground.floorAt });
+      figures.update(simple.map(({ pose, opacity }) => ({ id: pose.id, position: [pose.x, bodyY(pose), pose.z] as const,
         heading: pose.yaw * Math.PI * 2 / 256, distance: pose.distance, speed: pose.posture ? 0 : pose.speed, opacity })), now);
       people.update(full.map(({ pose, opacity: detail }) => ({ id: pose.id,
         look: pose.look,
-        position: [pose.x, pose.y, pose.z] as const, heading: pose.yaw * Math.PI * 2 / 256,
+        position: [pose.x, bodyY(pose), pose.z] as const, heading: pose.yaw * Math.PI * 2 / 256,
         distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, gesture: toolPoses.has(pose.id) ? 'point' : controller.gestureFor(pose.id, now),
         ...(pose.posture ? { posture: pose.posture } : {}),
+        // The gait's drawn ground and floors (citizens-gait-ground.patch, asked of PL11): read once the renderer takes them.
+        ...gaitGround(pose.id),
         opacity: detail * (pose.self ? play.selfHidden ? 0 : controller.owner === 'walking' ? controller.selfOpacity : 1 : 1), time: now / 1000 })), camera);
+      ground.retain(drawnHeights);
       const self = walkingPoses.find(pose => pose.self), state = client.room.state;
       const interaction = connection.session.snapshot().self;
       // The renderer now has variable walk/run cycles. Sound follows its actual touchdown, never a
@@ -244,7 +273,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         ? people.footfalls.find(footfall => footfall.id === client.selfId) : undefined;
       if (contact && self) {
         // The accepted home's installed floor wins over public terrain. Never infer wood from being indoors.
-        const surface = homeStepMaterial(interaction.plotId, contact.position) ?? publicStep(contact.position[0], contact.position[2]);
+        const surface = homeStepMaterial(interaction.plotId, contact.position) ?? groundStep(contact.position);
         footOffset.set(...contact.position).sub(camera.position);
         earRight.setFromMatrixColumn(camera.matrixWorld, 0);
         const distance = footOffset.length();
@@ -260,7 +289,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
           return { id: fall.id, position: fall.position, distance, pan };
         });
         for (const fall of othersSteps.choose(now, near)) {
-          sound.cue('step', { material: stepCue(publicStep(fall.position[0], fall.position[2])), pan: fall.pan, distance: othersStepDistance(fall.distance) });
+          sound.cue('step', { material: stepCue(groundStep(fall.position)), pan: fall.pan, distance: othersStepDistance(fall.distance) });
         }
       }
     },

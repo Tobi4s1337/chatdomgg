@@ -16,17 +16,19 @@ function harness(world?: PlayWorld) {
   const surface = Object.assign(new EventTarget(), {
     requestPointerLock() { doc.pointerLockElement = surface; doc.dispatchEvent(new Event('pointerlockchange')); },
   });
-  const keyboard = new EventTarget();
+  const keyboard = windowKeys();
   const cursor = createWalkLook(surface, doc, keyboard, { keyboardLock: null });
   let held = false, sink: ((dx: number, dy: number) => void) | null = null;
   const controller = { cursor, touch: false, owner: 'walking', hold: vi.fn((value: boolean) => { held = value; }), get held() { return held; },
     divertLook: (next: typeof sink) => { sink = next; } } as unknown as WalkController;
-  let open = false, host: PlayHost | undefined;
+  let open = false, capturing = false, host: PlayHost | undefined, lease: { release(): void } | null = null;
   const ledger = new Set<(open: boolean) => void>();
+  // Like the real ledger, it takes the cursor through the context while it is open.
   const hud: PlayHud = {
-    openLedger: vi.fn(() => { if (!open) { open = true; for (const l of ledger) l(true); } }),
-    closeLedger: vi.fn(() => { if (open) { open = false; for (const l of ledger) l(false); } }),
+    openLedger: vi.fn(() => { if (!open) { open = true; lease = host!.ctx.requestCursor('ledger'); for (const l of ledger) l(true); } }),
+    closeLedger: vi.fn(() => { if (open) { open = false; capturing = false; lease?.release(); lease = null; for (const l of ledger) l(false); } }),
     get ledgerOpen() { return open; },
+    get keyCapture() { return open && capturing; },
     onLedger(listener) { ledger.add(listener); return () => ledger.delete(listener); },
     escape: vi.fn(() => { if (!open) return false; hud.closeLedger(); return true; }),
     dispose: vi.fn(),
@@ -36,15 +38,48 @@ function harness(world?: PlayWorld) {
   const session = createPlaySession({ host: {} as HTMLElement, controller, kingdomId: '1' as KingdomId, self: null, live: () => true,
     wayHome: () => null, build: { open: null, note: 'Not yet.' }, cue, use, settings, keyboard, ...(world ? { world } : {}),
     mountHud: (_host, play) => { host = play; return hud; } });
-  const key = (code: string, init: { repeat?: boolean; type?: 'keydown' | 'keyup' } = {}) => {
+  const key = (code: string, init: { repeat?: boolean; type?: 'keydown' | 'keyup'; panel?: (event: Event) => void } = {}) => {
     const event = Object.assign(new Event(init.type ?? 'keydown', { cancelable: true }), { code, repeat: !!init.repeat, ctrlKey: false, metaKey: false, altKey: false, isComposing: false });
-    keyboard.dispatchEvent(event);
+    keyboard.press(event, init.panel);
     return event;
   };
+  const listenForKey = (on: boolean) => { capturing = on; };
   const lock = () => cursor.capture({ isTrusted: true, type: 'pointerdown', button: 0 });
   /** The browser's own release: it ate Escape. */
   const browserEscape = () => { doc.pointerLockElement = null; doc.dispatchEvent(new Event('pointerlockchange')); };
-  return { session, controller, cursor, hud, settings, key, lock, browserEscape, cue, use, host: () => host!, doc, moveMouse: (dx: number, dy: number) => sink?.(dx, dy) };
+  return { session, controller, cursor, hud, settings, key, lock, browserEscape, cue, use, host: () => host!, doc, listenForKey,
+    moveMouse: (dx: number, dy: number) => sink?.(dx, dy) };
+}
+
+/**
+ * The window as keys reach it: its capture listeners, then the page in between (a panel on the document or the
+ * focused element, which may take the press and stop it), then its bubble listeners.
+ */
+function windowKeys() {
+  type Entry = { type: string; listener: EventListenerOrEventListenerObject; capture: boolean };
+  const entries: Entry[] = [];
+  const capture = (options?: boolean | AddEventListenerOptions) => typeof options === 'boolean' ? options : !!options?.capture;
+  const call = (entry: Entry, event: Event) => typeof entry.listener === 'function' ? entry.listener(event) : entry.listener.handleEvent(event);
+  return {
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) {
+      if (listener) entries.push({ type, listener, capture: capture(options) });
+    },
+    removeEventListener(type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | EventListenerOptions) {
+      const at = entries.findIndex(entry => entry.type === type && entry.listener === listener && entry.capture === capture(options));
+      if (at >= 0) entries.splice(at, 1);
+    },
+    dispatchEvent(event: Event) { this.press(event); return !event.defaultPrevented; },
+    press(event: Event, panel?: (event: Event) => void) {
+      let stopped = false;
+      const stop = event.stopPropagation.bind(event), stopNow = event.stopImmediatePropagation.bind(event);
+      event.stopPropagation = () => { stopped = true; stop(); };
+      event.stopImmediatePropagation = () => { stopped = true; stopNow(); };
+      for (const entry of entries.filter(e => e.type === event.type && e.capture)) { if (stopped) return; call(entry, event); }
+      if (stopped) return;
+      panel?.(event);
+      for (const entry of entries.filter(e => e.type === event.type && !e.capture)) { if (stopped) return; call(entry, event); }
+    },
+  };
 }
 
 describe('the play session', () => {
@@ -70,6 +105,33 @@ describe('the play session', () => {
     expect([hud.ledgerOpen, cursor.mode]).toEqual([false, 'idle']);
     key('Escape');
     expect(hud.ledgerOpen).toBe(true);
+  });
+
+  it('lets the top panel take Escape first: a panel that closes on it keeps the ledger shut', async () => {
+    const { session, hud, key, lock, browserEscape } = harness();
+    await session.arrived;
+    lock(); browserEscape(); hud.closeLedger();
+    // A gesture panel open over the free cursor closes on Escape and takes the press, as walk/gestures does.
+    let panelOpen = true;
+    const panel = (event: Event) => { if (!panelOpen) return; panelOpen = false; event.preventDefault(); event.stopPropagation(); };
+    key('Escape', { panel });
+    expect([panelOpen, hud.ledgerOpen]).toEqual([false, false]);
+    // A panel that ignores Escape leaves it to the ledger.
+    key('Escape', { panel });
+    expect(hud.ledgerOpen).toBe(true);
+  });
+
+  it('gives a listening key plate every key, the ledger key included', async () => {
+    const { session, hud, key, listenForKey } = harness();
+    await session.arrived;
+    hud.openLedger();
+    listenForKey(true);
+    key('KeyP');
+    key('Escape');
+    expect(hud.ledgerOpen).toBe(true);
+    listenForKey(false);
+    key('KeyP');
+    expect(hud.ledgerOpen).toBe(false);
   });
 
   it('comes back to the street and captures the mouse in one trusted click, never from a script', async () => {

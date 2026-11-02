@@ -50,7 +50,7 @@ export interface WalkerGround {
    */
   readonly floorAt: SolidFloorAt;
   /** Drop state for walkers that are gone. Call once per frame with everyone drawn this frame. */
-  retain(ids: ReadonlySet<string>): void;
+  retain(ids: Pick<ReadonlySet<string>, 'has'>): void;
   /** Forget one walker's easing (teleport, relocation, reconnect), or everyone's. */
   reset(id?: string): void;
 }

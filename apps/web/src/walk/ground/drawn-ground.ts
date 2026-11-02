@@ -55,6 +55,22 @@ interface TerrainTile {
 }
 
 const RESCAN_MS = 500;
+/**
+ * A scene still without terrain tiles after twenty looks (ten seconds: the grand land's blocky ground has none) is
+ * looked at again ever less often, up to this. Terrain drawn just after the walk starts is still found within .5 s.
+ */
+const RESCAN_MAX_MS = 8000, RESCAN_PATIENCE = 20;
+
+/** Still drawn: attached all the way up to `root` and visible along the way. */
+function drawnIn(object: THREE.Object3D, root: THREE.Object3D | undefined): boolean {
+  let at: THREE.Object3D | null = object;
+  while (at) {
+    if (!at.visible) return false;
+    if (at === root) return true;
+    at = at.parent;
+  }
+  return root === undefined;
+}
 
 /**
  * Read the height field a terrain material displaces its vertices with (`uTerrain`, `uTerrainHeight`,
@@ -109,7 +125,7 @@ function tileOf(mesh: THREE.Mesh): TerrainTile | null {
  */
 export function createDrawnGround(options: DrawnGroundOptions): DrawnGround {
   const clock = options.clock ?? (() => performance.now());
-  let tiles: TerrainTile[] = [], scanned = false, lastScan = -Infinity, hint = 0;
+  let tiles: TerrainTile[] = [], scanned = false, lastScan = -Infinity, hint = 0, wait = RESCAN_MS, empty = 0;
   let source: DrawnGround['source'] = 'none';
   const scan = () => {
     tiles = []; scanned = true; lastScan = clock(); hint = 0;
@@ -118,17 +134,19 @@ export function createDrawnGround(options: DrawnGroundOptions): DrawnGround {
       const tile = tileOf(object);
       if (tile) tiles.push(tile);
     });
+    empty = tiles.length ? 0 : empty + 1;
+    wait = empty < RESCAN_PATIENCE ? RESCAN_MS : Math.min(RESCAN_MAX_MS, wait * 2);
   };
   // One sampler for every call, pointed at the tile being read: no closure per sample.
   let tileField: TerrainHeightField | null = null, tileX = 0, tileZ = 0;
   const sampleTile = (a: number, b: number) => sampleHeightField(tileField!, a + tileX, b + tileZ);
   const inside = (tile: TerrainTile, x: number, z: number) => x >= tile.minX && x <= tile.maxX && z >= tile.minZ && z <= tile.maxZ;
   const fromTerrain: DrawnGroundAt = (x, z) => {
-    if (!scanned || (!tiles.length && clock() - lastScan >= RESCAN_MS)) scan();
+    if (!scanned || (!tiles.length && clock() - lastScan >= wait)) scan();
     for (let n = 0; n < tiles.length; n++) {
       const index = (hint + n) % tiles.length, tile = tiles[index]!;
       if (!inside(tile, x, z)) continue;
-      if (!tile.mesh.parent || !tile.mesh.visible) {
+      if (!drawnIn(tile.mesh, options.scene)) {
         // A removed or hidden tile is not drawn ground; look again soon rather than trusting a stale cache.
         if (clock() - lastScan >= RESCAN_MS) { scan(); return fromTerrain(x, z); }
         continue;
@@ -159,6 +177,6 @@ export function createDrawnGround(options: DrawnGroundOptions): DrawnGround {
   return {
     at,
     get source() { return source; },
-    refresh() { scanned = false; tiles = []; },
+    refresh() { scanned = false; tiles = []; wait = RESCAN_MS; empty = 0; },
   };
 }

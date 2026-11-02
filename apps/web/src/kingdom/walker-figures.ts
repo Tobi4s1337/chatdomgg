@@ -14,7 +14,11 @@ const KEEP_FACTOR = .85, KEEP_MARGIN_M = 1.5;
 /** Crossfade between full and simple, so a walker crossing the boundary dissolves rather than swaps. */
 export const WALKER_DETAIL_BLEND_MS = 350;
 
-export interface WalkerPoint { readonly id: string; readonly x: number; readonly y: number; readonly z: number; readonly self?: boolean }
+export interface WalkerPoint {
+  readonly id: string; readonly x: number; readonly y: number; readonly z: number; readonly self?: boolean;
+  /** Seated at a place: always drawn in full, since a simple figure has no seated pose (seats are few). */
+  readonly posture?: string | undefined;
+}
 type Eye = { readonly x: number; readonly y: number; readonly z: number };
 
 /**
@@ -27,7 +31,7 @@ export function nearestWalkers<T extends WalkerPoint>(poses: readonly T[], eye: 
   for (const pose of poses) {
     if (![pose.x, pose.y, pose.z].every(Number.isFinite)) continue;
     const distance = Math.hypot(pose.x - eye.x, pose.y - eye.y, pose.z - eye.z);
-    scored.push({ pose, score: pose.self ? -Infinity : previous.has(pose.id) ? distance * KEEP_FACTOR - KEEP_MARGIN_M : distance });
+    scored.push({ pose, score: pose.self || pose.posture ? -Infinity : previous.has(pose.id) ? distance * KEEP_FACTOR - KEEP_MARGIN_M : distance });
   }
   scored.sort((a, b) => a.score - b.score || (a.pose.id < b.pose.id ? -1 : a.pose.id > b.pose.id ? 1 : 0));
   const count = Math.max(0, Math.floor(limit));
@@ -196,7 +200,9 @@ export function createWalkerFigures(scene: THREE.Object3D, lighting: VoxelRender
   let capacity = 0, mesh: THREE.InstancedMesh | undefined;
   let fades!: THREE.InstancedBufferAttribute, tintAttribute!: THREE.InstancedBufferAttribute, gait!: THREE.InstancedBufferAttribute;
   const allocate = (size: number) => {
-    if (mesh) { scene.remove(mesh); mesh.dispose(); }
+    // three.js frees a geometry's attribute buffers only when the geometry is disposed: release the outgrown
+    // per-instance buffers before swapping in larger ones (the shared shape re-uploads on the next draw).
+    if (mesh) { scene.remove(mesh); mesh.dispose(); geometry.dispose(); }
     capacity = size;
     fades = new THREE.InstancedBufferAttribute(new Float32Array(size), 1); fades.setUsage(THREE.DynamicDrawUsage);
     tintAttribute = new THREE.InstancedBufferAttribute(new Float32Array(size * 3), 3); tintAttribute.setUsage(THREE.DynamicDrawUsage);
