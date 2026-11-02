@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateSettlementPlan, type SettlementPlan } from '@chatdom/world';
+import { generateSettlementPlan, type RealmFoundedScene, type SettlementPlan } from '@chatdom/world';
 import oldTown from '../../../../realm/src/founded/artifacts/simulated-town.scene.json';
 import { nearestOnStreets, routeHome, streetGraph, trailStops } from './route';
 import { homeDoor, townMapFrom } from './town';
@@ -108,6 +108,24 @@ for (const [name, plan] of [['the old land', oldPlan], ['the grand land', grandP
       expect(map.places.map(place => place.id)).toEqual(['castle', 'market', 'forge']);
       // A home on the map is a plot and its street: nothing on it names a person.
       for (const home of map.homes) expect(Object.keys(home).sort()).toEqual(['centre', 'door', 'id', 'lot', 'street']);
+    });
+
+    it('names the Tavern and the Pier from the founded scene pieces, at the middle of each footprint', () => {
+      const asset = (hash: string, size: [number, number, number]) => ({ assetHash: hash, blueprint: { size } }) as unknown as RealmFoundedScene['assets'][number];
+      const pieces = {
+        assets: [asset('a-tavern', [64, 64, 32]), asset('a-pier', [20, 41, 32])],
+        placements: [
+          { id: 'civic:growth:v1:tavern', assetHash: 'a-tavern', position: [2, 9.5, -10], rotation: 0 },
+          { id: 'pier:lake:root', assetHash: 'a-pier', position: [238.25, -1, 227.75], rotation: 3 },
+        ],
+      } as Pick<RealmFoundedScene, 'placements' | 'assets'>;
+      const map = townMapFrom(plan, pieces);
+      expect(map.places.slice(3)).toEqual([
+        { id: 'tavern', name: 'Tavern', at: [6, -8] },
+        { id: 'pier', name: 'Pier', at: [236.25, 229] },
+      ]);
+      // A kingdom without either piece simply has no such place.
+      expect(townMapFrom(plan, { assets: [], placements: [] }).places.map(place => place.id)).toEqual(['castle', 'market', 'forge']);
     });
   });
 }

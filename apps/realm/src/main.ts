@@ -49,7 +49,7 @@ import { createRealmRoomDoor } from './raid-gate/room-door';
 import { createRealmPier } from './fishing/pier';
 import { mountPierRoutes } from './fishing/routes';
 import { Campfires, installCampfires, createPostgresFireStore, campfireChatCommands } from './campfire';
-import { createRealmLooks } from './look';
+import { createHomePlaces, createRealmLooks } from './look';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -203,7 +203,8 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   mountForgeQueueRoutes(transport.app, evening.line, { pool, origin, secureCookies: new URL(process.env.REALM_PUBLIC_ORIGIN ?? 'http://localhost:5190').protocol === 'https:' });
   mountPierRoutes(transport.app, pier);
   mountForgeLedgerRoutes(transport.app, forgeLedgerSource(boot.services));
-  looks.mount(transport.app);
+  looks.mount(transport.app, { places: createHomePlaces({ db: pool, origin, services: boot.services, allocation: boot.allocation, citizens,
+    log: line => console.info(line) }) });
   ownRealmShutdown(server, transport, async () => {
     pier.dispose();
     itemFoundation.dispose();

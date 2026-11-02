@@ -252,7 +252,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
   const drawnHeights = new Map<string, number>();
   let lastDraw: number | null = null;
   try {
-    wayHome = createWayHomeRuntime({ plan: founded.plan, scene, groundAt: (x, z) => ground.drawnAt(x, z),
+    wayHome = createWayHomeRuntime({ plan: founded.plan, pieces: founded, scene, groundAt: (x, z) => ground.drawnAt(x, z),
       reducedMotion: () => sharedPlaySettings().current.reducedMotion,
       ownedPlotId: ownedPlot, inside: insideOwnHome,
       feet: () => { const self = controller.debug.self; return self ? [self.x, self.y, self.z] : null; },

@@ -27,6 +27,12 @@ export const REALM_LOOK_ROUTES = {
    * in, `RealmLookSaveReply` out. The person is always the session's; a body never names one.
    */
   mine: '/api/realm/looks/me',
+  /**
+   * POST with the session cookie and `x-csrf-token`, `?kingdom=<id>`, no body: "Take your place". Grants the
+   * signed-in person a home in that kingdom through the same allocation chat and the panel use: `RealmHomePlaceReply`.
+   * Idempotent: asking again answers with the home already granted.
+   */
+  place: '/api/realm/looks/place',
 } as const;
 
 export function lookRecipeUrl(token: string): string {
@@ -118,3 +124,25 @@ export const RealmLookSaveReplySchema = z.discriminatedUnion('ok', [
   z.strictObject({ version: z.literal(1), ok: z.literal(false), code: z.enum(LOOK_SAVE_REFUSALS), reason: z.string().min(1).max(400) }),
 ]);
 export type RealmLookSaveReply = z.infer<typeof RealmLookSaveReplySchema>;
+
+/** Why a place was not granted. The domain answers (`castle` … `kingdom-full`) come with HTTP 409. */
+export const HOME_PLACE_REFUSALS = ['unauthenticated', 'forbidden', 'malformed', 'unnamed', 'castle', 'unfounded', 'held',
+  'three-homes', 'kingdom-full', 'busy', 'unavailable'] as const;
+export type HomePlaceRefusal = typeof HOME_PLACE_REFUSALS[number];
+export const RealmHomePlaceReplySchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    version: z.literal(1), ok: z.literal(true),
+    /** False when the home was already theirs: taking your place twice is the same home. */
+    fresh: z.boolean(),
+    home: z.strictObject({
+      kingdomId: KingdomIdSchema,
+      plotId: z.string().min(1).max(128),
+      street: z.string().min(1).max(128),
+      /** 'Number 4 on Lantern Row'. */
+      place: z.string().min(1).max(200),
+    }),
+  }),
+  /** `reason` is a sentence for the person; `code` is for the client's logic. */
+  z.strictObject({ version: z.literal(1), ok: z.literal(false), code: z.enum(HOME_PLACE_REFUSALS), reason: z.string().min(1).max(400) }),
+]);
+export type RealmHomePlaceReply = z.infer<typeof RealmHomePlaceReplySchema>;

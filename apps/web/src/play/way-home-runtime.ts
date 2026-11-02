@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import type { Vec3 } from '@chatdom/shared';
-import type { SettlementPlan } from '@chatdom/world';
+import type { RealmFoundedScene, SettlementPlan } from '@chatdom/world';
 import type { PlayMapView, PlayWayHomeLights } from './host';
 import { createLanternTrail, type LanternTrail } from './lantern/trail';
 import { mapPeople, type FriendAuthority, type MapWalker } from './map/people';
@@ -19,6 +19,8 @@ import { createTownMapCache, homeDoor } from './map/town';
 
 export interface WayHomeRuntimeOptions {
   readonly plan: SettlementPlan;
+  /** The founded scene's pieces, for the places the map names from them (the Tavern, the Pier). */
+  readonly pieces?: Pick<RealmFoundedScene, 'placements' | 'assets'>;
   readonly scene: THREE.Scene;
   /** The drawn ground at (x, z), or null; lanterns stand on it. */
   readonly groundAt?: (x: number, z: number) => number | null;
@@ -73,7 +75,7 @@ export function activeWayHome(): WayHomeRuntime | null { return active; }
 
 export function createWayHomeRuntime(options: WayHomeRuntimeOptions): WayHomeRuntime {
   const { plan } = options;
-  const town = createTownMapCache()(plan);
+  const town = createTownMapCache()(plan, options.pieces ?? null);
   const graph = streetGraph(plan);
   const trail = createLanternTrail({ scene: options.scene, reducedMotion: options.reducedMotion,
     ...(options.groundAt ? { groundAt: options.groundAt } : {}) });

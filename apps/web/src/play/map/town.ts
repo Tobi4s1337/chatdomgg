@@ -1,5 +1,5 @@
-import type { Vec3 } from '@chatdom/shared';
-import type { SettlementPlan } from '@chatdom/world';
+import { VOXEL_METRES, type Vec3 } from '@chatdom/shared';
+import { transformCardinalPoint, type RealmFoundedScene, type SettlementPlan } from '@chatdom/world';
 
 /**
  * The kingdom's map, read from the founded plan alone, the same way on the old land and the grand land. It names
@@ -41,7 +41,7 @@ export interface MapHome {
 }
 
 export interface MapPlace {
-  readonly id: 'castle' | 'market' | 'forge';
+  readonly id: 'castle' | 'market' | 'forge' | 'tavern' | 'pier';
   readonly name: string;
   readonly at: XZ;
 }
@@ -101,10 +101,31 @@ function streamsOf(plan: SettlementPlan): MapStream[] {
     .map(stream => ({ id: stream.id, points: stream.points.map((point: { position: XZ; width: number }) => ({ at: point.position, width: point.width })) }));
 }
 
+/** The founded scene's pieces the map names, by placement id. A kingdom without one simply has no such place. */
+const SCENE_PLACES: readonly { readonly id: 'tavern' | 'pier'; readonly name: string; readonly piece: string }[] = [
+  { id: 'tavern', name: 'Tavern', piece: 'civic:growth:v1:tavern' },
+  { id: 'pier', name: 'Pier', piece: 'pier:lake:root' },
+];
+
+/** The middle of a placed piece's footprint: its blueprint's half size, turned as the piece is turned. */
+export function scenePlaces(scene: Pick<RealmFoundedScene, 'placements' | 'assets'> | null | undefined): MapPlace[] {
+  if (!scene) return [];
+  const places: MapPlace[] = [];
+  for (const wanted of SCENE_PLACES) {
+    const placement = scene.placements.find(candidate => candidate.id === wanted.piece);
+    if (!placement || !finite(placement.position)) continue;
+    const size = scene.assets.find(asset => asset.assetHash === placement.assetHash)?.blueprint.size;
+    const half: Vec3 = size ? [size[0] * VOXEL_METRES.build / 2, 0, size[2] * VOXEL_METRES.build / 2] : [0, 0, 0];
+    const centre = transformCardinalPoint(placement.position, placement.rotation, half);
+    if (finite(centre)) places.push({ id: wanted.id, name: wanted.name, at: xz(centre) });
+  }
+  return places;
+}
+
 const WIDTH_ORDER: Record<MapStreet['kind'], number> = { main: 0, lane: 1, trail: 2, approach: 3 };
 
 /** The map of one founded plan. Pure; the same plan always gives an equal map. */
-export function townMapFrom(plan: SettlementPlan): TownMap {
+export function townMapFrom(plan: SettlementPlan, scene?: Pick<RealmFoundedScene, 'placements' | 'assets'> | null): TownMap {
   const active = new Set(plan.activeStreetIds);
   const streets = plan.streets.filter(street => active.has(street.id) && street.points.length >= 2)
     .map(street => ({ id: street.id, kind: street.kind, name: street.name, width: street.width, points: street.points.filter(finite).map(xz) }))
@@ -131,6 +152,7 @@ export function townMapFrom(plan: SettlementPlan): TownMap {
       { id: 'castle', name: 'The castle', at: xz(plan.castle.centre) },
       { id: 'market', name: 'The market', at: centre },
       { id: 'forge', name: 'The Forge', at: FORGE_ON_MARKET },
+      ...scenePlaces(scene),
     ],
     homes: plan.homes.map(home => ({
       id: home.id, street: home.street, centre: [(home.lot.minX + home.lot.maxX) / 2, (home.lot.minZ + home.lot.maxZ) / 2] as XZ,
@@ -140,7 +162,7 @@ export function townMapFrom(plan: SettlementPlan): TownMap {
 }
 
 /** One map per plan revision: the plan never changes under a revision, so neither does its map. */
-export function createTownMapCache(): (plan: SettlementPlan) => TownMap {
-  let last: TownMap | null = null;
-  return plan => (last && last.revision === plan.revision ? last : (last = townMapFrom(plan)));
+export function createTownMapCache(): (plan: SettlementPlan, scene?: Pick<RealmFoundedScene, 'placements' | 'assets'> | null) => TownMap {
+  let last: TownMap | null = null, lastScene: unknown = null;
+  return (plan, scene = null) => (last && last.revision === plan.revision && lastScene === scene ? last : (lastScene = scene, last = townMapFrom(plan, scene)));
 }

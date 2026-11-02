@@ -1,4 +1,5 @@
-import { KingdomIdSchema, REALM_LOOK_ROUTES, RealmLookMineReplySchema, type KingdomId, type RealmCitizenFacts } from '@chatdom/shared';
+import { KingdomIdSchema, REALM_LOOK_ROUTES, RealmHomePlaceReplySchema, RealmLookMineReplySchema, type KingdomId, type RealmCitizenFacts } from '@chatdom/shared';
+import { REALM_AUTH_ROUTES, RealmSessionReplySchema } from '@chatdom/shared/realm';
 import type { ForgedSource, ForgedThing, PlayContext } from '../slots';
 
 /*
@@ -42,6 +43,44 @@ export function citizenFactsOf(body: unknown): CitizenFactsResult {
   return reply.data.citizen ? { kind: 'ready', facts: reply.data.citizen } : { kind: 'unavailable' };
 }
 
+/* ---------------------------------------------------------------- Take your place */
+
+export type TakePlaceResult =
+  | { readonly kind: 'home'; readonly street: string; readonly place: string }
+  | { readonly kind: 'refused'; readonly reason: string };
+
+/**
+ * "Take your place": asks the realm for a home in this kingdom, as the signed-in person, with this session's CSRF
+ * token. The realm grants it the way chat and the panel do, or says why not in a sentence the card shows as it is.
+ */
+export async function takePlace(kingdomId: KingdomId, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<TakePlaceResult> {
+  const id = KingdomIdSchema.safeParse(kingdomId);
+  if (!id.success) return { kind: 'refused', reason: CARD_WORDS.placeUnavailable };
+  const within = () => AbortSignal.any([signal, AbortSignal.timeout(PLACE_TIMEOUT_MS)]);
+  try {
+    const session = await fetcher(REALM_AUTH_ROUTES.session, { method: 'GET', credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' }, signal: within() });
+    const reply = session.ok ? RealmSessionReplySchema.safeParse(await session.json()) : null;
+    if (!reply?.success) return { kind: 'refused', reason: CARD_WORDS.placeUnavailable };
+    if (reply.data.status === 'anonymous') return { kind: 'refused', reason: CARD_WORDS.anonymous };
+    const response = await fetcher(`${REALM_LOOK_ROUTES.place}?kingdom=${encodeURIComponent(id.data)}`, {
+      method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json', 'x-csrf-token': reply.data.csrfToken }, signal: within(),
+    });
+    const body = RealmHomePlaceReplySchema.safeParse(await response.json());
+    if (!body.success) return { kind: 'refused', reason: CARD_WORDS.placeUnavailable };
+    return body.data.ok ? { kind: 'home', street: body.data.home.street, place: body.data.home.place } : { kind: 'refused', reason: body.data.reason };
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return { kind: 'refused', reason: CARD_WORDS.placeUnavailable };
+  }
+}
+
+const PLACE_TIMEOUT_MS = 15_000;
+
+/** The card offers "Take your place" only to a signed-in citizen with no home here, never to the monarch in their own kingdom. */
+export function canTakePlace(self: PlayContext['self'], kingdomId: KingdomId, result: CitizenFactsResult | null): boolean {
+  return !!self && self.personId !== String(kingdomId) && result?.kind === 'ready' && !result.facts.homes.some(home => home.here);
+}
+
 /* ---------------------------------------------------------------- What the card draws */
 
 const DATE = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -78,6 +117,11 @@ export const CARD_WORDS = {
   anonymous: 'Sign in to keep a card here.',
   homeless: 'No home has been granted to you yet.',
   here: 'This kingdom',
+  take: 'Take your place',
+  taking: 'Finding your street…',
+  welcome: (place: string) => `Welcome home. ${place} is yours.`,
+  placeUnavailable: 'The kingdom could not settle you just now. Try again in a moment.',
+  hudHomeless: 'You have no home here yet. Open your card in the ledger to take your place.',
 } as const;
 
 /** Everything the card shows, from the approved name and the realm's answer; no field without a source. */

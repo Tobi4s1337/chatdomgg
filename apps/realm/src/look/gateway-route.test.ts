@@ -7,7 +7,7 @@ import { classify } from '../../../api/src/public/routes';
  */
 describe('the public gateway routes saved looks to the realm', () => {
   it('passes the look routes the realm serves', () => {
-    for (const path of ['/api/realm/looks/me', `/api/realm/looks/lk.${'a1'.repeat(20)}`, '/api/realm/looks/hearth']) {
+    for (const path of ['/api/realm/looks/me', `/api/realm/looks/lk.${'a1'.repeat(20)}`, '/api/realm/looks/hearth', '/api/realm/looks/place']) {
       expect(classify(path, ''), path).toEqual({ kind: 'realm' });
     }
   });
