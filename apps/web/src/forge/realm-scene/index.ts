@@ -13,6 +13,7 @@ import { createForgePresentation, type ForgePresentation } from '../presentation
 import { createForgeRitualView } from '../ritual-view';
 import { createLandingMaterial } from './landing-light';
 import { forgeHomeShot, forgeFlightShot } from '../home-shot';
+import { createForgeLedgerWall } from '../ledger/wall';
 
 export interface RealmForgeSceneOptions {
   onFlight?: import('../presentation/stage').ForgePresentationOptions['onFlight'];
@@ -28,6 +29,11 @@ export interface RealmForgeSceneOptions {
   /** Hide only this committed attachment's static geometry during its arrival. */
   hideAttachment(id: string, hidden: boolean): void;
   registerShadow?(mesh: THREE.Mesh): () => void;
+  /**
+   * "The forge remembers" (FW12): where the land installed the wall at the forge. The land draws its frame and
+   * collision as a fixture; this scene stands the remembered pieces in its niches and hangs their plates.
+   */
+  ledgerWall?: { readonly kingdomId: string; readonly position: Vec3; readonly yaw: number; readonly style: 'hearth' | 'tide' | 'grove'; readonly drawFrame?: boolean };
 }
 
 interface Casting {
@@ -55,6 +61,9 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
   effects.name = 'realm-forge-presentation';
   options.scene.add(effects);
   const emitters = createForgeEmitters(options.scene);
+  const ledgerWall = options.ledgerWall ? createForgeLedgerWall({ scene: options.scene, pool: options.pool, material: options.material,
+    position: options.ledgerWall.position, yaw: options.ledgerWall.yaw, style: options.ledgerWall.style, kingdomId: options.ledgerWall.kingdomId,
+    drawFrame: options.ledgerWall.drawFrame ?? false, ...(options.registerShadow ? { registerShadow: options.registerShadow } : {}) }) : null;
   const seen = new Set<string>(), completedActivities = new Set<string>(), queue: CommittedForgeAttachment[] = [];
   const standing = new Map<string, { attachment: CommittedForgeAttachment; position: THREE.Vector3; kind: 'smoke' | 'glow'; direction?: THREE.Vector3 }>();
   const stages = new Map<string, { stage: string; started: number }>();
@@ -302,7 +311,9 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       if (!cameraAllowed || (!waiting && !current)) return false;
       direct(current, frame); return true;
     },
-    setEnvironment: view.setEnvironment,
+    setEnvironment(grade: Parameters<typeof view.setEnvironment>[0]) { view.setEnvironment(grade); ledgerWall?.setEnvironment(grade); },
+    /** Changes when the wall at the forge changed, for a host that renders on demand. */
+    get ledgerRevision() { return ledgerWall?.renderRevision ?? 0; },
     active: () => !!(stages.size || preparing || current),
     get focusPoint() { return focusPoint; },
     get heat() { return castingHeat; },
@@ -326,7 +337,7 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       disposed = true; epoch++; unsubscribe(); stages.clear(); standing.clear(); queue.length = 0; landing = null;
       options.sound.forgeUpdate?.(null);
       if (preparing) options.hideAttachment(preparing.id, false);
-      preparing = null; clearCurrent(); view.dispose(); emitters.dispose(); options.scene.remove(effects);
+      preparing = null; clearCurrent(); view.dispose(); emitters.dispose(); ledgerWall?.dispose(); options.scene.remove(effects);
     },
   };
 }

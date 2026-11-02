@@ -61,7 +61,7 @@ Words almost always become things. A citizen walking in their kingdom comes to t
   - Three wishes sent within a few seconds of each other all land, and their rituals play in order.
   - A real-GPU still of the anvil showing the queue.
 
-- [ ] **FW12 — The forge remembers.** (I05)
+- [x] **FW12 — The forge remembers.** (I05)
   Outcome: Every piece forged in a kingdom is listed with the piece itself, who wished for it and when: on a wall at the forge in the world, on a page in the Esc menu (in play's slot), and through a small public read route the panel can use. Once copies exist, the list also says how many homes carry one; until then it says nothing about copies.
   Quality bar: Only real entries from the realm's committed Forge facts. A refused, held or cold wish never appears, and the words of a wish never appear (title and plaque only). Names appear as the citizen card shows them. The wall belongs to the forge square's carved look and reads at street distance; the page reads at 390 px.
   Done when: Real-GPU stills of the wall and the Esc page with real entries from FW10 and FW11 wishes; tests on the read route for order, privacy (no words, no refusals, no held wishes) and an empty kingdom; the panel seam written in `SEAMS.md`.

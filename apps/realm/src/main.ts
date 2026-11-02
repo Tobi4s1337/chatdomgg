@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { ForgeWriteGate, FileForgeApprovals } from './wiring';
 import { RealmEveningBridge, mountEveningRoutes } from './evening';
 import { mountForgeQueueRoutes } from './forge-queue/http';
+import { forgeLedgerSource, mountForgeLedgerRoutes } from './forge-ledger/http';
 import { createRealmCitizens } from './evening/citizens';
 import { createRealmCastle } from './evening/castle';
 import { attachEveningInteractions } from './evening/interactions';
@@ -100,6 +101,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   mountRealmWatchRoutes(transport.app, boot);
   forgeChat.mount(transport.app);
   mountForgeQueueRoutes(transport.app, evening.line, { pool, origin, secureCookies: new URL(process.env.REALM_PUBLIC_ORIGIN ?? 'http://localhost:5190').protocol === 'https:' });
+  mountForgeLedgerRoutes(transport.app, forgeLedgerSource(boot.services));
   ownRealmShutdown(server, transport, async () => {
     dock.stop();
     try { await forgeChat.stop(); }
