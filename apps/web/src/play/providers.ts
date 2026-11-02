@@ -7,5 +7,6 @@ import '../tavern/register';
 import '../fishing/play-slot';
 import '../fishing/kingdom-slot';
 import '../raid-gate/play-slot';
+import '../campfire/register';
 
 export {};

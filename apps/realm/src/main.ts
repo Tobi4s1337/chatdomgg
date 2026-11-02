@@ -45,6 +45,7 @@ import { RealmRoomTravel } from './raid-gate/room-travel';
 import { createRealmRoomDoor } from './raid-gate/room-door';
 import { createRealmPier } from './fishing/pier';
 import { mountPierRoutes } from './fishing/routes';
+import { Campfires, installCampfires, createPostgresFireStore, campfireChatCommands } from './campfire';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -111,6 +112,9 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     chatPresented: (input, result) => raidChat.observe(input, result) });
   // The grand land: bound to each founded receipt before it is public, baked in a niced child for a new plan.
   const land = process.env.REALM_LAND_DIRECTORY ? await (await import('./land/realm')).openRealmLand(process.env.REALM_LAND_DIRECTORY, line => console.info(line)) : null;
+  const campfires = new Campfires({ store: createPostgresFireStore(pool) });
+  // Chat's `!sus` reaches the burning fire through the herald's chat-command registry.
+  const unregisterCampfireChat = realmChatCommands.register(campfireChatCommands(campfires));
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
     ...(land ? { beforeFoundedPublication: land.beforePublication } : {}),
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
@@ -120,9 +124,10 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
       const detachGuests = raidGuests.attach(kingdom), detachDoor = roomDoor.attach(kingdom);
       const clearRaidChat = () => raidChat.clear(kingdom.kingdomId), detachRaidChat = kingdom.onClosed(clearRaidChat);
       const detachEvening = evening.attach(kingdom);
+      const fire = campfires.fire(kingdom.kingdomId), detachLive = fire.bindLive(() => kingdom.current && kingdom.privateState.stream.liveUntil > Date.now());
       const detachInteractions = attachEveningInteractions(kingdom, { auth: boot.services.auth,
-        scene: () => boot.loader.current(kingdom.kingdomId)?.scene });
-      return () => { clearRaidChat(); detachRaidChat(); detachDoor(); detachGuests(); detachInteractions(); detachEvening(); };
+        scene: () => boot.loader.current(kingdom.kingdomId)?.scene, campfire: fire.seats });
+      return () => { clearRaidChat(); detachRaidChat(); detachDoor(); detachGuests(); detachInteractions(); detachLive(); detachEvening(); };
     },
   });
   Object.assign(boot.services, { channels: [...(boot.services.channels ?? []), createItemRoomChannel(itemFoundation.items, createPostgresItemAdmission({ pool, origin, readiness: boot.readiness }))] });
@@ -159,6 +164,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   dock.use(boot.services);
   installGatherStore(boot.services, createPostgresGatherStore(pool));
   installTavernReturns(boot.services, kingdomId => boot.loader.current(kingdomId)?.scene);
+  installCampfires(boot.services, campfires);
   // Doors out of the kingdom (the tavern's) register their outside here; coming back stands you outside them.
   const doors = new RealmPortalArrivals(); installPortalArrivals(boot.services, doors);
   const panel = new RealmPanelService({ settings: new RealmPanelSettings({ db: pool, services: boot.services, origin }), gifts: new RealmPanelGifts({ db: pool, services: boot.services, origin }), db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded, projection: true, guard: forgetGuard });
@@ -178,7 +184,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   ownRealmShutdown(server, transport, async () => {
     pier.dispose();
     itemFoundation.dispose();
-    dock.stop();
+    dock.stop(); unregisterCampfireChat(); campfires.dispose();
     await land?.stop();
     raidChatRead.close();
     await raidShow.close();
@@ -193,7 +199,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     await forgeChat.start();
     await releasePort();
     await server.listen(port, host);
-  } catch (error) { pier.dispose(); itemFoundation.dispose(); dock.stop(); raidChatRead.close(); await raidShow.close(); await chatCommands.close(); await raidCrier?.close(); await forgeChat.stop(); await evening.stop(); await boot.stop(); await raidGuests.close(); await pool.end(); throw error; }
+  } catch (error) { pier.dispose(); itemFoundation.dispose(); dock.stop(); unregisterCampfireChat(); campfires.dispose(); raidChatRead.close(); await raidShow.close(); await chatCommands.close(); await raidCrier?.close(); await forgeChat.stop(); await evening.stop(); await boot.stop(); await raidGuests.close(); await pool.end(); throw error; }
   console.info(`${simulated ? 'SIMULATED' : 'LIVE'} realm on ${port}: adopted durable Postgres kingdoms in schema "${config.schema}"; `
     + (boot.ingress.gate.configured ? `service ingress at POST ${INGRESS_ROUTE} (${Object.keys(credentials).join(', ')})` : 'service ingress closed (no REALM_INGRESS_*_SECRET)')
     + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}; current approved geometry only`);

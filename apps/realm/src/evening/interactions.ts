@@ -2,7 +2,7 @@ import type { RealmAuthenticator, RealmPrivateState } from '@chatdom/shared/real
 import type { RealmFoundedScene } from '@chatdom/world';
 import { createFoundedInteractionRegistry, type InteractionRegistry } from '@chatdom/world/interactions';
 import { REALM_RECONNECT_GRACE_MS } from '../auth/seats';
-import { createInteractionAuthority, ownedHomes } from '../interactions';
+import { composeInteractionHosts, createInteractionAuthority, ownedHomes, type CampfireSeatHost } from '../interactions';
 import { canonicalSceneJson } from '../founded/codec';
 import type { DurableKingdom } from '../persistence';
 
@@ -11,6 +11,8 @@ export function attachEveningInteractions(kingdom: DurableKingdom, options: {
   readonly auth: RealmAuthenticator;
   /** The loader's currently adopted scene; prospective preparations must never be returned here. */
   readonly scene: () => RealmFoundedScene | undefined;
+  /** The kingdom's fire (gather): its logs' seat policy. Absent, logs stay social seats. */
+  readonly campfire?: CampfireSeatHost;
 }): () => void {
   let scene: RealmFoundedScene | undefined, registry: InteractionRegistry | null = null;
   let homes: RealmPrivateState['homes'] | undefined;
@@ -45,6 +47,7 @@ export function attachEveningInteractions(kingdom: DurableKingdom, options: {
     },
     homes: ownedHomes(() => kingdom.privateState, () => kingdom.layoutRevision),
     recovery: (walkerId, revision) => kingdom.recoverWalker(walkerId, revision),
+    ...(options.campfire ? { hosts: composeInteractionHosts({ campfire: options.campfire }) } : {}),
   });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
