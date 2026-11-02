@@ -1,0 +1,164 @@
+/* The wardrobe in play: the builder over the street behind two swinging doors, the doors' own states (unlocking,
+   shut, sign in), the mirror on a first walk, and the ledger's "Your look" page. Same kit, same faces as the builder. */
+
+/* ------------------------------------------------------------------ Over the street */
+.lk-overlay { position: fixed; inset: 0; z-index: 40; pointer-events: auto; outline: none; }
+.lk-overlay-frame { position: absolute; inset: 0; perspective: 2200px; background: #07040fcc; animation: lk-fade .3s ease-out both; }
+@keyframes lk-fade { from { opacity: 0; } }
+.lk-overlay-frame > .ab { animation: lk-rise .42s cubic-bezier(.2, .85, .25, 1) both; }
+@keyframes lk-rise { from { opacity: 0; transform: scale(.985); } }
+
+/* ------------------------------------------------------------------ The doors: unlocking, shut, sign in */
+.lk-doors { position: relative; width: 100%; height: 100vh; height: 100dvh; display: grid; place-items: center; overflow: hidden; perspective: 2200px;
+  font: 16px/1.4 var(--cd-face-body); color: var(--cd-ink);
+  background: radial-gradient(ellipse 50% 40% at 50% 55%, #ffb46a26, transparent 70%), linear-gradient(178deg, #1d1530, #2e2044 50%, #3e2638); }
+.lk-door { position: absolute; top: 4vh; bottom: 4vh; width: min(42vw, 520px); display: grid; grid-template-rows: 1fr 1.4fr; gap: 18px; padding: 24px;
+  border: 1px solid var(--cd-wood-edge);
+  background: repeating-linear-gradient(90deg, #ffdcae08 0 2px, transparent 2px 11px, #1a0c0414 11px 12px, transparent 12px 19px), linear-gradient(176deg, var(--cd-wood-hi), var(--cd-wood) 45%, var(--cd-wood-lo));
+  box-shadow: inset 0 1px 0 #ffe1b44d, inset 0 0 0 6px #00000014, 0 20px 50px #000a; }
+.lk-door-left { right: 50%; border-radius: 14px 2px 2px 14px; transform-origin: left center; }
+.lk-door-right { left: 50%; border-radius: 2px 14px 14px 2px; transform-origin: right center; }
+.lk-door-panel { border-radius: 8px; box-shadow: inset 0 0 0 2px #2b1b10, inset 0 0 0 3px #ffe1b41f, inset 0 3px 10px #0006; background: linear-gradient(176deg, #6b4630, #4a2f1f); }
+.lk-keyhole { position: absolute; left: 50%; top: 52%; width: 34px; height: 54px; translate: -50% -50%; border-radius: 8px;
+  background: radial-gradient(circle at 50% 36%, #1a0e06 0 5px, transparent 6px), linear-gradient(#1a0e06, #1a0e06) 50% 70% / 4px 16px no-repeat,
+    linear-gradient(150deg, var(--cd-brass-hi), var(--cd-brass) 45%, var(--cd-brass-lo));
+  box-shadow: 0 0 0 1px #3a280f, 0 3px 6px #0008; }
+.lk-door-note { position: relative; z-index: 2; width: min(460px, calc(100vw - 48px)); display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+  padding: 26px 30px 26px; border-radius: 6px;
+  background: radial-gradient(ellipse at 30% 15%, var(--cd-parch-hi), transparent 72%), linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #ffffff5c, inset 0 0 0 4px #f9eed5, inset 0 0 0 4.8px #9c7a4c4d, 0 0 0 1px var(--cd-wood-edge), 0 14px 40px #000b; }
+.lk-doors[data-state='loading'] .lk-door-note { background: none; box-shadow: none; color: var(--cd-cream); top: 30vh; }
+.lk-note-title { font: 30px/1.1 var(--cd-face-story); color: inherit; }
+.lk-doors[data-state='loading'] .lk-note-title { font: italic 18px/1.3 var(--cd-face-body); color: var(--cd-cream); text-shadow: 0 1px 2px #000c; }
+.lk-note-words { font: 17px/1.45 var(--cd-face-body); color: var(--cd-ink-soft); max-width: 40ch; }
+.lk-note-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+.lk-note-mark { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; color: var(--cd-brass-hi);
+  background: linear-gradient(176deg, var(--cd-wood-hi), var(--cd-wood-lo)); box-shadow: inset 0 0 0 2px var(--cd-brass-lo), 0 3px 0 #0005; }
+.lk-note-mark .ab-glyph { width: 32px; height: 32px; }
+/* A lantern breathing while the realm answers: never a spinner. */
+.lk-note-lamp { width: 26px; height: 26px; background: radial-gradient(circle, #ffe2a8 0 3px, #ffb45a 5px, #ffb45a33 9px, transparent 13px); box-shadow: none;
+  animation: lk-lamp 1.8s ease-in-out infinite; }
+@keyframes lk-lamp { 50% { opacity: .55; transform: scale(.86); } }
+.lk-signin { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; line-height: 50px; }
+.lk-twitch { width: 18px; height: 20px; flex: none; background: currentColor;
+  clip-path: polygon(10% 0, 100% 0, 100% 62%, 76% 86%, 52% 86%, 34% 100%, 34% 86%, 0 86%, 0 18%, 10% 0, 22% 14%, 22% 74%, 42% 74%, 42% 90%, 58% 74%, 72% 74%, 88% 58%, 88% 14%, 22% 14%); }
+
+/* ------------------------------------------------------------------ The mirror on a first walk */
+.lk-mirror-layer { position: absolute; inset: 0; z-index: 40; pointer-events: auto; }
+.lk-mirror-scene { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; overflow: auto; color: var(--cd-ink); font: 16px/1.4 var(--cd-face-body); font-synthesis: none; }
+.lk-mirror-scene *, .lk-mirror-scene *::before, .lk-mirror-scene *::after { box-sizing: border-box; }
+.lk-mirror-scene :where(h2, h3, p, figure) { margin: 0; }
+.lk-doors :where(p, h2) { margin: 0; }
+.lk-doors *, .lk-doors *::before, .lk-doors *::after { box-sizing: border-box; }
+.lk-doors :where(button) { font: inherit; color: inherit; margin: 0; appearance: none; -webkit-appearance: none; }
+.lk-mirror-scene :where(button) { font: inherit; color: inherit; margin: 0; appearance: none; -webkit-appearance: none; }
+.lk-mirror-scene :where(button):focus { outline: none; }
+.lk-mirror-scene :where(button):focus-visible { outline: var(--cd-focus-width) solid #7a531f; outline-offset: 3px; }
+.lk-mirror-dusk { position: absolute; inset: 0; background: radial-gradient(ellipse 50% 46% at 36% 52%, #ffb45a24, transparent 70%), radial-gradient(130% 100% at 50% 50%, #1b1230a6, #07040fe0);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: lk-fade .5s ease-out both; }
+.lk-mirror { position: relative; display: grid; grid-template-columns: auto minmax(0, 470px); gap: 40px; align-items: center; animation: lk-rise .5s .1s cubic-bezier(.2, .85, .25, 1) both; }
+/* The glass: an oval in a carved walnut frame with a brass bead, the citizen standing in it. */
+.lk-glass-frame { position: relative; display: flex; flex-direction: column; align-items: center; }
+.lk-glass { position: relative; display: block; width: min(330px, 34vw); aspect-ratio: 3 / 4.3; border-radius: 50% / 46%; overflow: hidden;
+  background: radial-gradient(ellipse 60% 40% at 50% 64%, #ffb46a40, transparent 70%), linear-gradient(178deg, #2a2050, #4a3462 55%, #6d4458);
+  box-shadow: 0 0 0 3px var(--cd-brass-lo), 0 0 0 5px var(--cd-brass), 0 0 0 6px #3a280f, 0 0 0 20px var(--cd-wood), 0 0 0 21px var(--cd-wood-edge), 0 0 0 23px #c99f5b55,
+    0 24px 60px #000c, inset 0 0 40px #0c0a1c99; }
+.lk-glass-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.lk-glass-sheen { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(118deg, transparent 30%, #ffffff1f 38%, transparent 46%, transparent 60%, #ffffff12 64%, transparent 70%); }
+.lk-glass-crest { position: absolute; top: -40px; z-index: 1; display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; color: var(--cd-ink);
+  background: linear-gradient(150deg, var(--cd-brass-hi), var(--cd-brass) 50%, var(--cd-brass-lo)); box-shadow: 0 0 0 1px #3a280f, 0 4px 8px #0008; }
+.lk-glass-crest .ab-glyph { width: 28px; height: 28px; }
+.lk-glass-plate { position: relative; z-index: 1; margin-top: 34px; padding: 8px 22px 9px; border-radius: 6px; font: 20px/1 var(--cd-face-story); color: var(--cd-ink);
+  background: linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 60%, var(--cd-brass-lo)); box-shadow: inset 0 1px 0 #fff6d8, 0 0 0 1px #3a280f, 0 4px 10px #0009; }
+.lk-mirror-card { display: flex; flex-direction: column; gap: 10px; padding: 26px 28px 22px; border-radius: 6px;
+  background: radial-gradient(ellipse at 30% 12%, var(--cd-parch-hi), transparent 72%), linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #ffffff5c, inset 0 0 0 4px #f9eed5, inset 0 0 0 4.8px #9c7a4c4d, 0 0 0 1px var(--cd-wood-edge), 0 0 0 7px var(--cd-wood), 0 0 0 8px var(--cd-wood-edge), 0 24px 60px #000b; }
+.lk-mirror-eyebrow { font: italic 16px/1.2 var(--cd-face-body); color: #6b4a1a; }
+.lk-mirror-title { font: 40px/1 var(--cd-face-story); color: var(--cd-ink); }
+.lk-mirror-lead { font: 17px/1.4 var(--cd-face-body); color: var(--cd-ink-soft); }
+.lk-mirror-row { display: grid; gap: 7px; padding-top: 10px; border-top: 1px dashed #9c7a4c66; }
+.lk-mirror-label { font: 19px/1 var(--cd-face-story); color: var(--cd-ink); font-weight: 400; }
+.lk-picks { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: none; }
+.lk-picks::-webkit-scrollbar { display: none; }
+.lk-pick { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 66px; padding: 3px; border: 0; border-radius: 8px; background: none; cursor: pointer;
+  transition: transform .12s cubic-bezier(.3, 1.4, .5, 1); }
+.lk-pick:hover:not(:disabled) { transform: translateY(-2px); }
+.lk-pick:active:not(:disabled) { transform: translateY(1px) scale(.97); }
+.lk-pick:disabled { cursor: default; }
+.lk-pick .ab-thumb { border-radius: 50%; }
+.lk-pick-name { font: 13px/1.1 var(--cd-face-body); color: var(--cd-ink-soft); text-align: center; }
+.lk-pick.lk-chosen .ab-thumb { box-shadow: 0 0 0 2px var(--cd-brass), 0 0 0 3.5px var(--cd-brass-lo), 0 3px 8px #6b4a2a66; }
+.lk-pick.lk-chosen .lk-pick-name { color: var(--cd-ink); font-weight: 700; }
+.lk-colours { padding: 2px 2px 4px; }
+.lk-colours .ab-swatch { width: 30px; height: 30px; }
+.lk-mirror-status { min-height: 1.4em; font: italic 16px/1.35 var(--cd-face-body); color: var(--cd-ink-soft); }
+.lk-mirror-status[data-state='refused'] { color: var(--cd-ink-alarm); font-style: normal; }
+.lk-mirror-status[data-state='saved'] { color: #6b4a1a; }
+.lk-mirror-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.lk-mirror-small { font: italic 14px/1.35 var(--cd-face-body); color: var(--cd-ink-soft); }
+@media (max-width: 820px) {
+  .lk-mirror-scene { padding: 46px 12px 16px; place-items: start center; }
+  .lk-mirror { grid-template-columns: minmax(0, 1fr); gap: 18px; justify-items: center; }
+  .lk-glass { width: min(150px, 40vw); }
+  .lk-glass-crest { top: -30px; width: 42px; height: 42px; }
+  .lk-glass-plate { margin-top: 26px; font-size: 17px; padding: 6px 16px 7px; }
+  .lk-mirror-card { padding: 18px 16px 16px; gap: 8px; width: 100%; }
+  .lk-mirror-title { font-size: 32px; }
+  .lk-mirror-lead { font-size: 15px; }
+  .lk-pick { width: 58px; }
+  /* The two answers stay in reach while the picks scroll under them. */
+  .lk-mirror-actions { position: sticky; bottom: -16px; z-index: 1; margin: 0 -16px -16px; padding: 12px 16px 14px;
+    background: linear-gradient(180deg, #e9d6ab00, var(--cd-parch-lo) 26%); }
+}
+
+/* ------------------------------------------------------------------ The ledger's "Your look" page */
+.lk-ledger { min-height: 100%; }
+.lk-ledger-wait { min-height: 100%; display: grid; place-items: center; align-content: center; gap: 14px; text-align: center; padding: 30px 0; }
+.lk-ledger-spread { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 40px; align-items: start; padding-top: 6px; }
+.lk-ledger-portrait { display: flex; flex-direction: column; align-items: center; gap: 12px; margin: 0; }
+.lk-ledger-frame { display: block; width: 240px; height: 240px; padding: 7px; border-radius: 50%;
+  background: linear-gradient(150deg, var(--cd-brass-hi), var(--cd-brass) 40%, var(--cd-brass-lo));
+  box-shadow: 0 0 0 1px #3a280f, 0 0 0 10px #5b3b27, 0 0 0 11px #24160d, 0 10px 24px #3b220f80, inset 0 1px 0 #fff3cc; }
+.lk-ledger-frame img { display: block; width: 100%; height: 100%; border-radius: 50%; }
+.lk-ledger-name { margin-top: 10px; padding: 7px 18px 8px; border-radius: 5px; font: 21px/1 var(--cd-face-story); color: var(--cd-ink);
+  background: linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 60%, var(--cd-brass-lo)); box-shadow: inset 0 1px 0 #fff6d8, 0 0 0 1px #3a280f, 0 3px 6px #3b220f66; }
+.lk-ledger-words { display: grid; gap: 22px; min-width: 0; }
+.lk-wearing { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.lk-wearing-row { display: flex; align-items: center; gap: 10px; min-height: 30px; font: 17px/1.25 var(--cd-face-body); }
+.lk-wearing-part { flex: none; font: italic 16px/1.2 var(--cd-face-body); color: var(--cd-ink-soft); }
+.lk-wearing-leader { flex: 1; min-width: 16px; height: 1px; translate: 0 4px; background: repeating-linear-gradient(90deg, #8a6a4699 0 2px, transparent 2px 6px); }
+.lk-wearing-name { flex: none; color: var(--cd-ink); }
+.lk-wearing-emblem svg { width: 26px; }
+.lk-wearing-emblem[data-emblem='ribbons'] svg { width: 24px; }
+.lk-wearing-emblem .ab-emblem-caption { display: none; }
+.lk-open { justify-self: start; margin-top: 0; }
+.lk-open .ab-glyph { width: 22px; height: 22px; color: var(--cd-brass-hi); }
+@media (max-width: 820px) {
+  .lk-ledger-spread { grid-template-columns: minmax(0, 1fr); gap: 18px; justify-items: center; }
+  .lk-ledger-frame { width: 160px; height: 160px; }
+  .lk-ledger-words { justify-items: stretch; width: 100%; }
+  .lk-open { justify-self: center; }
+}
+
+.bench-street { position: fixed; inset: 0; background: linear-gradient(180deg, #2a2148, #4a2f4f 60%, #3a2a2a); }
+/* The dev bench's contact sheet of pieces. */
+.bp { min-height: 100vh; padding: 28px 32px 48px; box-sizing: border-box; color: var(--cd-ink); font: 15px/1.4 var(--cd-face-body);
+  background: radial-gradient(ellipse at 30% 0, var(--cd-parch-hi), transparent 70%), linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo)); }
+.bp-head { display: flex; align-items: baseline; gap: 18px; border-bottom: 1px solid #9c7a4c66; padding-bottom: 10px; margin-bottom: 8px; }
+.bp-head h1 { margin: 0; font: 34px/1 var(--cd-face-story); }
+.bp-head p { margin: 0; font-style: italic; color: var(--cd-ink-soft); }
+.bp-kind h2 { margin: 22px 0 10px; font: 24px/1 var(--cd-face-story); }
+.bp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.bp-piece { margin: 0; display: grid; grid-template-rows: auto 1fr; gap: 8px; padding: 10px; border-radius: 8px; background: #fff8e852; box-shadow: inset 0 0 0 1px #9c7a4c55; }
+.bp-piece[data-tier='fun'] { box-shadow: inset 0 0 0 1.5px #b8476a88; }
+.bp-thumb { width: 100%; height: auto; aspect-ratio: 1; }
+.bp-thumb img { width: 100%; height: 100%; display: block; }
+.bp-piece figcaption { display: grid; gap: 3px; }
+.bp-name { font: 19px/1.1 var(--cd-face-story); }
+.bp-tier { font: italic 13px/1.2 var(--cd-face-body); color: #6b4a1a; }
+.bp-story { font: 14px/1.35 var(--cd-face-body); color: var(--cd-ink-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-overlay-frame, .lk-overlay-frame > .ab, .lk-mirror, .lk-mirror-dusk, .lk-note-lamp { animation-duration: 1ms !important; animation-iteration-count: 1 !important; }
+  .lk-pick { transition: none; }
+}

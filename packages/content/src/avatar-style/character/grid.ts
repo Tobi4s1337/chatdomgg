@@ -17,7 +17,14 @@ export const SLOTS = [
   // Earned pieces: the month ribbons, the tenure hood, two pins, the raid scarf, the forged hat's motif.
   'ribbon1', 'ribbon2', 'hood', 'hoodDeep', 'hoodTrim',
   'pin1a', 'pin1b', 'pin1m', 'pin2a', 'pin2b', 'pin2m', 'raidA', 'raidB', 'raidDeep', 'forgeMetal',
+  // Fey ears (skin or a tint), face paint, an earring's pearl, tassel or cherry, the white and ink of a hat's
+  // eyes and spots, and a held toy.
+  'ear', 'earDeep', 'earTuft', 'paint', 'bead',
+  'hatWhite', 'hatInk',
+  'held', 'heldDeep', 'heldTwo', 'heldThree', 'heldGlow', 'heldInk',
 ] as const;
+/** The slots of a held toy: they ride the hand that holds it, wherever the arm swings. */
+export const HELD_SLOTS: readonly Slot[] = ['held', 'heldDeep', 'heldTwo', 'heldThree', 'heldGlow', 'heldInk'];
 /** Slots that are glass: meshed apart and drawn see-through, so the eyes show behind a lens. */
 export const GLASS_SLOTS: readonly Slot[] = ['lens'];
 export type Slot = typeof SLOTS[number];

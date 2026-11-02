@@ -102,12 +102,11 @@ const project = (p: THREE.Vector3): { x: number; y: number } => {
 
 function describe(): void {
   const option = document.querySelector('#option')!, title = document.querySelector('#title')!, summary = document.querySelector('#summary')!, facts = document.querySelector('#facts')!;
-  const sim = '<span class="simulated">SIMULATED REVIEW PEOPLE · FIVE EVERYDAY LOOKS</span>';
   if (styleId === 'current') {
     option.textContent = 'Reference · not an option';
     title.textContent = 'Today’s citizen';
     summary.textContent = 'The wardrobe as it stands, posed and lit exactly as the three options.';
-    facts.innerHTML = `<b>1.50 m</b> tall · head <b>33%</b> of height<br>24 cells · 6.25 cm voxels<br>${sim}`;
+    facts.innerHTML = `<b>1.50 m</b> tall · head <b>33%</b> of height<br>24 cells · 6.25 cm voxels`;
     return;
   }
   const s = avatarStyle(styleId);
@@ -115,7 +114,7 @@ function describe(): void {
   title.textContent = s.name;
   summary.textContent = s.summary;
   const head = Math.round((s.head.y[1] - s.head.y[0]) / s.height * 100);
-  facts.innerHTML = `<b>${(s.height * M).toFixed(2)} m</b> tall · head <b>${head}%</b> of height<br>${s.height} cells · 6.25 cm voxels<br>${sim}`;
+  facts.innerHTML = `<b>${(s.height * M).toFixed(2)} m</b> tall · head <b>${head}%</b> of height<br>${s.height} cells · 6.25 cm voxels`;
 }
 
 try {
@@ -138,7 +137,7 @@ try {
   scene.add(staff);
   scene.updateMatrixWorld(true);
   capes.beginFrame(0, [0, 0]);
-  roots.forEach(({ back, cape }, i) => { if (cape) capes.add({ id: `simulated-${i}`, heading: CONTROLS.heading, distance: 0, speed: 0 }, cape, back.matrixWorld); });
+  roots.forEach(({ back, cape }, i) => { if (cape) capes.add({ id: `citizen-${i}`, heading: CONTROLS.heading, distance: 0, speed: 0 }, cape, back.matrixWorld); });
   capes.endFrame();
   renderer.render(scene, camera);
   pool.dispose();
@@ -151,7 +150,7 @@ try {
     const el = document.createElement('div');
     el.className = 'label';
     el.style.left = `${at.x}px`; el.style.top = `${at.y}px`;
-    el.innerHTML = `${fixture.label}<small>SIMULATED</small><em>${fixture.expect.family} · ${fixture.expect.hair.replace(/([A-Z])/g, ' $1').toLowerCase()}${fixture.expect.cloak ? ' · cloak' : ''}</em>`;
+    el.innerHTML = `${fixture.label}<em>${fixture.expect.family} · ${fixture.expect.hair.replace(/([A-Z])/g, ' $1').toLowerCase()}${fixture.expect.cloak ? ' · cloak' : ''}</em>`;
     labels.append(el);
     bottom = Math.max(bottom, at.y + 70);
   });

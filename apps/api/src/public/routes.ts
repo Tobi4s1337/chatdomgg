@@ -44,6 +44,7 @@ export function classify(pathname: string, search: string): PublicRoute {
   if (AUTH.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/dock\/(?:status|actions|presentations|witness)$/.test(pathname)) return { kind: 'dock' };
   if (REALM_READ.test(pathname)) return { kind: 'realm' };
+  if (/^\/api\/realm\/looks\/(?:me|lk\.[a-f0-9]{40}|[a-z]{1,16})$/.test(pathname)) return { kind: 'realm' };
   if (pathname === REALM_PREFIX || pathname.startsWith(`${REALM_PREFIX}/`)) {
     const upstream = pathname.slice(REALM_PREFIX.length);
     // Literal route grammar deliberately accepts no percent escapes, repeated prefixes or arbitrary tails:

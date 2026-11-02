@@ -8,6 +8,7 @@ import { sampleFoundedTerrain } from '@chatdom/world/founded-collision';
 import { createWalkerGround } from '../walk/ground';
 import type { InteractionRegistry } from '@chatdom/world/interactions';
 import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
+import { sharedCitizenLooks } from '../citizens/look-library';
 import type { RealmWalkerPose } from '../realm/client';
 import type { WalkerLabel } from './walk-scene';
 import { presentWalkers, type WalkerPresentation } from './walker-presentation';
@@ -70,8 +71,9 @@ export function createObservedWalkerTrack(manifest: WalkerScene) {
 export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Camera, canvas: HTMLCanvasElement,
   pool: VoxelWorkerPool, material: VoxelRenderState, manifest: WalkerScene, feed: RealmWalkerFeed, registry: InteractionRegistry,
   land?: { readonly plan: SettlementPlan; readonly world: CollisionWorld }) {
-  const looks = createDefaultCitizenLooks(), known = new Set(looks.map(look => look.id));
-  const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool });
+  const looks = createDefaultCitizenLooks(), library = sharedCitizenLooks();
+  const ready = (look: string) => library.has(look) || (library.request(look), false);
+  const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool, library });
   // The nearest walkers in full, the rest as simple figures, crossfading at the boundary.
   const split = createWalkerSplit(), inView = createWalkerViewTest(), figures = createWalkerFigures(scene, material);
   const track = createObservedWalkerTrack(manifest);
@@ -90,8 +92,9 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
     draw(now: number, visible = true) {
       // A walker whose look is not here yet is still a person in the street: a simple figure until it is.
       const parts = split.split(visible ? poses : [], eye.setFromMatrixPosition(camera.matrixWorld), now, inView(camera));
-      const full = parts.full.filter(({ pose }) => known.has(pose.look));
-      const simple = [...parts.simple, ...parts.full.filter(({ pose }) => !known.has(pose.look))];
+      for (const { pose } of parts.simple) ready(pose.look);
+      const full = parts.full.filter(({ pose }) => ready(pose.look));
+      const simple = [...parts.simple, ...parts.full.filter(({ pose }) => !ready(pose.look))];
       const dt = lastDraw === null ? 0 : Math.max(0, Math.min(.1, (now - lastDraw) / 1000));
       lastDraw = now;
       heights.clear();

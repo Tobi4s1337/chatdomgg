@@ -1,5 +1,6 @@
 import { isHex, luma, rgb, type Hex } from './colour';
-import { BOTTOM_CLOTH, DYES, LEATHER, LENS_TINTS, METALS, NATURAL_HAIR, PETALS, SKIN_TONES, STRAW, WILD_HAIR } from './palette';
+import { BOTTOM_CLOTH, DYES, FEY_TINTS, LEAF_GREEN, LEATHER, LENS_TINTS, METALS, NATURAL_HAIR, PETALS, SKIN_TONES, STRAW, WILD_HAIR } from './palette';
+import { checkHarmful } from './safety';
 
 /*
  * The citizen look recipe (spec 49). A recipe is what a person saves and what everyone else receives: pure
@@ -27,24 +28,43 @@ export type BeardStyleId = typeof BEARD_STYLE_IDS[number];
 export const MOUSTACHE_STYLE_IDS = ['walrus', 'handlebar', 'horseshoe'] as const;
 export type MoustacheStyleId = typeof MOUSTACHE_STYLE_IDS[number];
 /** `colour` is the crown (the straw, the felt, the knit); `trim` is the bill, band, cuff and pompom. */
-export const HAT_STYLE_IDS = ['cap', 'cap-backwards', 'beanie', 'straw-hat', 'pointed-hat'] as const;
+export const HAT_STYLE_IDS = [
+  'cap', 'cap-backwards', 'beanie', 'straw-hat', 'pointed-hat',
+  'beret', 'bucket-hat', 'top-hat', 'flat-cap', 'flower-crown', 'earflap-hat',
+  'frog-hat', 'teapot-hat', 'party-cone', 'fish-hat', 'chef-toque', 'propeller-cap', 'antler-band', 'nightcap', 'toadstool-cap', 'bee-antennae',
+] as const;
 export type HatStyleId = typeof HAT_STYLE_IDS[number];
-export const GLASSES_STYLE_IDS = ['round', 'square', 'goggles'] as const;
+export const GLASSES_STYLE_IDS = ['round', 'square', 'goggles', 'shades', 'half-moon', 'heart', 'star', 'monocle'] as const;
 export type GlassesStyleId = typeof GLASSES_STYLE_IDS[number];
-export const EARRING_STYLE_IDS = ['stud', 'hoop', 'drop'] as const;
+export const EARRING_STYLE_IDS = ['stud', 'hoop', 'drop', 'crescent', 'pearl', 'tassel', 'cherries'] as const;
 export type EarringStyleId = typeof EARRING_STYLE_IDS[number];
 /** What is worn next to the skin (spec L5). A robe is a top that reaches the shins. */
-export const TOP_STYLE_IDS = ['tee', 'tank', 'shirt', 'hoodie', 'sweater', 'robe'] as const;
+export const TOP_STYLE_IDS = ['tee', 'tank', 'shirt', 'hoodie', 'sweater', 'robe', 'turtleneck', 'tunic', 'sailor', 'raglan'] as const;
 export type TopStyleId = typeof TOP_STYLE_IDS[number];
-/** Worn open over the top, so the top shows down the front: the reference's layered look. */
-export const OUTER_STYLE_IDS = ['jacket', 'vest', 'overshirt', 'coat'] as const;
+/**
+ * Worn over the top. The first four and the cardigan are worn open, so the top shows down the front (the
+ * reference's layered look); a cloak sits on the shoulders, a poncho and a puffer close, an apron ties on.
+ */
+export const OUTER_STYLE_IDS = ['jacket', 'vest', 'overshirt', 'coat', 'cardigan', 'cloak', 'poncho', 'puffer', 'apron'] as const;
 export type OuterStyleId = typeof OUTER_STYLE_IDS[number];
-export const BOTTOM_STYLE_IDS = ['trousers', 'shorts', 'skirt', 'overalls'] as const;
+export const BOTTOM_STYLE_IDS = ['trousers', 'shorts', 'skirt', 'overalls', 'rolled-trousers', 'cargo-trousers', 'shortalls'] as const;
 export type BottomStyleId = typeof BOTTOM_STYLE_IDS[number];
-export const NECKWEAR_STYLE_IDS = ['scarf', 'tie', 'bowtie', 'bandana'] as const;
+export const NECKWEAR_STYLE_IDS = ['scarf', 'tie', 'bowtie', 'bandana', 'pendant', 'beads', 'cowl', 'ruff'] as const;
 export type NeckwearStyleId = typeof NECKWEAR_STYLE_IDS[number];
-export const SHOE_STYLE_IDS = ['sneakers', 'boots', 'shoes'] as const;
+export const SHOE_STYLE_IDS = ['sneakers', 'boots', 'shoes', 'clogs', 'sandals', 'wellies', 'slippers', 'curly-toes'] as const;
 export type ShoeStyleId = typeof SHOE_STYLE_IDS[number];
+/** Fey ears (Artstyle: people with fey touches), in the skin or a fey tint. They come out through any hair or hat. */
+export const EAR_STYLE_IDS = ['pointed', 'long-fey', 'tufted', 'droopy', 'leaf', 'petite'] as const;
+export type EarStyleId = typeof EAR_STYLE_IDS[number];
+/** Small festival face paint on the cheeks and round the eyes; never the whole face, never round the mouth. */
+export const FACE_PAINT_STYLE_IDS = ['cheek-stripes', 'cheek-star', 'paint-dots', 'heart', 'daisy', 'mask-band'] as const;
+export type FacePaintStyleId = typeof FACE_PAINT_STYLE_IDS[number];
+/** A toy carried in the person's right hand. Storybook things only: never a real weapon, never a brand. */
+export const HELD_STYLE_IDS = [
+  'rubber-duck', 'paper-lantern', 'balloon', 'teddy', 'wooden-sword', 'bouquet', 'cider-mug',
+  'baguette', 'paper-windmill', 'frog-plush', 'cupcake', 'ice-cream', 'storybook', 'star-wand',
+] as const;
+export type HeldStyleId = typeof HELD_STYLE_IDS[number];
 /**
  * Painted voxel patterns. `stripes` are rows of the accent, `plaid` a buffalo check (the accent where the bands
  * cross, a blend where one passes), `dots` a scatter of accent cells, `print` a block on the chest.
@@ -128,7 +148,25 @@ export interface CitizenLook {
   readonly shoes: { readonly style: ShoeStyleId; readonly dye: Hex };
   /** What this person has earned and chose to wear. A look saved before earned pieces existed wears none. */
   readonly earned: EarnedLook;
+  /*
+   * The parts added with the second wardrobe. They are left out of a look that does not wear them (never
+   * written as null), so every look saved before they existed parses to exactly the same recipe and keeps its
+   * look token.
+   */
+  /** Fey ears; `tint` null wears them in the skin. */
+  readonly ears?: EarsPart;
+  /** Face paint from the paint pot (`FACE_PAINTS`). */
+  readonly facePaint?: FacePaintPart;
+  /** A toy in the right hand; `colour` dyes its main part (the duck, the balloon, the petals, the cover). */
+  readonly held?: HeldPart;
 }
+
+export interface EarsPart { readonly style: EarStyleId; readonly tint: Hex | null }
+export interface FacePaintPart { readonly style: FacePaintStyleId; readonly colour: Hex }
+export interface HeldPart { readonly style: HeldStyleId; readonly colour: Hex }
+
+/** The second wardrobe's parts, which a look leaves out rather than writing as null. */
+export const NEW_PARTS = ['ears', 'facePaint', 'held'] as const;
 
 /** What a look saved before the wardrobe existed is wearing below the waist. */
 export const DEFAULT_BOTTOM: Garment<BottomStyleId> = { style: 'trousers', dye: '#2f4f86', pattern: 'plain', accent: '#1e1d22' };
@@ -160,10 +198,12 @@ const record = (value: unknown, what: string, keys: readonly string[]): Record<s
   return value as Record<string, unknown>;
 };
 const part = <T>(value: unknown, read: (v: unknown) => T): T | null => (value === undefined || value === null ? null : read(value));
+/** A second-wardrobe part as a key to spread: absent when not worn. */
+const withPart = <K extends typeof NEW_PARTS[number], T>(key: K, value: T | null): { [P in K]?: T } => (value === null ? {} : { [key]: value } as { [P in K]?: T });
 
 /** Validates untrusted input (a saved look, a realm message) into a recipe. Unknown keys are refused. */
 export function parseLook(input: unknown): CitizenLook {
-  const v = record(input, 'Look', ['version', 'skin', 'eyes', 'freckles', 'blush', 'hair', 'beard', 'top', ...OPTIONAL_PARTS, ...WARDROBE_PARTS]);
+  const v = record(input, 'Look', ['version', 'skin', 'eyes', 'freckles', 'blush', 'hair', 'beard', 'top', ...OPTIONAL_PARTS, ...WARDROBE_PARTS, ...NEW_PARTS]);
   if (v.version !== 1) throw new Error('Unsupported look version.');
   const eyes = record(v.eyes, 'Eyes', ['shape', 'spacing']), hair = record(v.hair, 'Hair', ['style', 'colour']);
   if (typeof v.blush !== 'boolean') throw new Error('Blush must be true or false.');
@@ -209,6 +249,18 @@ export function parseLook(input: unknown): CitizenLook {
       return { style: oneOf(SHOE_STYLE_IDS, r.style, 'shoes'), dye: colour(r.dye, 'Shoe dye') };
     })(),
     earned: v.earned === undefined ? NO_EARNED : parseEarned(v.earned),
+    ...withPart('ears', part(v.ears, e => {
+      const r = record(e, 'Ears', ['style', 'tint']);
+      return { style: oneOf(EAR_STYLE_IDS, r.style, 'ears'), tint: r.tint === undefined || r.tint === null ? null : colour(r.tint, 'Ear tint') };
+    })),
+    ...withPart('facePaint', part(v.facePaint, f => {
+      const r = record(f, 'Face paint', ['style', 'colour']);
+      return { style: oneOf(FACE_PAINT_STYLE_IDS, r.style, 'face paint'), colour: colour(r.colour, 'Face paint colour') };
+    })),
+    ...withPart('held', part(v.held, h => {
+      const r = record(h, 'Held', ['style', 'colour']);
+      return { style: oneOf(HELD_STYLE_IDS, r.style, 'held toy'), colour: colour(r.colour, 'Held toy colour') };
+    })),
   };
   if (look.hat && look.earned.forgedHat) throw new Error('A look wears a hat or a forged hat, not both.');
   if (look.neckwear && look.earned.scarf) throw new Error('A look wears neckwear or the raid scarf, not both.');
@@ -346,9 +398,10 @@ export function seedLook(seed: string): CitizenLook {
     colour: pick(random, METALS).hex,
     lens: glassesStyle === 'goggles' ? pick(random, [LENS_TINTS[4], LENS_TINTS[3], LENS_TINTS[2]]).hex : pick(random, LENS_TINTS.slice(0, 4)).hex,
   };
-  const earrings = random() < .14 ? { style: pick(random, EARRING_STYLE_IDS), colour: pick(random, METALS.slice(0, 3)).hex } : null;
+  // The first shelf of earrings, so a seed draws what it always drew; the second shelf comes after.
+  const earrings = random() < .14 ? { style: pick(random, ['stud', 'hoop', 'drop'] as const), colour: pick(random, METALS.slice(0, 3)).hex } : null;
   const flower = !beard && random() < .07 ? { colour: pick(random, PETALS).hex } : null;
-  return {
+  return seedSecondWardrobe(seed, {
     version: 1,
     skin,
     eyes: {
@@ -366,7 +419,49 @@ export function seedLook(seed: string): CitizenLook {
     flower,
     ...seedClothes(random),
     earned: NO_EARNED,
-  };
+  });
+}
+
+/** The second wardrobe's free base set, as a newcomer may be seeded with it. Funny pieces are chosen, never seeded. */
+const SEEDED_HATS = ['beret', 'bucket-hat', 'top-hat', 'flat-cap', 'flower-crown', 'earflap-hat'] as const satisfies readonly HatStyleId[];
+
+/**
+ * Newcomers sometimes wear a piece from the second wardrobe's free base set: fey ears on a few, and now and
+ * then a newer hat, top, layer, pair of glasses or shoes in place of the one drawn. These draws come from their
+ * own stream, so the odds of everything seeded before stay as they were. A seeded look is never one
+ * `checkHarmful` refuses: if the draw makes one, the hat comes off.
+ */
+function seedSecondWardrobe(seed: string, look: CitizenLook): CitizenLook {
+  const random = seededRandom(`citizen-look-2:${seed}`);
+  let next: CitizenLook = look;
+  const earStyle = random() < .07 ? pick(random, EAR_STYLE_IDS) : null;
+  if (earStyle) next = { ...next, ears: { style: earStyle, tint: random() < .2 ? pick(random, FEY_TINTS).hex : null } };
+  if (next.hat && random() < .35) {
+    const style = pick(random, SEEDED_HATS);
+    const colour = style === 'flower-crown' ? LEAF_GREEN : style === 'top-hat' ? pick(random, [DYES[14], DYES[15], DYES[10], DYES[1]]).hex : next.hat.colour;
+    next = { ...next, hat: { style, colour, trim: style === 'flower-crown' ? pick(random, PETALS).hex : next.hat.trim } };
+  }
+  if (next.glasses && random() < .2) {
+    next = random() < .5 ? { ...next, glasses: { ...next.glasses, style: 'shades', lens: LENS_TINTS[4].hex } } : { ...next, glasses: { ...next.glasses, style: 'half-moon', lens: LENS_TINTS[0].hex } };
+  }
+  if (next.earrings && random() < .3) next = { ...next, earrings: { ...next.earrings, style: pick(random, ['crescent', 'pearl', 'tassel'] as const) } };
+  if (next.top.style !== 'robe' && random() < .12) {
+    const style = pick(random, ['turtleneck', 'tunic', 'sailor', 'raglan'] as const);
+    next = { ...next, top: { ...next.top, style, pattern: style === 'tunic' || style === 'raglan' ? 'plain' : next.top.pattern === 'stripes' ? 'stripes' : 'plain' } };
+  }
+  if (next.outer && random() < .25) {
+    const style = pick(random, ['cardigan', 'cloak', 'poncho', 'puffer', 'apron'] as const);
+    next = { ...next, outer: { ...next.outer, style, pattern: style === 'poncho' && random() < .5 ? 'stripes' : 'plain' } };
+  }
+  if (next.top.style !== 'robe' && next.top.style !== 'tunic' && random() < .1) {
+    next = { ...next, bottom: { ...next.bottom, style: pick(random, ['rolled-trousers', 'cargo-trousers', 'shortalls'] as const), pattern: 'plain' } };
+  }
+  if (next.neckwear && random() < .3) next = { ...next, neckwear: { ...next.neckwear, style: pick(random, ['pendant', 'beads', 'cowl'] as const) } };
+  if (random() < .15) {
+    const style = pick(random, ['clogs', 'sandals', 'wellies'] as const);
+    next = { ...next, shoes: { style, dye: style === 'wellies' ? pick(random, [DYES[4], DYES[1], DYES[6], DYES[10], DYES[15]]).hex : pick(random, LEATHER).hex } };
+  }
+  return checkHarmful(next).length ? { ...next, hat: null } : next;
 }
 
 /** Two dyes that read as different garments: apart in lightness or clearly apart in hue. */
@@ -393,6 +488,10 @@ function seedClothes(random: () => number): Pick<CitizenLook, 'top' | 'outer' | 
     hoodie: [['plain', 5], ['print', 1.2]],
     sweater: [['plain', 4], ['stripes', 2]],
     robe: [['plain', 1]],
+    turtleneck: [['plain', 4], ['stripes', 1.4]],
+    tunic: [['plain', 1]],
+    sailor: [['plain', 3], ['stripes', 1]],
+    raglan: [['plain', 4], ['print', 1]],
   };
   const topDye = pick(random, DYES).hex;
   const topPattern = weighted(random, topPatterns[topStyle]);

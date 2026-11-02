@@ -18,6 +18,7 @@ import { createServer as createPortReservation } from 'node:net';
 import { realmListenHost, realmListenPort } from './listen-port';
 import { ownRealmShutdown } from './lifecycle';
 import { RealmPortalArrivals, installPortalArrivals } from './portals/arrivals';
+import { createRealmLooks } from './look';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -72,15 +73,19 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   }
   const castle = createRealmCastle({ origin, kingdomNames: names, safetyKey: evidenceKey });
   const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names, castle: castle.observe, evidenceKey });
+  // Saved looks: GET/PUT /api/realm/looks/…, checked against verified records, worn live by walkers already in a room.
+  const looks = createRealmLooks({ pool, origin, verifier, names, scene: kingdomId => boot.loader.current(kingdomId)?.scene,
+    publicOrigin: process.env.REALM_PUBLIC_ORIGIN, log: line => console.info(line) });
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
     repositoryOptions: gate.install({ origin, guards: [castle.guard] }), furnish: citizens.furnish,
     attach: kingdom => {
+      const detachLooks = looks.attach(kingdom);
       const detachEvening = evening.attach(kingdom);
       const detachInteractions = attachEveningInteractions(kingdom, { auth: boot.services.auth,
         scene: () => boot.loader.current(kingdom.kingdomId)?.scene });
-      return () => { detachInteractions(); detachEvening(); };
+      return () => { detachInteractions(); detachEvening(); detachLooks(); };
     },
   });
   citizens.use(boot.allocation, boot.services);
@@ -96,6 +101,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); } });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
+  looks.mount(transport.app);
   ownRealmShutdown(server, transport, async () => {
     dock.stop();
     try { await evening.stop(); }

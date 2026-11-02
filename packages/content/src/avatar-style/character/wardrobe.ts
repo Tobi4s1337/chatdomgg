@@ -64,7 +64,19 @@ function crewNeck(g: VoxelGrid, deep: Slot): void {
 }
 
 /** Rows a top covers from: a tee or shirt stops at the waistband, a hoodie or sweater hangs over it. */
-const TOP_HEM: Record<TopStyleId, number> = { tee: 10, tank: 10, shirt: 10, hoodie: 9, sweater: 9, robe: 9 };
+const TOP_HEM: Record<TopStyleId, number> = {
+  tee: 10, tank: 10, shirt: 10, hoodie: 9, sweater: 9, robe: 9, turtleneck: 9, tunic: 6, sailor: 10, raglan: 10,
+};
+
+/** A ring of cells round the neck at the collar row, outside the neck itself. */
+function neckRing(g: VoxelGrid, slot: Slot, grow = 0): void {
+  const [x0, x1] = [NECK.x[0] - 1 - grow, NECK.x[1] + grow], [z0, z1] = [NECK.z[0] - 1 - grow, NECK.z[1] + grow];
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+    const inside = x >= NECK.x[0] && x < NECK.x[1] && z >= NECK.z[0] && z < NECK.z[1];
+    const corner = grow > 0 && (x === x0 || x === x1) && (z === z0 || z === z1);
+    if (!inside && !corner) g.set(x, NECK.y[0], z, slot);
+  }
+}
 
 export function drawTop(g: VoxelGrid, style: TopStyleId, pattern: PatternId): void {
   const hem = TOP_HEM[style];
@@ -123,6 +135,44 @@ export function drawTop(g: VoxelGrid, style: TopStyleId, pattern: PatternId): vo
       set(g, [[0, hem, PROUD_Z], [0, hem - 1, PROUD_Z], [0, hem - 2, PROUD_Z]], 'topAccent');
       break;
     }
+    case 'turtleneck':
+      // A ribbed roll collar right up the neck, long sleeves to the wrist, a ribbed hem.
+      g.paint([NECK.x[0], NECK.y[0], NECK.z[0]], [NECK.x[1], NECK.y[1], NECK.z[1]], 'top');
+      neckRing(g, 'top');
+      rib(g, NECK.y[0], 'top', 'topDeep');
+      arms(g, ARM.hand, ARM.y[1], 'top');
+      arms(g, ARM.hand, ARM.hand + 1, 'topDeep');
+      rib(g, hem, 'top', 'topDeep');
+      break;
+    case 'tunic':
+      // Down over the hips, laced at the neck, a belt with a brass buckle, long sleeves with deep cuffs.
+      g.paint([HIPS.x[0], hem, HIPS.z[0]], [HIPS.x[1], HIPS.y[1], HIPS.z[1]], 'top');
+      for (let x = TX0; x < TX1; x++) for (let z = TZ0; z < TZ1; z++) if (g.get(x, hem, z) === 'top') g.set(x, hem, z, 'topDeep');
+      crewNeck(g, 'topDeep');
+      set(g, [[-1, SHOULDER - 1, CHEST_Z], [0, SHOULDER - 1, CHEST_Z]], 'skin');
+      set(g, [[-1, SHOULDER - 2, CHEST_Z], [0, SHOULDER - 1, CHEST_Z]], 'topTrim');
+      torso(g, 9, 10, 'topDeep');
+      g.set(-1, 9, PROUD_Z, 'button');
+      arms(g, ARM.hand, ARM.y[1], 'top');
+      arms(g, ARM.hand, ARM.hand + 1, 'topDeep');
+      break;
+    case 'sailor':
+      // A V neck edged in the accent, a knotted tie, the square sailor's collar lying flat down the back.
+      crewNeck(g, 'topDeep');
+      set(g, [[-1, SHOULDER - 1, CHEST_Z], [0, SHOULDER - 1, CHEST_Z]], 'skin');
+      set(g, [[-2, SHOULDER, CHEST_Z], [1, SHOULDER, CHEST_Z], [-2, SHOULDER - 1, CHEST_Z], [1, SHOULDER - 1, CHEST_Z]], 'topAccent');
+      set(g, [[-1, SHOULDER - 2, PROUD_Z], [0, SHOULDER - 2, PROUD_Z], [-1, SHOULDER - 3, PROUD_Z]], 'topTrim');
+      for (let x = TX0 + 1; x < TX1 - 1; x++) for (let y = SHOULDER - 2; y <= SHOULDER; y++) g.set(x, y, BACK_Z - 1, y === SHOULDER - 2 ? 'topTrim' : 'topAccent');
+      arms(g, 12, ARM.y[1], 'top');
+      arms(g, 12, 13, 'topAccent');
+      break;
+    case 'raglan':
+      // A baseball tee: the sleeves and the shoulder seams in the accent, sleeves to below the elbow.
+      crewNeck(g, 'topDeep');
+      arms(g, 10, ARM.y[1], 'topAccent');
+      for (const x of [TX0, TX1 - 1]) g.paint([x, SHOULDER - 1, TZ0], [x + 1, SHOULDER + 1, TZ1], 'topAccent');
+      for (const x of [TX0 + 1, TX1 - 2]) g.paint([x, SHOULDER, TZ0], [x + 1, SHOULDER + 1, TZ1], 'topAccent');
+      break;
   }
   paintPattern(g, pattern, TOP, 11);
 }
@@ -137,8 +187,20 @@ export function drawBottom(g: VoxelGrid, style: BottomStyleId, pattern: PatternI
       legs(g, LEG.foot, LEG.foot + 1, 'bottomDeep');
       break;
     case 'shorts':
+    case 'shortalls':
       legs(g, 4, LEG.y[1], 'bottom');
       legs(g, 4, 5, 'bottomDeep');
+      break;
+    case 'rolled-trousers':
+      // Rolled up to show the ankle, the turn-up in the mix of the two dyes.
+      legs(g, 3, LEG.y[1], 'bottom');
+      legs(g, 3, 4, 'bottomMix');
+      break;
+    case 'cargo-trousers':
+      // Full length with a flapped pocket on the outside of each thigh.
+      legs(g, LEG.foot, LEG.y[1], 'bottom');
+      legs(g, LEG.foot, LEG.foot + 1, 'bottomDeep');
+      for (const x of [TX0 - 1, TX1]) for (let z = LEG.z[0]; z < LEG.z[1]; z++) { g.set(x, 4, z, 'bottom'); g.set(x, 5, z, 'bottomDeep'); }
       break;
     case 'skirt':
       // An A-line skirt: the hips, then a wider flared hem with pleats.
@@ -164,10 +226,61 @@ export function drawBib(g: VoxelGrid): void {
 }
 
 /** Rows an outer layer covers from; a coat hangs to the shins. */
-const OUTER_HEM: Record<OuterStyleId, number> = { jacket: 8, vest: 9, overshirt: 8, coat: 3 };
+const OUTER_HEM: Record<OuterStyleId, number> = {
+  jacket: 8, vest: 9, overshirt: 8, coat: 3, cardigan: 8, cloak: 4, poncho: 9, puffer: 9, apron: 4,
+};
+
+/** Outer layers that are not worn open down the front: each has its own shape. */
+function drawWrap(g: VoxelGrid, style: 'cloak' | 'poncho' | 'puffer' | 'apron', hem: number): void {
+  switch (style) {
+    case 'cloak':
+      // A capelet over the shoulders and upper arms, a clasp at the throat, the cloak down the back to the shins.
+      torso(g, SHOULDER - 1, TORSO.y[1], 'outer');
+      arms(g, 12, ARM.y[1], 'outer');
+      for (let x = TX0; x < TX1; x++) for (let y = hem; y <= SHOULDER; y++) g.set(x, y, BACK_Z - 1, y === hem ? 'outerDeep' : 'outer');
+      for (const x of [TX0, TX1 - 1]) for (let y = hem + 1; y < SHOULDER - 1; y++) g.set(x, y, BACK_Z - 1, 'outerDeep');
+      set(g, [[-1, SHOULDER, PROUD_Z], [0, SHOULDER, PROUD_Z]], 'button');
+      break;
+    case 'poncho':
+      // A woven square over the head: it hangs one cell proud in front and behind, its fringe in the accent.
+      torso(g, 10, TORSO.y[1], 'outer');
+      arms(g, 10, ARM.y[1], 'outer');
+      for (const z of [PROUD_Z, BACK_Z - 1]) for (let x = TX0; x < TX1; x++) for (let y = hem; y < SHOULDER; y++) {
+        g.set(x, y, z, y === hem ? ((x % 2 + 2) % 2 === 0 ? 'outerAccent' : 'outerDeep') : 'outer');
+      }
+      g.fill([-1, SHOULDER, CHEST_Z], [1, SHOULDER + 1, CHEST_Z + 1], 'outerDeep');
+      break;
+    case 'puffer':
+      // Zipped shut and padded: a proud front quilted in rows, a stand-up collar, fat sleeves.
+      torso(g, hem, TORSO.y[1], 'outer');
+      for (let x = TX0; x < TX1; x++) for (let y = hem; y < SHOULDER; y++) g.set(x, y, PROUD_Z, y === hem ? 'outerDeep' : y % 2 === 0 ? 'outerDeep' : 'outer');
+      for (let y = hem; y < SHOULDER; y++) g.set(-1, y, PROUD_Z, 'outerAccent');
+      neckRing(g, 'outer');
+      arms(g, ARM.hand, ARM.y[1], 'outer');
+      arms(g, ARM.hand, ARM.hand + 1, 'outerDeep');
+      for (const side of SIDES) for (let y = 10; y < ARM.y[1]; y++) g.set(armX(side), y, ARM.z[0] - 1, y === 11 ? 'outerDeep' : 'outer');
+      break;
+    case 'apron': {
+      // A bib apron: straps over the shoulders, ties round the waist in a bow at the back, the skirt to the
+      // knees with a pocket.
+      for (let x = -2; x < 2; x++) for (let y = 10; y < SHOULDER; y++) g.set(x, y, PROUD_Z, 'outer');
+      for (const x of [-2, 1]) g.paint([x, SHOULDER, TZ0], [x + 1, SHOULDER + 1, TZ1], 'outer');
+      torso(g, 9, 10, 'outerDeep');
+      set(g, [[-1, 9, BACK_Z - 1], [0, 9, BACK_Z - 1], [-2, 10, BACK_Z - 1], [1, 10, BACK_Z - 1], [-2, 8, BACK_Z - 1], [1, 8, BACK_Z - 1]], 'outerDeep');
+      for (let x = TX0; x < TX1; x++) for (let y = hem; y < 9; y++) g.set(x, y, PROUD_Z, y === hem ? 'outerDeep' : 'outer');
+      set(g, [[-2, 6, PROUD_Z], [-1, 6, PROUD_Z], [-2, 5, PROUD_Z], [-1, 5, PROUD_Z]], 'outerAccent');
+      break;
+    }
+  }
+}
 
 export function drawOuter(g: VoxelGrid, style: OuterStyleId, pattern: PatternId): void {
   const hem = OUTER_HEM[style];
+  if (style === 'cloak' || style === 'poncho' || style === 'puffer' || style === 'apron') {
+    drawWrap(g, style, hem);
+    paintPattern(g, pattern === 'print' ? 'stripes' : pattern, OUTER, 17);
+    return;
+  }
   // Repaint the torso, then open the front: the middle two columns keep what is under it.
   const under: [number, number, Slot][] = [];
   for (let x = -1; x < 1; x++) for (let y = 8; y < TORSO.y[1]; y++) { const s = g.get(x, y, CHEST_Z); if (s) under.push([x, y, s]); }
@@ -192,7 +305,12 @@ export function drawOuter(g: VoxelGrid, style: OuterStyleId, pattern: PatternId)
     for (const x of [NECK.x[0] - 1, NECK.x[1]]) g.set(x, NECK.y[0], NECK.z[0], 'outer');
   }
   // Sleeves: long for a jacket and coat, short for an overshirt, none for a vest (the top's sleeves show).
-  if (style === 'jacket' || style === 'coat') { arms(g, ARM.hand, ARM.y[1], 'outer'); arms(g, ARM.hand, ARM.hand + 1, 'outerDeep'); }
+  if (style === 'jacket' || style === 'coat' || style === 'cardigan') { arms(g, ARM.hand, ARM.y[1], 'outer'); arms(g, ARM.hand, ARM.hand + 1, 'outerDeep'); }
+  if (style === 'cardigan') {
+    // A soft knit worn open: ribbed hem and cuffs, buttons down the person's right panel.
+    rib(g, hem, 'outerDeep', 'outer');
+    for (const y of [10, 12]) g.set(TX0 + 1, y, PROUD_Z, 'button');
+  }
   if (style === 'overshirt') { arms(g, 11, ARM.y[1], 'outer'); arms(g, 11, 12, 'outerDeep'); }
   paintPattern(g, pattern === 'print' ? 'stripes' : pattern, OUTER, 17);
 }
@@ -229,10 +347,40 @@ export function drawNeckwear(g: VoxelGrid, style: NeckwearStyleId): void {
       for (const [x, y, z] of [...cells, [-1, NECK.y[0], NECK.z[1]] as Cell, [0, NECK.y[0], NECK.z[1]] as Cell]) if (cellHash(x, y, z, 23) < .34) g.set(x, y, z, 'neckAccent');
       break;
     }
+    case 'pendant':
+      // A dark cord round the neck and down to a gem in a little brass cap, the gem's shine in the accent.
+      neckRing(g, 'neckDeep');
+      set(g, [[-2, SHOULDER, PROUD_Z], [1, SHOULDER, PROUD_Z], [-2, SHOULDER - 1, PROUD_Z], [1, SHOULDER - 1, PROUD_Z]], 'neckDeep');
+      set(g, [[-1, SHOULDER - 2, PROUD_Z], [0, SHOULDER - 2, PROUD_Z]], 'button');
+      set(g, [[-1, SHOULDER - 3, PROUD_Z], [0, SHOULDER - 3, PROUD_Z], [-1, SHOULDER - 4, PROUD_Z], [0, SHOULDER - 4, PROUD_Z]], 'neck');
+      g.set(-1, SHOULDER - 3, PROUD_Z, 'neckAccent');
+      break;
+    case 'beads': {
+      // Big wooden beads in two colours, a string round the neck and a loop down the chest.
+      neckRing(g, 'neck');
+      const drape: Cell[] = [[-2, SHOULDER, PROUD_Z], [1, SHOULDER, PROUD_Z], [-2, SHOULDER - 1, PROUD_Z], [1, SHOULDER - 1, PROUD_Z], [-1, SHOULDER - 2, PROUD_Z], [0, SHOULDER - 2, PROUD_Z]];
+      set(g, drape, 'neck');
+      for (const [[x, y, z], slot] of [...g.entries()]) if (slot === 'neck' && y >= SHOULDER - 2 && (x + y + z) % 2 === 0) g.set(x, y, z, 'neckAccent');
+      break;
+    }
+    case 'cowl':
+      // A loose knitted cowl: a ring at the throat and a soft fold lying over the shoulders, ribbed.
+      neckRing(g, 'neck');
+      g.paint([TX0 + 1, SHOULDER, TZ0], [TX1 - 1, SHOULDER + 1, TZ1], 'neck');
+      for (let x = TX0; x < TX1; x++) { g.set(x, SHOULDER, PROUD_Z, 'neck'); g.set(x, SHOULDER, BACK_Z - 1, 'neck'); }
+      for (let x = TX0 + 1; x < TX1 - 1; x++) g.set(x, SHOULDER - 1, PROUD_Z, 'neckDeep');
+      rib(g, SHOULDER, 'neck', 'neckDeep');
+      break;
+    case 'ruff':
+      // A pleated ruff standing out flat all round the neck, like a plate under the chin.
+      neckRing(g, 'neck', 1);
+      for (const [[x, y, z], slot] of [...g.entries()]) if (slot === 'neck' && y === NECK.y[0] && (x + z) % 2 !== 0) g.set(x, y, z, 'neckDeep');
+      break;
   }
 }
 
 export function drawShoes(g: VoxelGrid, style: ShoeStyleId): void {
+  if (style === 'clogs' || style === 'sandals' || style === 'wellies' || style === 'slippers' || style === 'curly-toes') return drawShapedShoes(g, style);
   const height = style === 'boots' ? 4 : 2;
   for (const side of SIDES) {
     const x = legX(side);
@@ -243,6 +391,50 @@ export function drawShoes(g: VoxelGrid, style: ShoeStyleId): void {
     g.fill([x, 0, LEG.z[0]], [x + 2, 1, LEG.z[1]], style === 'sneakers' ? 'sole' : 'shoeDeep');
     if (style === 'boots') g.fill([x, height - 1, LEG.z[0]], [x + 2, height, LEG.z[1]], 'shoeDeep');
     if (style === 'sneakers') g.set(x + (side < 0 ? 1 : 0), 1, LEG.z[1], 'sole');
+  }
+}
+
+/** The second shelf of shoes, each built on the same foot: two cells wide, the toe one cell out in front. */
+function drawShapedShoes(g: VoxelGrid, style: 'clogs' | 'sandals' | 'wellies' | 'slippers' | 'curly-toes'): void {
+  for (const side of SIDES) {
+    const x = legX(side), toe = LEG.z[1], inner = side < 0 ? x + 1 : x;
+    const foot = (y0: number, y1: number, z0: number, z1: number, slot: Slot) => g.fill([x, y0, z0], [x + 2, y1, z1], slot);
+    switch (style) {
+      case 'clogs':
+        // A chunky wooden clog: a tall rounded toe box, a thick sole, the heel open.
+        foot(0, 2, LEG.z[0], toe + 1, 'shoe');
+        foot(2, 3, toe - 1, toe + 1, 'shoe');
+        foot(0, 1, LEG.z[0], toe + 1, 'shoeDeep');
+        foot(1, 2, LEG.z[0], LEG.z[0] + 1, 'skin');
+        break;
+      case 'sandals':
+        // A sole, a strap over the foot and round the heel, the toes bare.
+        foot(0, 1, LEG.z[0], toe + 1, 'shoeDeep');
+        foot(1, 2, LEG.z[0], toe, 'shoe');
+        foot(1, 2, toe, toe + 1, 'skin');
+        break;
+      case 'wellies':
+        // Tall rubber boots to the shin with a pale band round the top.
+        foot(0, 5, LEG.z[0], toe, 'shoe');
+        foot(0, 2, toe, toe + 1, 'shoe');
+        foot(0, 1, LEG.z[0], toe + 1, 'shoeDeep');
+        foot(4, 5, LEG.z[0], toe, 'sole');
+        break;
+      case 'slippers':
+        // Fuzzy slippers with a white pompom on each toe.
+        foot(0, 2, LEG.z[0], toe + 1, 'shoe');
+        foot(0, 1, LEG.z[0], toe + 1, 'shoeDeep');
+        for (let z = LEG.z[0]; z <= toe; z++) for (let dx = 0; dx < 2; dx++) if (cellHash(x + dx, 1, z, 29) < .3) g.set(x + dx, 1, z, 'shoeDeep');
+        foot(1, 2, toe + 1, toe + 2, 'sole');
+        break;
+      case 'curly-toes':
+        // Pointed slippers whose toes run out and curl up, with a little brass bell on each tip.
+        foot(0, 2, LEG.z[0], toe + 1, 'shoe');
+        foot(0, 1, LEG.z[0], toe + 1, 'shoeDeep');
+        g.set(inner, 0, toe + 1, 'shoe').set(inner, 1, toe + 1, 'shoe').set(inner, 2, toe + 1, 'shoeDeep');
+        g.set(inner, 2, toe, 'button');
+        break;
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-import type { BuildMirror, BuildTool } from '@chatdom/shared';
+import type { BuildTool, BuildToolsState } from '@chatdom/shared';
 
 /** Order matches the core's 1–4 shortcuts in build/session.ts. */
 export const TOOLS: readonly { id: BuildTool; name: string; key: string; hint: string }[] = [
@@ -13,16 +13,6 @@ export const BRUSHES: readonly { cells: 1 | 2 | 4; name: string; label: string }
   { cells: 2, name: 'A quarter metre', label: '¼ m' },
   { cells: 1, name: 'An eighth of a metre', label: '⅛ m' },
 ];
-
-export const MIRRORS: readonly { value: BuildMirror | null; label: string; name: string; help: string }[] = [
-  { value: null, label: 'Off', name: 'No mirror', help: 'Each stroke lands only where you put it.' },
-  { value: 'x', label: 'X', name: 'Mirror left and right', help: 'Mirrors left and right across the middle of your plot.' },
-  { value: 'z', label: 'Z', name: 'Mirror front and back', help: 'Mirrors front and back across the middle of your plot.' },
-  { value: 'xz', label: 'X+Z', name: 'Mirror into all four corners', help: 'Mirrors into all four quarters of your plot.' },
-];
-
-/** Short spoken form of the mirror for compact readouts. */
-export const mirrorWord = (value: BuildMirror | null) => value === null ? 'No mirror' : value === 'xz' ? 'Mirror X+Z' : `Mirror ${value.toUpperCase()}`;
 
 type Swatch = { id: number; name: string; colour: string };
 /**
@@ -49,4 +39,48 @@ export function shelveMaterials(materials: readonly Swatch[]): { name: string; i
 export function materialName(name: string): string {
   const words = name.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+const count = new Intl.NumberFormat('en-GB');
+
+/**
+ * The engine still names its browser-local draft mode; a person never reads that word (decision 25). This is the
+ * one place the rack asks it: a private draft can be shaped, anything else rests until the street opens to building.
+ */
+export const privateDraft = (mode: BuildToolsState['mode']) => mode === 'SIMULATED';
+
+/** The rack's heading: the owner's approved name when the kingdom knows it, a plain heading when it does not. */
+export function rackHeading(ownerName?: string): string {
+  const name = ownerName?.trim();
+  return name ? `${name}’s home` : 'Your home';
+}
+
+/** What happens to the work, in plain words: who sees it and where it is kept. */
+export function draftWords(mode: BuildToolsState['mode']): { title: string; detail: string; unsent: string } {
+  return privateDraft(mode)
+    ? { title: 'Private to you', detail: 'Saved in this browser until the street opens to building.', unsent: 'Not yet on your street' }
+    : { title: 'Not open to building yet', detail: 'The tools rest until this street opens to building.', unsent: 'Not on the street' };
+}
+
+/** The one action that reaches a street, and exactly which street it reaches. */
+export function welcomeWords(mode: BuildToolsState['mode'], publishing: boolean): { title: string; detail: string; short: string } {
+  if (!privateDraft(mode)) return { title: 'Welcome the street', detail: 'Opens with the street', short: 'Not open yet' };
+  return { title: publishing ? 'Opening the shutters…' : 'Welcome the street', detail: 'Your street in this browser', short: 'This browser' };
+}
+
+/** The allowance as words and a gauge: blocks used of the plot's budget, and what is left. */
+export function allowanceWords(occupied: number, budget: number): { fraction: number; used: string; left: string; near: boolean; full: boolean; spoken: string } {
+  const total = Math.max(0, budget), used = Math.max(0, occupied), left = Math.max(0, total - used);
+  const fraction = total > 0 ? Math.min(1, used / total) : 1;
+  return {
+    fraction, near: fraction > .9, full: left === 0,
+    used: `${count.format(used)} of ${count.format(total)}`,
+    left: left === 0 ? 'No blocks left' : left === 1 ? '1 block left' : `${count.format(left)} left`,
+    spoken: `${count.format(used)} of ${count.format(total)} blocks used, ${left === 0 ? 'none' : count.format(left)} left`,
+  };
+}
+
+/** The pieces shelf is drawn only when the core really offers something to place; never as an empty stand-in. */
+export function pieceShelf<T>(pieces: readonly T[] | undefined): readonly T[] | null {
+  return pieces && pieces.length ? pieces : null;
 }

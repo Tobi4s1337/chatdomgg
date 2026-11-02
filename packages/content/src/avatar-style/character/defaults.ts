@@ -2,6 +2,7 @@ import { colourDistance, oklab, rgb, type Hex } from './colour';
 import { tenureGarb, type CitizenEntitlements } from './earned';
 import { DYES } from './palette';
 import { defaultAccent, seedLook, type CitizenLook } from './recipe';
+import { checkHarmful } from './safety';
 import { settleLook } from './variety';
 
 /*
@@ -57,5 +58,7 @@ export function twitchDefaultLook({ personId, nameColour, entitlements, town = [
   const dye = favouriteDye(nameColour);
   const base = town.length ? settleLook(personId, town, look => (dye ? withFavouriteDye(look, dye) : look)) : seedLook(personId);
   const dyed = dye ? withFavouriteDye(base, dye) : base;
-  return tenureGarb(dyed, entitlements);
+  const look = tenureGarb(dyed, entitlements);
+  // A favourite colour never makes a default someone could not save: if it would, the hat comes off.
+  return checkHarmful(look).length ? { ...look, hat: null } : look;
 }

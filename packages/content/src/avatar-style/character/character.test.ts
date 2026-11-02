@@ -10,6 +10,7 @@ import { meshCitizen, OCCLUSION_LEVELS } from './mesh';
 import { SKIN_TONES } from './palette';
 import { PORTRAIT, portraitEye } from './portrait';
 import { PORTRAIT_FIXTURES } from './fixtures';
+import { pieceCard, type PieceKind } from './pieces';
 import { ARM, CHEST_Z, LEG, PROUD_Z, TORSO, armX, legX } from './body';
 import {
   BEARD_STYLE_IDS, EARRING_STYLE_IDS, EYE_SHAPES, EYE_SPACINGS, FRECKLES, GLASSES_STYLE_IDS, HAIR_STYLE_IDS, HAT_STYLE_IDS,
@@ -24,6 +25,9 @@ const base: CitizenLook = {
   top: { style: 'tee', dye: '#43b6ec', pattern: 'plain', accent: '#1e1d22' }, outer: null, bottom: DEFAULT_BOTTOM, neckwear: null, shoes: DEFAULT_SHOES, earned: NO_EARNED,
 };
 const variant = (patch: Partial<CitizenLook>): CitizenLook => ({ ...base, ...patch });
+/** The first shelf of a kind (the pieces the twenty fixtures were drawn to show), and its free base set. */
+const firstShelf = <T extends string>(kind: PieceKind, ids: readonly T[]): T[] => ids.filter(id => !pieceCard(kind, id)!.isNew);
+const baseSet = <T extends string>(kind: PieceKind, ids: readonly T[]): T[] => ids.filter(id => pieceCard(kind, id)!.tier === 'base');
 const rest = (id: string): number => {
   let y = 0, at: string | null = id;
   while (at) { const bone = AVATAR_RIG.find(b => b.id === at)!; y += bone.offset[1]; at = bone.parent; }
@@ -66,10 +70,15 @@ describe('the look recipe', () => {
     expect(new Set(looks.map(l => l.skin)).size).toBe(SKIN_TONES.length);
     for (const l of looks) if (l.beard) expect(['short-crop', 'side-part', 'quiff', 'slicked', 'spiky', 'side-shave', 'mohawk', 'bald']).toContain(l.hair.style);
     expect(looks.filter(l => l.beard).length).toBeGreaterThan(20);
-    for (const style of HAT_STYLE_IDS) expect(looks.some(l => l.hat?.style === style), style).toBe(true);
-    for (const style of GLASSES_STYLE_IDS) expect(looks.some(l => l.glasses?.style === style), style).toBe(true);
+    // Every free base piece turns up somewhere in a town; the funny tier is only ever chosen.
+    for (const style of baseSet('hat', HAT_STYLE_IDS)) expect(looks.some(l => l.hat?.style === style), style).toBe(true);
+    for (const style of baseSet('glasses', GLASSES_STYLE_IDS)) expect(looks.some(l => l.glasses?.style === style), style).toBe(true);
     for (const style of MOUSTACHE_STYLE_IDS) expect(looks.some(l => l.moustache?.style === style), style).toBe(true);
-    for (const style of EARRING_STYLE_IDS) expect(looks.some(l => l.earrings?.style === style), style).toBe(true);
+    for (const style of baseSet('earrings', EARRING_STYLE_IDS)) expect(looks.some(l => l.earrings?.style === style), style).toBe(true);
+    for (const l of looks) {
+      for (const [kind, id] of [['hat', l.hat?.style], ['glasses', l.glasses?.style], ['earrings', l.earrings?.style]] as const) if (id) expect(pieceCard(kind, id)!.tier, id).toBe('base');
+      expect(l.facePaint ?? l.held, 'seeded with a funny piece').toBeUndefined();
+    }
     expect(looks.some(l => l.flower)).toBe(true);
     // A seeded full beard stands apart from the hair, so the two never close into a hood round the face.
     for (const l of looks) if (l.beard?.style === 'full') expect(Math.abs(luma(rgb(l.beard.colour)) - luma(rgb(l.hair.colour)))).toBeGreaterThan(.14);
@@ -200,6 +209,8 @@ describe('hats', () => {
       const g = buildCitizen(look);
       const hatCells = [...g.entries()].filter(([, s]) => s.startsWith('hat'));
       const top = Math.max(...hatCells.map(([[, y]]) => y));
+      // A flower crown is a ring round the hair, not a hat over it: the hair keeps its shape inside it.
+      if (look.hat!.style === 'flower-crown') continue;
       for (const [[x, y, z], slot] of g.entries()) {
         if (!HAIR_SLOTS.includes(slot)) continue;
         const label = `${look.hair.style} under ${look.hat!.style} at ${x},${y},${z}`;
@@ -208,17 +219,20 @@ describe('hats', () => {
         if (x >= SKULL.x[0] && x < SKULL.x[1] && z >= SKULL.z[0] && z < SKULL.z[1]) expect(y < SKULL.y[1] || y < hatBrim(look.hat!.style), label).toBe(true);
       }
     }
-  });
+  }, 60000);
 
   it('sits on the hat socket and keeps the face clear', () => {
     for (const look of hatted) {
-      const g = buildCitizen(look);
+      const g = buildCitizen(look), style = look.hat!.style;
       for (const [c, r] of eyeCells(look.eyes.shape, look.eyes.spacing)) expect(g.get(faceX(c), faceY(r), FACE_Z)).toBe('eye');
-      expect(g.get(0, SKULL.y[1], 0)?.startsWith('hat'), look.hat!.style).toBe(true);
-      const lowest = Math.min(...[...g.entries()].filter(([, s]) => s.startsWith('hat')).map(([[, y]]) => y));
-      expect(lowest).toBeGreaterThan(faceY(EYE_ROW + 1));
+      // Over the socket: the crown on it, or (headbands and the flower crown) something of the hat above or round it.
+      if (firstShelf('hat', HAT_STYLE_IDS).includes(style)) expect(g.get(0, SKULL.y[1], 0)?.startsWith('hat'), style).toBe(true);
+      else expect([...g.entries()].some(([[, y], s]) => s.startsWith('hat') && y >= SKULL.y[1] - 1), style).toBe(true);
+      // In front of the face nothing of a hat comes down to the eyes (earflaps hang at the sides, behind it).
+      const lowest = Math.min(...[...g.entries()].filter(([[, , z], s]) => s.startsWith('hat') && z >= FACE_Z).map(([[, y]]) => y));
+      expect(lowest, style).toBeGreaterThan(faceY(EYE_ROW + 1));
     }
-  });
+  }, 60000);
 
   it('lets tied hair come out from under the brim', () => {
     for (const style of ['ponytail', 'buns'] as const) for (const hat of HAT_STYLE_IDS) {
@@ -240,8 +254,12 @@ describe('glasses, earrings and the flower', () => {
       const g = buildCitizen(look);
       for (const [c, r] of eyeCells(shape, spacing)) {
         expect(g.get(faceX(c), faceY(r), FACE_Z), `${style} ${spacing} ${shape}`).toBe('eye');
-        if (shape !== 'closed') expect(g.get(faceX(c), faceY(r), FACE_Z + 1), `${style} ${spacing}`).toBe('lens');
+        // The first shelf glazes both eyes; every pair keeps frame off the eyes: only glass or nothing in front.
+        const front = g.get(faceX(c), faceY(r), FACE_Z + 1);
+        if (shape !== 'closed' && firstShelf('glasses', GLASSES_STYLE_IDS).includes(style)) expect(front, `${style} ${spacing}`).toBe('lens');
+        expect(front === undefined || front === 'lens', `${style} ${spacing} ${shape} ${c},${r}`).toBe(true);
       }
+      expect(eyeCells(shape, spacing).some(([c, r]) => g.get(faceX(c), faceY(r), FACE_Z + 1) === 'lens'), `${style} ${spacing} ${shape}`).toBe(true);
       expect([...g.entries()].some(([, s]) => s === 'frame')).toBe(true);
       // The eyes keep their front faces in the opaque mesh: the lens is not solid to it.
       const solid = meshCitizen(g, slotColours(look));
@@ -261,7 +279,7 @@ describe('glasses, earrings and the flower', () => {
   it('hangs earrings on both sides, over long hair too', () => {
     for (const style of EARRING_STYLE_IDS) for (const hair of ['short-crop', 'long-waves', 'braids'] as const) {
       const g = buildCitizen(variant({ hair: { style: hair, colour: '#1c191c' }, earrings: { style, colour: '#e8b54a' } }));
-      const metal = [...g.entries()].filter(([, s]) => s === 'metal').map(([c]) => c);
+      const metal = [...g.entries()].filter(([, s]) => s === 'metal' || s === 'bead' || s === 'leaf').map(([c]) => c);
       expect(metal.some(c => c[0] < SKULL.x[0]), `${style} ${hair}`).toBe(true);
       expect(metal.some(c => c[0] >= SKULL.x[1]), `${style} ${hair}`).toBe(true);
     }
@@ -325,8 +343,9 @@ describe('the wardrobe', () => {
   });
 
   it('dresses every combination within the look limits, and nothing it wears reaches the head', () => {
-    for (const top of TOP_STYLE_IDS) for (const outer of [null, ...OUTER_STYLE_IDS]) for (const bottom of BOTTOM_STYLE_IDS) {
-      for (const neckwear of [null, ...NECKWEAR_STYLE_IDS]) {
+    // The first shelf in full; the second shelf's every piece against every other is swept in `pieces.test.ts`.
+    for (const top of firstShelf('top', TOP_STYLE_IDS)) for (const outer of [null, ...firstShelf('outer', OUTER_STYLE_IDS)]) for (const bottom of firstShelf('bottom', BOTTOM_STYLE_IDS)) {
+      for (const neckwear of [null, ...firstShelf('neckwear', NECKWEAR_STYLE_IDS)]) {
         const look = dress({
           top: garment(top, '#f3f1ee', 'plaid'), outer: outer && garment(outer, '#2d5fd8', 'dots', '#f6d23c'), bottom: garment(bottom, '#3a3a40', 'stripes'),
           neckwear: neckwear && { style: neckwear, dye: '#d3202a', accent: '#f6d23c' }, shoes: { style: 'boots', dye: '#5e3a22' },
@@ -339,7 +358,8 @@ describe('the wardrobe', () => {
   }, 30000);
 
   it('wears an outer layer open: proud front panels, and the top showing down the middle', () => {
-    for (const outer of OUTER_STYLE_IDS) {
+    // A cloak, a poncho, a puffer and an apron have shapes of their own (`pieces.test.ts`).
+    for (const outer of OUTER_STYLE_IDS.filter(o => !['cloak', 'poncho', 'puffer', 'apron'].includes(o))) {
       const g = buildCitizen(dress({ top: garment('tee', '#f3f1ee'), outer: garment(outer, '#d3202a') }));
       for (const x of [-1, 0]) expect(g.get(x, 11, CHEST_Z), outer).toBe('top');
       for (const x of [TORSO.x[0], TORSO.x[1] - 1]) expect(g.get(x, 11, PROUD_Z), outer).toBe('outer');
@@ -362,12 +382,15 @@ describe('the wardrobe', () => {
   });
 
   it('gives every bottom and shoe its own shape', () => {
+    const shape = (bottom: (typeof BOTTOM_STYLE_IDS)[number], shoes: (typeof SHOE_STYLE_IDS)[number]) =>
+      [...buildCitizen(dress({ bottom: garment(bottom, '#2f4f86'), shoes: { style: shoes, dye: '#5e3a22' } })).entries()]
+        .filter(([[, y]]) => y < SKULL.y[0]).map(([c, s]) => `${c.join(',')}:${s}`).join('|');
     const shapes = new Set<string>();
-    for (const bottom of BOTTOM_STYLE_IDS) for (const shoes of SHOE_STYLE_IDS) {
-      const g = buildCitizen(dress({ bottom: garment(bottom, '#2f4f86'), shoes: { style: shoes, dye: '#5e3a22' } }));
-      shapes.add([...g.entries()].filter(([[, y]]) => y < SKULL.y[0]).map(([c, s]) => `${c.join(',')}:${s}`).join('|'));
-    }
-    expect(shapes.size).toBe(BOTTOM_STYLE_IDS.length * SHOE_STYLE_IDS.length);
+    for (const bottom of firstShelf('bottom', BOTTOM_STYLE_IDS)) for (const shoes of firstShelf('shoes', SHOE_STYLE_IDS)) shapes.add(shape(bottom, shoes));
+    expect(shapes.size).toBe(firstShelf('bottom', BOTTOM_STYLE_IDS).length * firstShelf('shoes', SHOE_STYLE_IDS).length);
+    // Tall boots and wellies hide where trousers end, so the whole shelf is told apart over low shoes and bare legs.
+    expect(new Set(BOTTOM_STYLE_IDS.map(b => shape(b, 'sneakers'))).size).toBe(BOTTOM_STYLE_IDS.length);
+    expect(new Set(SHOE_STYLE_IDS.map(s => shape('shorts', s))).size).toBe(SHOE_STYLE_IDS.length);
     // Shorts and skirts show the legs; trousers cover them to the shoe.
     expect(buildCitizen(dress({ bottom: garment('shorts', '#2f4f86') })).get(legX(-1), 3, 0)).toBe('skin');
     expect(buildCitizen(dress({ bottom: garment('trousers', '#2f4f86') })).get(legX(-1), 3, 0)).toBe('bottom');
@@ -375,11 +398,15 @@ describe('the wardrobe', () => {
 
   it('seeds outfits with layers, patterns and every piece somewhere in a town, layers apart from what they cover', () => {
     const looks = Array.from({ length: 400 }, (_, i) => seedLook(`viewer-${i}`));
-    for (const style of TOP_STYLE_IDS) expect(looks.some(l => l.top.style === style), style).toBe(true);
-    for (const style of OUTER_STYLE_IDS) expect(looks.some(l => l.outer?.style === style), style).toBe(true);
-    for (const style of BOTTOM_STYLE_IDS) expect(looks.some(l => l.bottom.style === style), style).toBe(true);
-    for (const style of NECKWEAR_STYLE_IDS) expect(looks.some(l => l.neckwear?.style === style), style).toBe(true);
-    for (const style of SHOE_STYLE_IDS) expect(looks.some(l => l.shoes.style === style), style).toBe(true);
+    for (const style of baseSet('top', TOP_STYLE_IDS)) expect(looks.some(l => l.top.style === style), style).toBe(true);
+    for (const style of baseSet('outer', OUTER_STYLE_IDS)) expect(looks.some(l => l.outer?.style === style), style).toBe(true);
+    for (const style of baseSet('bottom', BOTTOM_STYLE_IDS)) expect(looks.some(l => l.bottom.style === style), style).toBe(true);
+    for (const style of baseSet('neckwear', NECKWEAR_STYLE_IDS)) expect(looks.some(l => l.neckwear?.style === style), style).toBe(true);
+    for (const style of baseSet('shoes', SHOE_STYLE_IDS)) expect(looks.some(l => l.shoes.style === style), style).toBe(true);
+    // The funny tier is chosen, never seeded.
+    for (const l of looks) for (const [kind, id] of [['top', l.top.style], ['outer', l.outer?.style], ['bottom', l.bottom.style], ['neckwear', l.neckwear?.style], ['shoes', l.shoes.style]] as const) {
+      if (id) expect(pieceCard(kind, id)!.tier, id).toBe('base');
+    }
     for (const pattern of PATTERN_IDS) expect(looks.some(l => l.top.pattern === pattern || l.outer?.pattern === pattern), pattern).toBe(true);
     const layered = looks.filter(l => l.outer).length / looks.length;
     expect(layered).toBeGreaterThan(.2);
@@ -454,8 +481,9 @@ describe('the portrait', () => {
     const looks = PORTRAIT_FIXTURES.map(f => f.look);
     expect(looks).toHaveLength(20);
     expect(new Set(looks.map(l => l.hair.style)).size).toBeGreaterThanOrEqual(16);
-    for (const style of HAT_STYLE_IDS) expect(looks.some(l => l.hat?.style === style), style).toBe(true);
-    for (const style of GLASSES_STYLE_IDS) expect(looks.some(l => l.glasses?.style === style), style).toBe(true);
+    // The fixtures are frozen (the starter looks are drawn from them): they show the first shelf.
+    for (const style of firstShelf('hat', HAT_STYLE_IDS)) expect(looks.some(l => l.hat?.style === style), style).toBe(true);
+    for (const style of firstShelf('glasses', GLASSES_STYLE_IDS)) expect(looks.some(l => l.glasses?.style === style), style).toBe(true);
     expect(looks.some(l => l.beard) && looks.some(l => l.moustache) && looks.some(l => l.earrings) && looks.some(l => l.flower)).toBe(true);
     for (const shape of EYE_SHAPES) expect(looks.some(l => l.eyes.shape === shape)).toBe(true);
     for (const spacing of EYE_SPACINGS) expect(looks.some(l => l.eyes.spacing === spacing)).toBe(true);

@@ -29,10 +29,10 @@ const exists = path => access(path).then(() => true, () => false);
 async function composeSheet(browser, rows, band, path) {
   const scale = .85, w = Math.round(SIZE.width * scale), h = Math.round((band.bottom - band.top) * scale);
   const html = `<!doctype html><html><body style="margin:0;background:#e4d6bb;font-family:Georgia,serif;color:#463a30;width:${w + 260}px">
-    <div style="padding:26px 34px 18px"><div style="font:12px sans-serif;letter-spacing:.2em;color:#8a6a4c">SPEC 49 · AVATAR STYLE STUDY · SIMULATED REVIEW PEOPLE</div>
+    <div style="padding:26px 34px 18px"><div style="font:12px sans-serif;letter-spacing:.2em;color:#8a6a4c">SPEC 49 · AVATAR STYLE STUDY</div>
     <div style="font-size:30px;margin-top:6px">Same five everyday looks, same pose, camera and light: three shapes to choose from</div></div>
     ${rows.map(r => `<div style="display:flex;align-items:center;border-top:1px solid #c9b896">
-      <div style="width:260px;padding:0 24px 0 34px"><div style="font:12px sans-serif;letter-spacing:.18em;color:#8a6a4c;text-transform:uppercase">${r.kicker}</div><div style="font-size:24px;margin-top:6px">${r.title}</div><div style="font:11px sans-serif;letter-spacing:.16em;margin-top:8px;color:#7a5a3c">SIMULATED</div></div>
+      <div style="width:260px;padding:0 24px 0 34px"><div style="font:12px sans-serif;letter-spacing:.18em;color:#8a6a4c;text-transform:uppercase">${r.kicker}</div><div style="font-size:24px;margin-top:6px">${r.title}</div></div>
       <div style="width:${w}px;height:${h}px;background:url(${r.url}) 0 ${-band.top * scale}px / ${w}px ${Math.round(SIZE.height * scale)}px no-repeat"></div></div>`).join('')}
     </body></html>`;
   const page = await browser.newPage({ viewport: { width: w + 260, height: 400 } });
@@ -45,7 +45,7 @@ async function composeCompare(browser, before, after, title, path) {
   const w = SIZE.width / 2, h = SIZE.height / 2;
   const cell = (label, url) => `<div><div style="font:13px sans-serif;letter-spacing:.2em;padding:10px 14px;color:#7a5a3c">${label}</div><img src="${url}" style="display:block;width:${w}px;height:${h}px"></div>`;
   const html = `<!doctype html><html><body style="margin:0;background:#e4d6bb;font-family:Georgia,serif;color:#463a30;width:${SIZE.width}px">
-    <div style="padding:14px 14px 0;font-size:22px">${title} · same view and controls · SIMULATED</div>
+    <div style="padding:14px 14px 0;font-size:22px">${title} · same view and controls</div>
     <div style="display:flex">${cell('BEFORE', before)}${cell('AFTER', after)}</div></body></html>`;
   const page = await browser.newPage({ viewport: { width: SIZE.width, height: 300 } });
   await page.setContent(html);

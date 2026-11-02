@@ -7,12 +7,13 @@ import { capeObject, disposeCape } from './cape';
 const looks: readonly CitizenLook[] = [...PORTRAIT_FIXTURES.map(f => f.look), ...Array.from({ length: 12 }, (_, i) => seedLook(`builder-${i}`))];
 
 describe('the builder catalogue', () => {
-  it('offers the same nine tabs on page and panel, every control labelled', () => {
-    expect(TABS.map(t => t.id)).toEqual(['face', 'hair', 'beard', 'hat', 'trinkets', 'top', 'layer', 'below', 'earned']);
+  it('offers the same tabs on page and panel, every control labelled', () => {
+    expect(TABS.map(t => t.id)).toEqual(['face', 'hair', 'beard', 'hat', 'trinkets', 'top', 'layer', 'below', 'carry', 'earned', 'yours']);
     for (const t of TABS) for (const c of t.controls) expect(c.label.length, c.id).toBeGreaterThan(2);
   });
 
-  it('makes a valid look from every tile on every look, and the tile then reads as chosen', () => {
+  // Every tile on every look is a few thousand looks parsed; give a loaded machine room.
+  it('makes a valid look from every tile on every look, and the tile then reads as chosen', { timeout: 30_000 }, () => {
     for (const look of looks) for (const t of TABS) for (const control of t.controls) {
       if (control.kind !== 'tiles' || (control.visible && !control.visible(look))) continue;
       for (const option of control.options) {

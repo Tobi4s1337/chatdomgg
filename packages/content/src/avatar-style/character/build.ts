@@ -4,15 +4,18 @@ import { drawBody } from './body';
 import { drawBib, drawBottom, drawNeckwear, drawOuter, drawShoes, drawTop } from './wardrobe';
 import { drawHead, type HeadOptions } from './head';
 import { drawBeard, drawHair, drawMoustache, drawTiedHair } from './hair';
-import { drawEarrings, drawFlower, drawGlasses, drawHat, hatShape } from './accessories';
+import { EARRING_BEADS, drawEarrings, drawFlower, drawGlasses, drawHat, hatShape } from './accessories';
+import { drawEars, drawFacePaint } from './ears';
+import { HELD_PALETTES, drawHeld } from './held';
 import { RIBBON_COLOURS, drawEarnedBody, forgedHat, ribbonMarks } from './earned-draw';
-import { BRASS, BLUSH_PINK, EYE_INK, EYE_INK_DEEP, FLOWER_HEART, FRECKLE_BROWN, LEAF_GREEN, METALS } from './palette';
+import { BRASS, BLUSH_PINK, EYE_INK, EYE_INK_DEEP, FLOWER_HEART, FRECKLE_BROWN, HAT_WHITE, LEAF_GREEN, METALS } from './palette';
 import type { CitizenLook } from './recipe';
 
 /**
  * The whole citizen as one paint grid. The order is the dressing order: the body, the bottom, the top, the bib
  * of overalls, an open outer layer, neckwear and shoes; then the head and face, hair, the hat over the hair,
- * tied hair out from under the hat, beard and moustache, then glasses, earrings and a flower.
+ * tied hair out from under the hat, beard and moustache, then face paint, fey ears, glasses, earrings and a
+ * flower, and last a toy in the hand.
  */
 export function buildCitizen(look: CitizenLook, options: HeadOptions = {}): VoxelGrid {
   const hat = look.earned.forgedHat ? forgedHat(look.earned.forgedHat.motif) : look.hat ? hatShape(look.hat.style) : null;
@@ -20,7 +23,7 @@ export function buildCitizen(look: CitizenLook, options: HeadOptions = {}): Voxe
   drawBody(g);
   drawBottom(g, look.bottom.style, look.bottom.pattern);
   drawTop(g, look.top.style, look.top.pattern);
-  if (look.bottom.style === 'overalls' && look.top.style !== 'robe') drawBib(g);
+  if ((look.bottom.style === 'overalls' || look.bottom.style === 'shortalls') && look.top.style !== 'robe') drawBib(g);
   if (look.outer) drawOuter(g, look.outer.style, look.outer.pattern);
   if (look.neckwear) drawNeckwear(g, look.neckwear.style);
   drawShoes(g, look.shoes.style);
@@ -31,9 +34,12 @@ export function buildCitizen(look: CitizenLook, options: HeadOptions = {}): Voxe
   drawTiedHair(g, look.hair.style, hat?.brim);
   if (look.beard) drawBeard(g, look.beard.style);
   if (look.moustache) drawMoustache(g, look.moustache.style);
+  if (look.facePaint) drawFacePaint(g, look.facePaint.style, look.eyes.spacing);
+  if (look.ears) drawEars(g, look.ears.style);
   if (look.glasses) drawGlasses(g, look.glasses.style, look.eyes.spacing);
   if (look.earrings) drawEarrings(g, look.earrings.style);
   if (look.flower) drawFlower(g, hat);
+  if (look.held) drawHeld(g, look.held.style);
   return g;
 }
 
@@ -95,11 +101,38 @@ export function slotColours(look: CitizenLook, options: ColourOptions = {}): Rec
     // Sneakers have a white rubber sole; a white sneaker gets a pale grey one so the two still part.
     sole: luma(shoe) > .8 ? rgb('#c9c4bc') : rgb('#f3f1ee'),
     button: rgb(BRASS),
+    ...newPartColours(look, hair),
     ...earnedColours(look, options),
   };
 }
 
 const GREY: Rgb = [.5, .49, .5];
+
+/**
+ * Fey ears in the skin or their tint with a warm inside, face paint, an earring's bead, a hat's white and ink,
+ * and a held toy: its chosen colour, that colour's deep tone, and the toy's own fixed trims.
+ */
+function newPartColours(look: CitizenLook, hair: Rgb): Record<'ear' | 'earDeep' | 'earTuft' | 'paint' | 'bead' | 'hatWhite' | 'hatInk' | 'held' | 'heldDeep' | 'heldTwo' | 'heldThree' | 'heldGlow' | 'heldInk', Rgb> {
+  const ear = rgb(look.ears?.tint ?? look.skin);
+  const toy = look.held ? HELD_PALETTES[look.held.style] : HELD_PALETTES['rubber-duck'];
+  const held = rgb(look.held?.colour ?? toy.colour);
+  const bead = look.earrings ? EARRING_BEADS[look.earrings.style] : undefined;
+  return {
+    ear,
+    earDeep: shade(mix(ear, rgb(BLUSH_PINK), luma(ear) > .5 ? .34 : .26), .9),
+    earTuft: luma(hair) > .7 ? shade(hair, .85) : hair,
+    paint: rgb(look.facePaint?.colour ?? BLUSH_PINK),
+    bead: rgb(bead ?? METALS[0].hex),
+    hatWhite: rgb(HAT_WHITE),
+    hatInk: rgb(EYE_INK),
+    held,
+    heldDeep: luma(held) < .12 ? mix(held, [1, 1, 1], .16) : shade(held, .76),
+    heldTwo: rgb(toy.two),
+    heldThree: rgb(toy.three),
+    heldGlow: rgb(toy.glow),
+    heldInk: rgb(EYE_INK),
+  };
+}
 
 /** The earned pieces' colours. With one month mark reached, both ribbon cells are its colour. */
 function earnedColours(look: CitizenLook, { subLapsed = false }: ColourOptions): Record<Slot & (`ribbon${1 | 2}` | `hood${'' | 'Deep' | 'Trim'}` | `pin${1 | 2}${'a' | 'b' | 'm'}` | `raid${'A' | 'B' | 'Deep'}` | 'forgeMetal'), Rgb> {

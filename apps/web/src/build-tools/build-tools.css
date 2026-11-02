@@ -1,287 +1,352 @@
-/* Fonts, focus and the material tokens come from the carved kit (@chatdom/ui/kit.css, imported by the rack). */
+/* The carved rack. Wood, brass, parchment, faces, the type scale and the focus wire come from the kit
+   (@chatdom/ui/kit.css, imported by the rack, which also wears the kit's .cd-plate). Two faces only: the kit's
+   storybook display face for headings, its humanist text face for everything else. Nothing on the page is under 13 px. */
 
 .bt-rack {
-  --bt-wood-hi: var(--cd-wood-hi); --bt-wood: var(--cd-wood); --bt-wood-lo: var(--cd-wood-lo); --bt-wood-edge: var(--cd-wood-edge);
-  --bt-brass-hi: var(--cd-brass-hi); --bt-brass: var(--cd-brass); --bt-brass-lo: var(--cd-brass-lo);
-  --bt-parch: var(--cd-parch); --bt-parch-lo: #e0cb9e; --bt-ink: var(--cd-ink); --bt-ink-soft: var(--cd-ink-soft); --bt-seal: #9c402c; --bt-alarm: var(--cd-ink-alarm);
-  --bt-cream: var(--cd-cream); --bt-cream-soft: var(--cd-cream-soft);
-  /* Resting fittings: flat wood, words still at least 3:1 (cream-soft on resting wood is above 5:1). */
-  --bt-rest: #4f3423; --bt-rest-ink: #c9b28d; --bt-rest-mark: #b0966f;
-  position: absolute; right: calc(24px + env(safe-area-inset-right)); bottom: calc(24px + env(safe-area-inset-bottom)); width: 380px; padding: 14px 14px 12px;
-  display: flex; flex-direction: column; gap: 10px; pointer-events: auto; z-index: 12;
-  /* Browser zoom or a short window can make the rack taller than the screen: it scrolls inside itself, never off the top. */
+  --bt-well: var(--cd-wood-well); --bt-ember: #c96a46;
+  /* Resting fittings: flat wood, words still well above 4.5:1 (cream-soft on resting wood). */
+  --bt-rest: #4f3423; --bt-rest-ink: #d0b994; --bt-rest-mark: #b0966f;
+  --bt-face-head: var(--cd-face-story); --bt-face-text: var(--cd-face-body);
+  position: absolute; right: calc(24px + env(safe-area-inset-right)); bottom: calc(24px + env(safe-area-inset-bottom)); width: 380px; padding: 15px 14px 12px;
+  display: flex; flex-direction: column; gap: 10px; pointer-events: auto; z-index: 12; border-radius: 14px;
+  /* Browser zoom or a short window can make the rack taller than the screen: it moves inside itself, never off the top,
+     and draws no browser scrollbar (wheel, touch and keyboard focus still reach every fitting). */
   max-height: calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; overflow-x: hidden;
-  scrollbar-width: thin; scrollbar-color: var(--bt-brass-lo) transparent;
+  scrollbar-width: none;
   /* A tool rack, not a page: no text selection, callouts or double-tap zoom under a working thumb. */
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; overscroll-behavior: contain;
-  color: var(--bt-cream); font: 14px/1.35 Alegreya, Georgia, serif; font-synthesis: none;
-  background:
-    radial-gradient(circle at 9px 9px, var(--bt-brass-hi) 0 1px, var(--bt-brass) 1.5px 2.6px, var(--bt-brass-lo) 3.2px, transparent 3.8px),
-    radial-gradient(circle at calc(100% - 9px) 9px, var(--bt-brass-hi) 0 1px, var(--bt-brass) 1.5px 2.6px, var(--bt-brass-lo) 3.2px, transparent 3.8px),
-    radial-gradient(circle at 9px calc(100% - 9px), var(--bt-brass-hi) 0 1px, var(--bt-brass) 1.5px 2.6px, var(--bt-brass-lo) 3.2px, transparent 3.8px),
-    radial-gradient(circle at calc(100% - 9px) calc(100% - 9px), var(--bt-brass-hi) 0 1px, var(--bt-brass) 1.5px 2.6px, var(--bt-brass-lo) 3.2px, transparent 3.8px),
-    repeating-linear-gradient(93deg, #ffdcae08 0 2px, transparent 2px 9px, #1a0c0410 9px 10px, transparent 10px 17px, #ffdcae06 17px 18px, transparent 18px 26px),
-    linear-gradient(176deg, var(--bt-wood-hi), var(--bt-wood) 38%, var(--bt-wood-lo));
-  border: 1px solid var(--bt-wood-edge); border-radius: 14px;
-  box-shadow: inset 0 1px 0 #ffe1b440, inset 0 -2px 0 #0000004d, inset 0 0 0 4px #00000014, 0 0 0 1px #c99f5b33, 0 20px 44px #0c0a1c80, 0 4px 10px #0c0a1c55;
+  font: var(--cd-type-body)/1.35 var(--bt-face-text);
 }
+.bt-rack::-webkit-scrollbar, .bt-piece-row::-webkit-scrollbar { display: none; }
 .bt-rack * { box-sizing: border-box; }
-.bt-rack p { margin: 0; }
-.bt-rack button { font: inherit; color: inherit; margin: 0; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.bt-rack p, .bt-rack h2, .bt-rack h3 { margin: 0; }
+.bt-rack button { font: inherit; color: inherit; margin: 0; cursor: pointer; appearance: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .bt-rack button:disabled { cursor: default; }
-/* Keyboard focus is a brass wire set just outside the fitting, so the fitting keeps its own depth and seated state. */
+/* Keyboard focus is the kit's brass wire, set just outside the fitting so it keeps its own depth and seated state. */
 .bt-rack button:focus { outline: none; }
-.bt-rack button:focus-visible { outline: 2px solid var(--bt-brass-hi); outline-offset: 2px; z-index: 1; }
-.bt-rack .bt-swatch:focus-visible { outline-offset: 3px; }
+.bt-rack button:focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: 2px; z-index: 1; }
+.bt-rack .bt-swatch:focus-visible, .bt-rack .bt-piece:focus-visible { outline-offset: 3px; }
 .bt-mark { width: 24px; height: 24px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
 .bt-mark .bt-mark-faint { stroke-width: 1; opacity: .45; }
 .bt-mark .bt-mark-solid { fill: currentColor; stroke: none; }
-.bt-rack kbd, .bt-why { font: 12px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .04em; color: var(--bt-cream-soft); }
+.bt-rack kbd, .bt-why { font: var(--cd-type-small)/1 var(--bt-face-text); font-variant-numeric: tabular-nums; color: var(--cd-cream-soft); }
+.bt-short { display: none; }
 
-/* Parchment label pinned at the head of the rack. */
+/* Section headings are cut into the wood in the storybook face. */
+.bt-label { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 3px 6px; font: 400 var(--cd-type-lead)/1 var(--bt-face-head); color: var(--cd-cream); }
+.bt-label-word { font-weight: 400; }
+.bt-chosen { font: var(--cd-type-body)/1 var(--bt-face-text); color: var(--cd-cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bt-label .bt-chip { width: 16px; height: 16px; flex: none; margin-right: -2px; outline: 1px solid var(--cd-brass); outline-offset: 1px; }
+.bt-label .bt-peek { font: italic var(--cd-type-small)/1 var(--bt-face-text); color: var(--cd-cream-soft); white-space: nowrap; }
+.bt-label .bt-peek::before { content: '· '; font-style: normal; }
+
+/* The owner's nameplate: parchment pinned in the head of the rack, a brass rule under the name. */
 .bt-head { display: flex; align-items: stretch; gap: 8px; }
-.bt-plate { flex: 1; min-width: 0; padding: 8px 12px 8px; color: var(--bt-ink); border-radius: 4px;
-  background: radial-gradient(ellipse at 30% 20%, #fff8e2, transparent 70%), linear-gradient(170deg, var(--bt-parch), var(--bt-parch-lo));
-  box-shadow: inset 0 0 0 1px #ffffff55, inset 0 -6px 14px #a0784020, 0 1px 0 #ffe7b833, 0 2px 0 #0000005c, 0 3px 6px #00000040; }
-.bt-eyebrow { font: 12px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .08em; color: var(--bt-ink-soft); }
-.bt-plate h2 { margin: 3px 0 4px; font: 22px/1.05 'IM Fell English', Georgia, serif; font-weight: 400; letter-spacing: -.005em; }
-.bt-mode { display: flex; align-items: baseline; gap: 7px; font-size: 12px; color: var(--bt-ink-soft); }
-.bt-mode b { font: 12px/1 system-ui, sans-serif; font-weight: 700; letter-spacing: .08em; color: var(--bt-alarm); padding: 2px 4px 1px; border: 1px solid #9c402c99; border-radius: 2px; }
+.bt-plate { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 9px 13px 9px;
+  color: var(--cd-ink); border-radius: 3px;
+  background: radial-gradient(ellipse at 28% 18%, var(--cd-parch-hi), transparent 72%), linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #ffffff52, inset 0 0 0 3px #f9eed5, inset 0 0 0 3.8px #9c7a4c38, inset 0 -6px 12px #a0784022, 0 1px 0 #ffe7b826, 0 2px 0 #0000005c, 0 3px 8px #0000003d; }
+.bt-owner { font: 400 var(--cd-type-title)/1.05 var(--bt-face-head); letter-spacing: -.005em; color: var(--cd-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding-bottom: 5px; border-bottom: 1px solid #9c7a4c55; }
+.bt-privacy { display: flex; flex-direction: column; gap: 1px; font: var(--cd-type-small)/1.3 var(--bt-face-text); color: var(--cd-ink-soft); }
+.bt-privacy b { font-weight: 700; color: var(--cd-ink); letter-spacing: .01em; }
+.bt-privacy-detail { font-style: italic; }
 
-/* Raised wooden keys: leave, undo, redo. */
-.bt-key { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 56px; min-height: 44px; padding: 5px 8px;
-  border: 1px solid var(--bt-wood-edge); border-radius: 7px; color: var(--bt-cream);
-  background: linear-gradient(180deg, #84593b, #684430); box-shadow: inset 0 1px 0 #ffe1b44d, 0 2px 0 var(--bt-wood-edge), 0 3px 5px #00000040;
+/* Raised wooden keys: leave, undo, redo, close, and the piece slip's two keys. */
+.bt-key { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 60px; min-height: 44px; padding: 5px 8px;
+  border: 1px solid var(--cd-wood-edge); border-radius: 7px; color: var(--cd-cream);
+  background: repeating-linear-gradient(88deg, #ffdcae0a 0 1px, transparent 1px 6px), linear-gradient(180deg, #84593b, #684430);
+  box-shadow: inset 0 1px 0 #ffe1b44d, 0 2px 0 var(--cd-wood-edge), 0 3px 5px #00000040;
   transition: transform .08s, box-shadow .08s, filter .12s; }
-.bt-key .bt-mark { width: 18px; height: 18px; color: var(--bt-brass); filter: drop-shadow(0 -1px 0 #00000080); }
-.bt-key span { font-size: 12px; line-height: 1; }
-.bt-key:not(:disabled):active { transform: translateY(2px); box-shadow: inset 0 1px 3px #00000066, 0 0 0 var(--bt-wood-edge); }
-.bt-key:disabled { color: var(--bt-rest-ink); background: linear-gradient(180deg, #5a3c29, var(--bt-rest)); box-shadow: inset 0 1px 0 #ffe1b41a, 0 1px 0 var(--bt-wood-edge); }
+.bt-key .bt-mark { width: 19px; height: 19px; color: var(--cd-brass); filter: drop-shadow(0 -1px 0 #00000080); }
+.bt-key > span { font-size: var(--cd-type-small); line-height: 1; }
+.bt-key:not(:disabled):hover { filter: brightness(1.07); }
+.bt-key:not(:disabled):active { transform: translateY(2px); box-shadow: inset 0 1px 3px #00000066, 0 0 0 var(--cd-wood-edge); }
+.bt-key:disabled { color: var(--bt-rest-ink); background: linear-gradient(180deg, #5a3c29, var(--bt-rest)); box-shadow: inset 0 1px 0 #ffe1b41a, 0 1px 0 var(--cd-wood-edge); }
 .bt-key:disabled .bt-mark { color: var(--bt-rest-mark); filter: none; }
 .bt-key:disabled .bt-why { color: var(--bt-rest-ink); }
-.bt-leave { align-self: stretch; }
+.bt-leave { align-self: stretch; min-width: 64px; }
 
 /* The core's own words: saving, rejection, publication. */
-.bt-slip { position: relative; display: flex; flex-direction: column; gap: 2px; min-height: 40px; justify-content: center; padding: 7px 12px 7px 14px;
-  color: var(--bt-ink); font-size: 13.5px; line-height: 1.3; border-radius: 3px;
-  background: linear-gradient(175deg, #f6ead0, #e6d2a8); box-shadow: inset 0 0 0 1px #ffffff4d, inset 3px 0 0 #b6905a66, 0 2px 0 #0000004d, 0 3px 7px #00000033; }
+.bt-slip { position: relative; display: flex; flex-direction: column; gap: 3px; min-height: 42px; justify-content: center; padding: 8px 12px 8px 15px;
+  color: var(--cd-ink); font: var(--cd-type-body)/1.3 var(--bt-face-text); border-radius: 3px;
+  background: radial-gradient(ellipse at 22% 10%, var(--cd-parch-hi), transparent 70%), linear-gradient(175deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #ffffff4d, inset 3px 0 0 #b6905a66, 0 2px 0 #0000004d, 0 3px 7px #00000033; }
 .bt-slip-text { animation: bt-ink .32s ease-out; }
 @keyframes bt-ink { from { opacity: .25; filter: blur(.6px); } to { opacity: 1; filter: none; } }
-.bt-slip-note { font: 12px/1.2 'IM Fell English SC', Georgia, serif; letter-spacing: .06em; color: var(--bt-alarm); }
+.bt-slip-note { font: italic var(--cd-type-small)/1.2 var(--bt-face-text); color: var(--cd-ink-alarm); }
 
 /* The tool rack proper: four pressed-wood blocks, the chosen one seated into the frame. */
 .bt-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; padding: 6px; border-radius: 9px;
-  background: linear-gradient(180deg, #2b1b10, #3a2517); box-shadow: inset 0 2px 5px #000000a0, inset 0 -1px 0 #ffe1b42a, 0 1px 0 #ffe1b41f; }
-.bt-tool { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 66px; padding: 8px 2px 9px;
-  border: 1px solid var(--bt-wood-edge); border-radius: 6px; color: var(--bt-cream);
+  background: linear-gradient(180deg, #00000047, #0000001f 40%, #ffdcae0a), var(--bt-well); box-shadow: inset 0 2px 5px #000000a0, inset 0 -1px 0 #ffe1b42a, 0 1px 0 #ffe1b41f; }
+.bt-tool { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 68px; padding: 9px 2px 10px;
+  border: 1px solid var(--cd-wood-edge); border-radius: 6px; color: var(--cd-cream);
   background: repeating-linear-gradient(88deg, #ffdcae0a 0 1px, transparent 1px 6px), linear-gradient(180deg, #8a5f40, #6b4631 70%, #5e3d2a);
   box-shadow: inset 0 1px 0 #ffe1b459, inset 0 -2px 0 #00000033, 0 3px 0 #1e1209, 0 4px 6px #0000004d;
   transition: transform .09s ease-out, box-shadow .09s ease-out, background .15s; }
-.bt-tool .bt-mark { width: 26px; height: 26px; color: var(--bt-brass); filter: drop-shadow(0 -1px 0 #000000a0) drop-shadow(0 1px 0 #ffe1b433); }
-.bt-tool-name { font-size: 13.5px; line-height: 1; letter-spacing: .01em; }
+.bt-tool .bt-mark { width: 27px; height: 27px; color: var(--cd-brass); filter: drop-shadow(0 -1px 0 #000000a0) drop-shadow(0 1px 0 #ffe1b433); }
+.bt-tool-name { font-size: var(--cd-type-body); line-height: 1; letter-spacing: .01em; }
 .bt-tool kbd { position: absolute; top: 5px; right: 6px; }
 .bt-tool:not(:disabled):hover { background: repeating-linear-gradient(88deg, #ffdcae0d 0 1px, transparent 1px 6px), linear-gradient(180deg, #966848, #744d36 70%, #654230); }
 .bt-tool:not(:disabled):active { transform: translateY(2px); box-shadow: inset 0 1px 0 #ffe1b433, 0 1px 0 #1e1209, 0 1px 2px #0000004d; }
 .bt-tool[aria-pressed='true'] { transform: translateY(3px); color: #fff1cf;
   background: radial-gradient(ellipse at 50% 30%, #c99f5b2e, transparent 70%), linear-gradient(180deg, #3e2819, #4d3222);
   box-shadow: inset 0 2px 5px #000000b3, inset 0 0 0 1px #e8c47833, 0 0 0 #1e1209; animation: bt-seat .18s ease-out; }
-.bt-tool[aria-pressed='true'] .bt-mark { color: var(--bt-brass-hi); filter: drop-shadow(0 0 5px #f0c56e70) drop-shadow(0 1px 0 #00000080); }
+.bt-tool[aria-pressed='true'] .bt-mark { color: var(--cd-brass-hi); filter: drop-shadow(0 0 5px #f0c56e70) drop-shadow(0 1px 0 #00000080); }
 .bt-tool[aria-pressed='true']::after { content: ''; position: absolute; left: 50%; bottom: 4px; width: 20px; height: 3px; margin-left: -10px; border-radius: 2px;
-  background: linear-gradient(90deg, var(--bt-brass-lo), var(--bt-brass-hi), var(--bt-brass-lo)); box-shadow: 0 0 6px #f0c56e80; }
+  background: linear-gradient(90deg, var(--cd-brass-lo), var(--cd-brass-hi), var(--cd-brass-lo)); box-shadow: 0 0 6px #f0c56e80; }
 .bt-tool:disabled { color: var(--bt-rest-ink); background: linear-gradient(180deg, #5a3c29, var(--bt-rest)); box-shadow: inset 0 1px 0 #ffe1b41a, 0 1px 0 #1e1209; }
 .bt-tool:disabled .bt-mark { color: var(--bt-rest-mark); filter: none; }
 @keyframes bt-seat { 0% { transform: translateY(0); } 60% { transform: translateY(4px); } 100% { transform: translateY(3px); } }
 
-.bt-hint { font-size: 12.5px; line-height: 1.35; color: var(--bt-cream-soft); padding: 0 3px; }
-.bt-hint b { font-weight: 400; color: var(--bt-cream); }
-.bt-label { display: flex; align-items: baseline; gap: 8px; padding: 0 3px 5px; font: 12px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .08em; color: var(--bt-cream-soft); }
-.bt-label span { font: 14px/1 Alegreya, Georgia, serif; letter-spacing: 0; color: var(--bt-cream); }
-/* The chosen sample sits beside its name, so colour and word read together. */
-.bt-label .bt-chip { align-self: center; width: 16px; height: 16px; margin-right: -2px; outline: 1px solid var(--bt-brass); outline-offset: 1px; }
+.bt-hint { font: var(--cd-type-small)/1.4 var(--bt-face-text); color: var(--cd-cream-soft); padding: 0 3px; }
+.bt-hint b { font-weight: 600; color: var(--cd-cream); }
+
+/* Two carved tabs over one shelf well, only when the core offers pieces: materials, and the person's own pieces. */
+.bt-tabs { display: flex; gap: 4px; margin-bottom: -10px; padding: 0 6px; position: relative; z-index: 1; }
+.bt-rack .bt-tab { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 14px 10px; border: 1px solid var(--cd-wood-edge); border-bottom: 0; border-radius: 8px 8px 0 0;
+  font: 400 var(--cd-type-lead)/1 var(--bt-face-head); color: var(--cd-cream-soft);
+  background: linear-gradient(180deg, #5e3d2a, #4a3020); box-shadow: inset 0 1px 0 #ffe1b42e; transition: color .12s, background .12s; }
+.bt-rack .bt-tab:hover { color: var(--cd-cream); }
+.bt-rack .bt-tab[aria-selected='true'] { color: var(--cd-cream); background: linear-gradient(180deg, #4a3020, var(--bt-well) 85%); box-shadow: inset 0 1px 0 #ffe1b44d, inset 0 -3px 0 var(--bt-well); }
+.bt-tab .bt-chip { width: 14px; height: 14px; outline: 1px solid var(--cd-brass); outline-offset: 1px; }
+.bt-count { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px;
+  font: 700 var(--cd-type-small)/1 var(--bt-face-text); font-variant-numeric: tabular-nums; color: var(--cd-ink);
+  background: radial-gradient(circle at 35% 30%, var(--cd-brass-hi), var(--cd-brass) 60%, var(--cd-brass-lo)); box-shadow: 0 1px 0 #00000080, inset 0 0 0 1px #00000026; }
+.bt-has-pieces .bt-materials .bt-label-word { display: none; }
+.bt-has-pieces .bt-materials, .bt-pieces { padding: 10px 8px 9px; border-radius: 9px; background: linear-gradient(180deg, #00000030, transparent 30%), var(--bt-well);
+  box-shadow: inset 0 2px 5px #000000a0, 0 1px 0 #ffe1b41f; }
+.bt-has-pieces .bt-materials .bt-swatches { padding: 2px 0 0; background: none; box-shadow: none; }
+.bt-materials:not(.bt-shelf-shown), .bt-pieces:not(.bt-shelf-shown) { display: none; }
 
 /* Material samples inlaid into the wood, shelved by what they build; the chosen one is raised in a brass frame and pinned. */
-.bt-label .bt-peek { font: italic 13px/1 Alegreya, Georgia, serif; color: var(--bt-cream-soft); }
-.bt-label .bt-peek::before { content: '· '; font-style: normal; opacity: .6; }
-.bt-swatches { display: flex; flex-wrap: wrap; column-gap: 11px; row-gap: 8px; padding: 7px 8px 9px; border-radius: 9px;
-  background: linear-gradient(180deg, #2b1b10, #3a2517); box-shadow: inset 0 2px 5px #000000a0, 0 1px 0 #ffe1b41f; }
-.bt-shelf { position: relative; display: flex; flex-direction: column; gap: 4px; }
-.bt-shelf + .bt-shelf::before { content: ''; position: absolute; left: -6px; top: 15px; bottom: 2px; width: 1px; background: linear-gradient(180deg, transparent, #c99f5b40 30%, #c99f5b40 70%, transparent); }
-.bt-shelf-name { font: 12px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .04em; color: var(--bt-cream-soft); white-space: nowrap; padding-left: 1px; }
+.bt-swatches { display: flex; flex-wrap: wrap; column-gap: 12px; row-gap: 9px; padding: 8px 8px 10px; border-radius: 9px;
+  background: linear-gradient(180deg, #00000047, #0000001f 40%, #ffdcae0a), var(--bt-well); box-shadow: inset 0 2px 5px #000000a0, 0 1px 0 #ffe1b41f; }
+.bt-shelf { position: relative; display: flex; flex-direction: column; gap: 5px; }
+.bt-shelf + .bt-shelf::before { content: ''; position: absolute; left: -7px; top: 17px; bottom: 2px; width: 1px; background: linear-gradient(180deg, transparent, #c99f5b40 30%, #c99f5b40 70%, transparent); }
+.bt-shelf-name { font: italic var(--cd-type-small)/1 var(--bt-face-text); color: var(--cd-cream-soft); white-space: nowrap; padding-left: 1px; }
 .bt-shelf-row { display: flex; gap: 4px; }
-.bt-swatch { position: relative; width: 33px; height: 33px; padding: 3px; border: 1px solid var(--bt-wood-edge); border-radius: 5px; background: #4a3020;
+.bt-swatch { position: relative; width: 34px; height: 34px; padding: 3px; border: 1px solid var(--cd-wood-edge); border-radius: 5px; background: #4a3020;
   box-shadow: inset 0 1px 0 #ffe1b433, 0 2px 0 #1e1209; transition: transform .08s ease-out, box-shadow .08s; }
 .bt-swatch i, .bt-chip { display: block; width: 100%; height: 100%; border-radius: 3px; background: linear-gradient(160deg, #ffffff38, transparent 45%, #00000030), var(--bt-swatch);
   box-shadow: inset 0 0 0 1px #00000030, inset 0 -2px 0 #00000026; }
 .bt-swatch:not(:disabled):hover { box-shadow: inset 0 1px 0 #ffe1b433, 0 2px 0 #1e1209, 0 0 0 1px #c99f5b66; }
 .bt-swatch:not(:disabled):active { transform: translateY(1px); box-shadow: inset 0 1px 0 #ffe1b433, 0 1px 0 #1e1209; }
-.bt-swatch[aria-pressed='true'] { transform: translateY(-2px); border-color: var(--bt-brass-lo);
-  background: linear-gradient(180deg, var(--bt-brass-hi), var(--bt-brass) 45%, var(--bt-brass-lo));
+.bt-swatch[aria-pressed='true'] { transform: translateY(-2px); border-color: var(--cd-brass-lo);
+  background: linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 45%, var(--cd-brass-lo));
   box-shadow: 0 0 0 1px #1e1209, 0 3px 0 #1e1209, 0 0 10px #f0c56e55; }
 .bt-swatch[aria-pressed='true']::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 7px; height: 7px; margin-left: -3.5px; transform: rotate(45deg);
-  background: linear-gradient(135deg, var(--bt-brass-hi), var(--bt-brass-lo)); border: 1px solid #1e1209; }
+  background: linear-gradient(135deg, var(--cd-brass-hi), var(--cd-brass-lo)); border: 1px solid #1e1209; }
 .bt-swatch:disabled { filter: saturate(.6) brightness(.85); }
 
-/* Phone only: the palette folds into a drawer behind this opener, and the drawer carries its own head. */
+/* Your pieces: small renders of the real voxel pieces on lamp-lit wood, named on a parchment tag. */
+.bt-piece-row { display: flex; flex-wrap: wrap; gap: 8px; max-height: 204px; overflow-y: auto; scrollbar-width: none; padding: 2px 2px 6px; }
+.bt-piece { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 0; width: 80px; padding: 3px; text-align: center;
+  border: 1px solid var(--cd-wood-edge); border-radius: 6px; background: #4a3020;
+  box-shadow: inset 0 1px 0 #ffe1b433, 0 2px 0 #1e1209, 0 3px 5px #00000040; transition: transform .08s ease-out, box-shadow .08s; }
+.bt-piece-picture { display: grid; place-items: center; height: 56px; border-radius: 4px 4px 0 0; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 35%, #f2c27a33, transparent 70%), linear-gradient(180deg, #2b1b10, #3d2718); box-shadow: inset 0 1px 3px #00000099; }
+.bt-piece-picture svg, .bt-piece-picture img { display: block; width: 64px; height: 48px; object-fit: contain; filter: drop-shadow(0 2px 2px #00000080); }
+.bt-piece-picture polygon { stroke: #00000038; stroke-width: .06; stroke-linejoin: round; }
+.bt-piece-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: 36px; padding: 4px 4px 3px;
+  font: var(--cd-type-small)/1.2 var(--bt-face-text); color: var(--cd-ink); border-radius: 0 0 3px 3px;
+  background: linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo)); box-shadow: inset 0 1px 0 #ffffff52; overflow-wrap: anywhere; }
+.bt-piece:not(:disabled):hover { box-shadow: inset 0 1px 0 #ffe1b433, 0 2px 0 #1e1209, 0 0 0 1px #c99f5b80; }
+.bt-piece:not(:disabled):active { transform: translateY(1px); }
+.bt-piece[aria-pressed='true'] { transform: translateY(-2px); border-color: var(--cd-brass-lo);
+  background: linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 45%, var(--cd-brass-lo)); box-shadow: 0 0 0 1px #1e1209, 0 3px 0 #1e1209, 0 0 12px #f0c56e55; }
+.bt-piece-slip { display: grid; gap: 6px; margin-top: 8px; padding: 9px 11px 10px; color: var(--cd-ink); border-radius: 3px; animation: bt-unroll .2s ease-out;
+  background: radial-gradient(ellipse at 26% 12%, var(--cd-parch-hi), transparent 70%), linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #ffffff57, inset 0 0 0 3px #f9eed5, inset 0 0 0 3.8px #9c7a4c38, 0 1px 0 #00000059, 0 3px 8px #0000004d; }
+@keyframes bt-unroll { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+.bt-piece-title { display: flex; flex-direction: column; gap: 2px; }
+.bt-piece-title b { font: 400 var(--cd-type-lead)/1.15 var(--bt-face-head); }
+.bt-piece-title span, .bt-piece-help { font: italic var(--cd-type-small)/1.3 var(--bt-face-text); color: var(--cd-ink-soft); }
+.bt-piece-actions { display: flex; gap: 7px; }
+.bt-piece-actions .bt-key { flex: 1; flex-direction: row; font-size: var(--cd-type-body); }
+.bt-rack .bt-set { color: var(--cd-ink); border-color: var(--cd-brass-lo);
+  background: linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 55%, #a98245); box-shadow: inset 0 1px 0 #fff3cc, 0 2px 0 #3d270f, 0 3px 5px #00000040; }
+
+/* Phone only: the shelves fold into drawers behind these openers, and an open drawer carries its own head. */
 .bt-opener, .bt-drawer-head { display: none; }
 
-/* Brush and mirror: brass plates in a recessed channel. */
-.bt-shape { display: grid; grid-template-columns: 3fr 4fr; gap: 8px; }
+/* Block size, then undo and redo, on one line: brass plates in a recessed channel beside two wooden keys. */
+.bt-shape { display: grid; grid-template-columns: minmax(0, 1fr) 68px 68px; align-items: end; gap: 7px; }
+.bt-field { min-width: 0; }
 .bt-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; padding: 4px; border-radius: 9px;
-  background: linear-gradient(180deg, #2b1b10, #3a2517); box-shadow: inset 0 2px 5px #000000a0, 0 1px 0 #ffe1b41f; }
-.bt-seg button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 46px; padding: 4px 0 3px;
-  border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--bt-cream-soft); transition: background .12s, color .12s, transform .08s; }
+  background: linear-gradient(180deg, #00000047, #0000001f 40%, #ffdcae0a), var(--bt-well); box-shadow: inset 0 2px 5px #000000a0, 0 1px 0 #ffe1b41f; }
+.bt-seg button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 52px; padding: 4px 0 3px;
+  border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--cd-cream-soft); transition: background .12s, color .12s, transform .08s; }
 .bt-seg button .bt-mark { width: 20px; height: 20px; }
-.bt-seg button span { font-size: 12px; line-height: 1; }
-.bt-seg button:not(:disabled):hover { background: #ffe1b414; color: var(--bt-cream); }
+.bt-seg button span { font-size: var(--cd-type-body); line-height: 1; font-variant-numeric: tabular-nums; }
+.bt-seg button:not(:disabled):hover { background: #ffe1b414; color: var(--cd-cream); }
 .bt-seg button:not(:disabled):active { transform: translateY(1px); }
 .bt-seg button[aria-pressed='true']:not(:disabled):active { box-shadow: inset 0 1px 3px #3d270f99, 0 0 0 #1e1209; filter: brightness(.96); }
-.bt-seg button[aria-pressed='true'] { color: var(--bt-ink); border-color: var(--bt-brass-lo);
-  background: linear-gradient(180deg, var(--bt-brass-hi), var(--bt-brass) 55%, #a98245); box-shadow: inset 0 1px 0 #fff3cc, 0 1px 0 #1e1209, 0 2px 3px #00000066; }
-.bt-seg button[aria-pressed='true'] span { font-weight: 600; }
+.bt-seg button[aria-pressed='true'] { color: var(--cd-ink); border-color: var(--cd-brass-lo);
+  background: linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 55%, #a98245); box-shadow: inset 0 1px 0 #fff3cc, 0 1px 0 #1e1209, 0 2px 3px #00000066; }
+.bt-seg button[aria-pressed='true'] span { font-weight: 700; }
 .bt-seg button:disabled { color: var(--bt-rest-ink); }
 .bt-seg button:disabled .bt-mark { color: var(--bt-rest-mark); }
-.bt-mirror-help { margin-top: -4px; }
+.bt-shape .bt-key { min-width: 0; height: 60px; padding: 6px 4px 5px; }
+.bt-shape .bt-key kbd, .bt-shape .bt-key .bt-why { white-space: nowrap; }
 
-/* History and allowance share the ledger line. */
-.bt-ledger { display: flex; align-items: center; gap: 7px; }
-.bt-ledger .bt-key { display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 5px; row-gap: 4px; min-width: 0; padding: 6px 11px 5px; }
-.bt-ledger .bt-key kbd, .bt-ledger .bt-key .bt-why { grid-column: 1 / -1; justify-self: center; white-space: nowrap; }
-.bt-budget { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; padding-left: 4px; }
-.bt-slash { display: none; }
-.bt-budget > span { font-size: 12px; line-height: 1; color: var(--bt-cream-soft); white-space: nowrap; }
-.bt-budget b { font-weight: 500; color: var(--bt-cream); }
-.bt-budget i { display: block; height: 7px; border-radius: 4px; overflow: hidden; background: #24160d; box-shadow: inset 0 1px 2px #000000b0, 0 1px 0 #ffe1b42a; }
-.bt-budget em { display: block; height: 100%; min-width: 3px; border-radius: 4px; background: linear-gradient(180deg, var(--bt-brass-hi), var(--bt-brass) 60%, var(--bt-brass-lo)); transition: width .2s ease-out; }
-.bt-budget-full em { background: linear-gradient(180deg, #f3b58f, #c96a46 60%, #8a3a24); }
+/* The allowance: a carved gauge with brass end caps and quarter notches, and the same fact in plain words. */
+.bt-allowance { display: flex; flex-direction: column; gap: 6px; padding: 0 2px; }
+.bt-allowance-words { display: flex; align-items: baseline; gap: 10px; padding: 0 1px; }
+.bt-allowance-name { font: 400 var(--cd-type-lead)/1 var(--bt-face-head); color: var(--cd-cream); }
+.bt-allowance-used { margin-left: auto; font: var(--cd-type-small)/1 var(--bt-face-text); font-variant-numeric: tabular-nums; color: var(--cd-cream-soft); white-space: nowrap; }
+.bt-allowance-used b { font-weight: 700; font-size: var(--cd-type-body); color: var(--cd-cream); }
+.bt-allowance-left { font: italic var(--cd-type-small)/1 var(--bt-face-text); font-variant-numeric: tabular-nums; color: var(--cd-cream-soft); white-space: nowrap; }
+.bt-gauge { position: relative; display: block; height: 14px; margin: 0 5px; padding: 3px; border-radius: 3px;
+  background: linear-gradient(180deg, #00000066, #00000026 60%, #ffdcae0d), var(--bt-well); border: 1px solid var(--cd-wood-edge);
+  box-shadow: inset 0 2px 3px #000000b0, 0 1px 0 #ffe1b42a; }
+/* Quarter notches cut into the channel, over the fill so the fill reads as poured brass behind them. */
+.bt-gauge::after { content: ''; position: absolute; inset: 2px 3px; pointer-events: none;
+  background: linear-gradient(90deg, transparent calc(25% - .5px), #1a0c04b3 calc(25% - .5px) calc(25% + .5px), transparent calc(25% + .5px) calc(50% - .5px), #1a0c04b3 calc(50% - .5px) calc(50% + .5px), transparent calc(50% + .5px) calc(75% - .5px), #1a0c04b3 calc(75% - .5px) calc(75% + .5px), transparent calc(75% + .5px)); }
+.bt-gauge::before { content: ''; position: absolute; inset: -4px -6px; pointer-events: none;
+  background:
+    radial-gradient(circle at 3px 50%, var(--cd-brass-hi) 0 1px, var(--cd-brass) 1.6px 2.4px, var(--cd-brass-lo) 3px, transparent 3.4px),
+    radial-gradient(circle at calc(100% - 3px) 50%, var(--cd-brass-hi) 0 1px, var(--cd-brass) 1.6px 2.4px, var(--cd-brass-lo) 3px, transparent 3.4px); }
+.bt-gauge i { display: block; height: 100%; min-width: 3px; border-radius: 2px; transition: width .2s ease-out;
+  background: linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 55%, var(--cd-brass-lo)); box-shadow: inset 0 1px 0 #fff3cc99, 0 0 6px #f0c56e40; }
+.bt-allowance-near .bt-gauge i { background: linear-gradient(180deg, #f3b58f, var(--bt-ember) 60%, #8a3a24); box-shadow: 0 0 6px #e0784a55; }
+.bt-allowance-near .bt-allowance-left { color: #f3b58f; font-style: normal; }
 
 /* The one action that reaches the street. */
-.bt-welcome { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 46px; padding: 9px 12px;
-  border: 1px solid #4a1b11; border-radius: 8px; color: #fbe7c0; font-size: 16px; letter-spacing: .01em;
+.bt-welcome { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 50px; padding: 9px 12px;
+  border: 1px solid #4a1b11; border-radius: 8px; color: #fbe7c0; font: var(--cd-type-lead)/1 var(--bt-face-text); letter-spacing: .01em;
   background: radial-gradient(ellipse at 50% 0%, #ffd7a733, transparent 65%), linear-gradient(180deg, #ad5338, #8a3b28 60%, #74301f);
   box-shadow: inset 0 1px 0 #ffcfa466, inset 0 0 0 1px #e3a46a33, 0 3px 0 #3a150c, 0 5px 9px #00000055; transition: transform .08s, box-shadow .08s, filter .12s; }
-.bt-welcome .bt-mark { width: 22px; height: 22px; color: var(--bt-brass-hi); }
-.bt-welcome-text { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; text-align: left; }
-.bt-welcome-text > span { line-height: 1.05; white-space: nowrap; }
-.bt-welcome-text small { font-size: 12px; line-height: 1; color: #f2cfa4; white-space: nowrap; letter-spacing: .01em; }
-.bt-welcome-text small b { font: 12px/1 system-ui, sans-serif; font-weight: 700; letter-spacing: .08em; color: #ffe7c2; }
-.bt-short { display: none; }
-/* While the core prepares the local housewarming, the lamp in the doorway flickers; the plate stays lit, not greyed. */
+.bt-welcome .bt-mark { width: 23px; height: 23px; color: var(--cd-brass-hi); }
+.bt-welcome-text { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; text-align: left; }
+.bt-welcome-text > span { font: 400 17px/1.05 var(--bt-face-head); white-space: nowrap; }
+.bt-welcome-text small { font: italic var(--cd-type-small)/1 var(--bt-face-text); color: #f6d6ad; white-space: nowrap; }
+/* While the core prepares the housewarming, the lamp in the doorway flickers; the plate stays lit, not greyed. */
 .bt-welcome[aria-busy='true'] .bt-mark { animation: bt-lamp .7s ease-in-out infinite alternate; }
 @keyframes bt-lamp { from { opacity: 1; } to { opacity: .55; } }
 .bt-welcome:not(:disabled):hover { filter: brightness(1.08); }
 .bt-welcome:not(:disabled):active { transform: translateY(2px); box-shadow: inset 0 1px 3px #00000066, 0 1px 0 #3a150c; }
 .bt-welcome:disabled { filter: saturate(.45) brightness(.8); }
 .bt-welcome[aria-busy='true'] { filter: none; }
-.bt-camera { text-align: center; font-size: 12px; margin-top: -2px; }
+.bt-camera { text-align: center; margin-top: -2px; }
 
 @media (hover: none) { .bt-rack kbd { display: none; } }
 /* Touch screens wide enough for the full rack (tablets) still get thumb-sized samples. */
 @media (pointer: coarse) and (min-width: 601px) and (min-height: 561px) {
   .bt-swatches { column-gap: 12px; }
   .bt-swatch { width: 44px; height: 44px; padding: 4px; }
-  .bt-ledger .bt-key { min-height: 46px; }
 }
 
-/* Laptop heights: the rack sheds its engraving and long help so it settles under the scene's own seal. */
+/* Laptop heights: the rack sheds its long help so it settles under the scene's own seal. */
+@media (min-width: 601px) and (min-height: 561px) and (max-height: 960px) {
+  .bt-has-pieces .bt-camera { display: none; }
+}
 @media (min-width: 601px) and (min-height: 561px) and (max-height: 820px) {
-  .bt-rack { gap: 8px; padding: 12px 12px 10px; }
-  .bt-eyebrow, .bt-mirror-help, .bt-camera { display: none; }
-  .bt-plate { padding: 7px 11px; }
-  .bt-plate h2 { margin-top: 0; font-size: 20px; }
-  .bt-slip { min-height: 36px; padding: 6px 12px 6px 14px; }
-  .bt-tool { min-height: 58px; padding: 6px 2px 7px; }
-  .bt-shelf-row { gap: 4px; }
-  .bt-welcome { min-height: 44px; padding: 7px 12px; }
+  .bt-rack { gap: 8px; padding: 13px 12px 10px; }
+  .bt-camera, .bt-privacy-detail { display: none; }
+  .bt-plate { padding: 7px 11px; gap: 4px; }
+  .bt-owner { font-size: 20px; padding-bottom: 4px; }
+  .bt-slip { min-height: 38px; padding: 6px 12px 6px 15px; }
+  .bt-tool { min-height: 60px; padding: 7px 2px 8px; }
+  .bt-seg button { min-height: 46px; }
+  .bt-shape .bt-key { height: 54px; }
+  .bt-welcome { min-height: 46px; padding: 7px 12px; }
 }
 @media (min-width: 601px) and (min-height: 561px) and (max-height: 700px) {
-  .bt-tool-help, .bt-plate h2 { display: none; }
-  .bt-head .bt-plate { display: flex; flex-direction: column; justify-content: center; gap: 5px; }
-  .bt-leave { min-height: 44px; }
+  .bt-tool-help, .bt-shape .bt-label { display: none; }
+  .bt-shape .bt-key { height: 54px; }
 }
 
-/* Phones, upright or on their side: the thumb rack, with the palette folded into a drawer. */
+/* Phones, upright or on their side: the thumb rack, with the shelves folded into drawers. */
 @media (max-width: 600px), (max-height: 560px) {
   .bt-rack { left: calc(8px + env(safe-area-inset-left)); right: calc(8px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); width: auto;
     max-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     padding: 9px; gap: 7px 5px; border-radius: 12px;
     display: grid; grid-template-columns: 44px 44px minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas: 'head head head head' 'slip slip slip slip' 'tools tools tools tools' 'pick pick pick budget' 'shape shape shape shape' 'undo redo welcome welcome'; }
-  .bt-rack kbd, .bt-eyebrow, .bt-hint, .bt-camera, .bt-label { display: none; }
-  .bt-head { grid-area: head; } .bt-slip { grid-area: slip; } .bt-tools { grid-area: tools; } .bt-opener { grid-area: pick; }
-  .bt-budget { grid-area: budget; } .bt-shape { grid-area: shape; } .bt-materials { grid-area: mats; }
+    grid-template-areas: 'head head head head' 'slip slip slip slip' 'tools tools tools tools' 'pick pick pick pick' 'brush brush brush budget' 'undo redo welcome welcome'; }
+  .bt-rack.bt-has-pieces { grid-template-areas: 'head head head head' 'slip slip slip slip' 'tools tools tools tools' 'pick pick pick pcs' 'brush brush brush budget' 'undo redo welcome welcome'; }
+  .bt-rack kbd, .bt-hint, .bt-camera, .bt-tabs, .bt-privacy-detail, .bt-materials > .bt-label, .bt-shape .bt-label { display: none; }
+  .bt-head { grid-area: head; } .bt-slip { grid-area: slip; } .bt-tools { grid-area: tools; } .bt-material-opener { grid-area: pick; } .bt-piece-opener { grid-area: pcs; }
+  .bt-allowance { grid-area: budget; } .bt-shape { display: contents; } .bt-field { grid-area: brush; }
   .bt-undo { grid-area: undo; } .bt-redo { grid-area: redo; } .bt-welcome { grid-area: welcome; }
-  .bt-plate { display: flex; align-items: center; padding: 6px 10px; }
-  .bt-plate h2 { display: none; }
-  .bt-mode { font-size: 12.5px; }
-  .bt-leave { min-width: 52px; }
-  .bt-slip { min-height: 34px; padding: 5px 10px 5px 12px; font-size: 13px; }
+  .bt-plate { flex-direction: row; align-items: baseline; gap: 8px; padding: 7px 11px; }
+  .bt-owner { flex: 0 1 auto; min-width: 0; font-size: 18px; padding: 0; border: 0; }
+  .bt-privacy { flex: none; }
+  .bt-privacy b { font-weight: 600; color: var(--cd-ink-soft); font-style: italic; }
+  .bt-leave { min-width: 56px; }
+  .bt-slip { min-height: 36px; padding: 6px 10px 6px 12px; font-size: var(--cd-type-small); }
   .bt-tools { padding: 4px; gap: 5px; }
   .bt-tool { min-height: 50px; flex-direction: row; gap: 5px; padding: 6px 2px; }
   .bt-tool .bt-mark { width: 22px; height: 22px; }
-  .bt-tool-name { font-size: 13px; }
+  .bt-tool-name { font-size: var(--cd-type-small); }
   .bt-tool[aria-pressed='true']::after { bottom: 3px; }
-  .bt-shape { grid-template-columns: minmax(0, 3fr) minmax(0, 4fr); gap: 6px; }
   .bt-seg { padding: 3px; gap: 2px; }
-  .bt-seg button { min-height: 44px; }
-  .bt-ledger { display: contents; }
-  .bt-ledger .bt-key { display: flex; width: 44px; padding: 0; }
-  .bt-ledger .bt-key span, .bt-ledger .bt-key .bt-why { display: none; }
-  .bt-ledger .bt-key .bt-mark { width: 20px; height: 20px; }
-  .bt-budget { justify-content: center; padding: 0 2px 0 4px; }
-  .bt-budget > span { font-size: 12px; }
-  .bt-of { display: none; }
-  .bt-slash { display: inline; }
-  .bt-welcome { min-height: 44px; padding: 6px 10px; font-size: 14px; gap: 6px; }
-  .bt-welcome .bt-mark { width: 19px; height: 19px; }
-  .bt-welcome-text { gap: 2px; }
-  .bt-welcome-text small { font-size: 12px; }
+  .bt-seg button { min-height: 44px; flex-direction: row; gap: 4px; }
+  .bt-seg button .bt-mark { width: 17px; height: 17px; }
+  .bt-shape .bt-key { display: flex; width: 44px; height: auto; min-height: 44px; padding: 0; }
+  .bt-shape .bt-key > span, .bt-shape .bt-key .bt-why { display: none; }
+  .bt-shape .bt-key .bt-mark { width: 20px; height: 20px; }
+  .bt-allowance { justify-content: center; gap: 5px; padding: 0 2px 0 4px; }
+  .bt-allowance-name, .bt-allowance-left { display: none; }
+  .bt-allowance-used { margin: 0; }
+  .bt-gauge { height: 12px; margin: 0 4px; }
   .bt-long { display: none; } .bt-short { display: inline; }
+  .bt-welcome { min-height: 44px; padding: 6px 10px; gap: 7px; }
+  .bt-welcome .bt-mark { width: 19px; height: 19px; }
+  .bt-welcome-text { gap: 3px; }
+  .bt-welcome-text > span { font-size: 16px; }
 
-  /* The closed drawer: one thumb-wide plate showing the swatch in hand. */
-  .bt-opener { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 5px 10px 5px 5px; text-align: left;
-    border: 1px solid var(--bt-wood-edge); border-radius: 8px; color: var(--bt-cream);
+  /* A closed drawer: one thumb-wide plate showing what is in hand. */
+  .bt-opener { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 44px; padding: 5px 10px 5px 5px; text-align: left;
+    border: 1px solid var(--cd-wood-edge); border-radius: 8px; color: var(--cd-cream);
     background: repeating-linear-gradient(88deg, #ffdcae0a 0 1px, transparent 1px 6px), linear-gradient(180deg, #84593b, #684430);
-    box-shadow: inset 0 1px 0 #ffe1b44d, 0 2px 0 var(--bt-wood-edge), 0 3px 5px #00000040; transition: transform .08s, box-shadow .08s; }
+    box-shadow: inset 0 1px 0 #ffe1b44d, 0 2px 0 var(--cd-wood-edge), 0 3px 5px #00000040; transition: transform .08s, box-shadow .08s; }
+  .bt-piece-opener { padding-left: 11px; }
   .bt-opener:not(:disabled):active { transform: translateY(2px); box-shadow: inset 0 1px 3px #00000066; }
-  .bt-chip { flex: none; width: 34px; height: 34px; border-radius: 5px; outline: 2px solid var(--bt-brass); outline-offset: -1px;
+  .bt-opener .bt-chip { flex: none; width: 34px; height: 34px; border-radius: 5px; outline: 2px solid var(--cd-brass); outline-offset: -1px;
     box-shadow: inset 0 0 0 1px #00000030, inset 0 -2px 0 #00000026, 0 0 0 3px #2b1b10; }
   .bt-opener-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-  .bt-opener-text small { font: 12px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .06em; color: var(--bt-cream-soft); }
-  .bt-opener-text span { font-size: 15px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bt-opener .bt-mark { width: 20px; height: 20px; color: var(--bt-brass); }
+  .bt-opener-text small { font: italic var(--cd-type-small)/1 var(--bt-face-text); color: var(--cd-cream-soft); }
+  .bt-opener-text span { font: var(--cd-type-lead)/1 var(--bt-face-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bt-opener .bt-mark { width: 20px; height: 20px; color: var(--cd-brass); }
 
-  /* The open drawer takes the place of the tool, material and shape rows and is never taller than the closed rack,
+  /* An open drawer takes the place of the tool, opener and shape rows and is never taller than the closed rack,
      so it covers no more of the home. Undo and redo stay put; Close drops to the thumb row in the street action's place. */
-  .bt-materials { display: none; }
-  /* The scene keeps its own SIMULATED seal in view, so the head plate folds away while the drawer is out. */
-  .bt-drawer-open { grid-template-areas: 'slip slip slip slip' 'mats mats mats mats' 'undo redo dhead dhead'; }
-  .bt-drawer-open .bt-head, .bt-drawer-open .bt-tools, .bt-drawer-open .bt-opener, .bt-drawer-open .bt-budget, .bt-drawer-open .bt-shape, .bt-drawer-open .bt-welcome { display: none; }
-  .bt-drawer-open .bt-materials { display: contents; }
-  .bt-drawer-open .bt-swatches { grid-area: mats; animation: bt-drawer .16s ease-out; }
+  .bt-materials, .bt-pieces, .bt-materials:not(.bt-shelf-shown), .bt-pieces:not(.bt-shelf-shown) { display: none; }
+  .bt-drawer-open, .bt-rack.bt-has-pieces.bt-drawer-open { grid-template-areas: 'slip slip slip slip' 'mats mats mats mats' 'undo redo dhead dhead'; }
+  .bt-drawer-open .bt-head, .bt-drawer-open .bt-tools, .bt-drawer-open .bt-opener, .bt-drawer-open .bt-allowance, .bt-drawer-open .bt-field, .bt-drawer-open .bt-welcome { display: none; }
+  .bt-rack[data-drawer='materials'] .bt-materials, .bt-rack[data-drawer='pieces'] .bt-pieces { display: block; grid-area: mats; min-width: 0; animation: bt-drawer .16s ease-out; }
+  .bt-has-pieces .bt-materials { padding: 0; background: none; box-shadow: none; }
+  .bt-has-pieces .bt-materials .bt-swatches { padding: 6px 7px 9px;
+    background: linear-gradient(180deg, #00000047, #0000001f 40%, #ffdcae0a), var(--bt-well); box-shadow: inset 0 2px 5px #000000a0, 0 1px 0 #ffe1b41f; }
+  .bt-pieces { padding: 7px 7px 8px; }
   @keyframes bt-drawer { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
   .bt-drawer-head { grid-area: dhead; display: flex; align-items: center; gap: 6px; min-width: 0; animation: bt-drawer .16s ease-out; }
+  .bt-rack:not(.bt-drawer-open) .bt-drawer-head { display: none; }
   .bt-drawer-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-left: 3px; }
-  .bt-drawer-title p:first-child { display: flex; align-items: baseline; gap: 8px; }
-  .bt-drawer-title small { display: none; }
-  .bt-drawer-title span { font-size: 16px; line-height: 1; color: var(--bt-cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bt-readout { font-size: 12px; line-height: 1; color: var(--bt-cream-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bt-close { flex-direction: row; gap: 5px; min-width: 84px; padding: 0 11px; }
-  .bt-close span { font-size: 14px; }
+  .bt-drawer-title span { display: block; font: 400 17px/1 var(--bt-face-head); color: var(--cd-cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bt-readout { font: var(--cd-type-small)/1 var(--bt-face-text); color: var(--cd-cream-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bt-close { flex-direction: row; gap: 5px; min-width: 88px; padding: 0 11px; }
+  .bt-close > span { font-size: var(--cd-type-body); }
   .bt-swatches { column-gap: 12px; row-gap: 7px; padding: 6px 7px 9px; }
-  .bt-shelf + .bt-shelf::before { left: -7px; }
   .bt-swatch { width: 44px; height: 44px; padding: 4px; }
+  .bt-piece-row { max-height: 196px; }
+  .bt-piece { width: 84px; }
+  .bt-piece-help { display: none; }
+  .bt-piece-actions .bt-key { min-height: 44px; }
 
   /* Folding the drawer away lifts the rack's rows back into place. */
-  .bt-drawer-shut .bt-head, .bt-drawer-shut .bt-tools, .bt-drawer-shut .bt-opener, .bt-drawer-shut .bt-budget, .bt-drawer-shut .bt-shape, .bt-drawer-shut .bt-welcome { animation: bt-rise .16s ease-out; }
+  .bt-drawer-shut .bt-head, .bt-drawer-shut .bt-tools, .bt-drawer-shut .bt-opener, .bt-drawer-shut .bt-allowance, .bt-drawer-shut .bt-field, .bt-drawer-shut .bt-welcome { animation: bt-rise .16s ease-out; }
   @keyframes bt-rise { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 }
 
 /* A phone on its side: the rack stands at the right edge, tools in a column, so the home keeps the middle of the screen. */
 @media (min-width: 601px) and (max-height: 560px) {
-  .bt-rack { left: auto; right: calc(8px + env(safe-area-inset-right)); width: 436px;
+  .bt-rack, .bt-rack.bt-has-pieces { left: auto; right: calc(8px + env(safe-area-inset-right)); width: 436px;
     grid-template-columns: 66px 44px 44px minmax(0, 1fr) minmax(0, 1fr) 56px;
-    grid-template-areas: 'tools slip slip slip slip leave' 'tools pick pick pick budget budget' 'tools shape shape shape shape shape' 'tools undo redo welcome welcome welcome'; }
-  /* The scene's SIMULATED seal stays in view above the rack; the core's draft line sits in the slip. */
+    grid-template-areas: 'tools slip slip slip slip leave' 'tools pick pick pick pick pick' 'tools brush brush brush budget budget' 'tools undo redo welcome welcome welcome'; }
+  .bt-rack.bt-has-pieces { grid-template-areas: 'tools slip slip slip slip leave' 'tools pick pick pick pcs pcs' 'tools brush brush brush budget budget' 'tools undo redo welcome welcome welcome'; }
+  /* The scene's own seal stays in view above the rack; the core's draft line sits in the slip. */
   .bt-head { display: contents; }
   .bt-plate { display: none; }
   .bt-leave { grid-area: leave; min-width: 0; }
@@ -289,10 +354,10 @@
   .bt-tools { grid-template-columns: 1fr; grid-auto-rows: 1fr; }
   .bt-tool { min-height: 44px; flex-direction: column; gap: 3px; padding: 4px 2px 6px; }
   .bt-tool .bt-mark { width: 20px; height: 20px; }
-  .bt-tool-name { font-size: 12.5px; }
-  .bt-rack.bt-drawer-open { grid-template-columns: 44px 44px minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'slip slip slip slip' 'mats mats mats mats' 'undo redo dhead dhead'; }
-  .bt-drawer-open .bt-slip { min-height: 34px; }
+  .bt-rack.bt-drawer-open, .bt-rack.bt-has-pieces.bt-drawer-open { grid-template-columns: 44px 44px minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'slip slip slip slip' 'mats mats mats mats' 'undo redo dhead dhead'; }
+  .bt-drawer-open .bt-slip { min-height: 36px; }
   .bt-drawer-open .bt-swatches { row-gap: 5px; padding-bottom: 7px; }
+  .bt-rack[data-drawer='pieces'] .bt-piece-row { max-height: 104px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,5 +1,5 @@
 import type { JSX } from 'solid-js';
-import type { BuildMirror, BuildTool } from '@chatdom/shared';
+import type { BuildTool } from '@chatdom/shared';
 
 /** Engraved marks, drawn for the rack on a 24-unit plate. Stroke colour follows the fitting. */
 const mark = (children: JSX.Element) => <svg class="bt-mark" viewBox="0 0 24 24" aria-hidden="true">{children}</svg>;
@@ -18,17 +18,6 @@ export const brushMark = (cells: 1 | 2 | 4) => {
   const side = cells === 4 ? 13 : cells === 2 ? 7.5 : 3.6, at = 12 - side / 2;
   return mark(<><path class="bt-mark-faint" d="M3.5 3.5h17v17h-17Z" /><rect class="bt-mark-solid" x={at} y={at} width={side} height={side} rx=".7" /></>);
 };
-
-/** The plot seen from above, front at the bottom: the dashed line is the mirror plane. */
-export const mirrorMark = (value: BuildMirror | null) => mark(<>
-  <path class="bt-mark-faint" d="M4 4h16v16H4Z" />
-  {value === 'x' || value === 'xz' ? <path d="M12 2.2v19.6" stroke-dasharray="1.8 1.9" /> : null}
-  {value === 'z' || value === 'xz' ? <path d="M2.2 12h19.6" stroke-dasharray="1.8 1.9" /> : null}
-  <rect class="bt-mark-solid" x="6.4" y={value === 'z' || value === 'xz' ? 6.4 : 9.6} width="3.2" height="3.2" rx=".5" />
-  {value === 'x' || value === 'xz' ? <rect class="bt-mark-solid" x="14.4" y={value === 'xz' ? 6.4 : 9.6} width="3.2" height="3.2" rx=".5" /> : null}
-  {value === 'z' || value === 'xz' ? <rect class="bt-mark-solid" x="6.4" y="14.4" width="3.2" height="3.2" rx=".5" /> : null}
-  {value === 'xz' ? <rect class="bt-mark-solid" x="14.4" y="14.4" width="3.2" height="3.2" rx=".5" /> : null}
-</>);
 
 export const undoMark = () => mark(<path d="M8.5 4.5 3.8 9.2l4.7 4.7M4 9.2h10.2a5.6 5.6 0 0 1 0 11.2H10" />);
 export const redoMark = () => mark(<path d="m15.5 4.5 4.7 4.7-4.7 4.7M20 9.2H9.8a5.6 5.6 0 0 0 0 11.2H14" />);
