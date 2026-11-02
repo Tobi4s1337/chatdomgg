@@ -9,7 +9,8 @@ import { CollisionGrid, comparePriority, MARK_PX, underLettering, type Rect } fr
 import type { Stamp } from './paint';
 import { HoldingLabels, onScreen, Placer, SHIELD_PAD, type Placed } from './placement';
 import { decorBand } from './pyramid';
-import { INK, LAND, PAPER } from './theme';
+import { GRAPHITE, INK, LAND, PAPER } from './theme';
+import type { FoundMark } from './found';
 
 /** Display faces; Alegreya carries Cyrillic and Greek, the system serif anything else (CJK, Thai, Arabic…). */
 export const FACE_TEXT = '"IM Fell English", "Alegreya", "Noto Serif", Georgia, serif';
@@ -117,6 +118,16 @@ export interface OverlayStats { stamps: number; marks: number; shields: number; 
 export interface Drawn { settler: Settler; x: number; y: number; r: number }
 /** A pencil flag in view: a small live channel at its pencil place. */
 export interface DrawnDab { dab: Dab; x: number; y: number; r: number }
+/** A found channel in view (see `found.ts`): its pencil flag, or its founded kingdom's hamlet and arms. */
+export interface DrawnFound { mark: FoundMark; x: number; y: number; r: number }
+
+/** A found channel's pencil flag is drawn this much larger than a live dab's: it is the place the visitor asked for. */
+const FOUND_FLAG_SCALE = 1.7;
+/** A found channel's name, a little larger than a hamlet's: pencilled in graphite, or inked for a founded kingdom. */
+const FOUND_LABEL_PX = 12.5;
+const GRAPHITE_HEX = parseInt(GRAPHITE.slice(1), 16);
+/** A founded kingdom stands as a hamlet (tier rank 4) until the Atlas grants it land of its own. */
+const FOUND_TIER = 4;
 
 class Pool<T extends Sprite | Text> {
   private readonly items: T[] = [];
@@ -205,6 +216,7 @@ export class Overlay {
   private readonly shields = new Container();
   private readonly standards = new Container();
   private readonly pencils = new Container();
+  private readonly found = new Container();
   private readonly labels = new Container();
   private readonly selection = new Graphics();
   private readonly markPool: Pool<Sprite>;
@@ -213,6 +225,9 @@ export class Overlay {
   private readonly shieldPool: Pool<Sprite>;
   private readonly standardPool: Pool<Sprite>;
   private readonly pencilPool: Pool<Sprite>;
+  private readonly foundPool: Pool<Sprite>;
+  private readonly foundFlags = new Map<string, { texture: Texture; image: StandardImage }>();
+  private foundMarks: readonly FoundMark[] = [];
   private readonly standardTextures = new Map<string, { texture: Texture; image: StandardImage }>();
   private live: LivePaint | null = null;
   private readonly markTextures: Texture[];
@@ -231,13 +246,14 @@ export class Overlay {
   /** Pickable things from the last update, highest priority first. */
   drawn: Drawn[] = [];
   drawnDabs: DrawnDab[] = [];
+  drawnFound: DrawnFound[] = [];
   /** Pennants and pencil flags drawn in the last update, by live class 1–5 (evidence and budgets). */
   pennants = [0, 0, 0, 0, 0, 0];
   /** What the last update put on the paper (evidence and budgets): stamps, survey marks, shields, text, standards, pencil flags. */
   stats: OverlayStats = { stamps: 0, marks: 0, shields: 0, labels: 0, standards: 0, pencils: 0 };
 
   constructor(private readonly world: PreviewWorld, private readonly geo: Geography, private readonly store: SettlerStore, sheet: TextureSource | null, stamps: Stamp[], private readonly pixelRatio: number) {
-    this.container.addChild(this.marks, this.pencils, this.fills, this.inks, this.selection, this.regionLayer, this.standards, this.shields, this.labels);
+    this.container.addChild(this.marks, this.pencils, this.fills, this.inks, this.found, this.selection, this.regionLayer, this.standards, this.shields, this.labels);
     this.realmOrder = labelledRealms(geo.realms);
     this.markTextures = MARK_PX.map((_, tier) => markTexture(tier, pixelRatio));
     this.markPool = new Pool(this.marks, () => {
@@ -250,6 +266,7 @@ export class Overlay {
     this.shieldPool = new Pool(this.shields, () => new Sprite());
     this.standardPool = new Pool(this.standards, () => new Sprite());
     this.pencilPool = new Pool(this.pencils, () => new Sprite());
+    this.foundPool = new Pool(this.found, () => new Sprite());
     this.stampsByTier = STAMP_GROUPS.map((group) => {
       if (!sheet) return [];
       return stamps.filter((stamp) => stamp.group === group).map((stamp) => ({
@@ -264,6 +281,22 @@ export class Overlay {
 
   setLive(live: LivePaint | null): void {
     this.live = live;
+  }
+
+  /** The found channels to draw (already gated: never withheld, never a drawn holding), oldest first. */
+  setFound(marks: readonly FoundMark[]): void {
+    this.foundMarks = marks;
+  }
+
+  private foundFlag(live: boolean): { texture: Texture; image: StandardImage } {
+    const key = live ? 'live' : 'waiting';
+    let entry = this.foundFlags.get(key);
+    if (!entry) {
+      const image = pencilFlagImage(this.pixelRatio, { scale: FOUND_FLAG_SCALE, live });
+      entry = { image, texture: new Texture({ source: new CanvasSource({ resource: image.canvas, resolution: this.pixelRatio }) }) };
+      this.foundFlags.set(key, entry);
+    }
+    return entry;
   }
 
   /** A standard's image: bare (0), a pennant (1–4) or the pencil flag (5), drawn once per class and variant. */
@@ -310,7 +343,7 @@ export class Overlay {
     return entry.text;
   }
 
-  private shieldTexture(settler: Settler, width: number): Texture {
+  private shieldTexture(settler: { id: string }, width: number): Texture {
     const key = `${settler.id}:${width}`;
     let entry = this.shieldCache.get(key);
     if (!entry) {
@@ -333,7 +366,7 @@ export class Overlay {
     return this.placer.fading;
   }
 
-  update(camera: Camera, view: Viewport, focus: { selected: Settler | null; hovered: Settler | null }, now: number): void {
+  update(camera: Camera, view: Viewport, focus: { selected: Settler | null; hovered: Settler | null; found?: string | null }, now: number): void {
     this.frame++;
     // The first view arrives whole with the map's own reveal; after that, whatever newly finds room fades in.
     this.placer.begin(now, this.reduceMotion || this.frame === 1);
@@ -359,6 +392,7 @@ export class Overlay {
     this.shieldPool.begin();
     this.standardPool.begin();
     this.pencilPool.begin();
+    this.foundPool.begin();
     this.pennants = [0, 0, 0, 0, 0, 0];
     const raising = scale >= STANDARD_FROM;
     for (const entry of this.textCache.values()) entry.text.visible = false;
@@ -415,6 +449,10 @@ export class Overlay {
     // 1. Language regions: the largest type on the map, written across the land at world and continent distance.
     this.placeRegions(camera, view, grid);
 
+    // 1b. Found channels, as a selected holding is: they always show, and every surveyed mark and name gives way.
+    const liveFound = new Set<string>();
+    this.drawnFound = this.placeFound(camera, view, grid, liveFound, focus.found ?? null);
+
     // 2. Stamps and names, in priority order; a stamp that would crowd a stronger one stays a survey mark. Realm
     // names go down after the capitals and before every smaller holding.
     let realmsPlaced = false;
@@ -470,16 +508,17 @@ export class Overlay {
     if (!realmsPlaced) this.placeRealms(camera, view, grid);
 
     // 3. Pencil flags of the small live channels at their pencil places, after every holding and its name.
-    this.drawnDabs = raising ? this.placePencils(camera, view, grid, phoneLayout(view)) : [];
-    stats.pencils = this.drawnDabs.length;
+    this.drawnDabs = raising ? this.placePencils(camera, view, grid, phoneLayout(view), liveFound) : [];
+    stats.pencils += this.drawnDabs.length;
 
     // 4. Community names (the observed main category of a cluster) once a realm is close.
     this.placeClusters(camera, view, grid);
 
     // 5. Selection: a double ink ring with four ticks, like a surveyor's mark.
     this.selection.clear();
-    if (focus.selected) {
-      const target = drawn.find((item) => item.settler === focus.selected);
+    const chosen = focus.selected ? drawn.find((item) => item.settler === focus.selected) : focus.found ? this.drawnFound.find((item) => item.mark.id === focus.found) : undefined;
+    {
+      const target = chosen;
       if (target) {
         const r = target.r + 7;
         this.selection.circle(target.x, target.y, r).stroke({ color: PAPER_HEX, width: 5, alpha: 0.85 });
@@ -499,13 +538,149 @@ export class Overlay {
     this.shieldPool.end();
     this.standardPool.end();
     this.pencilPool.end();
+    this.foundPool.end();
     this.placer.end();
     this.drawn = drawn;
     this.evict();
   }
 
+  /**
+   * Found channels at their pencil places, forced like a selected holding, at every distance. A waiting channel is a
+   * pencil flag with its name in graphite; on air its flag holds the live wash and its dab is not drawn again. A
+   * founded kingdom is a hamlet's stamp with its arms and its kingdom's name in ink, flying a pennant while on air.
+   * `liveFound` collects the dab hashes drawn here, so the live layer leaves them out.
+   */
+  private placeFound(camera: Camera, view: Viewport, grid: CollisionGrid, liveFound: Set<string>, selected: string | null): DrawnFound[] {
+    if (!this.foundMarks.length) return [];
+    const live = this.live?.frame ? this.live : null;
+    const onAir = new Set<string>();
+    if (live) {
+      const wanted = new Set(this.foundMarks.map((mark) => mark.hash));
+      for (const dab of live.dabs) if (wanted.has(dab.hash)) onAir.add(dab.hash);
+    }
+    const out: DrawnFound[] = [];
+    const reach = camera.visibleBox(view, 120);
+    const kingdom = camera.scale >= DISTANCE_SCALE.kingdom;
+    const radii = holdingRadii(this.world);
+    for (const mark of this.foundMarks) {
+      if (mark.x < reach.minX || mark.x > reach.maxX || mark.y < reach.minY || mark.y > reach.maxY) continue;
+      const s = camera.worldToScreen(mark.x, mark.y, view);
+      const airing = onAir.has(mark.hash);
+      if (airing) liveFound.add(mark.hash);
+      const style: TextStyleOptions = mark.kind === 'kingdom'
+        ? { fontFamily: FACE_TEXT, fontSize: FOUND_LABEL_PX + (kingdom ? 1.5 : 0), fill: INK_HEX, letterSpacing: 0.3, stroke: { color: PAPER_HEX, width: 3.2, join: 'round' }, padding: 4 }
+        : { fontFamily: FACE_ITALIC, fontStyle: 'italic', fontSize: FOUND_LABEL_PX + (kingdom ? 1 : 0), fill: GRAPHITE_HEX, letterSpacing: 0.3, stroke: { color: PAPER_HEX, width: 3.2, join: 'round' }, padding: 4 };
+      const label = mark.label === null ? null : this.text(`f:${mark.kind}:${mark.id}:${style.fontSize}:${mark.label}`, mark.label, style);
+      if (mark.kind === 'kingdom') {
+        const choices = this.stampsByTier[FOUND_TIER]!;
+        const w = stampPx(FOUND_TIER, radii[FOUND_TIER]!, camera.scale);
+        const choice = choices.length ? choices[hashId(mark.id) % choices.length]! : null;
+        const h = choice ? w * choice.aspect : w * 0.7;
+        const anchorX = choice?.anchorX ?? 0.5;
+        const anchorY = choice?.anchorY ?? 0.8;
+        const placed = this.placer.choose(grid, `fs:${mark.id}`, [{ x: s.x - w * anchorX + w * 0.12, y: s.y - h * anchorY + h * 0.18, w: w * 0.76, h: h * 0.76 }], true)!;
+        this.lettering.push(placed.rect);
+        if (choice) {
+          if (choice.fill) {
+            const fill = this.fillPool.next();
+            fill.texture = choice.fill;
+            fill.tint = LAND_HEX;
+            fill.position.set(s.x - w * anchorX, s.y - h * anchorY);
+            fill.width = w;
+            fill.height = h;
+            fill.alpha = placed.alpha;
+          }
+          const ink = this.inkPool.next();
+          ink.texture = choice.ink;
+          ink.tint = 0xffffff;
+          ink.position.set(s.x - w * anchorX, s.y - h * anchorY);
+          ink.width = w;
+          ink.height = h;
+          ink.alpha = placed.alpha;
+        } else {
+          const dot = this.markPool.next();
+          dot.texture = this.markTextures[2]!;
+          dot.position.set(Math.round(s.x), Math.round(s.y));
+          dot.scale.set(1);
+          dot.alpha = placed.alpha;
+        }
+        this.stats.stamps++;
+        const shieldW = SHIELD_PX[FOUND_TIER]! + 2 + (kingdom ? 3 : 0);
+        const block = this.names.place(grid, `fn:${mark.id}`, { x: s.x, y: s.y, w, h: h * anchorY }, label && { w: label.width, h: label.height }, { w: shieldW, h: shieldW * SHIELD_ASPECT }, true);
+        if (label) label.visible = !!block?.label;
+        if (block) this.lettering.push(block.rect);
+        if (block?.label && label) {
+          label.position.set(block.label.x, block.label.y);
+          label.alpha = block.alpha;
+          this.stats.labels++;
+        }
+        if (block?.shield) {
+          this.stats.shields++;
+          const shield = this.shieldPool.next();
+          shield.texture = this.shieldTexture(mark, shieldW);
+          shield.position.set(block.shield.x, block.shield.y);
+          shield.width = shieldW + SHIELD_PAD * 2;
+          shield.height = shieldW * SHIELD_ASPECT + SHIELD_PAD * 2;
+          shield.alpha = block.alpha;
+          // A founded kingdom on air flies the smallest pennant; off the air, its standard stands bare.
+          if (block.standard && live) {
+            const { texture, image } = this.standard(airing ? 4 : 0, hashId(mark.id));
+            const flag = this.standardPool.next();
+            flag.texture = texture;
+            flag.width = image.width;
+            flag.height = image.height;
+            const left = Math.round(block.standard.x - image.anchorX * image.width);
+            const top = Math.round(block.standard.y - image.height);
+            flag.position.set(left, top);
+            flag.alpha = block.alpha;
+            grid.claim({ x: left, y: top, w: image.width, h: image.height - 2 });
+            this.stats.standards++;
+          }
+        }
+        out.push({ mark, x: s.x, y: s.y - h * anchorY * 0.45, r: Math.max(w, h) * 0.45 + 2 });
+        continue;
+      }
+      const { texture, image } = this.foundFlag(airing);
+      const left = Math.round(s.x - image.anchorX * image.width);
+      const top = Math.round(s.y - image.height);
+      const placed = this.placer.choose(grid, `fp:${mark.id}`, [{ x: left, y: top, w: image.width - 2, h: image.height }], true)!;
+      this.lettering.push(placed.rect);
+      const sprite = this.foundPool.next();
+      sprite.texture = texture;
+      sprite.width = image.width;
+      sprite.height = image.height;
+      sprite.position.set(left, top);
+      sprite.alpha = placed.alpha;
+      this.stats.pencils++;
+      const pick = { x: s.x + image.width * 0.2, y: s.y - image.height * 0.55, r: Math.max(10, image.height * 0.5) };
+      if (label) {
+        // The name sits beside the flag, below its foot first, the side it held last frame before any other. While
+        // its card is open the name stands outside the selection ring and its ticks.
+        const ring = pick.r + 7 + 10;
+        const candidates = mark.id === selected
+          ? [
+            { x: pick.x - label.width / 2, y: pick.y + ring + 1, w: label.width, h: label.height },
+            { x: pick.x + ring + 3, y: pick.y - label.height / 2, w: label.width, h: label.height },
+            { x: pick.x - ring - 3 - label.width, y: pick.y - label.height / 2, w: label.width, h: label.height },
+            { x: pick.x - label.width / 2, y: pick.y - ring - label.height - 1, w: label.width, h: label.height },
+          ]
+          : HoldingLabels.candidates({ x: s.x + image.width * 0.22, y: s.y, w: image.width, h: image.height }, label.width, label.height);
+        const at = this.placer.choose(grid, `fl:${mark.id}`, candidates, true);
+        label.visible = !!at;
+        if (at) {
+          this.lettering.push(at.rect);
+          label.position.set(Math.round(at.rect.x), Math.round(at.rect.y));
+          label.alpha = at.alpha;
+          this.stats.labels++;
+        }
+      }
+      out.push({ mark, ...pick });
+    }
+    return out;
+  }
+
   /** Pencil flags never push a name aside: each takes free paper or waits for a closer view. */
-  private placePencils(camera: Camera, view: Viewport, grid: CollisionGrid, phone: boolean): DrawnDab[] {
+  private placePencils(camera: Camera, view: Viewport, grid: CollisionGrid, phone: boolean, skip: ReadonlySet<string> = new Set()): DrawnDab[] {
     const live = this.live;
     if (!live?.frame) return [];
     const { texture, image } = this.standard(5, 0);
@@ -515,7 +690,7 @@ export class Overlay {
     const out: DrawnDab[] = [];
     for (const dab of live.dabs) {
       if (out.length >= limit) break;
-      if (!dab.placed || dab.x < box.minX || dab.x > box.maxX || dab.y < box.minY || dab.y > box.maxY) continue;
+      if (!dab.placed || dab.x < box.minX || dab.x > box.maxX || dab.y < box.minY || dab.y > box.maxY || skip.has(dab.hash)) continue;
       const s = camera.worldToScreen(dab.x, dab.y, view);
       const left = Math.round(s.x - image.anchorX * image.width);
       const top = Math.round(s.y - image.height);
@@ -722,6 +897,20 @@ export class Overlay {
     }
   }
 
+  /** The found channel nearest a screen point, if any lies within reach. */
+  pickFound(x: number, y: number, slop: number): FoundMark | null {
+    let best: DrawnFound | null = null;
+    let bestD = Infinity;
+    for (const item of this.drawnFound) {
+      const d = Math.hypot(item.x - x, item.y - y);
+      if (d <= item.r + slop && d < bestD) {
+        best = item;
+        bestD = d;
+      }
+    }
+    return best?.mark ?? null;
+  }
+
   /** The pencil flag nearest a screen point, if any lies within reach. */
   pickDab(x: number, y: number, slop: number): Dab | null {
     let best: DrawnDab | null = null;
@@ -753,6 +942,7 @@ export class Overlay {
   dispose(): void {
     for (const entry of this.shieldCache.values()) entry.texture.destroy(true);
     for (const entry of this.standardTextures.values()) entry.texture.destroy(true);
+    for (const entry of this.foundFlags.values()) entry.texture.destroy(true);
     for (const texture of this.markTextures) texture.destroy(true);
     this.container.destroy({ children: true });
   }

@@ -103,41 +103,26 @@ try {
     check(`${width}: survey seal explains the dated preview in one line`, surveyText.length > 5 && !surveyText.includes('\n') && surveyLines === 1, { text: surveyText, lines: surveyLines });
     await survey.blur();
 
+    // AM15: one worded "Map key" button opens a labelled legend; every mark is named in words, nothing needs a hover.
     const key = page.locator('.atlas-key');
-    const keyToggle = page.getByRole('button', { name: 'Key', exact: true });
-    if (width === 390) {
-      check('phone: key begins closed', (await keyToggle.getAttribute('aria-expanded')) === 'false');
-      await keyToggle.click();
-      check('phone: key opens', (await keyToggle.getAttribute('aria-expanded')) === 'true');
-      const box = await key.boundingBox();
-      check('phone: key is a fitting bottom sheet', !!box && box.width >= width * 0.8 && box.height <= 844 * 0.5 && box.y + box.height <= 845, box);
-      await shot(page, 'phone-key', width);
+    const keyToggle = page.getByRole('button', { name: 'Map key', exact: true });
+    check(`${width}: key begins closed behind one worded button`, (await keyToggle.getAttribute('aria-expanded')) === 'false' && await key.locator('[data-atlas-key-item]').count() === 0);
+    await keyToggle.click();
+    check(`${width}: key opens`, (await keyToggle.getAttribute('aria-expanded')) === 'true');
+    const items = key.locator('[data-atlas-key-item]');
+    check(`${width}: seven marks, each named in words`, await items.count() === 7);
+    for (const item of await items.all()) {
+      const name = (await item.locator('.atlas-key-name').innerText()).trim();
+      const line = (await item.locator('.atlas-key-line').innerText()).trim();
+      check(`${width}: ${name} reads with its own line`, name.length > 2 && line.length > 10 && await item.locator('.atlas-key-line').isVisible(), { name, line });
     }
-    const labels = ['Live', 'Founded', 'Waiting land', 'Road', 'Your home'];
-    const symbols = labels.map(label => key.getByRole('button', { name: label, exact: true }));
-    check(`${width}: exactly five key glyph buttons`, (await key.locator('button[data-atlas-key-glyph]').count()) === 5);
-    check(`${width}: descriptions are absent until requested`, await key.locator('[data-atlas-key-detail]').count() === 0);
-    for (let i = 0; i < symbols.length; i++) {
-      await symbols[i].waitFor();
-      if (width === 390) await symbols[i].click();
-      else await symbols[i].hover();
-      const hint = key.locator('[data-atlas-key-detail]');
-      await hint.waitFor();
-      const content = (await hint.innerText()).trim();
-      const lines = await hint.evaluate(element => {
-        const range = document.createRange(); range.selectNodeContents(element);
-        return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size;
-      });
-      check(`${width}: ${labels[i]} gives one readable line`, content.length > 4 && !content.includes('\n') && lines === 1, { content, lines });
-    }
-    if (width === 390) {
-      await symbols[4].focus();
-      await page.keyboard.press('Escape');
-      check('phone: first Escape clears the description and retains glyph focus', await key.locator('[data-atlas-key-detail]').count() === 0 && await symbols[4].evaluate(element => document.activeElement === element));
-      await page.keyboard.press('Escape');
-      check('phone: second Escape closes the key', (await keyToggle.getAttribute('aria-expanded')) === 'false');
-      check('phone: Escape restores focus to the Key control', await keyToggle.evaluate(element => document.activeElement === element));
-    }
+    const keyBox = await key.boundingBox();
+    if (width === 390) check('phone: key is a fitting bottom sheet', !!keyBox && keyBox.width >= width * 0.95 && keyBox.height <= 844 * 0.75 && keyBox.y + keyBox.height <= 845, keyBox);
+    else check(`${width}: open key stays clear of the cartouche`, !!keyBox && keyBox.y > 160, keyBox);
+    await shot(page, 'key-open', width);
+    await page.keyboard.press('Escape');
+    check(`${width}: Escape closes the key`, (await keyToggle.getAttribute('aria-expanded')) === 'false');
+    check(`${width}: Escape restores focus to the Map key button`, await keyToggle.evaluate(element => document.activeElement === element));
 
     const mute = page.getByRole('button', { name: 'Mute map sounds', exact: true });
     await mute.waitFor();

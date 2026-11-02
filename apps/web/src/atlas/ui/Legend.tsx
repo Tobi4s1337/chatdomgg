@@ -1,80 +1,88 @@
-import { createSignal, createUniqueId, For, Show } from 'solid-js';
+import { For, Match, Switch } from 'solid-js';
 import type { PreviewWorld } from '../data/preview';
+import { ShieldIcon, StampIcon } from './marks';
 
-const ITEMS = [
-  { id: 'live', name: 'Live', description: 'Vermilion marks streams on air.' },
-  { id: 'founded', name: 'Founded', description: 'A founded kingdom drawn from life.' },
-  { id: 'waiting', name: 'Waiting land', description: 'Pencil marks waiting land.' },
-  { id: 'road', name: 'Road', description: 'Ink roads remember witnessed raids.' },
-  { id: 'home', name: 'Your home', description: 'A key marks your own home.' },
+/**
+ * The map key: every mark the map draws, named in words beside the mark itself, so nothing on the paper needs a
+ * hover to be understood. Marks are drawn from the map's own stamps and arms where they exist, the rest in the same
+ * engraved hand. Pigment is kept for what is live.
+ */
+export const KEY_ITEMS = [
+  { id: 'holding', name: 'Channel', line: 'Its arms and name. A bigger town is a bigger audience.' },
+  { id: 'live', name: 'Live now', line: 'A red pennant flies while the stream is on air.' },
+  { id: 'glow', name: 'Live glow', line: 'The red wash deepens where many streams are live.' },
+  { id: 'waiting', name: 'Pencilled in', line: 'Found on Twitch, waiting for land of its own.' },
+  { id: 'kingdom', name: 'Chatdom kingdom', line: 'Founded in Chatdom by its streamer.' },
+  { id: 'realms', name: 'Lands and realms', line: 'Each land is a language; its realms are what they play.' },
+  { id: 'road', name: 'Road', line: 'Inked by raids between channels; dotted once unused.' },
 ] as const;
-type KeyItem = (typeof ITEMS)[number];
+export type KeyItem = (typeof KEY_ITEMS)[number];
 
-/** Each hand-inked device belongs to the same engraved family, with pigment reserved for live. */
-function KeyGlyph(props: { kind: KeyItem['id'] }) {
+/** Arms drawn in the key: a fixed channel ID, so the key looks the same on every visit. */
+const KEY_ARMS = '23161357';
+const KINGDOM_ARMS = '40961027';
+
+function KeyMark(props: { kind: KeyItem['id'] }) {
   return (
-    <svg class="atlas-key-glyph" viewBox="0 0 40 40" aria-hidden="true">
-      <Show when={props.kind === 'live'}>
-        <ellipse class="atlas-key-pigment" cx="19" cy="29" rx="14" ry="7" />
-        <path d="M17 32V7m0 2c6 2 10-2 17 1l-4 4 4 4c-6-2-11 2-17 0" />
-        <path class="atlas-key-pennant" d="M17 9c6 2 10-2 17 1l-4 4 4 4c-6-2-11 2-17 0z" />
-      </Show>
-      <Show when={props.kind === 'founded'}>
-        <path d="M7 31V17l4-4 4 4v14M15 31V13l5-6 5 6v18M25 31V17l4-4 4 4v14M4 32h32M8 17h6M26 17h6M18 15h4M19 31v-7h3v7" />
-        <path class="atlas-key-brass" d="M20 3v4m0-4h6l-2 2 2 2h-6" />
-      </Show>
-      <Show when={props.kind === 'waiting'}>
-        <path class="atlas-key-pencil" d="M5 29c3-6 7-3 10-8s6-4 10 0 5 1 9 7M6 33h28M10 34h4m3 0h4m3 0h5" />
-        <path d="m24 8 4-4 4 4-4 4-4-4zm0 0-11 11-2 6 6-2 11-11" />
-      </Show>
-      <Show when={props.kind === 'road'}>
-        <path d="M5 29c7 0 7-9 14-9s6 8 15 0" />
-        <circle cx="6" cy="29" r="2.4" /><circle cx="34" cy="20" r="2.4" />
-        <path class="atlas-key-pencil" d="M7 33c8 0 8-9 14-9s6 8 13 1" />
-      </Show>
-      <Show when={props.kind === 'home'}>
-        <circle cx="13" cy="13" r="5.5" /><circle class="atlas-key-brass" cx="13" cy="13" r="2.3" />
-        <path d="m17 17 14 14m-4-4 3-3m0 6 3-3M7 31h14m-9-3h8" />
-      </Show>
-    </svg>
+    <span class="atlas-key-mark" data-atlas-key-mark={props.kind} aria-hidden="true">
+      <Switch>
+        <Match when={props.kind === 'holding'}>
+          <StampIcon group="town" index={1} width={30} />
+          <ShieldIcon channelId={KEY_ARMS} width={10} />
+        </Match>
+        <Match when={props.kind === 'kingdom'}>
+          <StampIcon group="village" index={2} width={24} />
+          <ShieldIcon channelId={KINGDOM_ARMS} width={10} />
+        </Match>
+        <Match when={props.kind === 'live'}>
+          <svg class="atlas-key-glyph" viewBox="0 0 40 40">
+            <path d="M15 34V8" />
+            <path class="atlas-key-pennant" d="M15.4 9c5 1.6 9-1.6 15 .8l-3.4 3.6 3.4 3.6c-6-2.2-10 1-15-.6z" />
+            <path class="atlas-key-shield" d="M9 22h12v6c0 4-3 6-6 7.5C12 34 9 32 9 28z" />
+          </svg>
+        </Match>
+        <Match when={props.kind === 'glow'}>
+          <svg class="atlas-key-glyph" viewBox="0 0 40 40">
+            <ellipse class="atlas-key-pigment" cx="20" cy="21" rx="16" ry="11" />
+            <ellipse class="atlas-key-pigment" cx="17" cy="20" rx="8" ry="5.5" />
+          </svg>
+        </Match>
+        <Match when={props.kind === 'waiting'}>
+          <svg class="atlas-key-glyph" viewBox="0 0 40 40">
+            <path class="atlas-key-graphite" d="M14 35V7" />
+            <path class="atlas-key-graphite atlas-key-hatch" d="M14.4 8l13 .9-3.2 3.5 3.2 3.4-13 .6z" />
+            <path class="atlas-key-graphite" d="M9 35.5h10" />
+          </svg>
+        </Match>
+        <Match when={props.kind === 'realms'}>
+          <span class="atlas-key-swatch" data-kind="realms" />
+        </Match>
+        <Match when={props.kind === 'road'}>
+          <svg class="atlas-key-glyph" viewBox="0 0 40 40">
+            <path d="M4 16c7 0 8-7 15-7s8 7 17 2" />
+            <circle cx="4.5" cy="16" r="2.2" /><circle cx="35" cy="11" r="2.2" />
+            <path class="atlas-key-dotted" d="M4 31c7 0 8-7 15-7s8 7 17 2" />
+          </svg>
+        </Match>
+      </Switch>
+    </span>
   );
 }
 
-/** A compact legend that keeps its explanation close to the device being inspected. */
+/** The labelled key, as a list: each mark with its name and one line. */
 export function LegendBody(props: { world: PreviewWorld }) {
   void props.world;
-  const [hovered, setHovered] = createSignal<KeyItem['id'] | null>(null);
-  const [focused, setFocused] = createSignal<KeyItem['id'] | null>(null);
-  const [chosen, setChosen] = createSignal<KeyItem['id'] | null>(null);
-  const id = createUniqueId();
-  const current = () => ITEMS.find(item => item.id === (hovered() ?? focused() ?? chosen()));
   return (
-    <div class="atlas-key-legend" on:keydown={(event) => {
-      if (event.key === 'Escape' && (hovered() || focused() || chosen())) {
-        event.stopPropagation();
-        setHovered(null); setFocused(null); setChosen(null);
-      }
-    }}>
-      <div class="atlas-key-glyphs" role="group" aria-label="Map symbols">
-        <For each={ITEMS}>{(item) => (
-          <button
-            type="button"
-            class="atlas-key-glyph-button cd-focus"
-            data-atlas-key-glyph={item.id}
-            aria-label={item.name}
-            aria-describedby={current()?.id === item.id ? `atlas-key-note-${id}` : undefined}
-            aria-pressed={chosen() === item.id}
-            on:pointerenter={(event) => { if (event.pointerType !== 'touch') setHovered(item.id); }}
-            on:pointerleave={() => setHovered(null)}
-            on:focus={() => setFocused(item.id)}
-            on:blur={() => setFocused(null)}
-            on:click={() => setChosen(chosen() === item.id ? null : item.id)}
-          ><KeyGlyph kind={item.id} /></button>
-        )}</For>
-      </div>
-      <Show when={current()}>{item => (
-        <p id={`atlas-key-note-${id}`} class="atlas-key-hint" data-atlas-key-detail="true" role="status">{item().description}</p>
-      )}</Show>
-    </div>
+    <ul class="atlas-key-list" aria-label="What the marks mean">
+      <For each={KEY_ITEMS}>{(item) => (
+        <li data-atlas-key-item={item.id}>
+          <KeyMark kind={item.id} />
+          <span class="atlas-key-words">
+            <span class="atlas-key-name">{item.name}</span>
+            <span class="atlas-key-line">{item.line}</span>
+          </span>
+        </li>
+      )}</For>
+    </ul>
   );
 }

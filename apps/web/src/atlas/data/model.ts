@@ -238,6 +238,11 @@ export class SettlerStore {
     if (settler.login) this.byLogin.set(settler.login, settler);
   }
 
+  /** Whether the names projection withholds this channel (the operator's list or its own hide), drawn or not. */
+  isWithheld(id: string): boolean {
+    return this.withheld.has(id);
+  }
+
   hasRegion(region: number): boolean {
     return this.loadedRegions.has(region);
   }
