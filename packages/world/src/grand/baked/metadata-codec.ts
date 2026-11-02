@@ -12,7 +12,7 @@ const bounds = z.strictObject({ min: point, max: point });
 const refFields = { hash, rawBytes: uint.max(BAKED_MAX_SIDE ** 2 * 4 + BAKED_SURFACE_HEADER_BYTES),
   gzipHash: hash, gzipBytes: uint.min(20).max(BAKED_MAX_SIDE ** 2 * 4 + 1024 * 1024) };
 const schema = z.strictObject({
-  version: z.literal(1), kingdomId: z.string().regex(/^[1-9][0-9]{0,31}$/), recipeHash: hash, sourcePlanHash: hash,
+  version: z.union([z.literal(1), z.literal(2)]), kingdomId: z.string().regex(/^[1-9][0-9]{0,31}$/), recipeHash: hash, sourcePlanHash: hash,
   sourcePlanRevision: z.string().min(1).max(256),
   compilers: z.strictObject({ generator: z.literal(BAKED_COMPILERS.generator), kit: z.literal(BAKED_COMPILERS.kit),
     grader: z.literal(BAKED_COMPILERS.grader), mesher: z.literal(BAKED_COMPILERS.mesher) }),

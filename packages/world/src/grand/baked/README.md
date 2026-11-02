@@ -21,7 +21,21 @@ loader or change a founded recipe. The parent realm owns durable storage and rec
   artifact with a new source plan while retaining the original recipe hash. A newer compiler never silently mutates
   existing content-addressed artifacts. Artifact availability alone grants no physical support or authority.
 
-## Portable format version 1
+## Portable format versions 1 and 2
+
+Producers write **format 2**; readers accept 1 and 2. The format is the artifact's byte order, not its content:
+the recipe, compilers and every decoded array are the same in both, so the recipe hash never changes with the
+format. Metadata `version` names the format of the metadata and of every blob it lists, and readers reject a blob
+whose header format differs from its metadata. A format 2 bake of a kingdom is new content-addressed bytes beside
+the format 1 artifacts; it never rewrites them, and a binding moves to it only by deliberate publication.
+
+Format 2 changes exactly two payloads. Region quads are written as eight byte planes: plane k holds byte k of
+every quad's little-endian eight bytes, in quad order (the shuffle filter of HDF5 and Blosc). Surface rows keep
+their first sample and store each following sample as its uint16 difference (mod 2^16) from the previous one,
+for the ground and the water raster alike. Headers, offsets, counts and lengths are unchanged apart from the
+version field. On tobi4s_'s land this takes the stored meshes from 29.59 MB to 16.92 MB of gzip, the surface from
+814 KB to 684 KB, and every recorded first view down by about 36% (see `work/evidence/grand-world/GW10-format-2.md`). Everything below describes
+format 1's layout, which format 2 shares except for those two payload orders.
 
 All binary integers are explicitly little endian; host typed-array endianness is never assumed. Decoders accept
 unaligned byte views, enforce allocation limits first and return owned typed arrays. Blob hashes cover raw canonical

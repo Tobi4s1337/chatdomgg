@@ -33,7 +33,7 @@ export async function artifact(options: { mesh?: (mesh: BakedRegionMesh) => Bake
     regions.push({ rx, rz, exact, meshes, bounds: { min: [rx * 128 - 16, -5, rz * 128 - 32],
       max: [(rx + 1) * 128 - 16, rx === 1 && rz === 0 ? 251 : -5, (rz + 1) * 128 - 32] } });
   }
-  let metadata: BakedMetadata = { version: 1, kingdomId: expected.kingdomId, recipeHash: expected.recipeHash,
+  let metadata: BakedMetadata = { version: 2, kingdomId: expected.kingdomId, recipeHash: expected.recipeHash,
     sourcePlanHash: expected.sourcePlanHash, sourcePlanRevision: expected.layoutRevision, compilers: BAKED_COMPILERS,
     size: 512, height: 384, seaLevel: 0,
     seat: { offset: [16, 5, 32], columns: { x0: 32, z0: 64, x1: 64, z1: 96 }, band: 96 },

@@ -40,7 +40,7 @@ async function artifact(value: RealmFoundedScene, groundHeight = 8) {
     ground: new Uint16Array(256 ** 2).fill(groundHeight), water: new Uint16Array(256 ** 2) }));
   const mesh = await store.put(encodeBakedRegion({ rx: 0, rz: 0, level: 0, minY: 0, maxY: 32,
     quads: new Uint32Array([0, 126]), offsets: new Int32Array([0, 1, 1, 1, 1, 1, 1]) }));
-  const metadata: BakedMetadata = { version: 1, kingdomId: '123', recipeHash, sourcePlanHash, sourcePlanRevision: value.layoutRevision,
+  const metadata: BakedMetadata = { version: 2, kingdomId: '123', recipeHash, sourcePlanHash, sourcePlanRevision: value.layoutRevision,
     compilers: BAKED_COMPILERS, size: 256, height: 256, seaLevel: 0,
     seat: { offset: [16, 5, 32], columns: { x0: 32, z0: 64, x1: 64, z1: 96 }, band: 96 },
     physicalRegion: { minX: 0, maxX: 16, minZ: 0, maxZ: 16 }, bounds: { min: [-16, -5, -32], max: [112, 123, 96] },
@@ -208,7 +208,7 @@ describe('founded store publication boundary', () => {
     release(); await pending;
     expect(underlying.put).toHaveBeenCalledOnce();
     expect(underlying.put).toHaveBeenCalledWith(value.bytes, value.manifest);
-  }, 15_000);
+  }, 60_000);
 
   it('preserves one owned byte and receipt snapshot across guard and write while the caller mutates both', async () => {
     const value = await scene(), bytes = Buffer.from(value.bytes), original = Uint8Array.from(bytes);

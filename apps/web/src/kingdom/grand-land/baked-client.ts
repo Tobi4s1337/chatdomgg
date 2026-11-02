@@ -127,7 +127,7 @@ export async function openBakedLand(options: BakedLandOptions): Promise<BakedLan
     // Structured cloning out of a worker drops property descriptors, so restore metadata immutability.
     freezeMetadata(metadata);
     const surface = await blob<BakedSurface>(metadata.surface, controller.signal,
-      { kind: 'surface', size: metadata.size, height: metadata.height, seaLevel: metadata.seaLevel });
+      { kind: 'surface', format: metadata.version, size: metadata.size, height: metadata.height, seaLevel: metadata.seaLevel });
     const refs = new Set(metadata.regions.flatMap(region => region.meshes));
     const materials = metadata.palette.map(material => material.id);
     checkSignal(controller.signal); stats.phase = 'ready'; progress(); checkSignal(controller.signal);
@@ -141,7 +141,7 @@ export async function openBakedLand(options: BakedLandOptions): Promise<BakedLan
         if (controller.signal.aborted || signal?.aborted) request.abort();
         try {
           checkSignal(request.signal);
-          return await blob<BakedRegionMesh>(ref, request.signal, { kind: 'mesh', ref, height: metadata.height, materials });
+          return await blob<BakedRegionMesh>(ref, request.signal, { kind: 'mesh', format: metadata.version, ref, height: metadata.height, materials });
         } finally {
           controller.signal.removeEventListener('abort', abort); signal?.removeEventListener('abort', abort);
         }

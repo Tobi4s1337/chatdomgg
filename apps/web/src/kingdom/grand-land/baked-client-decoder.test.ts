@@ -37,7 +37,7 @@ it('transfers compressed buffers into no more than two workers, returns only dec
   const fixture = await artifact(), decoder = new BakedDecoder(), ref = fixture.metadata.regions[1]!.meshes[3]!;
   const bytes = Array.from({ length: 5 }, () => fixture.blobs.get(ref.hash)!.slice());
   const results = await Promise.all(bytes.map(bytes => decoder.decode(bytes, ref,
-    { kind: 'mesh', ref, height: fixture.metadata.height, materials: [126] }, new AbortController().signal)));
+    { kind: 'mesh', format: fixture.metadata.version, ref, height: fixture.metadata.height, materials: [126] }, new AbortController().signal)));
   expect(TransferWorker.instances).toHaveLength(2);
   expect(bytes.every(bytes => bytes.byteLength === 0)).toBe(true);
   for (const result of results) {
@@ -53,7 +53,7 @@ it('terminates a cancelled active decoder before replacing it, and rejects every
   const fixture = await artifact(), decoder = new BakedDecoder(), ref = fixture.metadata.regions[1]!.meshes[3]!;
   const signals = Array.from({ length: 4 }, () => new AbortController());
   const requests = signals.map(signal => decoder.decode(fixture.blobs.get(ref.hash)!.slice(), ref,
-    { kind: 'mesh', ref, height: fixture.metadata.height, materials: [126] }, signal.signal));
+    { kind: 'mesh', format: fixture.metadata.version, ref, height: fixture.metadata.height, materials: [126] }, signal.signal));
   const settled = Promise.allSettled(requests);
   expect(TransferWorker.instances).toHaveLength(2); signals[0]!.abort();
   expect(TransferWorker.instances[0]!.terminated).toBe(true);

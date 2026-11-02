@@ -9,14 +9,14 @@ export async function verifyLandArtifact(store: LandArtifactStore, binding: Stor
     || metadata.sourcePlanHash !== binding.sourcePlanHash || metadata.sourcePlanRevision !== binding.layoutRevision)
     throw new Error('Baked land does not match the founded receipt binding');
   const surfaceBytes = await store.read(metadata.surface);
-  const surface = decodeBakedSurface(surfaceBytes);
+  const surface = decodeBakedSurface(surfaceBytes, metadata.version);
   if (surface.size !== metadata.size || surface.height !== metadata.height || surface.seaLevel !== metadata.seaLevel)
     throw new Error('Baked surface does not match the land metadata');
   const materials = new Set(metadata.palette.map(material => material.id));
   for (const region of metadata.regions) for (const ref of region.meshes) {
     check();
     const bytes = await store.read(ref);
-    const mesh = decodeBakedRegion(bytes);
+    const mesh = decodeBakedRegion(bytes, metadata.version);
     if (mesh.rx !== ref.rx || mesh.rz !== ref.rz || mesh.level !== ref.level || mesh.minY !== ref.minY
       || mesh.maxY !== ref.maxY || mesh.quads.length / 2 !== ref.quadCount) throw new Error('Baked mesh does not match its region reference');
     for (let i = 0; i < mesh.quads.length; i += 2) {

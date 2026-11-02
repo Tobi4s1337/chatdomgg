@@ -18,13 +18,42 @@ function metadata(size = 256) {
 }
 describe('portable immutable baked land', () => {
   it('writes fixed little-endian headers, offsets in quads and detached decoded arrays', () => {
-    const bytes = encodeBakedRegion(mesh);
+    const bytes = encodeBakedRegion(mesh, 1);
     expect(Array.from(bytes.subarray(0, 16))).toEqual([71, 68, 82, 49, 1, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     expect(Array.from(bytes.subarray(64, 72))).toEqual([225, 136, 65, 4, 126, 255, 0, 0]);
+    expect(decodeBakedRegion(bytes, 1)).toEqual(mesh);
     const result = decodeBakedRegion(bytes);
     expect(result).toEqual(mesh);
     bytes.fill(0);
     expect(result.quads).toEqual(mesh.quads);
+  });
+  it('writes format 2 as byte planes of the same quads, decodes both formats and binds the format to its metadata', () => {
+    const two: BakedRegionMesh = { ...mesh, quads: new Uint32Array([...mesh.quads, mesh.quads[0]! + (1 << 10), 126 | (17 << 8)]),
+      offsets: new Int32Array([0, 0, 0, 2, 2, 2, 2]) };
+    const bytes = encodeBakedRegion(two), legacy = encodeBakedRegion(two, 1);
+    expect(Array.from(bytes.subarray(4, 6))).toEqual([2, 0]);
+    expect(bytes.subarray(0, 64).filter((_, i) => i !== 4)).toEqual(legacy.subarray(0, 64).filter((_, i) => i !== 4));
+    // Plane k holds byte k of each quad, in quad order.
+    for (let k = 0; k < 8; k++) for (let q = 0; q < 2; q++) expect(bytes[64 + k * 2 + q]).toBe(legacy[64 + q * 8 + k]);
+    expect(decodeBakedRegion(bytes)).toEqual(two); expect(decodeBakedRegion(bytes, 2)).toEqual(two);
+    expect(decodeBakedRegion(legacy)).toEqual(two);
+    expect(() => decodeBakedRegion(bytes, 1)).toThrow(/metadata/); expect(() => decodeBakedRegion(legacy, 2)).toThrow(/metadata/);
+    const unknown = bytes.slice(); unknown[4] = 3; expect(() => decodeBakedRegion(unknown)).toThrow(/format/);
+    // Deterministic: the same quads give the same bytes.
+    expect(Buffer.from(encodeBakedRegion(two)).equals(Buffer.from(bytes))).toBe(true);
+    const { land } = fixture();
+    for (let i = 0; i < land.ground.length; i++) { land.ground[i] = (i * 7919) % (land.height + 1); land.water[i] = i % 5 ? 0 : Math.min(land.height, land.ground[i]! + 1); }
+    const surface = encodeBakedSurface(land), flat = encodeBakedSurface(land, 1);
+    expect(Array.from(surface.subarray(4, 6))).toEqual([2, 0]);
+    // Each row keeps its first sample; the rest are wrapped differences, including negative steps.
+    expect(new DataView(surface.buffer).getUint16(32 + 2, true)).toBe((land.ground[1]! - land.ground[0]!) & 0xffff);
+    expect(new DataView(surface.buffer).getUint16(32 + land.size * 2, true)).toBe(land.ground[land.size]!);
+    for (const decoded of [decodeBakedSurface(surface, 2), decodeBakedSurface(flat, 1)]) {
+      expect(Buffer.from(decoded.ground.buffer).equals(Buffer.from(land.ground.buffer))).toBe(true);
+      expect(Buffer.from(decoded.water.buffer).equals(Buffer.from(land.water.buffer))).toBe(true);
+    }
+    expect(() => decodeBakedSurface(surface, 1)).toThrow(/metadata/);
+    expect(metadata().version).toBe(2);
   });
   it('handles unaligned network buffers and rejects truncation, overflow, reserved flags, bad bucket faces and spans', () => {
     const bytes = encodeBakedRegion(mesh), unaligned = new Uint8Array(bytes.length + 1);

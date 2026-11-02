@@ -1,13 +1,13 @@
 import { sha256Hex } from '../../../../../packages/world/src/founded-world/codec';
 import { decodeBakedMetadata, decodeBakedRegion, decodeBakedSurface } from '../../../../../packages/world/src/grand/baked/codec';
 import { BAKED_REGION_HEADER_BYTES, BAKED_REGION_QUAD_BYTES,
-  type BakedBlobRef, type BakedMetadata, type BakedRegionMesh, type BakedRegionRef, type BakedSurface } from '../../../../../packages/world/src/grand/baked/types';
+  type BakedBlobRef, type BakedFormat, type BakedMetadata, type BakedRegionMesh, type BakedRegionRef, type BakedSurface } from '../../../../../packages/world/src/grand/baked/types';
 import { BAKED_SURFACE_BYTES, validateLandBlob, type BakedLandExpected } from './baked-client-binding';
 import { checkSignal, gunzipBounded } from './baked-client-transport';
 
 export type BakedDecodeContext = { readonly kind: 'metadata'; readonly expected: BakedLandExpected }
-  | { readonly kind: 'surface'; readonly size: number; readonly height: number; readonly seaLevel: number }
-  | { readonly kind: 'mesh'; readonly ref: BakedRegionRef; readonly height: number; readonly materials: readonly number[] };
+  | { readonly kind: 'surface'; readonly format: BakedFormat; readonly size: number; readonly height: number; readonly seaLevel: number }
+  | { readonly kind: 'mesh'; readonly format: BakedFormat; readonly ref: BakedRegionRef; readonly height: number; readonly materials: readonly number[] };
 export interface BakedDecoded {
   readonly value: BakedMetadata | BakedSurface | BakedRegionMesh;
   readonly compressed: Uint8Array;
@@ -35,12 +35,12 @@ export async function verifyAndDecode(bytes: Uint8Array, ref: BakedBlobRef, cont
       validateLandBlob(mesh, BAKED_REGION_HEADER_BYTES + BAKED_REGION_QUAD_BYTES);
     value = metadata;
   } else if (context.kind === 'surface') {
-    const surface = decodeBakedSurface(raw);
+    const surface = decodeBakedSurface(raw, context.format);
     if (surface.size !== context.size || surface.height !== context.height || surface.seaLevel !== context.seaLevel)
       throw new Error('Baked surface does not match the land metadata');
     value = surface;
   } else {
-    const mesh = decodeBakedRegion(raw), descriptor = context.ref;
+    const mesh = decodeBakedRegion(raw, context.format), descriptor = context.ref;
     if (mesh.rx !== descriptor.rx || mesh.rz !== descriptor.rz || mesh.level !== descriptor.level || mesh.minY !== descriptor.minY
       || mesh.maxY !== descriptor.maxY || mesh.quads.length / 2 !== descriptor.quadCount)
       throw new Error('Baked mesh does not match its region reference');

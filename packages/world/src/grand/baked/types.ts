@@ -10,6 +10,10 @@ export const BAKED_MAX_SIDE = 4096;
 export const BAKED_MAX_HEIGHT = 512;
 export const BAKED_REGION_HEADER_BYTES = 64;
 export const BAKED_SURFACE_HEADER_BYTES = 32;
+/** Artifact byte format, independent of the recipe and compilers (which decide the content). Format 2 orders
+ * the same quads and samples for compression (see codec.ts). Readers accept 1 and 2; producers write 2. */
+export type BakedFormat = 1 | 2;
+export const BAKED_FORMAT: BakedFormat = 2;
 export const BAKED_COMPILERS = Object.freeze({ generator: 'grand-land-1', kit: 'grand-artisans-1',
   grader: 'gk11-grade-2', mesher: 'hosted-grand-land-2' } as const);
 export const HOSTED_GRAND_COMPILER = BAKED_COMPILERS.mesher;
@@ -54,7 +58,8 @@ export interface BakedIdentity {
   readonly sourcePlanRevision: string;
 }
 export interface BakedMetadata extends BakedIdentity {
-  readonly version: 1;
+  /** The artifact format of this metadata and of every blob it names. */
+  readonly version: BakedFormat;
   readonly compilers: typeof BAKED_COMPILERS;
   readonly size: number; readonly height: number; readonly seaLevel: number;
   readonly seat: GrandSeat;

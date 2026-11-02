@@ -21,7 +21,7 @@ async function publish() {
   const surface = await store.put(encodeBakedSurface({ size: 256, height: 256, seaLevel: 0,
     ground: new Uint16Array(256 ** 2).fill(8), water: new Uint16Array(256 ** 2) }));
   const mesh = await store.put(encodeBakedRegion({ rx: 0, rz: 0, level: 0, minY: 0, maxY: 0, quads: new Uint32Array(), offsets: new Int32Array(7) }));
-  const metadata: BakedMetadata = { version: 1, kingdomId: '123', recipeHash, sourcePlanHash, sourcePlanRevision: 'layout-1',
+  const metadata: BakedMetadata = { version: 2, kingdomId: '123', recipeHash, sourcePlanHash, sourcePlanRevision: 'layout-1',
     compilers: BAKED_COMPILERS, size: 256, height: 256, seaLevel: 0,
     seat: { offset: [16, 5, 32], columns: { x0: 32, z0: 64, x1: 64, z1: 96 }, band: 96 },
     physicalRegion: { minX: 0, maxX: 16, minZ: 0, maxZ: 16 }, bounds: { min: [-16, -5, -32], max: [112, 123, 96] },

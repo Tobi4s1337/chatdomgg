@@ -18,7 +18,7 @@ async function artifact(material = 126, meshRx = 0) {
     ground: new Uint16Array(256 ** 2).fill(8), water: new Uint16Array(256 ** 2) }));
   const mesh = await store.put(encodeBakedRegion({ rx: meshRx, rz: 0, level: 0, minY: 0, maxY: 32,
     quads: new Uint32Array([0, material]), offsets: new Int32Array([0, 1, 1, 1, 1, 1, 1]) }));
-  const metadata: BakedMetadata = { version: 1, kingdomId: '123', recipeHash, sourcePlanHash: 'b'.repeat(64), sourcePlanRevision: 'layout-1',
+  const metadata: BakedMetadata = { version: 2, kingdomId: '123', recipeHash, sourcePlanHash: 'b'.repeat(64), sourcePlanRevision: 'layout-1',
     compilers: BAKED_COMPILERS, size: 256, height: 256, seaLevel: 0,
     seat: { offset: [16, 5, 32], columns: { x0: 32, z0: 64, x1: 64, z1: 96 }, band: 96 },
     physicalRegion: { minX: 0, maxX: 16, minZ: 0, maxZ: 16 }, bounds: { min: [-16, -5, -32], max: [112, 123, 96] },
@@ -48,7 +48,7 @@ async function coarseTopArtifact(localY: number) {
     regions.push({ rx, rz, exact, meshes, bounds: { min: [rx * 128 - 16, -5, rz * 128 - 32],
       max: [(rx + 1) * 128 - 16, rx === 1 && rz === 0 ? 251 : -5, (rz + 1) * 128 - 32] } });
   }
-  const metadata: BakedMetadata = { version: 1, kingdomId: '123', recipeHash, sourcePlanHash: 'b'.repeat(64), sourcePlanRevision: 'layout-1',
+  const metadata: BakedMetadata = { version: 2, kingdomId: '123', recipeHash, sourcePlanHash: 'b'.repeat(64), sourcePlanRevision: 'layout-1',
     compilers: BAKED_COMPILERS, size: 512, height: 384, seaLevel: 0,
     seat: { offset: [16, 5, 32], columns: { x0: 32, z0: 64, x1: 64, z1: 96 }, band: 96 },
     physicalRegion: { minX: 0, maxX: 16, minZ: 0, maxZ: 16 }, bounds: { min: [-16, -5, -32], max: [240, 187, 224] },

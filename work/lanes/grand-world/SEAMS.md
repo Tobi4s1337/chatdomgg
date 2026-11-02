@@ -670,3 +670,16 @@ Colour geometry, source detail, physics, scene receipts and place anchors are un
 
 Algorithm reference: [bounded integer face masks](../../references/grand-world/shadow-depth.md).
 No gather or pier consumer action is required for this renderer-local addition.
+
+## GW10 artifact format 2 — 2026-11-02
+
+Producers now write baked land in **format 2** (`packages/world/src/grand/baked/README.md`): the same quads and
+samples in a compression-friendly byte order. The recipe, compilers, recipe hash and decoded land are identical;
+only blob bytes, blob hashes and the manifest hash change. Readers (the native client, the realm verifier and
+routes) accept format 1 and 2, and reject a blob whose format differs from its metadata.
+
+For the integrator: publish tobi4s_'s land from a **format 2 bake**, not the earlier format 1 store. The same
+`bake` and `publish` commands produce it; nothing in the publication guard, routes or the bind patch above
+changes. A format 1 binding that already exists keeps working and is replaced only by deliberate republication.
+On his land, the format 2 store is 17.64 MB against 30.43 MB, and the recorded first views are 2.55 to 3.06 MB,
+all under the 4 MiB budget. Evidence: `work/evidence/grand-world/GW10-format-2.md`.

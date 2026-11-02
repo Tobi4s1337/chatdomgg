@@ -14,11 +14,29 @@ import { closeCapturePreview } from '../../../packages/testing/preview.mjs';
 const hour = Number(process.env.GRAND_NATIVE_HOUR ?? 17.5);
 const hours = new Map([[6.5, 'dawn'], [12, 'noon'], [17.5, 'golden'], [22, 'night']]);
 assert.ok(hours.has(hour), 'Use a named evidence hour');
-const width = 1920, height = 1080;
+// GRAND_NATIVE_SIZE=WxH (the evidence sizes only). GRAND_NATIVE_VIEW picks the lens: the director's hero or
+// window shot, or a fixed eye-level evidence pose on the real founded plan (door, Forge square, castle approach),
+// applied through the scene's capture pose once loaded. Poses are evidence framing, never a production camera.
+const sizes = new Set(['1920x1080', '1440x900', '390x844']);
+const size = process.env.GRAND_NATIVE_SIZE ?? '1920x1080';
+assert.ok(sizes.has(size), 'Use an evidence size');
+const [width, height] = size.split('x').map(Number);
+const views = {
+  hero: null, window: null,
+  // Home 0 (Hearthward Lane): its front faces west onto the lane at [-50, 8.375, 22].
+  door: { eye: [-58, 10.6, 24.5], target: [-46, 10.2, 21.5], fov: 52 },
+  // The market is the Forge square: from its south edge across the anvil toward the castle.
+  forge: { eye: [0, 11.2, 24], target: [0, 11.5, -8], fov: 52 },
+  // Crown Road where it leaves the castle gate (court edge z -36), looking back at the gate court and keep.
+  castle: { eye: [40, 21.7, -27], target: [0, 24, -44], fov: 52 },
+};
+const view = process.env.GRAND_NATIVE_VIEW ?? 'hero';
+assert.ok(Object.hasOwn(views, view), 'Use a named evidence view');
+const pose = views[view];
 // GRAND_NATIVE_SOURCE=today reads main's always-on preview (today's land) for side-by-side stills.
 // It starts no server and only issues GET requests to that preview.
 const today = process.env.GRAND_NATIVE_SOURCE === 'today';
-const label = process.env.GRAND_NATIVE_LABEL ?? (today ? 'today' : 'canvas');
+const label = process.env.GRAND_NATIVE_LABEL ?? `${today ? 'today' : 'canvas'}${view === 'hero' ? '' : `-${view}`}`;
 assert.match(label, /^[a-z][a-z0-9-]{0,40}$/);
 // Unset ports are chosen only after the capture lock is held: the first capture port that binds exclusively.
 const portChoice = name => process.env[name] ? [assertCapturePort(Number(process.env[name]))] : CAPTURE_PORTS;
@@ -37,7 +55,7 @@ async function bindFirst(candidates, taken, bind) {
   }
   throw new Error('No free capture port; nothing was started');
 }
-const directory = resolve('shots/grand-world/land-bake-a');
+const directory = resolve(process.env.GRAND_LAND_STORE ?? 'shots/grand-world/land-bake-f2');
 const { createLandReadServer } = await import(pathToFileURL(resolve('shots/grand-world/land-server/server.mjs')).href);
 const receipt = JSON.parse(await readFile('/tmp/grand-world-manifest.json', 'utf8'));
 const live = await fetch(`http://127.0.0.1:5197/api/realm/founded/${receipt.kingdomId}`, { signal: globalThis.AbortSignal.timeout(5000) });
@@ -45,7 +63,7 @@ assert.equal(live.status, 200);
 assert.deepEqual(await live.json(), receipt, 'Current public receipt changed; do not capture a stale binding');
 const stem = `work/evidence/grand-world/gw10-native-${label}-${hours.get(hour)}@${width}x${height}`;
 await mkdir('work/evidence/grand-world', { recursive: true });
-const report = { kind: today ? 'today-main-kingdom-canvas' : 'full-native-kingdom-canvas', renderer: 'Chrome SwiftShader',
+const report = { view, pose,  kind: today ? 'today-main-kingdom-canvas' : 'full-native-kingdom-canvas', renderer: 'Chrome SwiftShader',
   capture: 'PNG exported synchronously after the native draw; excludes DOM overlays and loading UI',
   viewport: { width, height }, hour, receipt, host, ports: { browserPort }, landRequests: [], errors: [], workerScripts: [], passed: false };
 let release, server, preview, browserServer, browser, page, deadline;
@@ -80,9 +98,11 @@ try {
     const path = new URL(response.url()).pathname;
     if (path.startsWith('/api/realm/land/')) report.landRequests.push({ path, status: response.status() });
   });
-  await page.addInitScript(() => {
+  await page.addInitScript(pose => {
     const raf = window.requestAnimationFrame.bind(window);
     window.__nativeCanvas = { done: false };
+    // With a pose, nothing drawn before it was applied may be accepted.
+    let posedAt = pose ? Infinity : 0;
     // With a fixed hour the scene redraws only when its render key changes, so the decisive draw can land
     // before readiness flips. Export every completed loaded draw (synchronously, inside that draw's RAF
     // callback) and accept the latest once ready, provided no newer draw happened and its canvas is the shown one.
@@ -96,6 +116,12 @@ try {
       if (result.done || result.failure || !kingdom) return;
       const state = kingdom.inspect();
       try {
+        if (pose && posedAt === Infinity && state.loaded && window.__chatdomReady) {
+          kingdom.pose(pose.eye, pose.target, pose.fov);
+          posedAt = state.renderCompletedAt; pending = null; result.posed = true;
+          return;
+        }
+        if (state.renderCompletedAt <= posedAt) return;
         if (state.loaded && state.renderPhase === 'drawn' && state.renderCompletedAt > prior) {
           const candidates = shown().length === 1 ? shown() : canvases().length === 1 ? canvases() : [];
           if (candidates.length === 1) {
@@ -116,8 +142,8 @@ try {
         kingdom.suspendRendering(); // Stop only this scene; leave UI callbacks and timer polling alive.
       } catch (error) { result.failure = error instanceof Error ? error.message : String(error); }
     });
-  });
-  await page.goto(`${today ? 'http://127.0.0.1:5190' : preview.base}/stream?source=realm&kingdom=${receipt.kingdomId}&hour=${hour}`, { timeout: 20_000 });
+  }, pose);
+  await page.goto(`${today ? 'http://127.0.0.1:5190' : preview.base}/stream?source=realm&kingdom=${receipt.kingdomId}&hour=${hour}${view === 'window' ? '&camera=window' : ''}`, { timeout: 20_000 });
   // Poll in slices so a slow software render leaves a trail of where it was when time ran out.
   report.trail = [];
   const started = Date.now();
