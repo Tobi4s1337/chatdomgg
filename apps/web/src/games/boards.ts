@@ -12,12 +12,22 @@ const colour = (id: number) => new THREE.Color(MATERIALS.materials.find(m => m.i
 const palette = {
   wood: colour(MAT.timber), frame: colour(MAT.earth), dark: colour(MAT.bark), brass: colour(MAT.brass),
   felt: colour(MAT.fabricMutedGreen), cream: colour(MAT.cream), red: colour(MAT.fabricRed),
-  pongFelt: new THREE.Color('#29473f'), paddle: new THREE.Color('#e6bd7c'),
+  chipEdge: colour(MAT.fabricRed).multiplyScalar(.62), pongFelt: new THREE.Color('#29473f'), paddle: new THREE.Color('#e6bd7c'),
 };
 /** Hearth Dice's peg board, inside the tray's right end: four lanes, ten holes each, five points a peg. */
 export const DICE_PEG_BOARD = { x: .33, w: .22, d: .56 } as const;
 export const DICE_PEG_LANES = [.255, .305, .355, .405] as const;
 export const DICE_CHIPS_SHOWN = 40;
+/**
+ * The pot's corner of the tray, between the rail and the cup. Its little grid is turned 35° so no chair at the
+ * four-sided hearth table looks straight down a row: stacks stand side by side from every seat. Row 0 holds loose
+ * chips, rows 1–3 hold up to three stacks each.
+ */
+export const DICE_POT = { x: -.33, z: -.26, step: .06, turn: 35 * Math.PI / 180 } as const;
+export function dicePotSpot(row: number, slot: number): readonly [number, number] {
+  const c = Math.cos(DICE_POT.turn) * DICE_POT.step, s = Math.sin(DICE_POT.turn) * DICE_POT.step;
+  return [DICE_POT.x + slot * c - row * s, DICE_POT.z + slot * s + row * c];
+}
 export const dicePegZ = (hole: number) => -.22 + hole * .05;
 export const dicePegs = (score: number) => Math.max(0, Math.min(10, Math.floor(score / 5)));
 /** Basic-material markings and rally balls share one draw while retaining their individual colours. */
@@ -163,10 +173,14 @@ export function createTurnBoards(root: THREE.Group, tables: readonly TavernTable
           // Whose turn it is: a brass cap at the near end of their lane.
           if (view.phase === 'playing' && view.turn === player) counter(lx, y + .077, z + dicePegZ(-1), palette.brass, .036, .014, true);
         });
-        // This turn's pot as a pile of chips by the cup, one a point, in stacks of five; a one sweeps it away.
-        for (let chip = 0; chip < Math.min(view.pot, DICE_CHIPS_SHOWN); chip++) {
+        // This turn's pot by the cup, one chip a point: loose chips lie singly in the row by the rail, so four
+        // reads as four, and every full five stands behind them as a striped stack. A one sweeps it all away.
+        const shown = Math.min(view.pot, DICE_CHIPS_SHOWN), stacks = Math.floor(shown / 5);
+        for (let chip = 0; chip < shown; chip++) {
           const stack = Math.floor(chip / 5), level = chip % 5;
-          counter(x - .33 + (stack % 4) * .05, y + .066 + level * .012, z - .2 + Math.floor(stack / 4) * .05, palette.red, .042, .011, true);
+          const [px, pz] = stack < stacks ? dicePotSpot(1 + Math.floor(stack / 3), stack % 3) : dicePotSpot(0, level);
+          counter(x + px, y + .069 + (stack < stacks ? level * .015 : 0), z + pz,
+            stack < stacks && level % 2 ? palette.chipEdge : palette.red, .046, .014, true);
         }
         if (view.die !== null) {
           const progress = Math.min(1, Math.max(0, (now - seen.started) / 400));

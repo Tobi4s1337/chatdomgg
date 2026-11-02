@@ -42,7 +42,8 @@ does not show an invented match. The working room/seat transport is tested separ
   last witnessed path; a terminal server result appears immediately. The new public schemas never admit RNG or
   paddle targets. See `work/evidence/gather/ga10-pong.md` for the measured limits.
 - Seated framing fits every actual board after collision clearance at both standard sizes, including the four
-  Dice chairs. Flat boards keep the chair's axis. The independent scene bakes four localized warm sources
+  Dice chairs. Flat boards keep the chair's axis and are seen as a seated player sees a table (about 30° down on
+  desktop, 50° on a phone), with the whole head of whoever sits across in the fit. The independent scene bakes four localized warm sources
   without adding GPU lights, and exterior views cut away the nearest wall with hysteresis instead of a screen-door fade.
 - The caller retains one common audio mixer across destinations. Original finite wood, stone, cup and brass
   sounds follow public accepted actions; actual Pong contacts use the board's buffered timeline. The hearth

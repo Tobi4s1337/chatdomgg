@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { DiceView, GatherFrame, PongView } from '@chatdom/shared';
 import { createTavernKit } from '../../../../packages/content/src/tavern';
-import { createPongHighlights, createTurnBoards, DICE_PEG_LANES, dicePegs } from './boards';
+import { createPongHighlights, createTurnBoards, DICE_PEG_LANES, dicePegs, dicePotSpot } from './boards';
 
 const pong = (paddles: [number, number]): PongView => ({ match: 'match', phase: 'rally', tick: 1, at: 1,
   serveAt: 0, ball: { x: .2, y: -.3, vx: 1, vy: 1 }, paddles, acknowledged: [0, 0], score: [0, 0],
@@ -91,6 +91,23 @@ describe('batched tavern boards', () => {
     const cap = instance(counters, 0);
     close([cap.position[0]!], [x + DICE_PEG_LANES[1]]);
     expect(dicePegs(49)).toBe(9); expect(dicePegs(75)).toBe(10); expect(dicePegs(-1)).toBe(0);
+    // Thirteen is two striped stacks of five and three loose chips, none on another, and no two stacks or loose
+    // chips line up along either axis a seated player looks down.
+    const chips = Array.from({ length: 13 }, (_, i) => instance(counters, 1 + i).position);
+    const loose = chips.filter(p => Math.abs(p[1]! - (y + .069)) < 1e-6 && !chips.some(q => q !== p && q[0] === p[0] && q[2] === p[2]));
+    expect(loose).toHaveLength(3);
+    const columns = [...new Map(chips.filter(p => !loose.includes(p)).map(p => [`${p[0]}:${p[2]}`, p])).values()];
+    expect(columns).toHaveLength(2);
+    for (const group of [loose, columns]) for (const a of group) for (const b of group) if (a !== b) {
+      expect(Math.abs(a[0]! - b[0]!)).toBeGreaterThan(.03); expect(Math.abs(a[2]! - b[2]!)).toBeGreaterThan(.03);
+    }
+    // Every spot the pot can use, all eight stacks and four loose chips, stays clear of the cup, the die and the rails.
+    for (const [row, slot] of [[0, 0], [0, 3], [1, 0], [1, 2], [3, 0], [3, 2]] as const) {
+      const [px, pz] = dicePotSpot(row, slot);
+      expect(Math.abs(px) + .023).toBeLessThan(.47); expect(Math.abs(pz) + .023).toBeLessThan(.305);
+      expect(px + .023 < -.06 || pz - .023 > .06 || pz + .023 < -.1, `die ${row}:${slot}`).toBe(true);
+      expect(pz + .023 < .035, `cup ${row}:${slot}`).toBe(true);
+    }
     // A one sweeps the pot away; a finished match keeps the pegs and drops the turn cap.
     board.frame(dice({ scores: [12, 50, 4], pot: 0, die: 1, last: 'bust', revision: 5 }), 2);
     expect(counters.count).toBe(1);

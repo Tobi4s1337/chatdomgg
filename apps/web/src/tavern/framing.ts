@@ -5,24 +5,31 @@ import { clearShot, type PlaceShot } from '../interactions/places/framing';
 
 export interface TavernTableFraming extends PlaceShot { readonly fov: number }
 
+/** The carved game card covers a phone below this clip-space height (its top edge at 390×844, with a margin). */
+export const PHONE_HUD_TOP = .34;
+/** A seated citizen's head sits behind the chair it is on; its top, with a little headroom, above the table top. */
+export const ACROSS_HEAD = { reach: 1.375, top: .66 } as const;
+
 /**
- * The actual table is the canvas. Flat games are seen from the chair, about fifty degrees down, so the board reads
- * as a table with the other players across it, never a plan; the upright frame has a three-quarter view.
+ * The actual table is the canvas. Flat games are seen from the chair, about thirty degrees down on desktop and fifty
+ * on a phone, the way a seated player sees a table: the board in front, the whole head of whoever sits across above
+ * it. The upright frame has a three-quarter view.
  */
 export function tavernTableFraming(centre: Vec3, facing: number, game: GatherGame, aspect: number,
   world: CollisionWorld): TavernTableFraming | null {
   const portrait = aspect < 1, upright = game === 'stones';
   const fx = Math.sin(facing), fz = Math.cos(facing), rx = -fz, rz = fx;
-  const back = upright ? portrait ? 3.1 : 2.6 : portrait ? 1.05 : 1.1;
-  const high = upright ? portrait ? 2.8 : 2.5 : portrait ? 1.75 : 1.3;
+  const back = upright ? portrait ? 3.1 : 2.6 : portrait ? 1.2 : 1.3;
+  const high = upright ? portrait ? 2.8 : 2.5 : portrait ? 1.55 : 1.1;
   const shift = portrait ? 0 : .35;
   // Flat boards keep the chair's axis: a lateral eye/aim mismatch rolls the board.
   const wide = upright ? portrait ? .65 : 1.25 : shift;
   const eye: Vec3 = [centre[0] - fx * back + rx * wide, centre[1] + high, centre[2] - fz * back + rz * wide];
-  // Aim above the actual solid top. A portrait looks toward the near edge so the board sits above its controls.
-  const toward = portrait && !upright ? -.35 : 0;
+  // Aim above the actual solid top, between the board and the face across it. A portrait aims nearer so the board
+  // sits above its controls.
+  const toward = upright ? 0 : portrait ? -.2 : .15;
   const at: Vec3 = [centre[0] + rx * shift + fx * toward,
-    centre[1] + (upright ? portrait ? .2 : .45 : .12), centre[2] + rz * shift + fz * toward];
+    centre[1] + (upright ? portrait ? .2 : .45 : portrait ? .4 : .25), centre[2] + rz * shift + fz * toward];
   const clear = clearShot(world, { eye, at });
   if (!clear) return null;
   const base = upright ? portrait ? 51 : 35 : portrait ? 62 : 35;
@@ -31,11 +38,13 @@ export function tavernTableFraming(centre: Vec3, facing: number, game: GatherGam
   const bounds = upright
     ? [-.68, .68].flatMap(x => [.08, .92].map(y => new Vector3(centre[0] + x, centre[1] + y, centre[2])))
     : (game === 'pong' ? [-.64, .64] : [-.53, .53]).flatMap(x =>
-      (game === 'pong' ? [-.47, .47] : [-.37, .37]).map(z => new Vector3(centre[0] + x, centre[1] + .1, centre[2] + z)));
+      (game === 'pong' ? [-.47, .47] : [-.37, .37]).map(z => new Vector3(centre[0] + x, centre[1] + .1, centre[2] + z)))
+      .concat([-.25, .25].map(side => new Vector3(centre[0] + fx * ACROSS_HEAD.reach + rx * side, centre[1] + ACROSS_HEAD.top,
+        centre[2] + fz * ACROSS_HEAD.reach + rz * side)));
   let scale = 1;
   for (const corner of bounds) {
     corner.project(probe);
-    scale = Math.max(scale, Math.abs(corner.x) / .92, corner.y / .88, -corner.y / (portrait ? .43 : .9));
+    scale = Math.max(scale, Math.abs(corner.x) / .92, corner.y / .88, -corner.y / (portrait ? PHONE_HUD_TOP : .9));
   }
   // A wall can pull a chair's eye inward. Fit the authored board again instead of clipping that chair's columns.
   const fov = MathUtils.radToDeg(2 * Math.atan(Math.tan(MathUtils.degToRad(base / 2)) * scale));

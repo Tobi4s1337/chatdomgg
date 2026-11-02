@@ -4,7 +4,7 @@ import type { CollisionWorld, SolidBox } from '@chatdom/shared/realm';
 import { createTavernKit, TAVERN_FLOOR, TAVERN_ROOM_BOUNDS } from '../../../../packages/content/src/tavern';
 import { clearShot } from '../interactions/places/framing';
 import { tableGame } from '../games/boards';
-import { tavernTableFraming } from './framing';
+import { ACROSS_HEAD, tavernTableFraming } from './framing';
 
 function interior(style: 'hearth' | 'tide') {
   const kit = createTavernKit(style), [w, d] = TAVERN_ROOM_BOUNDS;
@@ -53,8 +53,18 @@ describe('seated table framing', () => {
           p.project(camera);
           expect.soft(Math.abs(p.x), `${label} x=${p.x}`).toBeLessThan(.98);
           expect.soft(p.y, `${label} y=${p.y}`).toBeLessThan(.98);
-          expect.soft(p.y, `${label} y=${p.y}`).toBeGreaterThan(aspect < 1 ? -.5 : -.98);
+          expect.soft(p.y, `${label} y=${p.y}`).toBeGreaterThan(aspect < 1 ? -.37 : -.98);
           expect.soft(p.z, label).toBeLessThan(1);
+        }
+        if (game !== 'stones') {
+          // Whoever sits across stays whole, chin to crown, above the board.
+          const fx = Math.sin(seat.facing), fz = Math.cos(seat.facing);
+          for (const dy of [0, ACROSS_HEAD.top]) {
+            const p = new THREE.Vector3(x + fx * ACROSS_HEAD.reach, y + dy, z + fz * ACROSS_HEAD.reach).project(camera);
+            expect.soft(p.y, `${label} head across y=${p.y}`).toBeLessThan(.95);
+            expect.soft(p.y, `${label} head across y=${p.y}`).toBeGreaterThan(-.3);
+            expect.soft(Math.abs(p.x), `${label} head across x=${p.x}`).toBeLessThan(.95);
+          }
         }
         if (aspect >= 1) {
           // Reserve the largest carved game card at the top right, including its action and stand controls.
