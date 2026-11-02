@@ -1,0 +1,753 @@
+{
+  "status": "TEMPORARY. A temp bed for the rough cut only. Never publish, never ship, never upload, never put it in a cut that leaves this team. The final music is Tobias's decision.",
+  "generator": "apps/studio/sound/temp-bed.mjs (offline synthesis in Node, deterministic)",
+  "files": {
+    "raw": "/srv/chatdom/media/teaser/audio/music/temp-bed.wav",
+    "normalised": "/srv/chatdom/media/teaser/audio/music/temp-bed-18lufs.wav",
+    "spectrogram": "/srv/chatdom/media/teaser/audio/music/temp-bed-spectrogram.png",
+    "strikeCloseUp": "/srv/chatdom/media/teaser/audio/music/temp-bed-spectrogram-strike.png"
+  },
+  "format": {
+    "sampleRate": 48000,
+    "channels": 2,
+    "bits": 24,
+    "durationSeconds": 88
+  },
+  "key": "D major (the kingdom sound palette is D major pentatonic)",
+  "tempo": {
+    "bpm": 94,
+    "meter": "4/4",
+    "beatSeconds": 0.6383,
+    "barSeconds": 2.5532,
+    "pickupBeats": 2,
+    "firstDownbeat": 1.2766,
+    "note": "Beat n is at n * beatSeconds from 0. Bar 1 starts on beat 2 (a two-beat pickup), so bar k starts at (2 + 4(k-1)) * beatSeconds."
+  },
+  "chapters": [
+    {
+      "id": "opening",
+      "shots": "S01-S03",
+      "bar": 1,
+      "start": 0,
+      "end": 11.4894,
+      "feel": "Sparse and intimate: a lute alone over the softest strings. Starts with a two-beat pickup; bar 1 lands at 1.277 s."
+    },
+    {
+      "id": "island",
+      "shots": "S04",
+      "bar": 5,
+      "start": 11.4894,
+      "end": 16.5957,
+      "feel": "The lift: a low drum, the strings swell, horns underneath, the lute sweeps up. Card: CHATDOM on the downbeat."
+    },
+    {
+      "id": "way-home",
+      "shots": "S05-S07",
+      "bar": 7,
+      "start": 16.5957,
+      "end": 29.3617,
+      "feel": "Warm and walking: walking bass, the lute sings the answer to the opening theme, a harp turns, a soft frame drum."
+    },
+    {
+      "id": "lights",
+      "shots": "S08-S09",
+      "bar": 12,
+      "start": 29.3617,
+      "end": 37.0213,
+      "feel": "Gentle and glittering: celesta, the flute enters, high soft strings. Bar 14 thins out for the quiet one."
+    },
+    {
+      "id": "forge",
+      "shots": "S10-S12",
+      "bar": 15,
+      "start": 37.0213,
+      "end": 47.234,
+      "feel": "Rhythmic: a 3+3+2 ostinato with hammer tinks, the bellows draw, the anvil strike, then the flight and the landing."
+    },
+    {
+      "id": "growth",
+      "shots": "S13",
+      "bar": 19,
+      "start": 47.234,
+      "end": 52.3404,
+      "feel": "Building: spiccato strings, rising horns, the drums thicken, a roll into the raid."
+    },
+    {
+      "id": "raid",
+      "shots": "S14-S18",
+      "bar": 21,
+      "start": 52.3404,
+      "end": 67.6596,
+      "feel": "The biggest and most driving: taiko, a horn call, driving low strings; the choir arrives in bar 25; a drum fill into the map."
+    },
+    {
+      "id": "map",
+      "shots": "S19-S21",
+      "bar": 27,
+      "start": 67.6596,
+      "end": 80.4255,
+      "feel": "Soaring: the choir sings the answer, strings and horns below, broad drums, a glitter of ink."
+    },
+    {
+      "id": "close",
+      "shots": "S22",
+      "bar": 32,
+      "start": 80.4255,
+      "end": 85.5319,
+      "feel": "Resolving softly: IV to I, the lute alone over the last strings, the flute and the voices."
+    },
+    {
+      "id": "tail",
+      "shots": "after S22",
+      "bar": 34,
+      "start": 85.5319,
+      "end": 88,
+      "feel": "The last lute note and its reverb; faded out over the last 1.6 s."
+    }
+  ],
+  "hits": [
+    {
+      "id": "island-reveal",
+      "time": 11.4894,
+      "bar": 5,
+      "beat": 1,
+      "what": "Low drum and the string swell: the island and the CHATDOM card (S04)."
+    },
+    {
+      "id": "way-home",
+      "time": 16.5957,
+      "bar": 7,
+      "beat": 1,
+      "what": "The walking bass starts (S05)."
+    },
+    {
+      "id": "lights",
+      "time": 29.3617,
+      "bar": 12,
+      "beat": 1,
+      "what": "The celesta begins: chat becomes lights (S08)."
+    },
+    {
+      "id": "forge-wish",
+      "time": 37.0213,
+      "bar": 15,
+      "beat": 1,
+      "what": "The forge ostinato starts (S10)."
+    },
+    {
+      "id": "forge-strike",
+      "time": 40.8511,
+      "bar": 16,
+      "beat": 3,
+      "what": "THE HAMMER STRIKE: anvil, drum, a Bm stab and sparks. Put the picture's impact frame here (S11)."
+    },
+    {
+      "id": "forge-landing",
+      "time": 44.6809,
+      "bar": 18,
+      "beat": 1,
+      "what": "The piece lands: a drum, a lute strum and a chime (S12)."
+    },
+    {
+      "id": "growth",
+      "time": 47.234,
+      "bar": 19,
+      "beat": 1,
+      "what": "The growth build begins (S13)."
+    },
+    {
+      "id": "raid-drop",
+      "time": 52.3404,
+      "bar": 21,
+      "beat": 1,
+      "what": "THE RAID DROP: the full drums and the horn call. Twitch's raid notice lands here (S14)."
+    },
+    {
+      "id": "map-rise",
+      "time": 67.6596,
+      "bar": 27,
+      "beat": 1,
+      "what": "THE MAP RISE: the choir and the broad drums; the kingdom falls away into the Atlas (S19)."
+    },
+    {
+      "id": "close",
+      "time": 80.4255,
+      "bar": 32,
+      "beat": 1,
+      "what": "The close: the lute returns (S22). The end card can come in here or on bar 33."
+    },
+    {
+      "id": "final-chord",
+      "time": 82.9787,
+      "bar": 33,
+      "beat": 1,
+      "what": "The home chord, D major."
+    },
+    {
+      "id": "last-note",
+      "time": 85.5319,
+      "bar": 34,
+      "beat": 1,
+      "what": "The last lute note; everything after is tail."
+    }
+  ],
+  "bars": [
+    {
+      "bar": 1,
+      "time": 1.2766,
+      "chords": "D"
+    },
+    {
+      "bar": 2,
+      "time": 3.8298,
+      "chords": "G/D"
+    },
+    {
+      "bar": 3,
+      "time": 6.383,
+      "chords": "Bm"
+    },
+    {
+      "bar": 4,
+      "time": 8.9362,
+      "chords": "Asus4, A (beat 3)"
+    },
+    {
+      "bar": 5,
+      "time": 11.4894,
+      "chords": "G"
+    },
+    {
+      "bar": 6,
+      "time": 14.0426,
+      "chords": "Asus4, A (beat 3)"
+    },
+    {
+      "bar": 7,
+      "time": 16.5957,
+      "chords": "D"
+    },
+    {
+      "bar": 8,
+      "time": 19.1489,
+      "chords": "A/C#"
+    },
+    {
+      "bar": 9,
+      "time": 21.7021,
+      "chords": "Bm"
+    },
+    {
+      "bar": 10,
+      "time": 24.2553,
+      "chords": "G"
+    },
+    {
+      "bar": 11,
+      "time": 26.8085,
+      "chords": "Asus4, A (beat 3)"
+    },
+    {
+      "bar": 12,
+      "time": 29.3617,
+      "chords": "Dadd9"
+    },
+    {
+      "bar": 13,
+      "time": 31.9149,
+      "chords": "G"
+    },
+    {
+      "bar": 14,
+      "time": 34.4681,
+      "chords": "Em7, A7 (beat 3)"
+    },
+    {
+      "bar": 15,
+      "time": 37.0213,
+      "chords": "Bm"
+    },
+    {
+      "bar": 16,
+      "time": 39.5745,
+      "chords": "Bm"
+    },
+    {
+      "bar": 17,
+      "time": 42.1277,
+      "chords": "G"
+    },
+    {
+      "bar": 18,
+      "time": 44.6809,
+      "chords": "A"
+    },
+    {
+      "bar": 19,
+      "time": 47.234,
+      "chords": "D"
+    },
+    {
+      "bar": 20,
+      "time": 49.7872,
+      "chords": "G, A (beat 3)"
+    },
+    {
+      "bar": 21,
+      "time": 52.3404,
+      "chords": "Bm"
+    },
+    {
+      "bar": 22,
+      "time": 54.8936,
+      "chords": "G"
+    },
+    {
+      "bar": 23,
+      "time": 57.4468,
+      "chords": "D"
+    },
+    {
+      "bar": 24,
+      "time": 60,
+      "chords": "A"
+    },
+    {
+      "bar": 25,
+      "time": 62.5532,
+      "chords": "Bm"
+    },
+    {
+      "bar": 26,
+      "time": 65.1064,
+      "chords": "G, A (beat 3)"
+    },
+    {
+      "bar": 27,
+      "time": 67.6596,
+      "chords": "D"
+    },
+    {
+      "bar": 28,
+      "time": 70.2128,
+      "chords": "A/C#"
+    },
+    {
+      "bar": 29,
+      "time": 72.766,
+      "chords": "Bm"
+    },
+    {
+      "bar": 30,
+      "time": 75.3191,
+      "chords": "G"
+    },
+    {
+      "bar": 31,
+      "time": 77.8723,
+      "chords": "Asus4, A (beat 3)"
+    },
+    {
+      "bar": 32,
+      "time": 80.4255,
+      "chords": "Gadd9"
+    },
+    {
+      "bar": 33,
+      "time": 82.9787,
+      "chords": "D"
+    },
+    {
+      "bar": 34,
+      "time": 85.5319,
+      "chords": "tail"
+    }
+  ],
+  "beats": [
+    0,
+    0.6383,
+    1.2766,
+    1.9149,
+    2.5532,
+    3.1915,
+    3.8298,
+    4.4681,
+    5.1064,
+    5.7447,
+    6.383,
+    7.0213,
+    7.6596,
+    8.2979,
+    8.9362,
+    9.5745,
+    10.2128,
+    10.8511,
+    11.4894,
+    12.1277,
+    12.766,
+    13.4043,
+    14.0426,
+    14.6809,
+    15.3191,
+    15.9574,
+    16.5957,
+    17.234,
+    17.8723,
+    18.5106,
+    19.1489,
+    19.7872,
+    20.4255,
+    21.0638,
+    21.7021,
+    22.3404,
+    22.9787,
+    23.617,
+    24.2553,
+    24.8936,
+    25.5319,
+    26.1702,
+    26.8085,
+    27.4468,
+    28.0851,
+    28.7234,
+    29.3617,
+    30,
+    30.6383,
+    31.2766,
+    31.9149,
+    32.5532,
+    33.1915,
+    33.8298,
+    34.4681,
+    35.1064,
+    35.7447,
+    36.383,
+    37.0213,
+    37.6596,
+    38.2979,
+    38.9362,
+    39.5745,
+    40.2128,
+    40.8511,
+    41.4894,
+    42.1277,
+    42.766,
+    43.4043,
+    44.0426,
+    44.6809,
+    45.3191,
+    45.9574,
+    46.5957,
+    47.234,
+    47.8723,
+    48.5106,
+    49.1489,
+    49.7872,
+    50.4255,
+    51.0638,
+    51.7021,
+    52.3404,
+    52.9787,
+    53.617,
+    54.2553,
+    54.8936,
+    55.5319,
+    56.1702,
+    56.8085,
+    57.4468,
+    58.0851,
+    58.7234,
+    59.3617,
+    60,
+    60.6383,
+    61.2766,
+    61.9149,
+    62.5532,
+    63.1915,
+    63.8298,
+    64.4681,
+    65.1064,
+    65.7447,
+    66.383,
+    67.0213,
+    67.6596,
+    68.2979,
+    68.9362,
+    69.5745,
+    70.2128,
+    70.8511,
+    71.4894,
+    72.1277,
+    72.766,
+    73.4043,
+    74.0426,
+    74.6809,
+    75.3191,
+    75.9574,
+    76.5957,
+    77.234,
+    77.8723,
+    78.5106,
+    79.1489,
+    79.7872,
+    80.4255,
+    81.0638,
+    81.7021,
+    82.3404,
+    82.9787,
+    83.617,
+    84.2553,
+    84.8936,
+    85.5319,
+    86.1702,
+    86.8085,
+    87.4468
+  ],
+  "mix": {
+    "buses": {
+      "lute": {
+        "peakDb": -1.7,
+        "rmsDb": -29.7,
+        "byChapter": [
+          -26.6,
+          -28.5,
+          -26.3,
+          -34.1,
+          -31.2,
+          -91.8,
+          -120,
+          -32.5,
+          -25.6,
+          -36.5
+        ]
+      },
+      "harp": {
+        "peakDb": -18.4,
+        "rmsDb": -46.6,
+        "byChapter": [
+          -49.5,
+          -70,
+          -38.5,
+          -69,
+          -120,
+          -120,
+          -120,
+          -120,
+          -120,
+          -120
+        ]
+      },
+      "pluck": {
+        "peakDb": -6.3,
+        "rmsDb": -33.8,
+        "byChapter": [
+          -120,
+          -120,
+          -28.9,
+          -67.3,
+          -28.6,
+          -65,
+          -34.1,
+          -83.3,
+          -120,
+          -120
+        ]
+      },
+      "strings": {
+        "peakDb": -3.2,
+        "rmsDb": -22.3,
+        "byChapter": [
+          -28.1,
+          -18.2,
+          -25.3,
+          -26.2,
+          -21.9,
+          -20.3,
+          -19.5,
+          -22.3,
+          -28.1,
+          -30.4
+        ]
+      },
+      "low": {
+        "peakDb": -9.4,
+        "rmsDb": -27,
+        "byChapter": [
+          -120,
+          -23.9,
+          -30.3,
+          -26.9,
+          -26.1,
+          -26.3,
+          -25.9,
+          -25.1,
+          -27,
+          -30.9
+        ]
+      },
+      "choir": {
+        "peakDb": -5.2,
+        "rmsDb": -26.2,
+        "byChapter": [
+          -120,
+          -120,
+          -120,
+          -120,
+          -120,
+          -120,
+          -25.3,
+          -19.2,
+          -27.3,
+          -32.2
+        ]
+      },
+      "brass": {
+        "peakDb": -1.9,
+        "rmsDb": -21.8,
+        "byChapter": [
+          -120,
+          -28.2,
+          -46.4,
+          -120,
+          -22.3,
+          -19.7,
+          -15.5,
+          -28.5,
+          -46.5,
+          -120
+        ]
+      },
+      "flute": {
+        "peakDb": -13.9,
+        "rmsDb": -32.8,
+        "byChapter": [
+          -120,
+          -120,
+          -120,
+          -23.5,
+          -47.8,
+          -120,
+          -120,
+          -120,
+          -26.5,
+          -120
+        ]
+      },
+      "celesta": {
+        "peakDb": -7.8,
+        "rmsDb": -29.3,
+        "byChapter": [
+          -120,
+          -28.9,
+          -120,
+          -24.1,
+          -25.4,
+          -66.3,
+          -120,
+          -25.6,
+          -38.6,
+          -33.4
+        ]
+      },
+      "drums": {
+        "peakDb": 4.2,
+        "rmsDb": -20.9,
+        "byChapter": [
+          -40.8,
+          -21.6,
+          -33.3,
+          -63.5,
+          -22.6,
+          -17.3,
+          -15.7,
+          -20.4,
+          -46,
+          -120
+        ]
+      },
+      "anvil": {
+        "peakDb": -3.9,
+        "rmsDb": -34.5,
+        "byChapter": [
+          -120,
+          -120,
+          -120,
+          -120,
+          -25.1,
+          -120,
+          -120,
+          -120,
+          -120,
+          -120
+        ]
+      },
+      "air": {
+        "peakDb": -14.5,
+        "rmsDb": -42.9,
+        "byChapter": [
+          -47.9,
+          -41.9,
+          -70.5,
+          -120,
+          -43.3,
+          -35.2,
+          -40.3,
+          -43.7,
+          -120,
+          -120
+        ]
+      }
+    },
+    "limiter": {
+      "maxReductionDb": 2.5,
+      "limitedSeconds": 2.76
+    },
+    "written": {
+      "clipped": 0,
+      "samplePeakDb": -1.5
+    },
+    "discontinuity": {
+      "method": "energy above 10 kHz per 1 ms, 24 dB over the local median, not at a note onset",
+      "unexplained": 0,
+      "at": []
+    }
+  },
+  "loudness": {
+    "raw": {
+      "integratedLufs": -16.1,
+      "lraLu": 10.1,
+      "truePeakDbtp": -1.5,
+      "maxMomentaryLufs": -9.5,
+      "maxShortTermLufs": -11.5,
+      "peakDb": -1.500001,
+      "rmsDb": -18.894022,
+      "dcOffset": 0.000002,
+      "flatFactor": 0,
+      "peakCount": 6
+    },
+    "normalised": {
+      "integratedLufs": -17.9,
+      "lraLu": 10.1,
+      "truePeakDbtp": -3.3,
+      "maxMomentaryLufs": -11.3,
+      "maxShortTermLufs": -13.3,
+      "peakDb": -3.290001,
+      "rmsDb": -20.684022,
+      "dcOffset": 0.000002,
+      "flatFactor": 0,
+      "peakCount": 6,
+      "loudnorm": {
+        "normalizationType": "linear",
+        "inputI": -16.21,
+        "inputTP": -1.46,
+        "inputLRA": 10.4,
+        "targetOffset": -1.8
+      }
+    },
+    "target": {
+      "integratedLufs": -18,
+      "truePeakDbtp": -1.5,
+      "note": "Two-pass loudnorm, linear; true peak target -1.5 dBTP so the copy stays below -1 dBTP."
+    }
+  }
+}

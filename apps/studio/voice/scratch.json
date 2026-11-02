@@ -1,0 +1,899 @@
+{
+ "about": "Scratch narration for the teaser rough cut. \"audio\" is the edit copy: trimmed to the speech (50 ms before the first sound, 250 ms after the last word's sound), with a 5 ms fade in and 40 ms fade out, two-pass loudnorm (with a measured lookahead limiter first on lines too peaky for linear gain; loudness.limitedDb says how much) to -16 LUFS integrated and -1.5 dBTP, mp3 44.1 kHz 192 kb/s. Word timings are in the edit copy's time. \"raw\" is the untouched ElevenLabs render with its character alignment; trim.start and trim.end are offsets into it.",
+ "voice": {
+  "id": "kLhAstPcnnPxqzk6gS5i",
+  "name": "Rowan - Gentle, Soft-Spoken & Warm"
+ },
+ "model": "eleven_multilingual_v2",
+ "settings": {
+  "stability": 0.5,
+  "similarity_boost": 0.75,
+  "style": 0.2,
+  "use_speaker_boost": true,
+  "speed": 0.94
+ },
+ "seed": 1207,
+ "mediaRoot": "/srv/chatdom/media/teaser",
+ "generated": "2026-11-01T22:12:36.396Z",
+ "lines": [
+  {
+   "shot": "S01",
+   "text": "Every stream has a chat.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/01-S01.mp3",
+   "duration": 1.776,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -2.7,
+    "mode": "linear",
+    "limitedDb": 1.4
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/01-S01.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/01-S01.alignment.json",
+    "duration": 2.116,
+    "integratedLufs": -18.5,
+    "leadSilence": 0.03,
+    "tailSilence": 0.64
+   },
+   "trim": {
+    "start": 0,
+    "end": 1.73
+   },
+   "words": [
+    {
+     "text": "Every",
+     "start": 0,
+     "end": 0.313
+    },
+    {
+     "text": "stream",
+     "start": 0.372,
+     "end": 0.72
+    },
+    {
+     "text": "has",
+     "start": 0.789,
+     "end": 0.917
+    },
+    {
+     "text": "a",
+     "start": 0.975,
+     "end": 0.998
+    },
+    {
+     "text": "chat.",
+     "start": 1.057,
+     "end": 1.451
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S02",
+   "text": "Every chat… is a people.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/02-S02.mp3",
+   "duration": 2.142,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -2.5,
+    "mode": "linear",
+    "limitedDb": 2.1
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/02-S02.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/02-S02.alignment.json",
+    "duration": 2.456,
+    "integratedLufs": -21.5,
+    "leadSilence": 0,
+    "tailSilence": 0.61
+   },
+   "trim": {
+    "start": 0,
+    "end": 2.1
+   },
+   "words": [
+    {
+     "text": "Every",
+     "start": 0,
+     "end": 0.267
+    },
+    {
+     "text": "chat…",
+     "start": 0.325,
+     "end": 0.708
+    },
+    {
+     "text": "is",
+     "start": 1.138,
+     "end": 1.3
+    },
+    {
+     "text": "a",
+     "start": 1.347,
+     "end": 1.382
+    },
+    {
+     "text": "people.",
+     "start": 1.463,
+     "end": 1.916
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S04",
+   "text": "And every people deserves a kingdom.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/03-S04.mp3",
+   "duration": 2.351,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -2.5,
+    "mode": "linear",
+    "limitedDb": 2.5
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/03-S04.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/03-S04.alignment.json",
+    "duration": 2.926,
+    "integratedLufs": -21.4,
+    "leadSilence": 0.1,
+    "tailSilence": 0.81
+   },
+   "trim": {
+    "start": 0.05,
+    "end": 2.37
+   },
+   "words": [
+    {
+     "text": "And",
+     "start": 0,
+     "end": 0.136
+    },
+    {
+     "text": "every",
+     "start": 0.263,
+     "end": 0.612
+    },
+    {
+     "text": "people",
+     "start": 0.693,
+     "end": 1.076
+    },
+    {
+     "text": "deserves",
+     "start": 1.123,
+     "end": 1.564
+    },
+    {
+     "text": "a",
+     "start": 1.599,
+     "end": 1.633
+    },
+    {
+     "text": "kingdom.",
+     "start": 1.691,
+     "end": 2.063
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S05",
+   "text": "Show up…",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/04-S05.mp3",
+   "duration": 0.836,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -1.8,
+    "mode": "linear",
+    "limitedDb": 0
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/04-S05.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/04-S05.alignment.json",
+    "duration": 0.914,
+    "integratedLufs": -21.1,
+    "leadSilence": 0.01,
+    "tailSilence": 0.36
+   },
+   "trim": {
+    "start": 0,
+    "end": 0.8
+   },
+   "words": [
+    {
+     "text": "Show",
+     "start": 0,
+     "end": 0.267
+    },
+    {
+     "text": "up…",
+     "start": 0.337,
+     "end": 0.522
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S06",
+   "text": "…and the road leads home.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/05-S06.mp3",
+   "duration": 1.411,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -1.8,
+    "mode": "linear",
+    "limitedDb": 0
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/05-S06.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/05-S06.alignment.json",
+    "duration": 2.22,
+    "integratedLufs": -22.7,
+    "leadSilence": 0.28,
+    "tailSilence": 0.86
+   },
+   "trim": {
+    "start": 0.23,
+    "end": 1.61
+   },
+   "words": [
+    {
+     "text": "…and",
+     "start": 0,
+     "end": 0.118
+    },
+    {
+     "text": "the",
+     "start": 0.165,
+     "end": 0.234
+    },
+    {
+     "text": "road",
+     "start": 0.281,
+     "end": 0.49
+    },
+    {
+     "text": "leads",
+     "start": 0.548,
+     "end": 0.768
+    },
+    {
+     "text": "home.",
+     "start": 0.815,
+     "end": 1.21
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S08",
+   "text": "Every minute in chat… a light in the window.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/06-S08.mp3",
+   "duration": 2.847,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -2.7,
+    "mode": "linear",
+    "limitedDb": 1.2
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/06-S08.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/06-S08.alignment.json",
+    "duration": 3.422,
+    "integratedLufs": -19.5,
+    "leadSilence": 0.04,
+    "tailSilence": 0.86
+   },
+   "trim": {
+    "start": 0,
+    "end": 2.81
+   },
+   "words": [
+    {
+     "text": "Every",
+     "start": 0,
+     "end": 0.337
+    },
+    {
+     "text": "minute",
+     "start": 0.395,
+     "end": 0.639
+    },
+    {
+     "text": "in",
+     "start": 0.685,
+     "end": 0.755
+    },
+    {
+     "text": "chat…",
+     "start": 0.824,
+     "end": 1.184
+    },
+    {
+     "text": "a",
+     "start": 1.37,
+     "end": 1.451
+    },
+    {
+     "text": "light",
+     "start": 1.556,
+     "end": 1.846
+    },
+    {
+     "text": "in",
+     "start": 1.95,
+     "end": 2.078
+    },
+    {
+     "text": "the",
+     "start": 2.125,
+     "end": 2.194
+    },
+    {
+     "text": "window.",
+     "start": 2.229,
+     "end": 2.554
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S09",
+   "text": "Even the quiet ones.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/07-S09.mp3",
+   "duration": 1.437,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -2.6,
+    "mode": "linear",
+    "limitedDb": 1.3
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/07-S09.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/07-S09.alignment.json",
+    "duration": 2.09,
+    "integratedLufs": -27,
+    "leadSilence": 0.07,
+    "tailSilence": 0.93
+   },
+   "trim": {
+    "start": 0.02,
+    "end": 1.41
+   },
+   "words": [
+    {
+     "text": "Even",
+     "start": 0,
+     "end": 0.282
+    },
+    {
+     "text": "the",
+     "start": 0.317,
+     "end": 0.386
+    },
+    {
+     "text": "quiet",
+     "start": 0.433,
+     "end": 0.735
+    },
+    {
+     "text": "ones.",
+     "start": 0.793,
+     "end": 1.118
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S10",
+   "text": "Speak it…",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/08-S10.mp3",
+   "duration": 0.836,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -1.8,
+    "mode": "linear",
+    "limitedDb": 2.6
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/08-S10.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/08-S10.alignment.json",
+    "duration": 0.836,
+    "integratedLufs": -29.1,
+    "leadSilence": 0.04,
+    "tailSilence": 0.25
+   },
+   "trim": {
+    "start": 0,
+    "end": 0.836
+   },
+   "words": [
+    {
+     "text": "Speak",
+     "start": 0,
+     "end": 0.348
+    },
+    {
+     "text": "it…",
+     "start": 0.406,
+     "end": 0.58
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S11",
+   "text": "…and the Forge makes it real.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/09-S11.mp3",
+   "duration": 1.646,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -2.3,
+    "mode": "linear",
+    "limitedDb": 1.9
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/09-S11.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/09-S11.alignment.json",
+    "duration": 2.403,
+    "integratedLufs": -25.1,
+    "leadSilence": 0.31,
+    "tailSilence": 0.78
+   },
+   "trim": {
+    "start": 0.26,
+    "end": 1.87
+   },
+   "words": [
+    {
+     "text": "…and",
+     "start": 0,
+     "end": 0.112
+    },
+    {
+     "text": "the",
+     "start": 0.146,
+     "end": 0.216
+    },
+    {
+     "text": "Forge",
+     "start": 0.286,
+     "end": 0.646
+    },
+    {
+     "text": "makes",
+     "start": 0.692,
+     "end": 0.878
+    },
+    {
+     "text": "it",
+     "start": 0.924,
+     "end": 0.994
+    },
+    {
+     "text": "real.",
+     "start": 1.064,
+     "end": 1.354
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S13",
+   "text": "Come back… and it grows with you.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/10-S13.mp3",
+   "duration": 2.116,
+   "loudness": {
+    "integratedLufs": -16.3,
+    "truePeakDbtp": -2.6,
+    "mode": "linear",
+    "limitedDb": 2
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/10-S13.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/10-S13.alignment.json",
+    "duration": 2.769,
+    "integratedLufs": -24.4,
+    "leadSilence": 0.07,
+    "tailSilence": 0.93
+   },
+   "trim": {
+    "start": 0.02,
+    "end": 2.09
+   },
+   "words": [
+    {
+     "text": "Come",
+     "start": 0,
+     "end": 0.224
+    },
+    {
+     "text": "back…",
+     "start": 0.259,
+     "end": 0.514
+    },
+    {
+     "text": "and",
+     "start": 0.909,
+     "end": 1.071
+    },
+    {
+     "text": "it",
+     "start": 1.118,
+     "end": 1.176
+    },
+    {
+     "text": "grows",
+     "start": 1.222,
+     "end": 1.478
+    },
+    {
+     "text": "with",
+     "start": 1.513,
+     "end": 1.652
+    },
+    {
+     "text": "you.",
+     "start": 1.698,
+     "end": 1.849
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S15",
+   "text": "Friends arrive under their own banners.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/11-S15.mp3",
+   "duration": 2.142,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -2.9,
+    "mode": "linear",
+    "limitedDb": 0
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/11-S15.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/11-S15.alignment.json",
+    "duration": 2.586,
+    "integratedLufs": -21.5,
+    "leadSilence": 0.06,
+    "tailSilence": 0.72
+   },
+   "trim": {
+    "start": 0.01,
+    "end": 2.12
+   },
+   "words": [
+    {
+     "text": "Friends",
+     "start": 0,
+     "end": 0.338
+    },
+    {
+     "text": "arrive",
+     "start": 0.373,
+     "end": 0.675
+    },
+    {
+     "text": "under",
+     "start": 0.71,
+     "end": 0.861
+    },
+    {
+     "text": "their",
+     "start": 0.896,
+     "end": 1.047
+    },
+    {
+     "text": "own",
+     "start": 1.105,
+     "end": 1.302
+    },
+    {
+     "text": "banners.",
+     "start": 1.36,
+     "end": 1.813
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S17",
+   "text": "And when the night ends…",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/12-S17.mp3",
+   "duration": 1.541,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -3.9,
+    "mode": "linear",
+    "limitedDb": 0
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/12-S17.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/12-S17.alignment.json",
+    "duration": 1.802,
+    "integratedLufs": -22.1,
+    "leadSilence": 0.1,
+    "tailSilence": 0.5
+   },
+   "trim": {
+    "start": 0.05,
+    "end": 1.55
+   },
+   "words": [
+    {
+     "text": "And",
+     "start": 0,
+     "end": 0.113
+    },
+    {
+     "text": "when",
+     "start": 0.147,
+     "end": 0.275
+    },
+    {
+     "text": "the",
+     "start": 0.31,
+     "end": 0.38
+    },
+    {
+     "text": "night",
+     "start": 0.438,
+     "end": 0.67
+    },
+    {
+     "text": "ends…",
+     "start": 0.739,
+     "end": 1.169
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S18",
+   "text": "…ride out.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/13-S18.mp3",
+   "duration": 1.097,
+   "loudness": {
+    "integratedLufs": -16.5,
+    "truePeakDbtp": -1.8,
+    "mode": "linear",
+    "limitedDb": 4.8
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/13-S18.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/13-S18.alignment.json",
+    "duration": 1.75,
+    "integratedLufs": -28.8,
+    "leadSilence": 0.25,
+    "tailSilence": 0.73
+   },
+   "trim": {
+    "start": 0.2,
+    "end": 1.27
+   },
+   "words": [
+    {
+     "text": "…ride",
+     "start": 0,
+     "end": 0.45
+    },
+    {
+     "text": "out.",
+     "start": 0.485,
+     "end": 0.764
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S19",
+   "text": "Every raid leaves a road.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/14-S19.mp3",
+   "duration": 1.855,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -2.7,
+    "mode": "linear",
+    "limitedDb": 0
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/14-S19.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/14-S19.alignment.json",
+    "duration": 1.933,
+    "integratedLufs": -20.8,
+    "leadSilence": 0.06,
+    "tailSilence": 0.35
+   },
+   "trim": {
+    "start": 0.01,
+    "end": 1.83
+   },
+   "words": [
+    {
+     "text": "Every",
+     "start": 0,
+     "end": 0.338
+    },
+    {
+     "text": "raid",
+     "start": 0.443,
+     "end": 0.721
+    },
+    {
+     "text": "leaves",
+     "start": 0.791,
+     "end": 1.023
+    },
+    {
+     "text": "a",
+     "start": 1.058,
+     "end": 1.093
+    },
+    {
+     "text": "road.",
+     "start": 1.163,
+     "end": 1.546
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S21",
+   "text": "Thousands of chats. Thousands of kingdoms.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/15-S21.mp3",
+   "duration": 2.978,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -2.2,
+    "mode": "linear",
+    "limitedDb": 0
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/15-S21.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/15-S21.alignment.json",
+    "duration": 3.239,
+    "integratedLufs": -22,
+    "leadSilence": 0.04,
+    "tailSilence": 0.55
+   },
+   "trim": {
+    "start": 0,
+    "end": 2.94
+   },
+   "words": [
+    {
+     "text": "Thousands",
+     "start": 0,
+     "end": 0.615
+    },
+    {
+     "text": "of",
+     "start": 0.65,
+     "end": 0.708
+    },
+    {
+     "text": "chats.",
+     "start": 0.766,
+     "end": 1.207
+    },
+    {
+     "text": "Thousands",
+     "start": 1.428,
+     "end": 1.927
+    },
+    {
+     "text": "of",
+     "start": 1.962,
+     "end": 2.02
+    },
+    {
+     "text": "kingdoms.",
+     "start": 2.09,
+     "end": 2.635
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "S22",
+   "text": "Your chat is waiting.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/16-S22.mp3",
+   "duration": 1.411,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -2.2,
+    "mode": "linear",
+    "limitedDb": 0
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/16-S22.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/16-S22.alignment.json",
+    "duration": 1.933,
+    "integratedLufs": -22.2,
+    "leadSilence": 0.08,
+    "tailSilence": 0.77
+   },
+   "trim": {
+    "start": 0.03,
+    "end": 1.41
+   },
+   "words": [
+    {
+     "text": "Your",
+     "start": 0,
+     "end": 0.225
+    },
+    {
+     "text": "chat",
+     "start": 0.283,
+     "end": 0.539
+    },
+    {
+     "text": "is",
+     "start": 0.597,
+     "end": 0.678
+    },
+    {
+     "text": "waiting.",
+     "start": 0.736,
+     "end": 1.131
+    }
+   ],
+   "billed": 0
+  },
+  {
+   "shot": "CARD",
+   "text": "Every chat deserves a kingdom.",
+   "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/edit/17-CARD.mp3",
+   "duration": 2.247,
+   "loudness": {
+    "integratedLufs": -16.2,
+    "truePeakDbtp": -2.4,
+    "mode": "linear",
+    "limitedDb": 4
+   },
+   "raw": {
+    "audio": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/17-CARD.mp3",
+    "alignment": "/srv/chatdom/media/teaser/audio/voice/scratch/rowan-kLhAst/raw/17-CARD.alignment.json",
+    "duration": 2.351,
+    "integratedLufs": -24.1,
+    "leadSilence": 0.04,
+    "tailSilence": 0.38
+   },
+   "trim": {
+    "start": 0,
+    "end": 2.22
+   },
+   "words": [
+    {
+     "text": "Every",
+     "start": 0,
+     "end": 0.418
+    },
+    {
+     "text": "chat",
+     "start": 0.476,
+     "end": 0.778
+    },
+    {
+     "text": "deserves",
+     "start": 0.882,
+     "end": 1.428
+    },
+    {
+     "text": "a",
+     "start": 1.474,
+     "end": 1.509
+    },
+    {
+     "text": "kingdom.",
+     "start": 1.567,
+     "end": 1.962
+    }
+   ],
+   "billed": 0
+  }
+ ]
+}
