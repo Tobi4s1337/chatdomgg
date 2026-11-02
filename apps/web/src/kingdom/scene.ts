@@ -86,7 +86,6 @@ import './grand-land/pier-layer';
 import { createSceneStills, type SceneStillOptions } from './grand-land/scene-still';
 import { pierShot, type PierShotPose } from './grand-land/pier-shot';
 import { createRaidMomentHooks, raidTorchLights } from './grand-land/raid-support';
-import type { CollisionWorld } from '@chatdom/shared/realm';
 import { automaticSceneQuality, sceneQualityBudget, type SceneQuality } from './grand-land/scene-quality';
 export type { PlaceMount, PlaceMounter } from './grand-land/place-mount';
 export { registerKingdomLayer, type KingdomLayerMount, type KingdomLayerMounter } from './grand-land/kingdom-layer';
