@@ -11,7 +11,10 @@
 //
 //   node work/lanes/grand-world/capture-walk.mjs --pc        inside chatdom-pc-lease (preview 5192, realm 5191)
 //   node work/lanes/grand-world/capture-walk.mjs             SwiftShader under the capture lock
-//   [--sizes 1440x900,390x844] [--hour 17.5] [--views street,door,forge,castle]
+//   [--sizes 1440x900,390x844] [--hour 17.5] [--views street,door,forge,tavern,pier,castle]
+//   [--scene <bytes> --receipt <json>]   serve a staged adoption (stage-adoption.mjs) instead of the live scene; its
+//                                         land must be published for that receipt in this lane's store first
+//   [--stream hero,window,pier,citizen]   after the walk, the stream view's director shots on the same bench
 //
 // For each size: a fresh browser context (cold cache) opens the walk and records time to the designed gate, to
 // the loaded frame and to walkable. Then for each view the server places the walker a few metres short of the
@@ -22,7 +25,7 @@ import { Buffer } from 'node:buffer';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer as createHttpServer, get as httpGet } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -43,17 +46,24 @@ const { values } = parseArgs({ options: {
   today: { type: 'string' },
   // A realm that never answers land routes (today's live realm): the grand build must fall back to today's land.
   unpublished: { type: 'boolean', default: false },
+  scene: { type: 'string' },
+  receipt: { type: 'string' },
+  stream: { type: 'string', default: '' },
 } });
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const pc = values.pc, hour = Number(values.hour);
-const hourName = new Map([[6.5, 'dawn'], [12, 'noon'], [17.5, 'golden'], [22, 'night']]).get(hour);
+const hourName = new Map([[6.5, 'dawn'], [12, 'noon'], [17.5, 'golden'], [19.5, 'dusk'], [22, 'night']]).get(hour);
 assert.ok(hourName, 'Use a named evidence hour');
-const sizes = values.sizes.split(',').map(text => { const [w, h] = text.split('x').map(Number); assert.ok(w > 0 && h > 0); return { w, h }; });
+const sizes = values.sizes === 'none' ? [] : values.sizes.split(',').map(text => { const [w, h] = text.split('x').map(Number); assert.ok(w > 0 && h > 0); return { w, h }; });
 const viewNames = values.views.split(',');
-for (const name of viewNames) assert.ok(['street', 'door', 'forge', 'castle'].includes(name), `unknown view ${name}`);
+for (const name of viewNames) assert.ok(['street', 'door', 'forge', 'tavern', 'pier', 'castle'].includes(name), `unknown view ${name}`);
+const streamCameras = values.stream ? values.stream.split(',') : [];
+for (const name of streamCameras) assert.ok(['hero', 'window', 'pier', 'citizen'].includes(name), `unknown stream camera ${name}`);
+assert.ok(!values.scene === !values.receipt, 'A staged scene needs its receipt');
+const staged = !!values.scene;
 const today = values.today, unpublished = values.unpublished;
 assert.ok(!(today && unpublished), 'Choose either the comparison build or an unpublished land');
-const prefix = `gw10-${pc ? 'gpu-' : ''}${today ? 'today-' : ''}${unpublished ? 'unpublished-' : ''}walk${values.label ? `-${values.label}` : ''}`;
+const prefix = `${staged || streamCameras.length ? 'gw14' : 'gw10'}-${pc ? 'gpu-' : ''}${today ? 'today-' : ''}${unpublished ? 'unpublished-' : ''}walk${values.label ? `-${values.label}` : ''}`;
 const sleep = ms => new Promise(done => setTimeout(done, ms));
 const host = '127.0.0.1', kingdomId = '129634568';
 const live = 'http://127.0.0.1:5197';
@@ -88,8 +98,12 @@ try {
   // The live receipt and its exact scene bytes, read once through the public GET routes.
   const receiptResponse = await readLive(`/api/realm/founded/${kingdomId}`, { signal: AbortSignal.timeout(8000) });
   assert.equal(receiptResponse.status, 200);
-  const receiptText = await receiptResponse.text(), receipt = JSON.parse(receiptText);
-  const sceneBytes = new Uint8Array(await (await readLive(`/api/realm/founded/scenes/${receipt.sceneHash}`, { signal: AbortSignal.timeout(20_000) })).arrayBuffer());
+  const liveReceipt = JSON.parse(await receiptResponse.text());
+  // A staged adoption keeps the live plan and layout revision; only its placements and collision revision move.
+  const receiptText = staged ? await readFile(values.receipt, 'utf8') : JSON.stringify(liveReceipt), receipt = JSON.parse(receiptText);
+  if (staged) { assert.equal(receipt.layoutRevision, liveReceipt.layoutRevision); assert.equal(receipt.kingdomId, liveReceipt.kingdomId); report.liveReceipt = liveReceipt; }
+  const sceneBytes = staged ? new Uint8Array(await readFile(values.scene))
+    : new Uint8Array(await (await readLive(`/api/realm/founded/scenes/${receipt.sceneHash}`, { signal: AbortSignal.timeout(20_000) })).arrayBuffer());
   const entryText = await (await readLive(`/api/realm/entry/${kingdomId}`, { signal: AbortSignal.timeout(8000) })).text();
   const entryInfo = JSON.parse(entryText);
   assert.equal(entryInfo.origin, 'live');
@@ -110,9 +124,9 @@ try {
   // Evidence spots on the real plan. A spot is where the walker stops; it starts `lead` metres short of it, facing it.
   const unit = (from, to) => { const dx = to[0] - from[0], dz = to[2] - from[2], l = Math.hypot(dx, dz); return [dx / l, dz / l]; };
   const settle = point => interactions.settleOnFloor(world, point);
-  function approach(spot, dir, lead) {
+  function approach(spot, dir, lead, lifts = [0, .5, -.5, 1, -1, 1.5, -1.5]) {
     for (let back = lead; back >= 1; back -= .5) {
-      for (const lift of [0, .5, -.5, 1, -1, 1.5, -1.5]) {
+      for (const lift of lifts) {
         const start = settle([spot[0] - dir[0] * back, spot[1] + lift, spot[2] - dir[1] * back]);
         if (start) return { start, walk: back };
       }
@@ -137,6 +151,27 @@ try {
     spots.castle = { ...approach(castleGate, dir, 8), heading: Math.atan2(dir[0], dir[1]), stop: castleGate, note: 'Crown Road up to the castle gate' };
   }
   {
+    const tavern = groundLand.places.tavern;
+    if (tavern) {
+      const dir = [Math.sin(tavern.facing), Math.cos(tavern.facing)];
+      spots.tavern = { ...approach(tavern.position, dir, 6), heading: tavern.facing, stop: tavern.position, note: 'up to the tavern door (gather portal anchor)' };
+    }
+  }
+  {
+    // The deck's own axis runs through the root and its bays (the T-head is offset); the last bay gives it.
+    const root = scene.placements.find(p => p.id === 'pier:lake:root'), head = scene.placements.filter(p => /^pier:lake:bay-\d+$/.test(p.id)).at(-1);
+    if (root && head) {
+      // Onto the deck from the shore: the walk runs from the root toward the head; stop a few metres out.
+      const dir = unit(root.position, head.position), out = [root.position[0] + dir[0] * 6, root.position[1], root.position[2] + dir[1] * 6];
+      // The deck stands over the water at its own datum: look for the walkable top from above the posts down.
+      let stop = null;
+      for (let y = root.position[1] + 8; y >= root.position[1] - 2 && !stop; y -= 1) stop = settle([out[0], y, out[2]]);
+      report.pierProbe = { root: root.position, head: head.position, out, stop };
+      const lifts = [0, .5, -.5, 1, -1, 1.5, -1.5, 2, -2, 2.5, -2.5, 3, -3, 4, -4];
+      if (stop) spots.pier = { ...approach(stop, dir, 10, lifts), heading: Math.atan2(dir[0], dir[1]), stop, note: 'from the shore onto the pier deck' };
+    }
+  }
+  {
     const start = anchors[0], dir = unit(start, castleGate);
     spots.street = { start, walk: 2, heading: Math.atan2(dir[0], dir[1]), stop: null, note: 'arrival anchor 0 on the street, facing up toward the castle' };
   }
@@ -147,7 +182,7 @@ try {
 
   // The live kingdom's public world, mirrored read-only from its watch stream: the checkpoint seeds the bench
   // room's bootstrap (same writer epoch and cursors) and later `world` deliveries are forwarded verbatim.
-  const watchAbort = new AbortController(), subscribers = new Set();
+  const watchAbort = new AbortController(), subscribers = new Set(), watchers = new Set();
   cleanups.push(() => watchAbort.abort());
   const checkpoint = await new Promise((resolveCheckpoint, rejectCheckpoint) => {
     readLive(`/api/realm/watch/${kingdomId}`, { headers: { Accept: 'text/event-stream' }, signal: watchAbort.signal }).then(async response => {
@@ -162,13 +197,19 @@ try {
           const event = /^event: (.+)$/m.exec(block)?.[1], data = /^data: (.+)$/m.exec(block)?.[1];
           if (!event || !data) continue;
           if (event === 'checkpoint' && !seeded) { seeded = true; resolveCheckpoint(JSON.parse(data)); }
-          else if (event === 'world') { report.mirroredWorld = (report.mirroredWorld ?? 0) + 1; for (const deliver of subscribers) deliver(JSON.parse(data)); }
+          else if (event === 'world') {
+            // The live world rows keep presence fresh; a staged room keeps its own revision, so only watchers get them.
+            report.mirroredWorld = (report.mirroredWorld ?? 0) + 1;
+            if (!staged) for (const deliver of subscribers) deliver(JSON.parse(data));
+            for (const watcher of watchers) watcher(event, data);
+          }
         }
       }
     }).catch(error => { if (!watchAbort.signal.aborted) rejectCheckpoint(error); });
     setTimeout(() => rejectCheckpoint(new Error('No live watch checkpoint')), 10_000).unref();
   });
-  assert.equal(checkpoint.manifest.sceneHash, receipt.sceneHash, 'Live watch and receipt disagree');
+  if (staged) { assert.equal(checkpoint.manifest.sceneHash, liveReceipt.sceneHash, 'Live watch and receipt disagree'); checkpoint.manifest = receipt; checkpoint.checkpoint.collisionRevision = receipt.collisionRevision; subscribers.clear(); }
+  else assert.equal(checkpoint.manifest.sceneHash, receipt.sceneHash, 'Live watch and receipt disagree');
   report.checkpoint = { throughSequence: checkpoint.checkpoint.throughSequence, current: checkpoint.checkpoint.current.map(m => m.type) };
 
   // Bench realm: the real server, the real founded collision world, one bench principal per ticket.
@@ -203,6 +244,17 @@ try {
   app.get(`/api/realm/founded/${kingdomId}`, res => send(res, '200 OK', 'application/json', receiptText));
   app.get(`/api/realm/founded/scenes/${receipt.sceneHash}`, res => send(res, '200 OK', 'application/json', sceneBuffer));
   app.get(`/api/realm/entry/${kingdomId}`, res => send(res, '200 OK', 'application/json', entryText));
+  // The public watch the stream view reads: this bench's checkpoint (the staged receipt when staged), then the live
+  // kingdom's world deliveries verbatim when the scene is the live one. Comments keep the stream open.
+  app.get(`/api/realm/watch/${kingdomId}`, res => {
+    let open = true;
+    const write = text => { if (open) res.cork(() => res.write(text)); };
+    const watcher = (event, data) => write(`event: ${event}\ndata: ${data}\n\n`);
+    const beat = setInterval(() => write(':\n\n'), 10_000);
+    res.onAborted(() => { open = false; clearInterval(beat); watchers.delete(watcher); });
+    res.cork(() => { res.writeStatus('200 OK').writeHeader('Content-Type', 'text/event-stream').writeHeader('Cache-Control', 'no-store'); res.write(`event: checkpoint\ndata: ${JSON.stringify(checkpoint)}\n\n`); });
+    watchers.add(watcher); report.watchers = (report.watchers ?? 0) + 1;
+  });
   // The shared kingdom clock: each request reads the live realm's public clock (GET only).
   app.get('/api/realm/clock', res => {
     let aborted = false; res.onAborted(() => { aborted = true; });
@@ -346,6 +398,7 @@ try {
 
     for (const name of viewNames) {
       const spot = spots[name];
+      if (!spot) { run.views.push({ name, absent: 'this scene has no such place' }); console.log(JSON.stringify({ name, absent: true })); continue; }
       const view = { name, note: spot.note, start: spot.start };
       assert.ok(effects().placeWalker(walker, spot.start, world.revision), `placeWalker ${name}`);
       await page.waitForFunction(([x, z]) => { const s = window.__chatdomWalk.self; return s && Math.hypot(s.x - x, s.z - z) < .3 && s.speed < .05; }, [spot.start[0], spot.start[2]], { timeout: 60_000, polling: 100 })
@@ -398,6 +451,38 @@ try {
       console.log(JSON.stringify({ size: run.size, name, walked: +view.walked.toFixed(2), floorGap: view.floorGap, fromStop: view.fromStop }));
     }
     if (pc) await page.close(); else await context.close();
+  }
+  // The stream view's held director shots on the same bench (mood calm holds the named camera), at 1920x1080.
+  if (streamCameras.length) {
+    const stream = report.stream = [];
+    const context = pc ? browser.contexts()[0] : await browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+    for (const camera of streamCameras) {
+      const page = await context.newPage();
+      if (pc) { await page.setViewportSize({ width: 1920, height: 1080 }); await page.bringToFront(); }
+      page.on('pageerror', error => report.errors.push(`stream ${camera}: ${error.message}`));
+      page.on('console', message => { if (message.type() === 'error') report.errors.push(`stream ${camera} console: ${message.text().slice(0, 400)}`); });
+      const url = `${base}/stream?source=realm&kingdom=${kingdomId}&hour=${hour}&camera=${camera}`;
+      const started = Date.now();
+      await page.goto(url, { waitUntil: 'commit', timeout: 30_000 });
+      const shot = { camera, url };
+      try {
+        await page.waitForFunction(() => window.__chatdomReady === true || window.__chatdomStream?.phase === 'failed', null, { timeout: pc ? 120_000 : 200_000, polling: 250 });
+        if (await page.evaluate(() => window.__chatdomStream?.phase === 'failed')) throw new Error('The stream failed to open');
+        shot.readyMs = Date.now() - started;
+        await sleep(pc ? 4000 : 8000);
+        shot.state = await page.evaluate(() => { const k = window.__chatdomKingdom?.inspect?.(); return { director: window.__chatdomStream?.director ?? null, land: k?.land ? { generatedColumns: k.land.generatedColumns, phase: k.land.phase } : null, pier: window.__chatdomKingdom?.pierShot?.() ?? null }; });
+        shot.png = `${values.out}/${prefix}-stream-${camera}-${hourName}@1920x1080.png`;
+        await page.screenshot({ path: shot.png, timeout: pc ? 30_000 : 180_000 });
+      } catch (error) {
+        shot.failure = error instanceof Error ? error.message : String(error);
+        shot.trail = await page.evaluate(() => ({ phase: window.__chatdomStream?.phase ?? null, loading: window.__chatdomStream?.loading ?? null, source: window.__chatdomStream?.source ?? null,
+          text: document.body.innerText.slice(0, 300), land: window.__chatdomKingdom?.inspect?.()?.land?.phase ?? null })).catch(e => String(e));
+      }
+      stream.push(shot);
+      console.log(JSON.stringify(shot));
+      await page.close();
+    }
+    if (!pc) await context.close();
   }
   report.passed = true;
 } catch (error) {

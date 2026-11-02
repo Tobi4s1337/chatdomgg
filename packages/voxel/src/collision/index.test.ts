@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { stepPlayer } from '../../../world/src/movement/step';
 import { supported } from '../../../world/src/movement/collide';
-import { compileCollisionWorld, compilePlacedSolids, type CollisionBox, type PlacedSolidsInput } from './index';
+import { clearCollisionCompileCache, collisionCompileCacheStats, compileCollisionWorld, compilePlacedSolids, type CollisionBox, type PlacedSolidsInput } from './index';
 
 const bounds = (min: CollisionBox['min'], max: CollisionBox['max']): CollisionBox => ({ min, max });
 const hits = (world: ReturnType<typeof compileCollisionWorld>, min: CollisionBox['min'], max: CollisionBox['max']) => world.query(bounds(min, max));
@@ -69,4 +69,30 @@ describe('founded collision compiler', () => {
     expect(a.y).toBe(.5); expect(a.grounded).toBe(true);
   });
 
+
+  it('reuses unchanged assets and placements across trusted compiles, with the same boxes a fresh compile gives', () => {
+    const materials = { materials: [{ id: 0, solid: false }, { id: 1, solid: true }, { id: 2, solid: false }] };
+    const blueprint = (door: number) => ({ lattice: 'build' as const, size: [16, 16, 16] as const, boxes: [
+      { from: [0, 0, 0] as const, to: [16, 16, 16] as const, material: 1 }, { from: [door, 0, 0] as const, to: [door + 4, 12, 16] as const, material: 0 }] });
+    const source = (door: number, x: number): PlacedSolidsInput => ({ materials, assets: [{ assetHash: 'home', blueprint: blueprint(door) }],
+      placements: [{ id: 'a', assetHash: 'home', position: [0, 0, 0], rotation: 0 }, { id: 'b', assetHash: 'home', position: [x, 0, 4], rotation: 3 }] });
+    const text = (boxes: readonly CollisionBox[]) => boxes.map(b => [...b.min, ...b.max].join(',')).join(';');
+    clearCollisionCompileCache();
+    const fresh = text(compilePlacedSolids(source(4, 10)));
+    expect(collisionCompileCacheStats().assets).toBe(1);
+    expect(text(compilePlacedSolids(source(4, 10)))).toBe(fresh);
+    // A moved placement and a changed blueprint under the same hash both compile anew.
+    const moved = text(compilePlacedSolids(source(4, 12)));
+    const carved = text(compilePlacedSolids(source(8, 10)));
+    clearCollisionCompileCache();
+    expect(text(compilePlacedSolids(source(4, 12)))).toBe(moved);
+    clearCollisionCompileCache();
+    expect(text(compilePlacedSolids(source(8, 10)))).toBe(carved);
+    expect(carved).not.toBe(fresh);
+    // A changed solid registry is a different compile, and untrusted proposals never touch the cache.
+    clearCollisionCompileCache();
+    const glass = { materials: [{ id: 0, solid: false }, { id: 1, solid: true }, { id: 2, solid: true }] };
+    compilePlacedSolids({ ...source(4, 10), materials: glass }, { materials: 3, assets: 1, placements: 2, cells: 8192, writes: 2, writeCells: 8192, boxes: 64 });
+    expect(collisionCompileCacheStats()).toEqual({ assets: 0, boxes: 0 });
+  });
 });

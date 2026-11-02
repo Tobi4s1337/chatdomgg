@@ -862,3 +862,68 @@ is merged into this branch. Nothing below changes a home, a door, a placement or
 8. **panel-window, the stream still:** `still(width): Promise<Blob>` on the scene, drawn and read in one task, and
    one call in `apps/web/src/stream/index.tsx` to panel's publisher. Gift effects (PW12) mount through the moment
    hooks once their payloads are committed.
+
+### Installed after the integrator merge, third GW14 session (2026-11-02)
+
+`lane/integrator` is merged into this branch (548dc883). What each ask now has, and what stays with its owner:
+
+- **pier 3a, the lanterns in every scene: installed.** `apps/web/src/kingdom/grand-land/pier-layer.ts` (this lane's
+  folder; the pier's own `fishing/**` stays untouched) calls `registerPierKingdomLayer(registerKingdomLayer)`. It
+  imports the registry from `kingdom/grand-land/kingdom-layer.ts`, not from `scene.ts`, and `scene.ts` imports it
+  once, so the stream, a watcher's page, the panel's painter and the walk all get the lanterns with no import cycle.
+  A kingdom without `pier:` placements mounts nothing. The realm's adoption already installs the pier
+  (`pierFurnishings` in `apps/realm/src/founded/scene.ts`); tobi4s_'s live scene gets it on its next adoption.
+  - **For the realm owner:** `REALM_PIER_FISHING=1` can now be set wherever this build serves the kingdom view; the
+    layer is drawn.
+- **raid-show §8, §9, native sight and the gate shot: the scene side is installed; the forwarding is raid-show's.**
+  `kingdom/moments/index.ts` is raid-show's file, so grand-world does not edit it. `scene.ts` builds
+  `createRaidMomentHooks(...)` (`kingdom/grand-land/raid-support.ts`) from the scene's one adopted collision world
+  (compiled once, now shared by the soul host, the observed walkers and the moments) and its founded ground, and
+  spreads `{raidChatSupport, raidPennantVisible, validatePose}` into its single `createKingdomMoments({...})` call
+  under exactly the option names raid-show's SEAMS asks for. They are inert until raid-show forwards them; the ask
+  with the exact lines is in `work/lanes/raid-show/SEAMS.md` ("grand-world answer, GW14").
+  - `raidChatSupport`: every half-metre sample of the footprint stands on dry founded ground between 2 cm under the
+    foot and the prop's rise above it (lamp .08 m, wall bay .18 m, approach road .9 m); nothing solid overlaps the
+    body from `foot.y + .1` (lamp) or `+ .25` (bay) to its height; outside the walkable region only the visual road
+    may run (the caller's terrain check decides there); false once the scene's world retires.
+  - `validatePose`, for every moment shot: the eye stands at least .6 m above the drawn land, the land does not rise
+    over the line (sampled every 2 m to 2 m short of the subject, the grand land included), and no founded solid
+    stands in the way inside the walkable region (`segmentClear`, the subject's own box exempt).
+  - `raidPennantVisible`: the same sightline from the camera to the bay at 30, 60 and 90 % of its height.
+  - Torch light: the scene's light field reads `moments.metrics().raidTorchSites` through `raidTorchLights` (at most
+    twelve, flame 2.2 m above the foot) and lights the town from them as soon as raid-show adds that metrics field.
+  - Fixed-time draws: `renderKey` carries `view['pennantWall.revision']` (raid-show's ask, done in `scene.ts`).
+  - **Not done, by design:** pennant bays and torch posts are not registered as walking solids. Walking collision is
+    the realm's authority; a client-only blocker would make prediction disagree with the room. If they must stop
+    walkers, the realm must add them to the room's world; until then they are visual and the support check keeps
+    them off the paved egress. `raidPennantReading` needs play's input owner.
+  - **raidParty / `gatherAt`:** waits on raid-show's moments consumer and play's `gatherAt`. Nothing in the tree
+    produces a `RaidPartyFeed` yet; `SceneOptions` gains the option when that consumer lands.
+- **forge-wish §13, a commit must not block the realm: the compiler half is done.** `compileCollisionWorld` and
+  `compilePlacedSolids` (`packages/voxel/src/collision`) reuse each unchanged asset's coalesced boxes and each
+  unchanged placement's world boxes across trusted compiles. A hit is checked against the asset's exact writes,
+  size, lattice and solid materials, so it returns the same boxes a fresh compile gives (tobi4s_'s real scene:
+  194,992 boxes identical, and identical again after moving one placement). Untrusted proposals (explicit limits)
+  never touch the cache. Bounds: 1,024 assets, 1,000,000 retained boxes. On his real scene (1,197 placements,
+  101 assets) a warm recompile of the whole world went from 1,372–1,421 ms to 110–162 ms (placed solids
+  1,282–1,302 ms to 20–30 ms). No realm change is needed: the founded provider's existing call gets faster.
+  `COLLISION_COMPILER_VERSION` is unchanged because the output is identical.
+  - **Left to its owners:** §12 (no reload on a Forge commit) still needs play's hot adoption in `walk-scene.ts`.
+    grand-world's half (swap one home's attachment meshes in place, honouring `hideAttachment`) waits on that.
+- **play A2 `surfaceAt` into the walk:** still play's step (an optional `surfaceAt` on `createKingdomWalk` and
+  `createObservedWalkers`, passed to `createWalkerGround`). `scene.surfaceAt` is ready; walking already stands on the
+  collision floor on the grand land (floor gap 0 in every bench walk), so this is for footfall sound and dust only.
+- **gather, the campfire:** the pinned Wilds-edge clearing (`pinnedCampfireSite('129634568')`) is not installed by
+  the realm yet; no founded adoption places `gather:campfire:*`. Installing it is a realm adoption change (a new
+  placement for every kingdom with a pinned site, so a new receipt and a land rebind) and stays with the realm founded
+  owner. grand-world's side (the site, its validation and the `places` mount) is ready.
+- **panel-window:** the painter (`apps/web/src/panel-painter`) opens the kingdom scene itself with the founded scene
+  and receipt, so it paints the grand land wherever the land is published; it takes Chrome screenshots, so
+  `scene.still()` is offered but not needed.
+- **front-door FD13:** `apps/web/src/site/hero/land.ts` imports `mountLandHero` lazily; nothing more is asked.
+
+**Evidence bench for the next adoption.** `work/lanes/grand-world/stage-adoption.mjs` builds what the merged realm
+adopts next for tobi4s_ (the live scene plus the realm's own `pierFurnishings`, collision revision + 1, nothing else
+moved). The publication CLI rebinds the existing land to that receipt in 2.5 s with every blob reused.
+`capture-walk.mjs --scene/--receipt` serves it, and `--stream` takes the stream's held director shots on the same
+bench through a watch route that serves the bench's checkpoint.

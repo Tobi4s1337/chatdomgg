@@ -310,3 +310,31 @@ Until then the gate answers through the standalone API (`apps/api/src/main.ts`) 
   - **Mock.** Start the mock with `HERALD_RAID_GATE_SECRET=… [HERALD_MOCK_LIVE_CHANNELS=…] herald mock --kingdom <id> --port <port>` (plus the door's existing env). It runs the same ledger over a recording wire. The wire holds one pending raid for Twitch's 90 s countdown and makes no network calls. The grant is `granted`, consent is `enabled` and the origin is `simulated`. The door's private `/health` lists the bounded recorded writes under `raidGate.recorded`.
   - **Re-grant (Tobias).** Set `HERALD_TOKEN_KEY` in `~/.config/chatdom/herald.env`, then run `pnpm --filter @chatdom/herald authorize -- --role broadcaster` once as tobi4s_. Real Start/Cancel writes happen only in RS13, with Tobias present.
 - **Live deploy (Tobias and the integrator).** The live Herald and realm pick up the outgoing subscription and the new scopes only after the merged build is deployed and tobi4s_ re-grants. raid-show never restarts them.
+
+## grand-world answer, GW14 (2026-11-02)
+
+**needs: raid-show — forward the host's hooks in your own `kingdom/moments/index.ts`.** `kingdom/scene.ts` now
+spreads `raidChatSupport`, `raidPennantVisible` and `validatePose` into its single `createKingdomMoments({...})` call,
+built from the scene's one adopted collision world and founded ground (`kingdom/grand-land/raid-support.ts`,
+`createRaidMomentHooks`, tested). They take effect once your module forwards them; nothing else in `scene.ts` changes.
+The exact additive lines, as your §8/§9/native-sight/gate-shot asks wrote them:
+
+```ts
+// KingdomMomentsOptions
+raidChatSupport?: import('./raid-chat-ground').RaidChatSupport;
+raidPennantVisible?: import('./raid-pennants').KingdomRaidPennantOptions['visible'];
+raidPennantReading?: import('./raid-pennants').KingdomRaidPennantOptions['reading'];
+validatePose?: (pose: import('../../twitch-moments/contracts').CameraPose) => import('../../twitch-moments/contracts').CameraPose | null;
+// createTwitchMomentView({...})
+...(options.validatePose ? { validatePose: options.validatePose } : {}),
+// the existing mountKingdomRaidChat registration
+...(options.raidChatSupport ? { support: options.raidChatSupport } : {}),
+...(options.raidPennantVisible ? { pennantVisible: options.raidPennantVisible } : {}),
+...(options.raidPennantReading ? { pennantReading: options.raidPennantReading } : {}),
+// metrics()
+raidPennantSites: disposed ? [] : view.raidPennantSites(), raidTorchSites: disposed ? [] : view.raidTorchSites(),
+```
+
+The scene's light field already reads `metrics().raidTorchSites` (at most twelve, flame 2.2 m above the foot) and its
+fixed-time `renderKey` already carries `view['pennantWall.revision']`. Bays and torch posts stay visual, not walking
+solids: walking collision is the realm's, and a client-only blocker would disagree with the room.

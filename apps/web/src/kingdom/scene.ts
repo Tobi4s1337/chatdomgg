@@ -77,8 +77,12 @@ import { createPlaceMounts, type PlaceMounter } from './grand-land/place-mount';
 import { createPlaceShot } from './grand-land/place-shot';
 import type { PlaceShot } from '../interactions/places/framing';
 import { createKingdomLayers } from './grand-land/kingdom-layer';
+// Registered kingdom layers (effects only; solids stay founded placements): the pier's lanterns.
+import './grand-land/pier-layer';
 import { createSceneStills, type SceneStillOptions } from './grand-land/scene-still';
 import { pierShot, type PierShotPose } from './grand-land/pier-shot';
+import { createRaidMomentHooks, raidTorchLights } from './grand-land/raid-support';
+import type { CollisionWorld } from '@chatdom/shared/realm';
 import { automaticSceneQuality, sceneQualityBudget, type SceneQuality } from './grand-land/scene-quality';
 export type { PlaceMount, PlaceMounter } from './grand-land/place-mount';
 export { registerKingdomLayer, type KingdomLayerMount, type KingdomLayerMounter } from './grand-land/kingdom-layer';
@@ -729,7 +733,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     ]});
     dressing.hideLot(buildHidden?simulation.firstSlot:null);
     dressing.update({time,walkers:(walk?.poses??observed?.poses??[]).map(p=>[p.x,p.y,p.z] as Vec3)});
-    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,terrainHeight(layout,lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...(civicLife?.sources()??[]),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...forge.sources(),...(realmForge?.sources()??[]),...(growth?.sources()??[]),...(dockVisuals?.sources()??[])];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
+    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,terrainHeight(layout,lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...(civicLife?.sources()??[]),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...forge.sources(),...(realmForge?.sources()??[]),...(growth?.sources()??[]),...(dockVisuals?.sources()??[]),...raidTorchLights(moments?.metrics())];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
     const people=walk??observed;
     if(people)options.onWalkers?.(people.labels().filter(label=>{
       const person=people.poses.find(p=>p.id===label.id);
@@ -739,7 +743,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     // Fixed evidence frames have no animation between seeks. Keep the public
     // feed/watchdog alive, but don't burn SwiftShader CPU redrawing identical
     // pixels while a capture waits on fonts, a field worker or the filesystem.
-    const renderKey=[dockCameraDirected?now:0,poseRevision,overview?.revision??0,placeShot.revision,placeMounts.revision,kingdomLayers?.revision??0,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,grandLand?.revision??0,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
+    const renderKey=[dockCameraDirected?now:0,poseRevision,overview?.revision??0,placeShot.revision,placeMounts.revision,kingdomLayers?.revision??0,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,grandLand?.revision??0,fixedTime?moments?.metrics().view['pennantWall.revision']??0:0,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
     // The stream curtain covers preparation. Keep the bounded land install/update pump running,
     // but do not redraw a hidden high-quality reflection/post stack for every installed region.
     // The sun-shadow map is refreshed only for a frame that draws: every region attached during
@@ -825,23 +829,29 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   try {await Promise.all(tasks);
     if(disposed)throw new Error('Scene closed while loading');
     options.onProgress('Welcoming the citizens',1);await crowd.prepare();
+    let foundedWorld:CollisionWorld|undefined,foundedGround:((x:number,z:number)=>Vec3|null)|undefined;
     if(options.founded&&!options.replay){
-      const founded=options.founded,collision=compileFoundedScene(founded);
+      const founded=options.founded,collision=compileFoundedScene(founded);foundedWorld=collision;
       const land=createKingdomLandInterface({scene:founded,collision,ground:{layoutRevision:founded.layoutRevision,collisionRevision:founded.collisionRevision,
         sample:(x,z)=>x>=layout.bounds.minX&&x<layout.bounds.maxX&&z>=layout.bounds.minZ&&z<layout.bounds.maxZ?foundedGroundAt(layout,x,z):null}});
       // UTC and woodland are explicit presentation defaults until Genesis supplies its biome/zone.
       const keepers=await createSoulKeeperRenderer(scene,crowd.material,pool);
       if(disposed){keepers.dispose();throw new Error('Scene closed while preparing keepers');}
+      foundedGround=land.groundAt;
       soul=createSoulSceneHost(scene,foundedSoulBinding(land,'woodland',0),sound.soulHost,keepers);
       void soulClock.sync(abort.signal);
       soulClockTimer=setInterval(()=>{void soulClock.sync(abort.signal);},60_000);
     }
-    if(!installed){options.onProgress('Remembering your home',1);await build.prepare();options.onProgress('Remembering your forged gifts',1);await forge.prepare();}if(options.walkerFeed&&options.founded){const world=compileFoundedScene(options.founded);const next=await createObservedWalkers(scene,camera,canvas,pool,crowd.material,options.founded,options.walkerFeed,createFoundedInteractionRegistry(options.founded,world),{plan:options.founded.plan,world});if(disposed){next.dispose();throw new Error('Scene closed while preparing walkers');}observed=next;}if(disposed)throw new Error('Scene closed while preparing citizens');
+    if(!installed){options.onProgress('Remembering your home',1);await build.prepare();options.onProgress('Remembering your forged gifts',1);await forge.prepare();}if(options.walkerFeed&&options.founded){const world=foundedWorld??compileFoundedScene(options.founded);const next=await createObservedWalkers(scene,camera,canvas,pool,crowd.material,options.founded,options.walkerFeed,createFoundedInteractionRegistry(options.founded,world),{plan:options.founded.plan,world});if(disposed){next.dispose();throw new Error('Scene closed while preparing walkers');}observed=next;}if(disposed)throw new Error('Scene closed while preparing citizens');
     if(options.momentFeed){
       const kingdomId=options.founded?.kingdomId??options.kingdomId;
       if(!kingdomId||options.founded&&options.momentFeed.origin!==options.founded.origin)throw new Error('Moments need this kingdom and its actual source');
       const castleKeep=installed?installed.forgeHosts.find(h=>h.slot===65534):castleBuildings.find(h=>h.id===layout.castle.beaconModuleId);
-      moments=own(createKingdomMoments({scene,camera,canvas,target,plan:layout,houses,...(castleKeep?{castleKeep}:{}),pool,material:clay,registry,kingdomId,feed:options.momentFeed,sound:sound.moments,ground:landHeight,kit:options.forgeFamily==='tide'?'tide':'hearth',signal:abort.signal}));
+      // Raid props stand and moment shots see through this scene's one adopted world and floor (raid-show SEAMS §8).
+      // The options are raid-show's to forward in its own moments module; until it does, they are inert.
+      const raidHooks=foundedWorld&&foundedGround?createRaidMomentHooks({world:foundedWorld,region:layout.bounds,live:()=>!disposed,groundAt:foundedGround,
+        waterDepth:(x,z)=>{const sample=landSurface?.(x,z);return sample?sample.waterDepth:null;},height:landHeight,eye:()=>camera.position.toArray() as Vec3}):{};
+      moments=own(createKingdomMoments({scene,camera,canvas,target,plan:layout,houses,...(castleKeep?{castleKeep}:{}),pool,material:clay,registry,kingdomId,feed:options.momentFeed,sound:sound.moments,ground:landHeight,kit:options.forgeFamily==='tide'?'tide':'hearth',signal:abort.signal,...raidHooks}));
       // Optional future spectacles prepare on their four bounded worker lanes after the citizens. The gate
       // opens on the world drawing; a failed moment view detaches itself and reports failure in inspect().
       void moments.ready.catch(()=>{});
