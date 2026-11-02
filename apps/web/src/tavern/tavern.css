@@ -4,6 +4,7 @@
 .gather-game-input { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; background: transparent; }
 .gather-game-hud { z-index: 3; }
 .gather-tavern-status { z-index: 4; }
+.gather-tavern .gather-tavern-sound { position: absolute; z-index: 3; top: 24px; right: 20px; min-width: 92px; min-height: 44px; padding: 7px 14px; }
 .gather-tavern-return { width: min(360px, calc(100% - 28px)); text-align: center; }
 .gather-tavern-return p { margin: 0 0 14px; }
 .gather-tavern-return button { min-height: 44px; padding: 8px 18px; }

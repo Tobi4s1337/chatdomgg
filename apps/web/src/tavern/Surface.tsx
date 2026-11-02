@@ -5,6 +5,10 @@ import { createTavernStage } from './stage';
 import type { TavernClient } from './client';
 import { mountTavernWalk, type TavernWalkState } from './walk';
 import { TurnGameHud } from '../games/TurnHud';
+import { inspectKingdomAudio, type KingdomAudio } from '@chatdom/audio';
+import { Vector3 } from 'three';
+import { createTavernSound, type TavernSound } from './audio';
+import { audibleTavernHost, bindTavernSoundGesture, toggleTavernSound } from './audio-host';
 
 const EMPTY: GatherFrame = { at: 0, tables: [] };
 function result(table: GatherTableView): string {
@@ -20,9 +24,13 @@ function result(table: GatherTableView): string {
 export function TavernRoomSurface(props: {
   readonly open: () => Promise<TavernClient>;
   readonly requestInput: (surface: HTMLCanvasElement, reason: string) => GameInputLease;
+  readonly audio: KingdomAudio;
+  readonly audioControls?: boolean;
   readonly benchSeat?: string;
 }) {
-  let host: HTMLDivElement | undefined, stage: ReturnType<typeof createTavernStage> | undefined;
+  let root: HTMLDivElement | undefined, host: HTMLDivElement | undefined, stage: ReturnType<typeof createTavernStage> | undefined;
+  let sound: TavernSound | undefined, offSound: (() => void) | undefined, offGesture: (() => void) | undefined;
+  let observeSound: (() => void) | undefined;
   let gameInput: HTMLCanvasElement | undefined, inputOwner: symbol | undefined;
   let sceneFailed = false;
   let sceneReady: Promise<{ ok: true } | { ok: false; error: unknown }> | undefined;
@@ -30,10 +38,12 @@ export function TavernRoomSurface(props: {
   let disposed = false, installing = false, off: (() => void) | undefined;
   const [failed, setFailed] = createSignal(false), [frame, setFrame] = createSignal(EMPTY);
   const [link, setLink] = createSignal({ connected: false, ended: false });
+  const [soundOn, setSoundOn] = createSignal(false);
   const [state, setState] = createSignal<TavernWalkState>({ ready: false, connected: false, seated: null, column: null, names: [] });
   const table = createMemo(() => frame().tables.find(t => t.table === state().seated));
   const running = () => table()?.pong?.phase === 'rally' || table()?.pong?.phase === 'serve';
-  const start = () => { const current = table(); if (current) client?.start(current.table); gameInput?.focus(); };
+  const start = () => { const current = table(); if (current) { sound?.affordance(current.table); client?.start(current.table); } gameInput?.focus(); };
+  const leave = () => { sound?.affordance(state().seated); walk?.interactions.leave(); };
   const requestInput = (reason: string): GameInputLease => {
     const surface = gameInput!, owner = Symbol('seated table');
     inputOwner = owner; surface.hidden = false;
@@ -60,6 +70,7 @@ export function TavernRoomSurface(props: {
     if (disposed || installing) return;
     installing = true; setFailed(false); setLink({ connected: false, ended: false });
     setState({ ready: false, connected: false, seated: null, column: null, names: [] });
+    observeSound = undefined; offSound?.(); offSound = undefined; sound?.dispose(); sound = undefined;
     off?.(); off = undefined; walk?.dispose(); walk = undefined; client?.dispose(); client = undefined;
     setFrame(EMPTY); stage?.tavern.games(EMPTY);
     const debug = window as Window & { __chatdomReady?: boolean; __chatdomTavernError?: string };
@@ -76,19 +87,38 @@ export function TavernRoomSurface(props: {
       const opened = await props.open();
       if (disposed) { opened.dispose(); return; }
       client = opened;
-      const update = () => { setFrame(client!.tables); setLink({ connected: client!.connected, ended: client!.ended }); };
+      const update = () => { setFrame(client!.tables); setLink({ connected: client!.connected, ended: client!.ended }); if (!client!.connected) sound?.quiet(); else observeSound?.(); };
       update(); off = client.subscribe(update);
       const scene = await sceneReady!;
       if (!scene.ok) throw scene.error;
       await document.fonts.ready;
       if (disposed) return;
       walk = await mountTavernWalk(stage!, client, { host: host!, requestInput,
+        onAffordance: id => sound?.affordance(id),
         ...(props.benchSeat ? { benchSeat: props.benchSeat } : {}),
         onState(next) {
           setState(next);
           if (next.ready) (window as Window & { __chatdomReady?: boolean }).__chatdomReady = true;
         } });
       if (disposed) { walk.dispose(); return; }
+      sound = createTavernSound(() => audibleTavernHost(props.audio), stage!.tavern.kit);
+      const forward = new Vector3();
+      const updateSound = (now: number) => {
+        const current = client!;
+        stage!.camera.getWorldDirection(forward);
+        sound!.update({ frame: current.tables, now, connected: current.connected, visible: !document.hidden,
+          pongContactDelay: (table, at, observed) => current.presentations.get(table)?.contactDelay(at, observed) ?? 0,
+          walkers: current.room.state.walkers.size, seated: current.self.table,
+          listener: { feet: [current.predicted.x, current.predicted.y, current.predicted.z], forward: [forward.x, forward.y, forward.z] } });
+        const audioState = props.audio.getState();
+        setSoundOn(audioState.status === 'ready' && !audioState.settings.muted && audioState.settings.volume > 0);
+        (window as Window & { __chatdomTavernSound?: unknown }).__chatdomTavernSound = {
+          ...sound!.inspect(), status: props.audio.getState().status, level: inspectKingdomAudio(props.audio).level(),
+        };
+      };
+      // Witness every accepted public revision even if an expensive render coalesces several scene frames.
+      observeSound = () => updateSound(performance.now());
+      offSound = stage!.onFrame(() => updateSound(performance.now()));
     } catch (error) {
       if (disposed) return;
       setFailed(true); client?.dispose();
@@ -96,13 +126,18 @@ export function TavernRoomSurface(props: {
     } finally { installing = false; }
   };
   onMount(() => {
+    offGesture = bindTavernSoundGesture(props.audio, root!);
     void install();
   });
-  onCleanup(() => { disposed = true; off?.(); walk?.dispose(); client?.dispose(); stage?.dispose(); });
-  return <div class="gather-tavern gather-tavern--live cd-kit" data-gather="tavern-live">
+  const quiet = () => { if (document.hidden) sound?.quiet(); };
+  document.addEventListener('visibilitychange', quiet);
+  onCleanup(() => { disposed = true; observeSound = undefined; offGesture?.(); document.removeEventListener('visibilitychange', quiet); offSound?.(); sound?.dispose(); off?.(); walk?.dispose(); client?.dispose(); stage?.dispose(); });
+  return <div class="gather-tavern gather-tavern--live cd-kit" data-gather="tavern-live" ref={element => { root = element; }}>
     <div class="gather-tavern-stage" ref={element => { host = element; }} />
     <canvas ref={element => { gameInput = element; }} class="gather-game-input" data-gather-game-input hidden tabindex="0" aria-label="Table controls" />
     <Show when={!state().seated}><header class="gather-tavern-title"><p class="cd-label">By the hearth</p><h1>The tavern</h1></header></Show>
+    <Show when={props.audioControls && !state().seated}><button class="gather-tavern-sound cd-crest cd-focus" aria-label={soundOn() ? 'Mute sound' : 'Enable sound'} aria-pressed={soundOn()}
+      onClick={() => { sound?.quiet(); void toggleTavernSound(props.audio).then(setSoundOn); }}>Sound</button></Show>
     <Show when={!state().ready && !failed() && !link().ended}><p class="gather-tavern-status cd-slip" role="status">Opening the door…</p></Show>
     <Show when={failed() || link().ended}><section class="gather-tavern-status gather-tavern-return cd-plate" role="status">
       <p>{failed() ? 'The tavern could not be opened.' : 'Your connection ended. Your chair could not be restored.'}</p>
@@ -111,7 +146,7 @@ export function TavernRoomSurface(props: {
     <Show when={state().ready && !link().connected && !link().ended && !failed()}><p class="gather-tavern-status cd-slip" role="status">The road is quiet. Reconnecting to your chair…</p></Show>
     <For each={state().names}>{name => <span class="gather-citizen-name" style={{ left: `${name.x}px`, top: `${name.y}px` }}>{name.name}</span>}</For>
     <Show when={table()}>{current => <Show when={!current().game || current().game === 'pong'} fallback={<TurnGameHud table={current} seat={() => client?.self.playerIndex ?? null}
-      connected={() => link().connected} column={() => state().column} now={() => client?.serverNow() ?? Date.now()} onStart={start} onMove={(action, column) => client?.move(action, column)} onLeave={() => walk?.interactions.leave()} />}><section class="gather-game-hud cd-plate" aria-label="Pong table" data-pong-hud>
+      connected={() => link().connected} column={() => state().column} now={() => client?.serverNow() ?? Date.now()} onStart={start} onMove={(action, column) => { sound?.affordance(state().seated); client?.move(action, column); }} onLeave={leave} />}><section class="gather-game-hud cd-plate" aria-label="Pong table" data-pong-hud>
       <p class="cd-label">Pong · First to seven</p>
       <div class="gather-game-score">
         <span>{current().players?.[0] ?? current().seats[0] ?? 'Open chair'}</span><strong aria-label="score">{current().pong?.score[0] ?? 0} <i>:</i> {current().pong?.score[1] ?? 0}</strong>
@@ -129,7 +164,7 @@ export function TavernRoomSurface(props: {
           const sign = client?.self.seat === 0 ? -1 : 1;
           client?.aim(currentTarget + (event.code === 'ArrowRight' ? .12 : -.12) * sign, performance.now());
         }}><span>Slide to move your paddle</span></div>
-      <button class="gather-game-leave cd-focus" onClick={() => walk?.interactions.leave()}>Stand up <kbd>E</kbd> <kbd>Esc</kbd></button>
+      <button class="gather-game-leave cd-focus" onClick={leave}>Stand up <kbd>E</kbd> <kbd>Esc</kbd></button>
     </section></Show>}</Show>
   </div>;
 }

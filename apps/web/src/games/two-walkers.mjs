@@ -1,4 +1,4 @@
-/* global AbortController, requestAnimationFrame */
+/* global AbortController, requestAnimationFrame, structuredClone */
 // Real tavern transport and three SDK walkers; local, memory-only reference sessions.
 // Run: nice -n 10 node apps/web/src/games/two-walkers.mjs
 import assert from 'node:assert/strict';
@@ -14,8 +14,12 @@ import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mj
 
 const repo = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${repo}/work/evidence/gather`;
+const host = process.env.GATHER_HOST ?? '127.0.0.1';
+assert.ok(['127.0.0.1', '127.0.0.10'].includes(host), 'Only the two explicit local gather hosts are allowed');
 const lockedInput = process.env.GATHER_INPUT === 'locked';
-const imagePrefix = lockedInput ? 'ga10-pong-input' : 'ga10-pong-live';
+const evidencePrefix = process.env.GATHER_EVIDENCE;
+assert.ok(evidencePrefix === undefined || /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(evidencePrefix), 'GATHER_EVIDENCE must be a lowercase, hyphen-separated filename prefix');
+const imagePrefix = `${evidencePrefix ?? 'ga10-pong'}-${lockedInput ? 'input' : 'live'}`;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (predicate, description, timeout = 30_000) => {
   const deadline = Date.now() + timeout;
@@ -25,13 +29,35 @@ const until = async (predicate, description, timeout = 30_000) => {
     await sleep(30);
   }
 };
+// Inspection is emitted by the real live surface; all actions use the visible sound control.
+async function checkSound(page, report) {
+  const before = await page.evaluate(() => window.__chatdomTavernSound);
+  assert.equal(before.status, 'ready');
+  assert.equal(before.audible, true);
+  assert.ok(before.peakSources <= 6 && before.peakVoices <= 6, `sound limits exceeded: ${JSON.stringify(before)}`);
+  await page.getByRole('button', { name: 'Mute sound' }).click();
+  await page.waitForFunction(() => window.__chatdomTavernSound?.activeSources === 0 && !window.__chatdomTavernSound?.audible, null, { timeout: 10_000 });
+  const muted = await page.evaluate(() => window.__chatdomTavernSound);
+  assert.equal(muted.activeVoices, 0);
+  await page.getByRole('button', { name: 'Enable sound' }).click();
+  await page.waitForFunction(() => window.__chatdomTavernSound?.status === 'ready' && window.__chatdomTavernSound?.audible
+    && window.__chatdomTavernSound?.activeSources > 0, null, { timeout: 10_000 });
+  await sleep(1000);
+  const resumed = await page.evaluate(() => window.__chatdomTavernSound);
+  const attacks = played => Object.fromEntries(Object.entries(played).filter(([cue]) => cue !== 'hearth' && cue !== 'murmur'));
+  assert.deepEqual(attacks(resumed.played), attacks(muted.played), 'unmute must not replay stale attacks');
+  assert.ok(resumed.peakSources <= 6 && resumed.peakVoices <= 6, `sound limits exceeded: ${JSON.stringify(resumed)}`);
+  assert.ok((resumed.played.hearth ?? 0) > (muted.played.hearth ?? 0), 'hearth ambience resumes');
+  report.sound = { before, muted, resumed };
+  report.checks.push('Live accepted game sound played; standing mute stopped all sources, and enable resumed ambience without replaying attacks (peak six voices).');
+}
 const freePorts = async () => {
   const free = [];
-  for (const port of [5171, 5172, 5173, 5182]) {
+  for (const port of [5170, 5171, 5172, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180, 5181, 5182, 5183, 5184, 5185, 5186, 5188, 5189]) {
     const probe = createPortProbe();
     if (await new Promise(resolve => {
       probe.once('error', () => resolve(false));
-      probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)));
+      probe.listen(port, host, () => probe.close(() => resolve(true)));
     })) free.push(port);
     if (free.length === 2) return free;
   }
@@ -40,7 +66,7 @@ const freePorts = async () => {
 const report = { started: new Date().toISOString(), fixture: 'Temporary reference sessions with synthetic identities; memory only.',
   limitations: ['No kingdom-to-tavern transfer, Twitch identity, durable session, persistence or real-GPU performance is proven.',
     'Screenshots use SwiftShader; no frame-rate claim.'], checks: [], scores: [], screenshots: [] };
-let loader, realm, web, browser, release, motion, paddle, lockAcquiredAt, lockDeadline, measurement, player, spectator;
+let loader, realm, web, browser, page, release, motion, paddle, lockAcquiredAt, lockDeadline, measurement, player, spectator;
 const rooms = [];
 const cancellation = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
@@ -55,7 +81,7 @@ try {
     void browser?.close().catch(() => {});
   }, 270_000);
   const [realmPort, webPort] = await freePorts();
-  report.ports = { realm: realmPort, web: webPort };
+  report.ports = { host, realm: realmPort, web: webPort };
   loader = await createServer({ root: repo, configFile: false, appType: 'custom', logLevel: 'error', cacheDir: '/tmp/chatdom-gather/vite-harness-loader', optimizeDeps: { noDiscovery: true },
     server: { middlewareMode: true, hmr: false, ws: false } });
   const [{ createRealmServer }, { referenceServices }, { starterCitizenLook, TavernRoomState }, { createTavernInterior }, { seatApproachDriver }, { installGatherStore, MemoryGatherStore }] = await Promise.all([
@@ -72,10 +98,11 @@ try {
   const created = createRealmServer(services); realm = created.server;
   created.transport.app.post('/reference/session', response => response.writeHeader('Access-Control-Allow-Origin', '*')
     .writeHeader('Cache-Control', 'no-store').writeHeader('Content-Type', 'application/json').end(JSON.stringify(base.issue())));
-  await realm.listen(realmPort, '127.0.0.1');
-  const endpoint = `http://127.0.0.1:${realmPort}`;
+  await realm.listen(realmPort, host);
+  const endpoint = `http://${host}:${realmPort}`;
   web = await preview({ root: `${repo}/apps/web`, configFile: `${repo}/apps/web/vite.config.ts`, logLevel: 'error',
-    preview: { host: '127.0.0.1', port: webPort, strictPort: true,
+    ...(process.env.GATHER_WEB_DIST ? { build: { outDir: process.env.GATHER_WEB_DIST } } : {}),
+    preview: { host, port: webPort, strictPort: true,
       proxy: { '/live-realm-data': { target: endpoint, ws: true, rewrite: path => path.replace(/^\/live-realm-data/, '') } } } });
   const sdk = new Client(endpoint);
   const join = async () => {
@@ -111,13 +138,13 @@ try {
 
   browser = await chromium.launch({ channel: 'chrome', headless: true,
     args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+  page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error' && !message.location().url.endsWith('/favicon.ico')) errors.push(message.text()); });
   page.on('requestfailed', request => console.error(`[gather] request failed ${request.url()}: ${request.failure()?.errorText}`));
   page.on('response', response => { if (response.status() >= 400) console.error(`[gather] HTTP ${response.status()} ${response.url()}`); });
-  await page.goto(`http://127.0.0.1:${webPort}/-/tavern?testWalker=1&seat=tavern:middle:seat:2`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://${host}:${webPort}/-/tavern?testWalker=1&seat=tavern:middle:seat:2`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__chatdomReady || window.__chatdomTavernError, null, { timeout: 90_000 });
   const setupError = await page.evaluate(() => window.__chatdomTavernError);
   assert.equal(setupError, undefined, `browser admission failed: ${setupError}`);
@@ -134,7 +161,7 @@ try {
     await mkdir(output, { recursive: true });
     for (const [width, height] of lockedInput ? [] : [[1440, 900], [390, 844]]) {
       await page.setViewportSize({ width, height }); await sleep(800);
-      const path = `${output}/ga10-walk-live@${width}x${height}.png`;
+      const path = `${output}/${evidencePrefix ? `${evidencePrefix}-walk-live` : 'ga10-walk-live'}@${width}x${height}.png`;
       await page.screenshot({ path }); console.error(`[gather] ${path}`);
     }
     throw error;
@@ -161,9 +188,17 @@ try {
     await page.keyboard.press('Enter');
   } else await page.getByRole('button', { name: 'Play Pong' }).click();
   await until(() => player.state.tables.tables.find(table => table.table === 'middle')?.pong, 'Pong start');
+  await page.waitForFunction(() => window.__chatdomTavernSound?.status === 'ready' && window.__chatdomTavernSound?.audible
+    && window.__chatdomTavernSound?.activeSources > 0, null, { timeout: 15_000 });
   const game = () => player.state.tables.tables.find(table => table.table === 'middle')?.pong;
-  let sequence = 0;
-  paddle = setInterval(() => { const pong = game(); if (pong && ['serve', 'rally'].includes(pong.phase)) player.room.send('paddle', { match: pong.match, sequence: ++sequence, paddle: 1 }); }, 80);
+  let sequence = 0, witnessedPaddle = false;
+  paddle = setInterval(() => {
+    const pong = game();
+    if (!pong || !['serve', 'rally'].includes(pong.phase)) return;
+    witnessedPaddle ||= pong.contacts?.some(contact => contact.kind === 'paddle') ?? false;
+    // Meet one actual public rally before moving aside, so the live proof includes a swept paddle tock.
+    player.room.send('paddle', { match: pong.match, sequence: ++sequence, paddle: witnessedPaddle ? 1 : pong.ball.x });
+  }, 80);
   await page.keyboard.down('KeyD');
   try {
     await until(() => game()?.acknowledged[1] >= 0 && Math.abs(game()?.paddles[1] ?? 0) > .1, 'browser paddle reaches server', 30_000);
@@ -214,6 +249,9 @@ try {
   assert.equal(errors.length, 0, `browser errors: ${errors.join('; ')}`);
   report.checks.push('A whole server-timed Pong match reached seven; the spectator received the same match and final score.');
   report.result = { score: final.score, winner: final.winner, reason: final.reason, roomId: player.room.roomId };
+  assert.equal(witnessedPaddle, true, 'SDK player met an authoritative swept paddle contact');
+  await page.waitForFunction(() => (window.__chatdomTavernSound?.played?.point ?? 0) > 0
+    && (window.__chatdomTavernSound?.played?.paddle ?? 0) > 0, null, { timeout: 15_000 });
   if (lockedInput) {
     await page.keyboard.press('KeyE');
     await page.waitForFunction(() => window.__chatdomTavernLive?.seated !== 'middle', null, { timeout: 10_000 });
@@ -223,24 +261,59 @@ try {
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => window.__chatdomTavernLive?.seated !== 'middle', null, { timeout: 10_000 });
     report.checks.push('E stands, E sits again at the same physical chair, and Escape stands.');
+  } else {
+    await page.getByRole('button', { name: /Stand up/ }).click();
+    await page.waitForFunction(() => window.__chatdomTavernLive?.seated !== 'middle', null, { timeout: 10_000 });
+  }
+  await checkSound(page, report);
+  // Optional short room studies reuse this owned browser/preview and the same bounded capture lease.
+  // Freeze the wire counters first so still photography cannot dilute the connected-game measurement.
+  measurement.final = { at: Date.now(), sockets: measurement.sockets.map(counts => ({ ...counts })) };
+  if (process.env.GATHER_ROOM_STUDIES === '1') {
+    report.roomStudies = [];
+    for (const [view, width, height] of [['room', 1440, 900], ['room', 390, 844], ['bar', 1440, 900], ['table', 1440, 900]]) {
+      await page.setViewportSize({ width, height });
+      await page.goto(`http://${host}:${webPort}/-/tavern?view=${view}&still=1&hour=19`, { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
+      if (view === 'room' && width === 1440) {
+        await page.getByRole('button', { name: 'Enable sound' }).click();
+        await page.waitForFunction(() => document.querySelector('.gather-tavern-sound')?.getAttribute('aria-pressed') === 'true');
+        await page.getByRole('button', { name: 'Mute sound' }).click();
+        await page.waitForFunction(() => document.querySelector('.gather-tavern-sound')?.getAttribute('aria-pressed') === 'false');
+        report.checks.push('The first Sound button gesture enabled the local common host; the second muted it.');
+      }
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth || document.documentElement.scrollHeight > window.innerHeight), false);
+      const path = `${output}/${evidencePrefix ?? 'ga10-pong'}-${view}-study@${width}x${height}.png`;
+      await page.screenshot({ path });
+      report.roomStudies.push({ view, width, height, path, scene: await page.evaluate(() => window.__chatdomTavern) });
+      console.log(`[gather] ${path}`);
+    }
+    assert.equal(errors.length, 0, `study browser errors: ${errors.join('; ')}`);
   }
 } catch (error) {
   report.failure = error instanceof Error ? error.message : String(error);
+  report.failureFrame = structuredClone(player?.state.tables ?? null);
+  report.browserFailure = await page?.evaluate(() => ({ connected: window.__chatdomTavernLive?.connected,
+    ended: window.__chatdomTavernLive?.ended, seated: window.__chatdomTavernLive?.seated,
+    pointerLocked: !!document.pointerLockElement, error: window.__chatdomTavernError,
+    sound: window.__chatdomTavernSound })).catch(() => null);
+  process.exitCode = 1;
   throw error;
 } finally {
   clearInterval(motion); clearInterval(paddle); clearTimeout(lockDeadline);
   try {
     if (measurement) {
-      const seconds = (Date.now() - measurement.measuredAt) / 1000;
+      const counts = measurement.final?.sockets ?? measurement.sockets;
+      const seconds = ((measurement.final?.at ?? Date.now()) - measurement.measuredAt) / 1000;
       report.payloadBytesPerSecond = { seconds, scope: 'WebSocket message payload only, including room state and all tables; excludes frame and network headers',
-        player: { received: measurement.sockets[0].received / seconds, sent: measurement.sockets[0].sent / seconds },
-        spectator: { received: measurement.sockets[1].received / seconds, sent: measurement.sockets[1].sent / seconds } };
+        player: { received: counts[0].received / seconds, sent: counts[0].sent / seconds },
+        spectator: { received: counts[1].received / seconds, sent: counts[1].sent / seconds } };
       const final = player?.state.tables?.tables.find(table => table.table === 'middle')?.pong;
       const watched = spectator?.state.tables?.tables.find(table => table.table === 'middle')?.pong;
       if (final?.phase === 'finished') report.result = { score: final.score, winner: final.winner, reason: final.reason, match: final.match };
       if (watched?.phase === 'finished') report.spectatorResult = { score: watched.score, winner: watched.winner, reason: watched.reason, match: watched.match };
       await mkdir(output, { recursive: true });
-      await writeFile(`${output}/${lockedInput ? 'ga10-pong-input' : 'ga10-pong-browser-match'}.json`, `${JSON.stringify(report, null, 2)}\n`);
+      await writeFile(`${output}/${evidencePrefix ? `${evidencePrefix}-${lockedInput ? 'input' : 'browser-match'}` : lockedInput ? 'ga10-pong-input' : 'ga10-pong-browser-match'}.json`, `${JSON.stringify(report, null, 2)}\n`);
       console.log(JSON.stringify(report, null, 2));
     }
   } finally {

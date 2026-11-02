@@ -45,6 +45,11 @@ export const GatherMoveSchema = z.discriminatedUnion('action', [
 ]);
 export type GatherMove = z.infer<typeof GatherMoveSchema>;
 
+/** Actual swept impacts, bounded and public so sound never guesses a bounce from two positions. */
+export interface PongContact {
+  readonly sequence: number; readonly tick: number; readonly at: number;
+  readonly kind: 'paddle' | 'rail'; readonly x: number; readonly y: number;
+}
 export interface PongView {
   readonly match: string;
   readonly phase: 'serve' | 'rally' | 'finished' | 'interrupted';
@@ -57,6 +62,7 @@ export interface PongView {
   readonly score: readonly [number, number];
   readonly winner: 0 | 1 | null;
   readonly reason: 'points' | 'conceded' | 'restart' | null;
+  readonly contacts?: readonly PongContact[] | undefined;
 }
 export interface GatherTableView {
   readonly table: string;
@@ -107,6 +113,10 @@ export const PongViewSchema: z.ZodType<PongView> = z.strictObject({
   paddles: pair(z.number().finite().min(-1).max(1)), acknowledged: pair(z.number().int().min(-1).max(0xffff_ffff)),
   score: pair(z.number().int().min(0).max(7)), winner: z.union([z.literal(0), z.literal(1)]).nullable(),
   reason: z.enum(['points', 'conceded', 'restart']).nullable(),
+  contacts: z.array(z.strictObject({ sequence: UIntSchema, tick: UIntSchema, at: EpochMsSchema,
+    kind: z.enum(['paddle', 'rail']), x: z.number().finite().min(-1).max(1),
+    // A missed paddle can still be followed by a rail impact before the goal plane. Match the ball's domain.
+    y: z.number().finite().min(-4).max(4) })).max(8).optional(),
 });
 export const GatherFrameSchema: z.ZodType<GatherFrame> = z.strictObject({ at: EpochMsSchema,
   tables: z.array(z.strictObject({ table: TokenSchema, revision: UIntSchema,

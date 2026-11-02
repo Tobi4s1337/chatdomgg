@@ -14,6 +14,8 @@ import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mj
 
 const repo = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${repo}/work/evidence/gather`;
+const host = process.env.GATHER_HOST ?? '127.0.0.1';
+assert.ok(['127.0.0.1', '127.0.0.10'].includes(host), 'Only the two explicit local gather hosts are allowed');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (predicate, description, timeout = 30_000) => {
   const deadline = Date.now() + timeout;
@@ -23,13 +25,35 @@ const until = async (predicate, description, timeout = 30_000) => {
     await sleep(30);
   }
 };
+// Inspection is emitted by the real live surface; all actions use the visible sound control.
+async function checkSound(page, report) {
+  const before = await page.evaluate(() => window.__chatdomTavernSound);
+  assert.equal(before.status, 'ready');
+  assert.equal(before.audible, true);
+  assert.ok(before.peakSources <= 6 && before.peakVoices <= 6, `sound limits exceeded: ${JSON.stringify(before)}`);
+  await page.getByRole('button', { name: 'Mute sound' }).click();
+  await page.waitForFunction(() => window.__chatdomTavernSound?.activeSources === 0 && !window.__chatdomTavernSound?.audible, null, { timeout: 10_000 });
+  const muted = await page.evaluate(() => window.__chatdomTavernSound);
+  assert.equal(muted.activeVoices, 0);
+  await page.getByRole('button', { name: 'Enable sound' }).click();
+  await page.waitForFunction(() => window.__chatdomTavernSound?.status === 'ready' && window.__chatdomTavernSound?.audible
+    && window.__chatdomTavernSound?.activeSources > 0, null, { timeout: 10_000 });
+  await sleep(1000);
+  const resumed = await page.evaluate(() => window.__chatdomTavernSound);
+  const attacks = played => Object.fromEntries(Object.entries(played).filter(([cue]) => cue !== 'hearth' && cue !== 'murmur'));
+  assert.deepEqual(attacks(resumed.played), attacks(muted.played), 'unmute must not replay stale attacks');
+  assert.ok(resumed.peakSources <= 6 && resumed.peakVoices <= 6, `sound limits exceeded: ${JSON.stringify(resumed)}`);
+  assert.ok((resumed.played.hearth ?? 0) > (muted.played.hearth ?? 0), 'hearth ambience resumes');
+  report.sound = { before, muted, resumed };
+  report.checks.push('Live accepted game sound played; standing mute stopped all sources, and enable resumed ambience without replaying attacks (peak six voices).');
+}
 const freePorts = async () => {
   const free = [];
   for (const port of [5170, 5171, 5172, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180, 5181, 5182, 5183, 5184, 5185, 5186, 5188, 5189]) {
     const probe = createPortProbe();
     if (await new Promise(resolve => {
       probe.once('error', () => resolve(false));
-      probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)));
+      probe.listen(port, host, () => probe.close(() => resolve(true)));
     })) free.push(port);
     if (free.length === 2) return free;
   }
@@ -42,6 +66,9 @@ const reconnect = locked && process.env.GATHER_RECONNECT === '1';
 const tableId = kind === 'stones' ? 'west' : 'hearth';
 const ownChair = kind === 'stones' ? 1 : 3, browserChair = ownChair + 1;
 const prefix = `${kind === 'stones' ? 'stones' : 'dice'}${locked ? '-locked' : ''}`;
+const evidencePrefix = process.env.GATHER_EVIDENCE;
+assert.ok(evidencePrefix === undefined || /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(evidencePrefix), 'GATHER_EVIDENCE must be a lowercase, hyphen-separated filename prefix');
+const artifactPrefix = evidencePrefix ?? `ga10-${prefix}`;
 const report = { started: new Date().toISOString(), fixture: 'Temporary reference sessions with synthetic identities; memory only.',
   limitations: ['No kingdom-to-tavern transfer, Twitch identity, durable session, persistence or real-GPU performance is proven.',
     'Screenshots use SwiftShader; no frame-rate claim.'], checks: [], scores: [], revisions: [], screenshots: [] };
@@ -60,7 +87,7 @@ try {
     void browser?.close().catch(() => {});
   }, 270_000);
   const [realmPort, webPort] = await freePorts();
-  report.ports = { realm: realmPort, web: webPort };
+  report.ports = { host, realm: realmPort, web: webPort };
   loader = await createServer({ root: repo, configFile: false, appType: 'custom', logLevel: 'error', cacheDir: '/tmp/chatdom-gather/vite-harness-loader', optimizeDeps: { noDiscovery: true },
     server: { middlewareMode: true, hmr: false, ws: false } });
   const [{ createRealmServer }, { referenceServices }, { starterCitizenLook, TavernRoomState }, { createTavernInterior }, { seatApproachDriver }, { installGatherStore, MemoryGatherStore }, { severWalker }, { tickStones }] = await Promise.all([
@@ -78,10 +105,11 @@ try {
   const created = createRealmServer(services); realm = created.server;
   created.transport.app.post('/reference/session', response => response.writeHeader('Access-Control-Allow-Origin', '*')
     .writeHeader('Cache-Control', 'no-store').writeHeader('Content-Type', 'application/json').end(JSON.stringify(base.issue())));
-  await realm.listen(realmPort, '127.0.0.1');
-  const endpoint = `http://127.0.0.1:${realmPort}`;
+  await realm.listen(realmPort, host);
+  const endpoint = `http://${host}:${realmPort}`;
   web = await preview({ root: `${repo}/apps/web`, configFile: `${repo}/apps/web/vite.config.ts`, logLevel: 'error',
-    preview: { host: '127.0.0.1', port: webPort, strictPort: true,
+    ...(process.env.GATHER_WEB_DIST ? { build: { outDir: process.env.GATHER_WEB_DIST } } : {}),
+    preview: { host, port: webPort, strictPort: true,
       proxy: { '/live-realm-data': { target: endpoint, ws: true, rewrite: path => path.replace(/^\/live-realm-data/, '') } } } });
   const sdk = new Client(endpoint);
   const join = async () => {
@@ -123,7 +151,7 @@ try {
   page.on('console', message => { if (message.type() === 'error' && !message.location().url.endsWith('/favicon.ico')) errors.push(message.text()); });
   page.on('requestfailed', request => console.error(`[gather] request failed ${request.url()}: ${request.failure()?.errorText}`));
   page.on('response', response => { if (response.status() >= 400) console.error(`[gather] HTTP ${response.status()} ${response.url()}`); });
-  await page.goto(`http://127.0.0.1:${webPort}/-/tavern?testWalker=1&seat=tavern:${tableId}:seat:${browserChair}${reconnect ? `&resumeScope=ga10-locked-browser-session-scope-${Date.now()}` : ''}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://${host}:${webPort}/-/tavern?testWalker=1&seat=tavern:${tableId}:seat:${browserChair}${reconnect ? `&resumeScope=ga10-locked-browser-session-scope-${Date.now()}` : ''}`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__chatdomReady || window.__chatdomTavernError, null, { timeout: 90_000 });
   const setupError = await page.evaluate(() => window.__chatdomTavernError);
   assert.equal(setupError, undefined, `browser admission failed: ${setupError}`);
@@ -140,7 +168,7 @@ try {
     await mkdir(output, { recursive: true });
     for (const [width, height] of [[1440, 900], [390, 844]]) {
       await page.setViewportSize({ width, height }); await sleep(800);
-      const path = `${output}/ga10-${prefix}-walk@${width}x${height}.png`;
+      const path = `${output}/${artifactPrefix}-walk@${width}x${height}.png`;
       await page.screenshot({ path }); console.error(`[gather] ${path}`);
     }
     throw error;
@@ -169,6 +197,8 @@ try {
     await assertLocked();
   } else await page.getByRole('button', { name: kind === 'stones' ? 'Play Stones' : 'Play Hearth Dice' }).click();
   await until(() => game()?.phase === 'playing', 'match starts');
+  await page.waitForFunction(() => window.__chatdomTavernSound?.status === 'ready' && window.__chatdomTavernSound?.audible
+    && window.__chatdomTavernSound?.activeSources > 0, null, { timeout: 15_000 });
   if (kind === 'hearth-dice') assert.equal(game().scores.length, 2, 'sparse physical chairs map to two players');
   let clockCaughtUp = false;
   if (reconnect) {
@@ -278,7 +308,7 @@ try {
       for (const [width, height] of [[1440, 900], [390, 844]]) {
         await page.setViewportSize({ width, height });
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        const path = `${output}/ga10-${prefix}-live@${width}x${height}.png`;
+        const path = `${output}/${artifactPrefix}-live@${width}x${height}.png`;
         await page.screenshot({ path }); report.screenshots.push({ path, revision: game().revision }); console.log(`[gather] ${path}`);
       }
       if (locked) {
@@ -300,11 +330,16 @@ try {
   } else {
     assert.equal(game().reason, 'fifty'); assert.ok(game().scores[game().winner] >= 50);
   }
+  await page.waitForFunction(cue => (window.__chatdomTavernSound?.played?.[cue] ?? 0) > 0, kind === 'stones' ? 'stone' : 'dice', { timeout: 15_000 });
   if (locked) {
     await page.keyboard.press('KeyE');
     await page.waitForFunction(() => window.__chatdomTavernLive?.seated === null, null, { timeout: 15000 });
     report.checks.push('Game keys retained pointer lock; E released the chair.');
+  } else {
+    await page.getByRole('button', { name: /Stand up/ }).click();
+    await page.waitForFunction(() => window.__chatdomTavernLive?.seated === null, null, { timeout: 15_000 });
   }
+  await checkSound(page, report);
   assert.equal(errors.length, 0, `browser errors: ${errors.join('; ')}`);
   report.checks.push(`Completed ${kind} with ${moves} accepted moves including ${browserMoves} browser actions; spectator received the same final state.`);
   if (locked && kind === 'hearth-dice') report.mouseActions = { rolls: mouseRolls, holds: mouseHolds };
@@ -325,7 +360,7 @@ try {
     const publicJson = JSON.stringify(report);
     assert.ok(!/"(?:seed|cursor)"\s*:/.test(publicJson), 'private random state must never enter public evidence');
     await mkdir(output, { recursive: true });
-    const reportPath = `${output}/ga10-${prefix}-${report.failure ? 'failure' : 'browser-match'}.json`;
+    const reportPath = `${output}/${artifactPrefix}-${report.failure ? 'failure' : 'browser-match'}.json`;
     await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
     console.log(`[gather] ${reportPath}`);
   } finally {

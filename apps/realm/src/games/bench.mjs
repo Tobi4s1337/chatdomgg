@@ -7,6 +7,8 @@ import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
 
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
+const prefix = process.env.GATHER_EVIDENCE ?? 'ga10-pong';
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(prefix)) throw new Error('Invalid evidence prefix.');
 const loader = await createServer({ root, configFile: false, logLevel: 'error', appType: 'custom',
   server: { middlewareMode: true, hmr: false, ws: false } });
 try {
@@ -47,6 +49,6 @@ try {
     fiveIdleTablesScanMs: (performance.now() - start) / loops,
     method: 'Real rules plus public projection and JSON encoding. Synthetic rule inputs; no socket, movement, storage or scheduling overhead. p95 is across batch means, not individual ticks. This shared host is not a load benchmark.' };
   await mkdir(`${root}/work/evidence/gather`, { recursive: true });
-  await writeFile(`${root}/work/evidence/gather/ga10-pong-cost.json`, JSON.stringify(report, null, 2) + '\n');
+  await writeFile(`${root}/work/evidence/gather/${prefix}-cost.json`, JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report, null, 2));
 } finally { await loader.close(); }

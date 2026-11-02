@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createVoxelMaterial, getEnvironment } from '@chatdom/render';
+import { createVoxelMaterial } from '@chatdom/render';
 import { MATERIALS } from '@chatdom/content/materials';
 import { createInteractionRegistry } from '@chatdom/world/interactions';
 import { tavernPlacement, tavernSeatOf } from '../../../../packages/world/src/interactions/places';
@@ -8,7 +8,7 @@ import { createWalkController } from '../walk';
 import { mountInteractionController } from '../interactions';
 import { bindWalkInteractions } from '../kingdom/walk-interactions';
 import { presentWalkers } from '../kingdom/walker-presentation';
-import { createShotEase, clearShot } from '../interactions/places/framing';
+import { createShotEase } from '../interactions/places/framing';
 import type { InteractionPlaces } from '../interactions/ports';
 import type { InteractionAccepted, InteractionSession } from '../interactions/session';
 import type { RealmPrivateMessage } from '@chatdom/shared/realm';
@@ -17,11 +17,12 @@ import { bindPongHand } from '../games/input';
 import { bindTurnHand } from '../games/turn-input';
 import type { TavernClient } from './client';
 import type { createTavernStage } from './stage';
-import { tavernLight } from './light';
+import { tavernInteriorEnvironment, tavernLight, tavernLightSources } from './light';
 import { seatApproachDriver } from '../games/walker';
 import { TAVERN_ROOM_BOUNDS } from '../../../../packages/content/src/tavern';
 import { tableGame } from '../games/boards';
 import { createRetainedSeatRestore } from './retained-seat';
+import { tavernTableFraming } from './framing';
 
 export interface TavernWalkState {
   readonly ready: boolean;
@@ -35,6 +36,7 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
   readonly host: HTMLElement;
   readonly requestInput: (reason: string) => GameInputLease;
   readonly onState: (state: TavernWalkState) => void;
+  readonly onAffordance?: (table: string) => void;
   /** Loopback test-session route only; never a spawn or a seat grant. */
   readonly benchSeat?: string;
 }) {
@@ -43,8 +45,8 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
     placements: [tavernPlacement({ tavern: 'main', origin: [0, 0, 0], turn: 0, seats: kit.tables.flatMap(t => t.seats), source: 'tavern:interior-v1' })] });
   if (registry.disabled.length || JSON.stringify(registry.targets()) !== JSON.stringify(client.interior.targets)) throw new Error('The tavern chairs have changed. Enter again.');
   const avatar = createVoxelMaterial(MATERIALS, 'avatar');
-  const light = tavernLight([kit.hearth]); avatar.setLight(light);
-  const sky = getEnvironment(19); avatar.setEnvironment({ ...sky, sunIntensity: .12, ambientIntensity: .72, ambient: '#b3a0bd', shadow: '#45364f', night: .85 });
+  const light = tavernLight(tavernLightSources(kit.hearth)); avatar.setLight(light);
+  avatar.setEnvironment(tavernInteriorEnvironment(19));
   const looks = createDefaultCitizenLooks(), people = await createCitizenRenderer(stage.scene, { registry: MATERIALS, material: avatar, looks, capacity: 128 });
   if ([...client.room.state.walkers.values()].some(walker => !looks.some(look => look.id === walker.look))) {
     people.dispose(); avatar.dispose(); throw new Error('A citizen’s clothes could not be opened. Enter again shortly.');
@@ -84,34 +86,30 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
       if (action !== 'tavern' || !chair || !table) return null;
       const seat = Number(chair.seat) - 1, authoredSeat = table.seats.find(s => s.key === `${table.id}:${chair.seat}`);
       if (!authoredSeat) return null;
-      const game = tableGame(table.id), fx = Math.sin(authoredSeat.facing), fz = Math.cos(authoredSeat.facing);
-      let portrait = stage.camera.aspect < 1;
+      const game = tableGame(table.id);
+      let aspect = stage.camera.aspect;
       // Same board as the miniature. Frame over this end, above the actual seat; hide only the local body.
-      const framing = () => {
-        const back = game === 'stones' ? portrait ? 2.8 : 1.8 : portrait ? 1.75 : 1.15;
-        const high = game === 'stones' ? portrait ? 2.5 : 1.3 : portrait ? 2.6 : 1.15;
-        return clearShot(client.world, { eye: [table.centre[0] - fx * back, table.centre[1] + high, table.centre[2] - fz * back],
-          at: [table.centre[0] - fx * (portrait && game !== 'stones' ? .35 : 0), table.centre[1] + (game === 'stones' ? .48 : .12), table.centre[2] - fz * (portrait && game !== 'stones' ? .35 : 0)] });
-      };
+      const framing = () => tavernTableFraming(table.centre, authoredSeat.facing, game, stage.camera.aspect, client.world);
       const shot = framing();
       if (!shot) return null;
       const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      stage.camera.fov = portrait ? 56 : 43; stage.camera.filmOffset = 0; stage.camera.updateProjectionMatrix();
+      stage.camera.fov = shot.fov; stage.camera.filmOffset = 0; stage.camera.updateProjectionMatrix();
       let ease = createShotEase(stage.camera, shot, { reducedMotion });
       const lease = options.requestInput(`${game}:${table.id}`);
       const turnHand = game === 'pong' ? null : bindTurnHand(lease, () => ({
         table: client.self.table === table.id ? client.tables.tables.find(t => t.table === table.id) ?? null : null,
         playerIndex: client.self.playerIndex ?? null, physicalSeat: client.self.seatIndex ?? client.self.seat,
         connected: client.connected,
-      }), { start: id => client.start(id), move: (action, column) => client.move(action, column) });
+      }), { start: id => { options.onAffordance?.(id); client.start(id); },
+        move: (action, column) => { options.onAffordance?.(table.id); client.move(action, column); } });
       const hand = game === 'pong' ? bindPongHand(lease, seat as 0 | 1, { target: () => client.presentations.get(table.id)?.aimPosition ?? 0,
-        aim: (value, now) => client.aim(value, now), start: () => client.start(table.id) }, () => performance.now()) : turnHand!;
+        aim: (value, now) => client.aim(value, now), start: () => { options.onAffordance?.(table.id); client.start(table.id); } }, () => performance.now()) : turnHand!;
       selected = table.id;
       const view = { frame(dt: number, now: number) {
-        if (portrait !== (stage.camera.aspect < 1)) {
-          portrait = stage.camera.aspect < 1;
-          const next = framing(); if (next) ease = createShotEase(stage.camera, next, { reducedMotion });
-          stage.camera.fov = portrait ? 56 : 43; stage.camera.updateProjectionMatrix();
+        if (aspect !== stage.camera.aspect) {
+          aspect = stage.camera.aspect;
+          const next = framing(); if (next) { ease = createShotEase(stage.camera, next, { reducedMotion }); stage.camera.fov = next.fov; }
+          stage.camera.updateProjectionMatrix();
         }
         ease.frame(now); hand.frame(dt, now);
       },

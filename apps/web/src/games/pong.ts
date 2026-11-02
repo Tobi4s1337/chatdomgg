@@ -4,7 +4,8 @@ export const PONG_BUFFER_MS = 100;
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 export const clampPongPaddle = (n: number) => clamp(n, -FIELD.halfWidth + FIELD.paddleHalf, FIELD.halfWidth - FIELD.paddleHalf);
 const move = (from: number, to: number, dt: number) => from + clamp(to - from, -FIELD.paddleSpeed * dt, FIELD.paddleSpeed * dt);
-const copy = (view: PongView): PongView => ({ ...view, ball: { ...view.ball }, paddles: [...view.paddles], acknowledged: [...view.acknowledged], score: [...view.score] });
+const copy = (view: PongView): PongView => ({ ...view, ball: { ...view.ball }, paddles: [...view.paddles], acknowledged: [...view.acknowledged], score: [...view.score],
+  ...(view.contacts ? { contacts: view.contacts.map(hit => ({ ...hit })) } : {}) });
 interface Frame { readonly view: PongView; readonly received: number }
 
 /** Public snapshots only. This never decides a bounce, score or result. */
@@ -25,6 +26,11 @@ export class PongPresentation {
   get buffered(): number { return this.frames.length; }
   /** Last correction component, distinct from normal travel during the rendered frame. */
   get correctionDistance(): number { return this.correction; }
+  /** Read-only deadline for a witnessed impact on the same buffered timeline as the tabletop. */
+  contactDelay(at: number, now: number): number {
+    if (!Number.isFinite(at) || !Number.isFinite(now) || !Number.isFinite(this.clockOffset)) return 0;
+    return clamp((at + PONG_BUFFER_MS - now - this.clockOffset) / 1000, 0, PONG_BUFFER_MS / 1000);
+  }
   setSeat(seat: 0 | 1 | null): void {
     if (this.seat === seat) return;
     this.seat = seat; this.initialized = false;

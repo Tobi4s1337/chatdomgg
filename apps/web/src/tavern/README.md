@@ -4,8 +4,9 @@ The tavern is a portal destination. Its kingdom exterior is unchanged. The indep
 `tavern` room filtered by `kingdomId`; the campfire continues to live in `kingdom`.
 
 `mountTavern(scene, { style, phone })` installs the room and its public game miniatures. Its `kit` exposes local
-collision, table, chair and approach positions. `update` takes local feet, camera and hour. It fades the nearest
-wall; the interior has no roof. `games` consumes an already public `GatherFrame`, never server game state.
+collision, table, chair and approach positions. `update` takes local feet, camera and hour. Exterior study cameras
+cut away the nearest wall; cameras inside keep the enclosing walls and doorway. The interior has no roof.
+`games` consumes an already public `GatherFrame`, never server game state.
 
 `/-/tavern?view=room|bar|table&style=hearth|tide&hour=19&still=1` is a room study using that same mount. Its buttons
 inspect camera compositions. It does not claim a game seat, transfer a walker or stage people. An empty table
@@ -27,7 +28,8 @@ does not show an invented match. The working room/seat transport is tested separ
   frames, and adapts the same retained room to the existing movement predictor and interaction binding. It keeps
   a distinct reconnect partition. `TavernRoomSurface` composes the existing walk/citizen/camera owners around that
   connection. It hides the local body at the board and draws actual peers and authoritative table miniatures.
-- The caller supplies `open()` and `requestInput(canvas, reason)`. The game consumes the supplied input lease;
+- The caller supplies `open()`, `requestInput(canvas, reason)` and its existing `KingdomAudio` as `audio`.
+  The game consumes the supplied input lease;
   play still owns session transfer, the single active destination surface and the integrated pointer lock.
 - The lease receives a dedicated transparent input canvas, not another renderer. Walking releases its own
   canvas without cancelling the seated lock. Stones consumes motion/arrows, click/Enter and direct 1–7;
@@ -39,6 +41,15 @@ does not show an invented match. The working room/seat transport is tested separ
 - Pong predicts only the local paddle. The ball follows buffered public server snapshots. Network stalls hold the
   last witnessed path; a terminal server result appears immediately. The new public schemas never admit RNG or
   paddle targets. See `work/evidence/gather/ga10-pong.md` for the measured limits.
+- Seated framing fits every actual board after collision clearance at both standard sizes, including the four
+  Dice chairs. Flat boards keep the chair's axis. The independent scene bakes four localized warm sources
+  without adding GPU lights, and exterior views cut away the nearest wall with hysteresis instead of a screen-door fade.
+- The caller retains one common audio mixer across destinations. Original finite wood, stone, cup and brass
+  sounds follow public accepted actions; actual Pong contacts use the board's buffered timeline. The hearth
+  and abstract room air follow the room's real occupancy. No speech or pretend patrons are added. Mute, hide,
+  disconnect and unmount retire owned sources; unmute baselines current state without replaying moves.
+  The separate local inspection route owns its own locked mixer and exposes a sound control. See
+  `audio/README.md` for the host, timing, budgets and original material provenance.
 - Stones and Hearth Dice save before publishing an accepted move. Migration `0016` stores versioned checkpoints
   and immutable accepted commands atomically. The production entrypoint installs the Postgres store using its
   existing pool; the reference harness explicitly installs a memory store. Missing storage cannot start a turn game.
@@ -49,7 +60,8 @@ does not show an invented match. The working room/seat transport is tested separ
 
 GA10 remains open. Still required: play's generic portal transfer and safe return, approved exterior door anchors,
 full database-authenticated matches and portal evidence, durable result/tally integration, remaining browser failure-path and database restart evidence,
-sound and real-GPU acceptance with eight walkers. See the lane PRD and `SEAMS.md`.
+headphone mix review, populated-room draw budget and real-GPU acceptance with eight walkers. The latest empty
+studies use 10 desktop / 11 phone draws; simultaneous live miniatures can add draws. See the lane PRD and `SEAMS.md`.
 
 `work/evidence/gather/ga10-input-recovery.md` records the locked controls, actual cut/reconnect and page-refresh
 proof, the packet-order regressions, and their limits. The controlled same-person replacement experiment is
@@ -58,8 +70,8 @@ blocked after three failures; its skipped reproduction is not passing session-co
 The connected-browser checkpoint is demonstrated by `work/evidence/gather/ga10-pong-browser-match.json` and
 the two `ga10-pong-live` stills. One browser and two SDK clients completed a 1–7 match, with the same spectator
 result and server-confirmed browser paddle input. The sessions are temporary memory-only reference sessions;
-they do not prove tobi4s_'s database session or a portal transfer. The remaining cropped opponent framing and
-flat room treatment are documented in `work/evidence/gather/ga10-pong.md`.
+they do not prove tobi4s_'s database session or a portal transfer. Those older stills predate the current framing
+and lighting checkpoint; the current evidence and remaining limits are in `work/evidence/gather/ga10-feel.md`.
 
 ## Focused checks
 
@@ -94,6 +106,15 @@ to exercise real pointer lock, keys and mouse actions, and `GATHER_RECONNECT=1` 
 restore the chair and reload using the rotated token. The loopback-only entry uses sessionStorage with a stable
 test partition; it does not stand in for a production session issuer. Pong also accepts `GATHER_INPUT=locked`.
 Input and recovery evidence is recorded separately from the earlier native-control proofs.
+`GATHER_EVIDENCE=ga10-pong-framed` (or the corresponding turn-game prefix) keeps a new run's evidence separate.
+`GATHER_WEB_DIST=/absolute/path/to/private/build` previews a frozen private build without sharing `apps/web/dist`.
+`GATHER_HOST=127.0.0.10` selects the second explicitly permitted loopback host when other lanes occupy `.1`;
+it still probes only 5170–5189, excluding reserved 5187, and never touches their services. The local test-entry
+route permits only the exact configured loopback names/addresses, never a remote issuer or production origin.
+`GATHER_ROOM_STUDIES=1` appends four empty-room studies to a successful Pong proof within its capture lease.
+The multiplayer harnesses also inspect accepted sound cues and exercise the actual mute/enable control after
+standing. `nice -n 10 node apps/web/src/tavern/sound-study/run.mjs` renders the original materials through the
+common mixer into a 13-second WAV with numeric silence/resume checks; it does not claim headphone listening.
 
 The SQL check requires its pinned
 external embedded engine under `/tmp` (installation is in the runner header). It executes the exact migration and

@@ -92,6 +92,14 @@ The bar: every place and game is pleasant to watch without reading anything, fun
 
 ## Decisions
 
+- **2026-11-02 — Tavern composition and sound.** Seated views fit the actual authored board after collision
+  clearance and retain the chair's axis for flat games. The room uses four baked hearth/lantern pools and one
+  shared sheltered grade for furniture and citizens; the near wall cuts away with hysteresis. Sound connects
+  to the caller's existing common mixer, observes each public delivery independently of rendering, and retires
+  on mute, hide, disconnect and unmount. Pong supplies a bounded optional ring of actual swept contacts; their
+  sound deadlines use the existing board presentation clock. No inferred impacts, private RNG, second audio
+  context, fake patrons or exterior/founded changes are introduced. Listening and eight-walker GPU acceptance
+  remain separate done-checks.
 - **2026-11-02 — Seated input and recovery.** The existing input lease owns a dedicated transparent seated
   canvas, so releasing the walking canvas cannot unlock the game. All three games use that lease; Stones and
   Dice support mouse actions as well as keys while the pointer stays locked. Fresh full-state and matching-writer

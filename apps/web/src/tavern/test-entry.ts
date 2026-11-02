@@ -3,7 +3,7 @@ import { connectTavern } from './client';
 
 /** Explicit loopback-only testing. The realm must actually expose its test session service. */
 export async function openLocalTestTavern(params: URLSearchParams) {
-  const loopback = (host: string) => host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+  const loopback = (host: string) => host === 'localhost' || host === '127.0.0.1' || host === '127.0.0.10' || host === '[::1]';
   const endpoint = new URL(params.get('realm') ?? '/live-realm-data', location.origin);
   if (params.get('testWalker') !== '1' || !loopback(location.hostname) || !loopback(endpoint.hostname)) throw new Error('Enter the tavern from your kingdom.');
   const ticket = async () => {

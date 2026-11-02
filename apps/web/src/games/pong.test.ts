@@ -75,6 +75,19 @@ function latencyRun(rtt: number) {
 }
 
 describe('authoritative Pong presentation', () => {
+  it('schedules witnessed contact sound on the stable board clock despite packet jitter', () => {
+    const presentation = new PongPresentation();
+    const initial = pongView(startPong('contact-clock', 4, 10_000));
+    expect(presentation.contactDelay(10_000, 1000)).toBe(0);
+    presentation.receive(initial, 1000);
+    // An additional 80 ms of transit cannot rebase the already established presentation clock.
+    presentation.receive({ ...initial, tick: 3, at: 10_100 }, 1180);
+    expect(presentation.contactDelay(10_100, 1180)).toBeCloseTo(.02);
+    expect(presentation.contactDelay(10_100, 1200)).toBe(0);
+    expect(presentation.contactDelay(10_100, 1300)).toBe(0);
+    presentation.reset();
+    expect(presentation.contactDelay(10_100, 1180)).toBe(0);
+  });
   it.each([60, 120, 250])('moves the local paddle immediately and follows the delayed server ball at %i ms RTT', rtt => {
     const metrics = latencyRun(rtt);
     console.log(`Pong RTT ${rtt} ms: ${JSON.stringify(metrics)}`);

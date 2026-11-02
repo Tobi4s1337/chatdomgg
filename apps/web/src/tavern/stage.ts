@@ -29,13 +29,13 @@ export function createTavernStage(host: HTMLElement, options: { framing: TavernF
       camera.position.set(3.2, 2.8, 7.2); camera.lookAt(8, 1.1, 2);
     } else if (framing === 'room') {
       camera.fov = portrait ? 64 : 48;
-      if (portrait) { camera.position.set(7.8, 4.4, 9); camera.lookAt(8.8, 1.7, 3.6); }
+      if (portrait) { camera.position.set(7.8, 3.05, 8.8); camera.lookAt(8.8, 1.25, 3.6); }
       else { camera.position.set(8.5, 8.7, 14.8); camera.lookAt(7, .7, 4.5); }
     } else {
       const table = tavern.kit.tables.find(t => t.id === 'west')!;
-      camera.fov = portrait ? 56 : 42;
-      camera.position.set(table.centre[0], table.centre[1] + (portrait ? 1.8 : 1.2), table.centre[2] + 1.45);
-      camera.lookAt(table.centre[0], table.centre[1], table.centre[2]);
+      camera.fov = portrait ? 51 : 35;
+      camera.position.set(table.centre[0] + (portrait ? .65 : 1.25), table.centre[1] + (portrait ? 2.8 : 2.5), table.centre[2] + (portrait ? 3.1 : 2.6));
+      camera.lookAt(table.centre[0] + (portrait ? 0 : .35), table.centre[1] + (portrait ? .2 : .45), table.centre[2]);
     }
     camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
   }
@@ -49,7 +49,7 @@ export function createTavernStage(host: HTMLElement, options: { framing: TavernF
     renderer.render(scene, camera);
     (window as Window & { __chatdomTavern?: unknown }).__chatdomTavern = {
       draws: renderer.info.render.calls, triangles: renderer.info.render.triangles, dynamicLights: 1,
-      bakedWarmSources: phone ? 1 : 4,
+      bakedWarmSources: 4,
     };
     frame = requestAnimationFrame(draw);
   }

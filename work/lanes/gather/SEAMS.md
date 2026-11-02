@@ -39,7 +39,7 @@ gather does not edit play's files or implement a second generic transfer control
   `apps/web/src/tavern/index.tsx`. `entry` has the existing `RealmEntry` shape and must issue a fresh ticket for
   this destination. It returns the tavern's authenticated room, authoritative collision, movement adapter,
   public table frames and private owned-chair state. It never leaves a source room or reports a portal transfer.
-- `TavernRoomSurface({ open, requestInput })` composes the existing walk controller, citizen renderer and
+- `TavernRoomSurface({ open, requestInput, audio })` composes the existing walk controller, citizen renderer and
   interaction/camera owner with that destination. The caller installs only one active room surface after leaving
   the source. Table framing uses the same actual board as the miniatures and hides only the local seated body.
   `open(): Promise<TavernClient>` is supplied by the transfer owner; `requestInput(canvas, reason)` returns
@@ -48,6 +48,12 @@ gather does not edit play's files or implement a second generic transfer control
   seated input surface over the existing rendered scene. It prevents the disabled walking look owner from
   cancelling the game's lock; it adds no renderer or camera owner. The loopback adapter may require a fresh
   canvas click when acquiring lock or restoring a connection.
+- `audio` is the caller's existing `KingdomAudio` from `@chatdom/audio`, retained across portal transfers. The
+  destination obtains only its unlocked shared host; it never creates a second context or changes integrated
+  volume/mute. Its finite sound layer consumes raw public tables, actual connected walkers, listener feet and
+  camera direction. It stops on mute, hidden tab, stalled delivery, disconnect and unmount. Actual Pong swept
+  contacts schedule against the existing board presentation clock; no sound infers a bounce or reads RNG.
+  `audioControls` defaults to false; only the independent inspection route enables its local sound button.
 - The surface restores a retained chair's framing only after a fresh authoritative bootstrap. It does not
   recreate an abandoned local interaction. E/Esc and the HUD's stand action go through the existing interaction
   owner and server seat release. The carved game HUD is within the surface; moving it to play's HUD slot remains
@@ -64,7 +70,8 @@ gather does not edit play's files or implement a second generic transfer control
 
 The existing action/target contract has no generic portal action. Gather will add portal contracts only to its new
 `packages/shared/src/games.ts`; it will not widen `RealmIntentSchema` or existing target kinds silently.
-**needs: play** confirm the descriptor and implement generic portal transfer/return; agree the additive portal
+**needs: play** confirm the descriptor and implement generic portal transfer/return; supply the retained common
+audio owner to the destination; agree the additive portal
 interaction before installing the door anchor. Until then `/-/tavern` is the same destination scene, with no fake
 transfer success. No tavern chairs are installed in the kingdom registry.
 
@@ -152,6 +159,10 @@ export const GATHER_CHAT_ROUTE = '/internal/realm/gather/chat';
   `games.ts`. The original two-chair `seats` tuple remains stable. Hearth Dice has physical chairs 1–4;
   `self.seatIndex` identifies the physical chair, while `self.playerIndex` indexes immutable match participants.
   `self.seat` retains its original two-chair meaning. A new sitter never inherits an old participant's moves.
+- `PongView.contacts` is an additive optional public ring of the latest eight actual swept paddle/rail impacts:
+  `{ sequence, tick, at, kind, x, y }`. Old views/checkpoints remain valid. These facts carry no seed, input target
+  or private state and do not change physics. The client deduplicates them per match and never replays history
+  after a fresh connection. This avoids guessing audible impacts from sparse ball positions.
 - Recovered active turn-game participants reserve their original chairs for thirty seconds without creating a
   body or authenticated self. They re-enter through normal physical seating. At expiry, concessions persist;
   simultaneous total abandonment draws. Lifecycle retries are coalesced per table and bypass the bounded user

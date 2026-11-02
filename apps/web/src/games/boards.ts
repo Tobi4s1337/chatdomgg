@@ -12,6 +12,7 @@ const colour = (id: number) => new THREE.Color(MATERIALS.materials.find(m => m.i
 const palette = {
   wood: colour(MAT.timber), frame: colour(MAT.earth), dark: colour(MAT.bark), brass: colour(MAT.brass),
   felt: colour(MAT.fabricMutedGreen), cream: colour(MAT.cream), red: colour(MAT.fabricRed),
+  pongFelt: new THREE.Color('#29473f'), paddle: new THREE.Color('#e6bd7c'),
 };
 interface SeenStones { view: StonesView; started: number; moving: number | null }
 interface SeenDice { view: DiceView; started: number }
@@ -48,7 +49,12 @@ export function createTurnBoards(root: THREE.Group, tables: readonly TavernTable
       const [x, y, z] = table.centre;
       const publicTable = frame.tables.find(t => t.table === table.id);
       const game = tableGame(table.id);
-      if (game === 'stones') {
+      if (game === 'pong') {
+        // Share the room's existing box draw; dimensions, public coordinates and colours stay identical.
+        box(x, y + .008, z, 1.25, .016, .9, palette.pongFelt);
+        for (const seat of [0, 1] as const) box(x + (publicTable?.pong?.paddles[seat] ?? 0) * .62,
+          y + .046, z + (seat === 0 ? -.413 : .413), .2604, .06, .07, palette.paddle);
+      } else if (game === 'stones') {
         // 1.24m wide, .88m tall, standing along X at the table centre.
         box(x, y + .035, z, 1.34, .07, .28, palette.dark);
         box(x, y + .095, z, 1.25, .05, .19, palette.frame);

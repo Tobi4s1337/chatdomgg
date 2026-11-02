@@ -1,4 +1,4 @@
-import { GATHER_HZ, PONG_RULES, type PongView } from '@chatdom/shared';
+import { GATHER_HZ, PONG_RULES, type PongView, type PongContact } from '@chatdom/shared';
 
 /** Logical tabletop metres; paddle zero is on the near (+Y) end. */
 export const PONG = PONG_RULES;
@@ -10,6 +10,7 @@ export interface PongState {
   score: [number, number]; winner: PongSeat | null; reason: PongView['reason'];
   /** Server-only serve sequence, never part of a view. */
   seed: number; cursor: number; serveTo: PongSeat;
+  contacts?: PongContact[];
 }
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n));
 export function clampPaddle(n: number): number { return clamp(n, -1 + PONG.paddleHalf, 1 - PONG.paddleHalf); }
@@ -25,7 +26,7 @@ function random(state: PongState): number {
 export function startPong(match: string, seed: number, now: number): PongState {
   return { match, phase: 'serve', tick: 0, at: now, serveAt: now + PONG.serveMs,
     ball: { x: 0, y: 0, vx: 0, vy: 0 }, paddles: [0, 0], targets: [0, 0], acknowledged: [-1, -1],
-    score: [0, 0], winner: null, reason: null, seed: seed >>> 0, cursor: 0, serveTo: 0 };
+    score: [0, 0], winner: null, reason: null, seed: seed >>> 0, cursor: 0, serveTo: 0, contacts: [] };
 }
 /** Inputs are ordered per seat, not per socket: replaying after a reconnect cannot move a paddle backwards. */
 export function inputPong(state: PongState, seat: PongSeat, sequence: number, paddle: number): boolean {
@@ -70,10 +71,11 @@ export function tickPong(state: PongState): void {
     const duration = Math.min(left, Math.max(0, wall), paddle);
     ball.x += ball.vx * duration; ball.y += ball.vy * duration; left -= duration;
     if (paddle <= duration && paddle <= wall) {
+      contact(state, 'paddle', left);
       const offset = clamp((ball.x - state.paddles[seat]) / (PONG.paddleHalf + PONG.radius), -1, 1);
       const speed = Math.min(PONG.maxSpeed, Math.hypot(ball.vx, ball.vy) * 1.075);
       ball.vx = Math.sin(offset * .95) * speed; ball.vy = Math.cos(offset * .95) * speed * (seat === 0 ? -1 : 1);
-    } else if (wall <= duration) { ball.vx *= -1; }
+    } else if (wall <= duration) { contact(state, 'rail', left); ball.vx *= -1; }
     else break;
   }
   if (Math.abs(ball.y) > PONG.paddleY + .25) {
@@ -88,9 +90,16 @@ export function tickPong(state: PongState): void {
     }
   }
 }
+function contact(state: PongState, kind: PongContact['kind'], remaining: number): void {
+  const contacts = state.contacts ??= [];
+  contacts.push({ sequence: (contacts.at(-1)?.sequence ?? 0) + 1, tick: state.tick,
+    at: Math.round(state.at - remaining * 1000), kind, x: state.ball.x, y: state.ball.y });
+  if (contacts.length > 8) contacts.shift();
+}
 /** Explicit public projection: never spread the authoritative state into a message or log. */
 export function pongView(state: PongState): PongView {
   return { match: state.match, phase: state.phase, tick: state.tick, at: Math.round(state.at), serveAt: Math.round(state.serveAt),
     ball: { ...state.ball }, paddles: [...state.paddles], acknowledged: [...state.acknowledged],
-    score: [...state.score], winner: state.winner, reason: state.reason };
+    score: [...state.score], winner: state.winner, reason: state.reason,
+    ...(state.contacts ? { contacts: state.contacts.map(hit => ({ ...hit })) } : {}) };
 }
