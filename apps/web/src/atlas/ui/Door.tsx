@@ -15,6 +15,8 @@ export function DoorCartouche(props: {
   name: string;
   /** Under the name: the holding's tier and realm, in small capitals. */
   subtitle: string;
+  /** Above the name: what kind of land this is. */
+  eyebrow?: string | undefined;
   steps: readonly DoorStep[];
   /** `stamp` the seal falls; `ink` the parchment is up; `wake` the world shows through; `gone` it has lifted. */
   phase: 'stamp' | 'ink' | 'wake' | 'gone';
@@ -29,7 +31,7 @@ export function DoorCartouche(props: {
       <div class="door-paper" />
       <div class="door-cartouche">
         <div class="door-seal" aria-hidden="true"><ShieldIcon channelId={props.id} width={96} /></div>
-        <p class="door-eyebrow">Unfounded land</p>
+        <p class="door-eyebrow">{props.eyebrow ?? 'Unfounded land'}</p>
         <h1 class="door-name">{props.name}</h1>
         <p class="door-subtitle">{props.subtitle}</p>
         <div class="door-rule" aria-hidden="true"><span /><i>❦</i><span /></div>

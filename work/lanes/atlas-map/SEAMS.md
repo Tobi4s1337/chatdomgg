@@ -566,3 +566,22 @@ git apply work/lanes/atlas-map/gateway-visitor-address.integrator.patch   # own 
   (`git apply --check` clean; `atlas-owner/index.test.ts` and `public/` 138 tests pass, typecheck and lint clean), so
   it reaches `lane/integrator` with the launch merge; the `needs:` above is closed by that merge. The env lines for the
   hide flow are launch `SEAMS.md` `deploy: 6` (pointing at your steps 2–3).
+- 2 Nov (LA10, session 6): a cold start from `/map` to Willowmere's gate is 3 clicks and the login typed (search
+  field, the row, **Enter Willowmere**). Three seam fixes on that way:
+  - The search row of a channel the survey gives no land, but whose login is a kingdom the front door opens, said
+    "No land yet"; it now says "Founded · <name>", like its card (`ui/Search.tsx`, the door list read once by
+    `readOpenKingdoms` in `data/open-kingdoms.ts`).
+  - **Enter** on a founded kingdom (`/kingdom/<id>`) used to replace the page with `/stream?source=realm&kingdom=…`:
+    the streamer's broadcast source, "Stream resting" and no way to walk, sign in or go back. It now hands over to the
+    walk-in gate (`walkHref(id)`, `/?walk=1&kingdom=<id>`): signed in, the visitor walks straight in; signed out, the
+    gate says "Your place is waiting." with Sign in with Twitch (`apps/web/src/genesis/index.tsx`).
+  - The door's margin printed raw causes ("Reading the kingdom's adopted land returned HTTP 502 no content type;
+    expected JSON.", met on a passing realm 502). Only a worded refusal (a survey miss or withholding, now a
+    `DoorRefusal`) shows its own words; anything else reads "The road into this land could not be opened just now.
+    Try again in a moment." and goes to `console.warn` (`genesis/door-words.ts`, tested). A kingdom the front door
+    opens is named on its door ("Founded kingdom · Willowmere · tobi4s_'s kingdom") instead of "Unfounded land · A
+    holding"; `DoorCartouche` takes an optional `eyebrow` (default unchanged).
+  - `needs: atlas-map (AM15 part 3): on a cold /map nothing says where to go in 3 seconds.` The map shows other
+    streamers' capitals, none enterable; the search field is the only way to a kingdom and on a laptop it appears only
+    once the live paint settles (about 3 s after the ready flag under SwiftShader; to be timed on the 5080). A visible
+    founded kingdom (or a "Walk into Willowmere" way) on the cold map is the missing piece.

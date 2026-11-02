@@ -8,7 +8,7 @@ Boundaries: you are the one lane allowed to cross seams, because your job is tha
 
 ## Goals
 
-- [ ] **LA10 — A stranger can use chatdom.io end to end.**
+- [x] **LA10 — A stranger can use chatdom.io end to end.**
   Outcome: walk chatdom.io as a first-time visitor on Tobias's RTX 5080 (through pc-lease) and at phone width, and make every step work: the front door and its story; the Atlas, searching a channel and opening its card; "Enter the land" into tobi4s_'s kingdom on the grand land (buildings, homes, water, light); Twitch sign-in and coming back to the same place; walking, the HUD, minimap and lantern path; a wish at the Forge that becomes a piece; fishing at the pier and the Almanac; the tavern portal, a game, the campfire at night; the passport with raid stamps; the panel view at `/panel`; the stream view. For each break, fix it (small) or hand it over (big). Remove every developer trace a visitor could see: placeholder text, SIMULATED labels, test channels, stack traces, raw JSON errors, console errors on load. Every failure a visitor can hit gets a calm, worded state. Keep `noindex` until Tobias says launch.
   Quality bar: a person who has never heard of Chatdom gets from the front door to walking in a kingdom and doing one real thing without help, in under a minute, on a laptop and on a phone. Nothing on screen looks unfinished.
   Done when: a checklist in `work/lanes/launch/WALK.md` with every step above marked working, fixed (commit) or handed over (owner and needs line); stills of each step from the 5080 at 1440×900 and from a 390×844 viewport; zero console errors on the main path; the touched files' tests pass.
