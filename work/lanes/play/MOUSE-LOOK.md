@@ -1,5 +1,28 @@
 # Mouse look: the wild spin (2026-11-02)
 
+## Result, 21:40: the replay in real browsers
+
+The goal's real check is a recorded look sequence through the game's own input path, with the turn per count measured
+and nothing turning after the hand stops. `apps/web/src/walk/replay/` does that in a real browser: the walk controller,
+look.ts and the shoulder rig run at the browser's own frame rate, and every event arrives at its own time and is drawn
+on the next frame. The streams are Tobias's recorded Firefox X11 trace, 2 s echo streams with the lock begun at
+-978, 105, at 6, -3 and at -40, 0 from the centre, a steady 1000 Hz turn of 900 counts and a fast flick of 3,056
+counts.
+
+| Browser (headless) | Frames a second | Streams | Turn per count | Error | Turn after the hand stops (1.5 s) |
+|---|---|---|---|---|---|
+| Firefox 157 | 53 | 6 of 6 pass | 0.001000 rad (`LOOK.radiansPerPx`) | 0.00 counts on every stream | 0 rad on every stream |
+| Chrome 156 | 58 | 6 of 6 pass | 0.001000 rad | 0.00 counts on every stream | 0 rad on every stream |
+
+Evidence: `work/evidence/play/mouse/replay-firefox@1440x900.png`, `replay-chromium@1440x900.png`, and the numbers in
+`replay-firefox.json` and `replay-chromium.json`.
+
+Tobias's GPU was reserved for recording tonight, so the lease refused the run (`pc-lease` exit 75), and this is
+headless evidence (ROUND.md Pace). The same page runs on his Chrome through the lease with one command (walk
+README, "PL13 mouse look replay"). Neither run can show whether Firefox on his X11 desktop sends the stream the
+model expects at fast hand speeds near the centre. Only a minute in his own Firefox can show that ("Check on
+Tobias's machine" below).
+
 ## Update, 21:45: near the centre, and a false twin
 
 The 21:05 filter only learnt an echo bigger than 200 counts. Clicking in near the middle of the screen starts the
