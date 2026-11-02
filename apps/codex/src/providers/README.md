@@ -52,6 +52,19 @@ Result images are bounded inline PNGs written privately and attached directly to
 arbitrary filesystem paths or filesystem-tool access. Temporary evidence/state is removed after success,
 failure or cancellation. Time and combined process-output sizes are bounded; cancellation kills the process
 group. CLI diagnostics, account details and raw judge prose are never returned or persisted.
+Executable lookup checks absolute PATH directories in order, then the directory beside the running Node
+binary. That fallback prefixes only the child's PATH so the CLI's Node shebang can run; the parent's environment
+is unchanged. Missing executables remain a sanitized cold failure, with no shell lookup or automatic retry.
+
+`CodexDraftRun.onComplete` is an optional synchronous private accounting hook, called after scratch cleanup.
+It receives only model, effort, finite elapsed milliseconds, a finite outcome and optional numeric token counts
+explicitly reported by the CLI. Failed outcomes can include a finite failure category (configuration,
+authentication, model availability, transport, spawn, output budget or unknown); diagnostic text never enters it.
+Missing counts stay absent. Callback errors cannot change the model result.
+Recognized usage/rate-limit diagnostics kill the process group immediately and produce the sanitized typed
+`ForgeUsageLimitError` (`FORGE_USAGE_LIMIT`); raw diagnostic text is still discarded. Recognition covers the
+known CLI text forms, not every possible future upstream wording. Test drivers must stop submitting wishes
+when this outcome appears; the hook does not grant permission to retry an uncertain run.
 
 `/forge-data/status` reports `judgeBackend: codex-cli` and whether the existing Codex auth file is available.
 That configuration flag is not a successful authentication/health probe. The local-development endpoint still

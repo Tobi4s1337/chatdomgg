@@ -1,6 +1,7 @@
 {
   "extends": "../../../tsconfig.json",
   "include": [
+    "runtime/**/*.ts",
     "../../../apps/codex/src/**/*.ts",
     "../../../apps/realm/src/wiring/**/*.ts",
     "../../../apps/realm/src/evening/bridge.ts",
