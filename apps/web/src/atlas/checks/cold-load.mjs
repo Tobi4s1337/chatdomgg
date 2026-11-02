@@ -1,4 +1,4 @@
-/* global AbortSignal, performance, PerformanceObserver, MutationObserver, Response, WebGLRenderingContext, WebGL2RenderingContext */
+/* global AbortSignal, performance, PerformanceObserver, MutationObserver, Response, WebGLRenderingContext, WebGL2RenderingContext, HTMLCanvasElement, requestAnimationFrame, crypto, clearTimeout, Buffer */
 // Cold-load cost of the Atlas: every request in order, the milestones to the first coherent frame, the main thread's
 // long frames, and (once settled) the renderer's textures and draw calls. Each run is a new browser, so every cache is
 // cold. Run against an already running built preview and Atlas service of your own:
@@ -6,6 +6,10 @@
 // Env: COLD_RUNS (unthrottled runs per case, default 3), COLD_CASES (comma list of case ids), COLD_PROFILES
 // (comma list of none,broadband,phone), COLD_TRACE=0 to skip the traced run, COLD_RENDERER=0 to skip renderer cost.
 // SwiftShader on a shared host inflates CPU time; bytes, waterfalls and what waits on what are the evidence.
+// Real GPU: COLD_CDP=http://127.0.0.1:9333 drives Tobias's own Chrome through his tunnel instead (run it inside
+// `chatdom-pc-lease`, with the build on http://localhost:5192 and ATLAS_CHECK_URL pointing there). Each run is a new
+// browser context, so its cache is as cold as a new browser's; the capture lock and traces are not used, and only the
+// contexts this script made are closed (his Chrome stays open). The tunnel is a real long-distance link of its own.
 import { chromium } from '@playwright/test';
 import { writeFile, readFile, rm } from 'node:fs/promises';
 import { gzipSync, brotliCompressSync, constants as zlib } from 'node:zlib';
@@ -16,6 +20,7 @@ const label = process.argv[2] ?? 'before';
 const evidence = name => new URL(`../../../../../work/evidence/atlas-map/${name}`, import.meta.url).pathname;
 const GPU = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'];
 const RUNS = Number(process.env.COLD_RUNS ?? 3);
+const CDP = process.env.COLD_CDP ?? null;
 const READY_TIMEOUT = Number(process.env.COLD_READY_TIMEOUT_MS ?? 150_000);
 /** After the map is ready the page keeps being watched this long, to see what it fetches after the first view. */
 const TAIL_MS = Number(process.env.COLD_TAIL_MS ?? 4_000);
@@ -190,6 +195,13 @@ function glProbe() {
   };
 }
 
+/** Tobias's Chrome reports its own DevTools port; go through the tunnel's end instead. */
+async function connectGpu() {
+  const v = await (await fetch(`${CDP}/json/version`, { signal: AbortSignal.timeout(5_000) })).json();
+  return chromium.connectOverCDP(v.webSocketDebuggerUrl.replace(/^ws:\/\/[^/]+/, CDP.replace(/^http/, 'ws')));
+}
+let gpuBrowser = null;
+
 // ── One cold run ──────────────────────────────────────────────────────────────────────────────────────────────
 const groupOf = (url, type) => {
   const u = new URL(url);
@@ -216,14 +228,15 @@ const groupOf = (url, type) => {
 
 async function coldRun(caseDef, profileId, { trace = false, renderer = false, shot = null } = {}) {
   const profile = PROFILES[profileId];
-  const release = await acquireCaptureLock({ signal: AbortSignal.timeout(1_200_000) });
+  const release = CDP ? async () => undefined : await acquireCaptureLock({ signal: AbortSignal.timeout(1_200_000) });
   let browser;
+  let context;
   let watchdog;
   const run = { case: caseDef.id, profile: profileId, trace, renderer, errors: [], console: [] };
   const tracePath = `/tmp/am13-cold-trace-${caseDef.id}-${process.pid}.json`;
   try {
-    browser = await chromium.launch({ channel: 'chrome', headless: true, args: GPU });
-    const context = await browser.newContext({
+    browser = CDP ? (gpuBrowser ??= await connectGpu()) : await chromium.launch({ channel: 'chrome', headless: true, args: GPU });
+    context = await browser.newContext({
       viewport: { width: caseDef.width, height: caseDef.height }, isMobile: caseDef.mobile, hasTouch: caseDef.mobile,
       deviceScaleFactor: caseDef.mobile ? 2 : 1,
     });
@@ -264,10 +277,11 @@ async function coldRun(caseDef, profileId, { trace = false, renderer = false, sh
     const finish = req => { const p = pw.find(x => x.req === req); if (p) p.done = true; };
     context.on('requestfinished', finish);
     context.on('requestfailed', finish);
+    if (CDP) await page.bringToFront();
     if (trace) await browser.startTracing(page, { path: tracePath, categories: ['devtools.timeline', 'disabled-by-default-devtools.timeline', 'v8.execute', 'blink.user_timing', 'loading', 'toplevel', 'disabled-by-default-devtools.timeline.frame'] });
     const wall0 = Date.now();
     // The lock is held only while a browser runs, and never beyond four minutes: the watchdog closes the browser.
-    watchdog = setTimeout(() => { run.watchdog = true; log('watchdog: closing the browser'); void browser.close().catch(() => undefined); }, Number(process.env.COLD_WATCHDOG_MS ?? 240_000));
+    watchdog = setTimeout(() => { run.watchdog = true; log('watchdog: closing the browser'); void (CDP ? context : browser).close().catch(() => undefined); }, Number(process.env.COLD_WATCHDOG_MS ?? 240_000));
     log('goto', caseDef.id, profileId);
     await page.goto(`${base}${caseDef.path}`, { waitUntil: 'commit', timeout: 60_000 });
     let outcome = 'ready';
@@ -284,8 +298,12 @@ async function coldRun(caseDef, profileId, { trace = false, renderer = false, sh
     const probe = await page.evaluate(() => {
       const nav = performance.getEntriesByType('navigation')[0]?.toJSON();
       const resources = performance.getEntriesByType('resource').map(e => ({ url: e.name, initiatorType: e.initiatorType, start: e.startTime, requestStart: e.requestStart, responseStart: e.responseStart, end: e.responseEnd, transfer: e.transferSize, encoded: e.encodedBodySize, decoded: e.decodedBodySize }));
-      return { timeOrigin: performance.timeOrigin, nav, resources, cold: window.__cold, atlas: document.querySelector('.atlas')?.dataset ?? null, ready: document.querySelector('[data-chatdom-atlas]')?.dataset.atlasReady };
+      const gl = document.createElement('canvas').getContext('webgl2');
+      const info = gl?.getExtension('WEBGL_debug_renderer_info');
+      const gpu = gl ? (info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) : 'no WebGL';
+      return { timeOrigin: performance.timeOrigin, nav, resources, cold: window.__cold, gpu, atlas: document.querySelector('.atlas')?.dataset ?? null, ready: document.querySelector('[data-chatdom-atlas]')?.dataset.atlasReady };
     });
+    run.gpu = probe.gpu;
     run.atlasData = probe.atlas;
     run.final = probe.ready;
     // Align CDP's monotonic clock with the page's: the document request was sent at nav.fetchStart (or close to it).
@@ -339,7 +357,8 @@ async function coldRun(caseDef, profileId, { trace = false, renderer = false, sh
     run.failure = String(e?.stack ?? e);
   } finally {
     clearTimeout(watchdog);
-    await browser?.close().catch(() => undefined);
+    if (CDP) await context?.close().catch(() => undefined);
+    else await browser?.close().catch(() => undefined);
     await release();
     log('released');
   }
@@ -469,7 +488,7 @@ async function encodings(url) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────────────────────────────────────
-const report = { label, base, at: new Date().toISOString(), host: 'shared 12-core server under load, SwiftShader WebGL, no GPU', profiles: PROFILES, cases: CASES, runs: [] };
+const report = { label, base, at: new Date().toISOString(), host: CDP ? 'Tobias\'s own Chrome with a real GPU, the build served from the shared server through his SSH tunnel' : 'shared 12-core server under load, SwiftShader WebGL, no GPU', profiles: PROFILES, cases: CASES, runs: [] };
 const out = evidence(`am13-cold-load-${label}.json`);
 const save = () => writeFile(out, JSON.stringify(report, null, 1) + '\n');
 for (const c of CASES) {
@@ -511,3 +530,5 @@ if (sample) {
 }
 await save();
 console.log(`wrote ${out}`);
+// A CDP connection keeps the process alive; his Chrome itself is never closed.
+if (CDP) process.exit(0);

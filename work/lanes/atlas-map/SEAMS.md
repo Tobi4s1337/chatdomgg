@@ -314,6 +314,24 @@ branch's base; `git apply` it as its own commit, `feat(api): the Atlas owner's h
 `apps/api/src/atlas-owner/index.test.ts` and `public/routes.test.ts`). Until it lands, `/api/atlas/me` is a gateway
 404, the map reads that as anonymous and no card offers hiding; everything on the Atlas side is in this branch.
 
+**On the integrator (2 Nov, 18:45):** the integrator's gateway moved (raid-gate handlers after the dock, more routes),
+so `atlas-owner-api.patch` no longer applies there. `work/lanes/atlas-map/atlas-owner-api.integrator.patch` is the same
+change rebased on `lane/integrator` `ce219fd5` (`git apply --check` passes there and on `worktrees/public-next`; the
+patched `public/routes.test.ts` passes 23/23 on the integrator's route table; `dock/auth.ts`, `realm-auth/secrets.ts`
+and `realm-auth/config.ts`, which the new handler imports, are byte-identical on both branches). To make the hide flow
+real on chatdom.io, in this order:
+
+1. Integrator: `git apply work/lanes/atlas-map/atlas-owner-api.integrator.patch`, its own commit
+   (`feat(api): the Atlas owner's hide and show`); run `apps/api/src/atlas-owner/index.test.ts` and
+   `public/routes.test.ts`; rebuild the public gateway (`node scripts/public/build.mjs`).
+2. Atlas service (`atlas-live.sh serve`): `ATLAS_INGEST_PORT=5201` and `ATLAS_INGEST_TOKEN=<openssl rand -hex 32>`
+   in its env file (the deploy table's optional row).
+3. Public gateway (`ops/bin/public`): `ATLAS_PRIVATE_URL=http://127.0.0.1:5201` and the same
+   `ATLAS_INGEST_TOKEN`.
+4. Check: signed out, `curl https://chatdom.io/api/atlas/me` answers `{"version":1,"status":"anonymous"}` (not 404).
+   Then Tobias signs in with Twitch as tobi4s_ on chatdom.io/map, opens his card (search `tobi4s_`) and the line
+   "Your channel · Hide my channel" is under its actions; atlas-map takes the hide-flow stills from there.
+
 - **`apps/api/src/atlas-owner/index.ts`** (new): `GET /api/atlas/me[?preview=<map id>]`, `POST /api/atlas/me/hide`,
   `POST /api/atlas/me/show`. The channel is always the session's own person (`dockPrincipal`: a signed-in Twitch user
   is the broadcaster of exactly one channel), never anything the browser sends. Mutations need the page's exact

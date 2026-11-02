@@ -2,6 +2,7 @@ import type { AtlasGateEvent, AtlasGateHost, AtlasTravelStage, GateLand } from '
 import type { AtlasChannel } from '@chatdom/shared';
 import type { AtlasRaid, KingdomId } from '../../../api/src/raid-gate/contracts';
 import { preloadFaces } from './fonts';
+import { headStart, type HeadStart } from './head-start';
 
 export type AtlasMode = 'hero' | 'explore' | 'gate';
 export type AtlasTarget = { login: string } | { channelId: string };
@@ -132,8 +133,9 @@ export function gateBridge(scene: () => AtlasScene | null, loaded: Promise<unkno
 }
 
 export function mountAtlas(el: HTMLElement, options: AtlasMountOptions): AtlasHandle {
-  // The lettering's faces travel beside the scene's code, not after it.
+  // The lettering's faces, the pointer, the world and the still's bakers travel beside the scene's code, not after it.
   preloadFaces();
+  const head: HeadStart | null = options.signal?.aborted ? null : headStart(options.base ?? '/map-data');
   let mode = options.mode;
   let scene: AtlasScene | null = null;
   let disposed = false;
@@ -150,6 +152,7 @@ export function mountAtlas(el: HTMLElement, options: AtlasMountOptions): AtlasHa
     if (disposed) return;
     disposed = true;
     controller.abort();
+    head?.done();
     options.signal?.removeEventListener('abort', dispose);
     scene?.dispose();
     scene = null;
@@ -165,8 +168,9 @@ export function mountAtlas(el: HTMLElement, options: AtlasMountOptions): AtlasHa
       if (disposed) return;
       root.dataset.atlasReady = state;
       resolveReady(state);
-    }, event => emitGate(event));
+    }, event => emitGate(event), head);
   }).catch(() => {
+    head?.done();
     if (disposed) return;
     root.dataset.atlasReady = 'failed';
     root.textContent = 'The map room is closed. Try again in a moment.';
