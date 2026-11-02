@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { Camera, type Box, type Viewport } from './camera';
 import { Gestures, INERTIA, isNotched, releaseVelocity, WHEEL, type GestureHost } from './gestures';

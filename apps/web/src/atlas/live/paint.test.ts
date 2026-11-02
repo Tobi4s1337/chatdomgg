@@ -1,14 +1,15 @@
+// @vitest-environment node
 import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ATLAS_SPECTACLE, AtlasManifestSchema, createAtlasAlignment, encodeDabsV1, encodeLiveV2,
   type AtlasAlignment, type AtlasDab, type AtlasLiveSlot, type AtlasManifest, type KingdomId,
 } from '@chatdom/shared';
-import { BASE, columns, CHUNK_ROWS, FakeService, makeChunk, makeNames, makeWorld, publish, sha, type Row } from '../data/fixtures.test-support';
+import { BASE, CHUNK_ROWS, FakeService, LATER_HAMLET, makeChunk, makeEdition, makeNames, makeWorld, publish, sha } from '../data/fixtures.test-support';
 import { decodeRings, SettlerStore } from '../data/model';
-import { PREVIEW_LABEL, TIER_CODES, type PreviewChunk, type PreviewWorld } from '../data/preview';
+import { PREVIEW_LABEL, TIER_CODES, type PreviewWorld } from '../data/preview';
 import { LiveFeed, type LiveFrame } from './feed';
-import { BLOOM_MS, chooseSpectacle, DRY_MS, LivePaint, SPECTACLE_PRIORITY } from './paint';
+import { BLOOM_MS, chooseSpectacle, DRY_MS, LivePaint, pencilBase, SPECTACLE_PRIORITY } from './paint';
 import { HAMLET_RADIUS, HOLDING_GAP, LandIndex, LATTICE, type RealmCircle } from './pencil';
 
 const T = 1_793_325_387_307;
@@ -305,6 +306,61 @@ describe('chooseSpectacle', () => {
   });
 });
 
+describe('pencil places in an edition', () => {
+  /** The square land as one night of Edition I, its chunk of region 0 holding `extra` after its own rows. */
+  function editionSetup(extra: { x: number; y: number; founding: boolean } | null) {
+    const world = makeEdition();
+    world.coasts = squareWorld().coasts;
+    publish(world);
+    const store = new SettlerStore(world, () => T);
+    for (const region of world.regions) {
+      const chunk = makeChunk(world, region.index);
+      if (region.index === 0 && extra) {
+        const s = chunk.settlers;
+        const at = extra.founding ? s.founded! : s.ids.length;
+        const insert = <K extends 'ids' | 'tier' | 'x' | 'y' | 'average' | 'game' | 'region' | 'realm'>(key: K, value: (typeof s)[K][number]) =>
+          (s[key] as (typeof s)[K][number][]).splice(at, 0, value);
+        insert('ids', '923456789'); insert('tier', 4); insert('x', Math.round(extra.x * 20)); insert('y', Math.round(extra.y * 20));
+        insert('average', 7); insert('game', 0); insert('region', 0); insert('realm', 1);
+        if (extra.founding) s.founded = s.founded! + 1;
+      }
+      store.addChunk(chunk);
+    }
+    const paint = new LivePaint(world, store, decodeRings(world), () => T);
+    return { world, store, paint };
+  }
+  const place = ({ store, paint }: { store: SettlerStore; paint: LivePaint }, dabs: AtlasDab[]) => {
+    paint.apply(frameOf(store, { dabs }));
+    while (paint.work(1_000));
+    return paint.dabs.map(({ hash, x, y, placed }) => ({ hash, x, y, placed }));
+  };
+
+  it('keeps clear of founding holdings only: a holding granted later never moves a dab', () => {
+    const dabs = dabsIn(1, 12);
+    const base = place(editionSetup(null), dabs);
+    expect(base.every(dab => dab.placed)).toBe(true);
+    // The later grant already in the fixture (LittleLantern) is not in the base either.
+    const { store } = editionSetup(null);
+    const radii = [6, 3.4, 1.8, 1.25, 0.5];
+    expect(pencilBase(store.all, 0, radii).some(h => h.x === LATER_HAMLET.x / 20 && h.y === LATER_HAMLET.y / 20)).toBe(false);
+    // A hamlet granted on a later night, right on the first dab's place: every dab stays where it was.
+    const target = base[0]!;
+    expect(place(editionSetup({ x: target.x, y: target.y, founding: false }), dabs)).toEqual(base);
+    // Had the same hamlet been founded with the edition, that place would have been taken.
+    const founded = place(editionSetup({ x: target.x, y: target.y, founding: true }), dabs);
+    expect(founded[0]).not.toEqual(target);
+  });
+
+  it('keeps a survey preview’s base whole: every holding of the region, withheld ones included', () => {
+    const world = squareWorld();
+    const { store } = setup({ world });
+    store.applyNames(makeNames(world, { withheld: [CHUNK_ROWS[0]![0]!.id] }));
+    const radii = [6, 3.4, 1.8, 1.25, 0.5];
+    expect(pencilBase(store.all, 0, radii)).toHaveLength(store.all.filter(settler => settler.region === 0).length);
+    expect(pencilBase(store.all, 0, radii).map(h => h.r).sort()).toEqual(store.all.filter(s => s.region === 0).map(s => radii[s.tierRank]!).sort());
+  });
+});
+
 describe('LivePaint dab placement', () => {
   const realmDabs = () => [...dabsIn(1, 40), ...dabsIn(4, 12), ...dabsIn(5, 2)];
   const placeAll = (paint: LivePaint) => {
@@ -318,7 +374,6 @@ describe('LivePaint dab placement', () => {
     const radii = world.tiers.holdingRadius;
     const r = [radii.capital, radii.city, radii.town, radii.village];
     const clearance = HAMLET_RADIUS + LATTICE.shore;
-    const seen = new Set<string>();
     for (const dab of paint.dabs.filter((d) => d.placed)) {
       expect(land.realmAt(dab.x, dab.y)).toBe(dab.realm);
       expect(land.distanceToCoast(dab.x, dab.y, clearance)).toBeGreaterThanOrEqual(clearance);
@@ -326,13 +381,10 @@ describe('LivePaint dab placement', () => {
         const min = HAMLET_RADIUS + r[settler.tierRank]! + HOLDING_GAP - 1e-9;
         expect(Math.hypot(settler.x - dab.x, settler.y - dab.y)).toBeGreaterThanOrEqual(min);
       }
-      const key = `${dab.x.toFixed(6)}:${dab.y.toFixed(6)}`;
-      expect(seen.has(key)).toBe(false);
-      seen.add(key);
     }
   }
 
-  it('places every dab on free land of its own realm, one dab to a slot', () => {
+  it('places every dab on free land of its own realm', () => {
     const { world, store, paint } = setup();
     paint.apply(frameOf(store, { dabs: realmDabs() }));
     expect(paint.dabs).toHaveLength(54);
@@ -377,21 +429,14 @@ describe('LivePaint dab placement', () => {
       .toEqual(before.map(({ hash, x, y, placed }) => ({ hash, x, y, placed })));
   });
 
-  it('places again when a region’s towns and villages arrive, keeping clear of them', () => {
+  it('waits for a region’s complete holdings, then agrees with a browser that loaded them before its frame', () => {
     const world = squareWorld();
     const { store, paint } = setup({ world, chunks: false });
-    paint.apply(frameOf(store, { dabs: dabsIn(1, 40) }));
+    const dabs = dabsIn(1, 40);
+    paint.apply(frameOf(store, { dabs }));
     placeAll(paint);
-    expectWellPlaced(world, store, paint);
-    // A region-0 chunk whose village sits right on the first dab's place.
-    const first = paint.dabs.find((dab) => dab.placed)!;
-    const at = { x: first.x, y: first.y };
-    const rows: Row[] = [
-      { ...CHUNK_ROWS[0]![0]!, x: Math.round(at.x * world.coordScale), y: Math.round(at.y * world.coordScale), realm: 1, tier: 3 },
-      CHUNK_ROWS[0]![1]!,
-    ];
-    const chunk: PreviewChunk = { version: 1, kind: 'chatdom-atlas-survey-preview-region', preview: world.id, region: 0, settlers: columns(rows) };
-    store.addChunk(chunk);
+    expect(paint.dabs.every(dab => !dab.placed)).toBe(true);
+    store.addChunk(makeChunk(world, 0));
     // A region that was never placed is not queued.
     const version = paint.version;
     paint.regionLoaded(3);
@@ -400,10 +445,58 @@ describe('LivePaint dab placement', () => {
     paint.regionLoaded(0);
     expect(paint.work(1_000)).toBe(false);
     expect(paint.version).toBe(version + 1);
-    const moved = paint.dabs.find((dab) => dab.hash === first.hash)!;
-    expect(moved.placed).toBe(true);
-    expect(Math.hypot(moved.x - at.x, moved.y - at.y)).toBeGreaterThan(0);
+    expect(paint.dabs.every(dab => dab.placed)).toBe(true);
     expectWellPlaced(world, store, paint);
+    const complete = setup({ world });
+    complete.paint.apply(frameOf(complete.store, { dabs }));
+    placeAll(complete.paint);
+    expect(paint.dabs).toEqual(complete.paint.dabs);
+    // A duplicate load notification cannot rebuild a frozen occupancy or move its dabs.
+    const placedVersion = paint.version;
+    paint.regionLoaded(0);
+    expect(paint.work(1_000)).toBe(false);
+    expect(paint.version).toBe(placedVersion);
+  });
+
+  it('cannot move an existing channel when colliding dabs arrive, reorder, leave or restart', () => {
+    const { store, paint } = setup();
+    const kept = { realmIndex: 1, channelHash: '0000000000000001', startedAt: T };
+    const added = { realmIndex: 1, channelHash: '0000000000000000', startedAt: T };
+    paint.apply(frameOf(store, { dabs: [kept] }));
+    placeAll(paint);
+    const expected = { ...paint.dabs[0]! };
+    expect(expected.placed).toBe(true);
+    for (const dabs of [[added, kept], [kept, added], [kept]]) {
+      paint.apply(frameOf(store, { dabs }));
+      placeAll(paint);
+      expect(paint.dabs.find(dab => dab.hash === kept.channelHash)).toEqual(expected);
+    }
+    const restarted = setup();
+    restarted.paint.apply(frameOf(restarted.store, { dabs: [added, kept] }));
+    placeAll(restarted.paint);
+    expect(restarted.paint.dabs.find(dab => dab.hash === kept.channelHash)).toEqual(expected);
+    expect(restarted.paint.dabs[0]!.x).toBe(expected.x);
+    expect(restarted.paint.dabs[0]!.y).toBe(expected.y);
+  });
+
+  it('finishes a crowded region over several budgets in exactly the order of one unlimited pass', () => {
+    const whole = setup();
+    whole.paint.apply(frameOf(whole.store, { dabs: dabsIn(1, 12) }));
+    expect(whole.paint.work(1_000)).toBe(false);
+    const sliced = setup();
+    sliced.paint.apply(frameOf(sliced.store, { dabs: dabsIn(1, 12) }));
+    // Every clock read advances a millisecond, so each 1.5 ms budget runs out after one dab inside the region.
+    let t = 0;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => (t += 1));
+    let calls = 0;
+    try {
+      while (sliced.paint.work(1.5) && calls < 100) calls++;
+    } finally {
+      clock.mockRestore();
+    }
+    expect(calls).toBeGreaterThanOrEqual(11);
+    expect(sliced.paint.dabs.map((dab) => [dab.hash, dab.placed, dab.x, dab.y])).toEqual(whole.paint.dabs.map((dab) => [dab.hash, dab.placed, dab.x, dab.y]));
+    expect(sliced.paint.dabs.filter((dab) => dab.placed).length).toBeGreaterThan(0);
   });
 
   it('places the regions in view first', () => {

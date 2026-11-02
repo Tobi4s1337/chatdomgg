@@ -178,7 +178,7 @@ describe('the camera stays out of solids', () => {
   it('approaches a wall in first person without the near plane entering it', () => {
     for (const { width, height } of SIZES) for (const heading of [Math.PI, Math.PI * .75, Math.PI * 1.2]) for (const pitch of [-.5, 0, .9]) {
       const { camera, rig, aspect } = rigAt(width, height, heading);
-      rig.zoom(-5000);
+      rig.setPerson('first', { instant: true });
       rig.orbit(0, (pitch - SHOULDER.pitch) / SHOULDER.orbitPitch * height, height);
       // A wall at z = -1; the body stops with its face touching it.
       const wall = box([-5, 0, -2], [5, 4, -1]);

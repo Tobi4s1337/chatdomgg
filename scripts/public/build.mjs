@@ -1,10 +1,10 @@
-// The one production build for chatdom.io: the realm, the web app with its front door, the public server bundle,
+// The one production build for chatdom.io: the realm, the web app with its site pages, the public server bundle,
 // precompressed static files, and the Twitch panel's extension zip (checked against Twitch's rules).
 //
 //   node scripts/public/build.mjs            # everything
 //   node scripts/public/build.mjs --no-panel # skip the extension zip
 //
-// Outputs: apps/realm/dist/realm.mjs, apps/web/dist/ (with door/ and .br/.gz siblings), apps/api/dist/public.mjs,
+// Outputs: apps/realm/dist/realm.mjs, apps/web/dist/ (with site/ and .br/.gz siblings), apps/api/dist/public.mjs,
 // deploy/public/dist/chatdom-panel-<version>.zip.
 import { execFileSync } from 'node:child_process';
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
@@ -21,7 +21,7 @@ const started = Date.now();
 
 run(['--filter', '@chatdom/realm', 'build']);
 run(['--filter', '@chatdom/web', 'build']);
-run(['exec', 'vite', 'build', '--config', 'src/kingdom-entry/door/vite.config.mjs'], join(root, 'apps/web'));
+run(['exec', 'vite', 'build', '--config', 'src/site/vite.config.mjs'], join(root, 'apps/web'));
 run(['exec', 'vite', 'build', '--config', 'src/public/vite.config.mjs'], join(root, 'apps/api'));
 
 // Text assets ship with brotli and gzip siblings; the public server picks one per request (never on the fly).

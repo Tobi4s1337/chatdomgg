@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classify, isRealmSocket } from './routes';
+import { asksForStagedData, classify, isRealmSocket } from './routes';
 
 /** Classifies a URL the way the public server does: through WHATWG URL parsing first. */
 const at = (path: string) => {
@@ -83,6 +83,16 @@ describe('the public origin route table', () => {
     expect(classify('/map/road/tobi4s_/mashad4', '')).toEqual({ kind: 'page' });
   });
 
+  it('publishes the road ledger and the gate finder, and nothing beside them', () => {
+    const preview = 'pv-20261101T120000Z-aaaaaaaaaaaa';
+    for (const path of [`roads/${preview}/channel/123`, `roads/${preview}/road/123/456`, `roads/${preview}/road/login/tobi4s_/mashad4`,
+      `roads/${preview}/busiest`, `gate/${preview}/finder`]) expect(classify(`/map-data/v1/${path}`, '?from=123&q=willow')).toEqual({ kind: 'optional', service: 'map' });
+    for (const path of [`roads/${preview}/channel/0`, `roads/${preview}/channel/123/private`, `roads/${preview}/road/123`, `roads/${preview}`,
+      `roads/pv-x/busiest`, `gate/${preview}`, `gate/${preview}/finder/private`, 'roads/observe', `roads/${preview}/observe`])
+      expect(classify(`/map-data/v1/${path}`, '')).toEqual({ kind: 'not-found', api: true });
+    expect(classify('/v1/roads/observe', '')).not.toEqual({ kind: 'optional', service: 'map' });
+  });
+
   it('refuses nested service doors and any encoded path before it can reach an upstream decoder', () => {
     for (const prefix of ['/live-realm-data', '/presence-data', '/forge-data', '/map-data']) {
       for (const suffix of ['', '/', '/internal', '/internal/realm/ingress', '/internal/realm/herald',
@@ -117,11 +127,33 @@ describe('the public origin route table', () => {
     }
   });
 
-  it('shows the front door at the bare origin, also when a sign-in outcome returns there', () => {
-    expect(classify('/', '')).toEqual({ kind: 'door' });
-    expect(classify('/', '?')).toEqual({ kind: 'door' });
-    expect(classify('/', '?signin=ok')).toEqual({ kind: 'door' });
-    expect(classify('/', '?signin=denied&signin=again')).toEqual({ kind: 'door' });
+  it('shows the story page at the bare origin, also when a sign-in outcome returns there', () => {
+    for (const search of ['', '?', '?signin=ok', '?signin=denied&signin=again']) expect(classify('/', search), search).toEqual({ kind: 'site', page: 'index' });
+  });
+
+  it('serves the site pages at their own addresses, and only there', () => {
+    expect(classify('/how-it-works', '')).toEqual({ kind: 'site', page: 'how-it-works' });
+    expect(classify('/imprint', '')).toEqual({ kind: 'site', page: 'imprint' });
+    expect(classify('/privacy', '?signin=ok')).toEqual({ kind: 'site', page: 'privacy' });
+    expect(classify('/terms', '')).toEqual({ kind: 'site', page: 'terms' });
+    for (const path of ['/imprint/', '/Privacy', '/terms.html', '/site/index.html', '/how-it-works/x']) expect(classify(path, ''), path).toEqual({ kind: 'file' });
+  });
+
+  it('answers robots.txt and the sitemap itself', () => {
+    expect(classify('/robots.txt', '')).toEqual({ kind: 'robots' });
+    expect(classify('/sitemap.xml', '')).toEqual({ kind: 'sitemap' });
+  });
+
+  it('sends the retired showcase to the front page for good', () => {
+    expect(classify('/showcase', '')).toEqual({ kind: 'redirect', location: '/' });
+    expect(classify('/showcase', '?source=simulated')).toEqual({ kind: 'redirect', location: '/' });
+  });
+
+  it('never opens a page on staged data: any fixture or simulated source is a 404', () => {
+    for (const search of ['?source=simulated', '?source=SIMULATED', '?fixture=wren', '?fixtures=1', '?simulated=1', '?source=fixture', '?mode=page&fixture=wren&light=dusk']) {
+      for (const path of ['/', '/stream', '/panel', '/map', '/kingdom/1001', '/privacy']) expect(classify(path, search), `${path}${search}`).toEqual({ kind: 'staged' });
+    }
+    for (const search of ['?source=realm&kingdom=1001', '?source=live', '?walk=1&kingdom=1001', '?signin=ok']) expect(asksForStagedData(search), search).toBe(false);
   });
 
   it('opens the app itself when the bare origin carries any other query', () => {
@@ -131,10 +163,10 @@ describe('the public origin route table', () => {
   });
 
   it('serves the listed product pages and nothing that merely looks like one', () => {
-    for (const path of ['/showcase', '/stream', '/panel', '/map', '/map/tobi4s_', '/kingdom/1001', '/-/avatar-builder', '/dock', '/dock/', '/-/citizen-card']) {
+    for (const path of ['/stream', '/panel', '/map', '/map/tobi4s_', '/kingdom/1001', '/-/avatar-builder', '/dock', '/dock/']) {
       expect(classify(path, ''), path).toEqual({ kind: 'page' });
     }
-    for (const path of ['/showcase/', '/map/Tobi4s', '/map/a-b', '/map/abcdefghijklmnopqrstuvwxyz', '/kingdom/0', '/kingdom/01', '/kingdom/abc', '/kingdom/1001/x', '/bench', '/-/other', '/dock/bench', '/-/citizen-card/bench']) {
+    for (const path of ['/showcase/', '/map/Tobi4s', '/map/a-b', '/map/abcdefghijklmnopqrstuvwxyz', '/kingdom/0', '/kingdom/01', '/kingdom/abc', '/kingdom/1001/x', '/bench', '/-/other', '/dock/bench', '/-/citizen-card', '/-/citizen-card/bench']) {
       expect(classify(path, ''), path).toEqual({ kind: 'file' });
     }
   });
@@ -150,7 +182,7 @@ describe('the public origin route table', () => {
 
   it('leaves everything else to the built files', () => {
     expect(classify('/assets/index-AbCdEf12.js', '')).toEqual({ kind: 'file' });
-    expect(classify('/door/assets/door-AbCdEf12.css', '')).toEqual({ kind: 'file' });
+    expect(classify('/site/assets/site-AbCdEf12.css', '')).toEqual({ kind: 'file' });
     expect(classify('/favicon.ico', '')).toEqual({ kind: 'file' });
   });
 

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { FakeService, ID_A, ID_B, makeWorld, MemoryStorage, publish, REV_B, type Published } from './fixtures.test-support';
 import { adoptPreview, loadPreview, PIN_KEY } from './load';

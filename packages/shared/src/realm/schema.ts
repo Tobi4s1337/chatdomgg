@@ -16,6 +16,8 @@ export const WalkerSchema = schema({
   placement: t.uint32().default(0),
   // Append-only wire field: authority's public street link, never an owner ID or editing right.
   homeSlot: t.uint16().default(REALM_NO_HOME_SLOT),
+  // Append-only visual lease; bounded strict JSON via raid-show's codec, empty means no insignia.
+  raidGuest: t.string().default(''),
 }, 'ChatdomWalkerV1');
 export type WalkerSchema = SchemaType<typeof WalkerSchema>;
 

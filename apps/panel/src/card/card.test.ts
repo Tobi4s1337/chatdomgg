@@ -29,7 +29,6 @@ describe('the citizen card in the panel', () => {
     expect(again?.passport).toBe(first?.passport);
 
     if (first?.passport.kind !== 'readable') throw new Error('no passport');
-    expect(first.passport.simulated).toBe(true);
     const session = createPassportSession(first.passport.transport);
     const done = settled(session);
     session.open();

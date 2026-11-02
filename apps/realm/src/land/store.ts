@@ -117,6 +117,19 @@ export class LandArtifactStore {
     return bytes;
   }
 
+  /** Size-only presence of an immutable blob, for artifacts already fully verified when they were catalogued. */
+  async present(ref: StoredLandBlob): Promise<boolean> {
+    reference(ref);
+    try { return (await stat(join(this.directory, 'blobs', `${ref.hash}.gz`))).size === ref.gzipBytes; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
+  }
+
+  /** The pinned recipe hash, or null while this kingdom has never been baked into this store. */
+  async pinnedRecipeHash(kingdomId: string): Promise<string | null> {
+    try { return await this.recipeHash(kingdomId); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
+  }
+
   async read(ref: StoredLandBlob): Promise<Uint8Array> {
     const bytes = await decompress(await this.compressed(ref), { maxOutputLength: ref.rawBytes });
     if (bytes.byteLength !== ref.rawBytes || hash(bytes) !== ref.hash) throw new Error('Stored land content does not match its manifest');

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TokenSchema } from './identity';
+import { FORGE_WISH_WORDS_MAX } from './forge-words';
 import { Cell3Schema, StyleIdSchema, VoxelBlueprintSchema } from './voxel';
 
 /** The spell chooses a registered construction; it cannot supply voxels, code, identity or approval. */
@@ -19,7 +20,7 @@ export type ForgeDraft=z.infer<typeof ForgeDraftSchema>;
 export const ForgeHostProfileSchema=z.enum(['street-home','castle-keep']);
 export type ForgeHostProfile=z.infer<typeof ForgeHostProfileSchema>;
 /** Local development citizens remain simulated even when the spell and judges are real. */
-export const ForgeRunRequestSchema=z.strictObject({words:z.string().trim().min(1).max(240),family:z.enum(['hearth','tide','grove']),home:VoxelBlueprintSchema,hostProfile:ForgeHostProfileSchema.optional()}).superRefine(({home,hostProfile},ctx)=>{
+export const ForgeRunRequestSchema=z.strictObject({words:z.string().trim().min(1).max(FORGE_WISH_WORDS_MAX),family:z.enum(['hearth','tide','grove']),home:VoxelBlueprintSchema,hostProfile:ForgeHostProfileSchema.optional()}).superRefine(({home,hostProfile},ctx)=>{
   const castle=hostProfile==='castle-keep';
   if(home.lattice!=='build'||(castle?home.kind!=='civic'||home.size.some(n=>n>256):home.size[0]>64||home.size[1]>160||home.size[2]>128)||home.boxes.length>6000)ctx.addIssue({code:'custom',message:'A Forge run needs one bounded owned host.'});
   if(home.boxes.reduce((sum,b)=>sum+b.to.reduce((volume,n,i)=>volume*(n-b.from[i]!),1),0)>32*1024*1024)ctx.addIssue({code:'custom',message:'This home needs a simpler Forge survey.'});

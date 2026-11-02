@@ -3,8 +3,9 @@ import * as THREE from 'three';
 import { WALK_BUTTON, type CollisionWorld, type PlayerState, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
 import type { RealmWalkerPose } from '../realm/client';
 import { createWalkController, type WalkRealm } from './index';
+import { createPlaySettings } from '../play/settings';
 
-const hudInput = vi.hoisted(() => ({ jump: undefined as (() => void) | undefined, look: undefined as ((event: MouseEvent) => void) | undefined }));
+const hudInput = vi.hoisted(() => ({ jump: undefined as (() => void) | undefined }));
 const gestureUi = vi.hoisted(() => ({ state: undefined as import('./gestures').GestureState | undefined }));
 vi.mock('./gestures', async importOriginal => ({
   ...await importOriginal<typeof import('./gestures')>(),
@@ -15,9 +16,9 @@ vi.mock('./gestures', async importOriginal => ({
 }));
 vi.mock('./input/hud', async importOriginal => ({
   ...await importOriginal<typeof import('./input/hud')>(),
-  createWalkHud: (_container: HTMLElement, jump: () => void, look: (event: MouseEvent) => void) => {
-    hudInput.jump = jump; hudInput.look = look;
-    return { update() {}, dispose() { hudInput.jump = undefined; hudInput.look = undefined; } };
+  createWalkHud: (_container: HTMLElement, jump: () => void) => {
+    hudInput.jump = jump;
+    return { update() {}, dispose() { hudInput.jump = undefined; } };
   },
 }));
 
@@ -50,7 +51,7 @@ function realm(at: { x: number; y: number; z: number; yaw: number }) {
 function key(target: EventTarget, type: 'keydown' | 'keyup', code: string, repeat = false) {
   target.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), { code, repeat, ctrlKey: false, metaKey: false, altKey: false }));
 }
-function setup(width = 1440, height = 900, heading?: number, collisionOrHud?: CollisionWorld | (() => CollisionWorld | null) | boolean, gestures?: import('./index').WalkControllerOptions['gestures']) {
+function setup(width = 1440, height = 900, heading?: number, collisionOrHud?: CollisionWorld | (() => CollisionWorld | null) | boolean, gestures?: import('./index').WalkControllerOptions['gestures'], settings?: import('../play/slots').PlaySettingsReader) {
   const withHud = collisionOrHud === true;
   const collision = typeof collisionOrHud === 'boolean' ? undefined : collisionOrHud;
   const keyboard = new EventTarget(), page = Object.assign(new EventTarget(), { hidden: false });
@@ -66,11 +67,13 @@ function setup(width = 1440, height = 900, heading?: number, collisionOrHud?: Co
   const camera = new THREE.PerspectiveCamera(52, width / height, .15, 2200);
   const world = realm({ x: 2, y: 0, z: 9, yaw: 128 });
   const clock = { now: 0 };
-  const controller = createWalkController({ camera, surface, realm: world.fake, keyboard, page, lockDocument, coarse: false, clock: () => clock.now, ...(heading === undefined ? {} : { heading }), ...(collision ? { collision } : {}), ...(withHud ? { hud: {} as HTMLElement } : {}), ...(gestures ? { gestures } : {}) });
+  const controller = createWalkController({ camera, surface, realm: world.fake, keyboard, page, lockDocument, coarse: false, clock: () => clock.now, ...(heading === undefined ? {} : { heading }), ...(collision ? { collision } : {}), ...(withHud ? { hud: {} as HTMLElement } : {}), ...(gestures ? { gestures } : {}), ...(settings ? { settings } : {}), keyboardLock: null });
+  /** A trusted press into the world (scripted events are never trusted, so tests call the capture directly). */
+  const capture = () => controller.cursor.capture({ isTrusted: true, type: 'pointerdown', button: 0 });
   const touch = (type: string, id: number, x: number, y: number) =>
     surface.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), { pointerId: id, pointerType: 'touch', isPrimary: id === 1, button: 0, buttons: 1, clientX: x, clientY: y }));
   const mouse = (movementX: number, movementY: number) => lockDocument.dispatchEvent(Object.assign(new Event('mousemove'), { movementX, movementY }));
-  return { keyboard, page, surface, camera, controller, lockDocument, touch, mouse, clock, ...world };
+  return { keyboard, page, surface, camera, controller, lockDocument, touch, mouse, clock, capture, ...world };
 }
 
 describe('the walk controller', () => {
@@ -209,19 +212,101 @@ describe('the walk controller', () => {
   });
 
   it('hands a first-person walker back to another camera whole, and takes first person back at once', () => {
-    const { controller, surface } = setup();
+    const settings = createPlaySettings(null);
+    const { controller } = setup(1440, 900, undefined, undefined, undefined, settings);
     controller.frame(0);
-    for (let n = 1; n <= 120; n++) {
-      surface.dispatchEvent(Object.assign(new Event('wheel', { cancelable: true }), { deltaY: -240, deltaMode: 0 }));
-      controller.frame(n * 16);
-    }
-    expect([controller.debug.camera.distance, controller.selfOpacity]).toEqual([0, 0]);
+    settings.set({ view: 'first' });
+    for (let n = 1; n <= 60; n++) controller.frame(n * 16);
+    expect([controller.debug.camera.distance, controller.selfOpacity, controller.debug.person]).toEqual([0, 0, 'first']);
     // The director or the Forge looks at the citizen: it must be drawn.
     controller.release();
     expect(controller.selfOpacity).toBe(1);
     controller.resume();
     controller.frame(2000);
     expect([controller.debug.camera.distance, controller.selfOpacity]).toEqual([0, 0]);
+  });
+
+  it('applies sensitivity, invert and field of view live from the ledger’s settings', () => {
+    const settings = createPlaySettings(null);
+    const { controller, mouse, capture, camera } = setup(1440, 900, undefined, true, undefined, settings);
+    controller.frame(0);
+    capture();
+    const fov = camera.fov, start = { ...controller.debug.camera };
+    settings.set({ sensitivity: 2, invertY: true, fov: 90 });
+    mouse(50, 20);
+    controller.frame(16);
+    expect(start.yaw - controller.debug.camera.yaw).toBeCloseTo(50 * .0024 * 2, 9);
+    // Inverted: moving the mouse down looks up.
+    expect(controller.debug.camera.pitch).toBeLessThan(start.pitch);
+    expect(camera.fov).toBeGreaterThan(fov);
+  });
+
+  it('walks on the keys the person bound, and the arrows always walk too', () => {
+    const settings = createPlaySettings(null);
+    const { controller, keyboard, sent } = setup(1440, 900, 0, undefined, undefined, settings);
+    settings.bind('forward', 'KeyI');
+    controller.frame(0);
+    key(keyboard, 'keydown', 'KeyW');
+    controller.frame(16);
+    expect(sent.at(-1)).toMatchObject({ moveX: 0, moveZ: 0 });
+    key(keyboard, 'keyup', 'KeyW'); key(keyboard, 'keydown', 'KeyI');
+    controller.frame(32);
+    expect(sent.at(-1)!.moveZ).not.toBe(0);
+    key(keyboard, 'keyup', 'KeyI'); key(keyboard, 'keydown', 'ArrowUp');
+    controller.frame(48);
+    expect(sent.at(-1)!.moveZ).not.toBe(0);
+  });
+
+  it('holds input under a page without moving the camera off the citizen', () => {
+    const { controller, keyboard, sent } = setup(1440, 900, 0);
+    controller.frame(0);
+    key(keyboard, 'keydown', 'KeyW');
+    controller.hold(true);
+    controller.frame(16);
+    expect(sent.at(-1)).toMatchObject({ moveX: 0, moveZ: 0, buttons: 0 });
+    expect([controller.owner, controller.held, controller.debug.ready]).toEqual(['walking', true, true]);
+    key(keyboard, 'keydown', 'KeyW');
+    controller.frame(32);
+    expect(sent.at(-1)).toMatchObject({ moveX: 0, moveZ: 0 });
+    controller.hold(false);
+    key(keyboard, 'keydown', 'KeyW');
+    controller.frame(48);
+    expect(sent.at(-1)!.moveZ).not.toBe(0);
+  });
+
+  it('lends the captured mouse to a seated game while held, and drops movement no one asked for', () => {
+    const { controller, mouse, clock, capture } = setup(1440, 900, 0, true);
+    controller.frame(0);
+    capture();
+    const yaw = controller.debug.camera.yaw, seen: number[][] = [];
+    controller.hold(true);
+    controller.divertLook((dx, dy) => seen.push([dx, dy]));
+    clock.now = 50; mouse(30, -4); mouse(31, -5);
+    controller.frame(60);
+    expect(seen).toEqual([[61, -9]]);
+    controller.divertLook(null);
+    clock.now = 80; mouse(40, 0); mouse(40, 0);
+    controller.frame(90);
+    controller.hold(false);
+    controller.frame(110);
+    // Nothing gathered while held turns the camera on release.
+    expect(controller.debug.camera.yaw).toBeCloseTo(yaw, 9);
+  });
+
+  it('keeps the boom short in a place and lets it pass the walls the place fades', () => {
+    const solids: SolidBox[] = [{ min: [-20, -1, -20], max: [20, 0, 20] }];
+    const wall: SolidBox = { min: [-20, 0, 11], max: [20, 6, 11.4] };
+    const { controller, camera } = setup(1440, 900, undefined, () => ({ revision: 3, query: () => [...solids, wall] }));
+    controller.frame(0); controller.frame(16);
+    expect(camera.position.z).toBeLessThan(11);
+    controller.limitCamera({ maxDistance: 3, tilt: [.1, .5], seeThrough: [{ min: [-30, -.5, 10.5], max: [30, 7, 12] }] });
+    for (let t = 32; t < 3000; t += 16) controller.frame(t);
+    expect(controller.debug.camera.desiredDistance).toBeCloseTo(3, 6);
+    expect(controller.debug.camera.clearance).toBeNull();
+    controller.limitCamera(null);
+    for (let t = 3000; t < 4000; t += 16) controller.frame(t);
+    expect(controller.debug.camera.desiredDistance).toBeGreaterThan(5);
+    expect(camera.position.z).toBeLessThan(11);
   });
 
   it('follows the given entry heading and resets to it', () => {
@@ -271,38 +356,35 @@ describe('the walk controller', () => {
 
   it('turns a fixed angle per locked mouse pixel, gathering a whole slow frame', () => {
     const turn = (width: number, height: number) => {
-      const { controller, mouse, clock } = setup(width, height, undefined, true);
+      const { controller, mouse, clock, capture } = setup(width, height, undefined, true);
       controller.frame(0);
-      hudInput.look!({ type: 'click', isTrusted: true, detail: 1 } as MouseEvent);
+      capture();
       expect(controller.debug.look).toBe('locked');
       const start = controller.debug.camera.yaw;
-      clock.now = 50; mouse(50, 0); // inside the settle window: ignored
-      controller.frame(50);
-      expect(controller.debug.camera.yaw).toBe(start);
       // Nothing else is drawn for 200 ms (a stalled frame), while the hand keeps moving.
       clock.now = 120;
       for (let n = 0; n < 10; n++) { mouse(20, 0); clock.now += 13; }
-      mouse(600, 0); // a warp
+      mouse(600, 0); // a warp: alone, far larger than the steady hand before it
       controller.frame(250);
+      clock.now += 40; mouse(19, 0); mouse(21, 0);
+      controller.frame(300);
       return start - controller.debug.camera.yaw;
     };
     const desktop = turn(1440, 900), phone = turn(390, 844);
-    expect(desktop).toBeCloseTo(200 * .0024, 9);
+    expect(desktop).toBeCloseTo(240 * .0024, 9);
     expect(phone).toBeCloseTo(desktop, 9);
   });
-
-  it('lets go of held keys, a pending jump, the stick and the lock on a dropped connection, a hidden page and a menu', () => {
-    const { controller, keyboard, page, touch, onDrop, onLeave, lockDocument, sent } = setup(1440, 900, undefined, true);
+  it('lets go of held keys, a pending jump and the stick on a dropped connection, a hidden page and a menu', () => {
+    const { controller, keyboard, page, touch, onDrop, onLeave, lockDocument, sent, capture } = setup(1440, 900, undefined, true);
     controller.frame(0);
     const holdAll = () => {
       key(keyboard, 'keydown', 'KeyW'); key(keyboard, 'keydown', 'Space');
-      hudInput.look!({ type: 'click', isTrusted: true, detail: 1 } as MouseEvent);
       touch('pointerdown', 1, 200, 800); touch('pointermove', 1, 200, 740);
     };
     const still = (now: number) => {
       controller.frame(now);
       expect(sent.at(-1)).toMatchObject({ moveX: 0, moveZ: 0, buttons: 0 });
-      expect([controller.debug.look, controller.debug.stick, lockDocument.pointerLockElement]).toEqual(['free', null, null]);
+      expect(controller.debug.stick).toBeNull();
     };
     holdAll(); onDrop.fire(4000); still(16);
     key(keyboard, 'keyup', 'Space');
@@ -310,14 +392,15 @@ describe('the walk controller', () => {
     key(keyboard, 'keyup', 'Space');
     holdAll(); page.hidden = true; page.dispatchEvent(new Event('visibilitychange')); still(48);
     page.hidden = false; key(keyboard, 'keyup', 'Space');
+    capture();
+    expect(lockDocument.pointerLockElement).not.toBeNull();
     holdAll(); controller.release();
     controller.frame(64);
-    expect([controller.debug.look, lockDocument.pointerLockElement, sent.at(-1)!.buttons]).toEqual(['free', null, 0]);
-    // V is not heard while the menu owns the keyboard.
-    key(keyboard, 'keydown', 'KeyV');
-    expect(controller.debug.look).toBe('free');
+    // Handing the camera away lets the mouse go too, as the walk's own release: never the person's Escape.
+    expect([controller.debug.look, lockDocument.pointerLockElement, sent.at(-1)!.buttons]).toEqual(['touch', null, 0]);
+    expect(controller.cursor.mode).toBe('idle');
+    expect(capture()).toBe(false);
   });
-
   it('lets go of everything on dispose', () => {
     const { controller, keyboard, camera, sent, onLeave, onDrop } = setup();
     controller.frame(0);
@@ -410,13 +493,12 @@ describe('the walk controller', () => {
     const clearInput = vi.fn(); Object.assign(fake, { clearInput });
     controller.frame(0);
     key(keyboard, 'keydown', 'KeyW');
-    hudInput.look!({ type: 'click', isTrusted: true, detail: 1 } as MouseEvent);
     touch('pointerdown', 1, 90, 700); touch('pointermove', 1, 90, 600);
     hudInput.jump!();
     keyboard.dispatchEvent(new Event(event, { cancelable: true }));
     controller.frame(16);
     expect(sent.at(-1)).toMatchObject({ moveX: 0, moveZ: 0, buttons: 0 });
-    expect([controller.debug.look, controller.debug.stick, lockDocument.pointerLockElement]).toEqual(['free', null, null]);
+    expect([controller.debug.stick, lockDocument.pointerLockElement]).toEqual([null, null]);
     expect(clearInput).toHaveBeenCalledOnce();
     controller.dispose();
   });

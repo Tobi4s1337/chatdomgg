@@ -1,0 +1,57 @@
+{
+ "about": "Hero sound effects for the teaser, from the ElevenLabs sound-effects endpoint. Raw renders, not normalised; levels are set in the mix.",
+ "status": "blocked: the API key lacks the sound_generation permission. needs: tobias enable sound effects on the teaser's ElevenLabs key, then re-run apps/studio/voice/sfx.mjs",
+ "checked": "2026-11-01T22:13:39.261Z",
+ "items": [
+  {
+   "id": "forge-hammer",
+   "shot": "S11",
+   "file": null,
+   "prompt": "A single heavy blacksmith's hammer strike on an iron anvil in a stone forge: a bright metallic clang with a long, clear ringing tail that slowly fades away.",
+   "duration": null,
+   "requestedSeconds": 3.5,
+   "model": "eleven_text_to_sound_v2",
+   "promptInfluence": 0.5
+  },
+  {
+   "id": "gate-creak",
+   "shot": "S05, S15, S17",
+   "file": null,
+   "prompt": "A heavy old wooden castle gate creaking slowly open on iron hinges outdoors: deep groaning timber, a long creak, ending with a soft wooden thud.",
+   "duration": null,
+   "requestedSeconds": 4,
+   "model": "eleven_text_to_sound_v2",
+   "promptInfluence": 0.5
+  },
+  {
+   "id": "raid-horn",
+   "shot": "S14, S17",
+   "file": null,
+   "prompt": "A medieval war horn call: one long, deep, rallying horn blast echoing across a wide valley at dusk.",
+   "duration": null,
+   "requestedSeconds": 4,
+   "model": "eleven_text_to_sound_v2",
+   "promptInfluence": 0.5
+  },
+  {
+   "id": "crowd-cheer",
+   "shot": "S08, S12, S15",
+   "file": null,
+   "prompt": "A warm crowd of townsfolk cheering, clapping and laughing together in a stone town square at night, joyful, with a soft echo off the stone walls.",
+   "duration": null,
+   "requestedSeconds": 5,
+   "model": "eleven_text_to_sound_v2",
+   "promptInfluence": 0.5
+  },
+  {
+   "id": "screen-whoosh",
+   "shot": "S03",
+   "file": null,
+   "prompt": "A soft magical whoosh with a gentle shimmer, airy and smooth, like a camera gliding through a glowing screen into another world.",
+   "duration": null,
+   "requestedSeconds": 2,
+   "model": "eleven_text_to_sound_v2",
+   "promptInfluence": 0.5
+  }
+ ]
+}

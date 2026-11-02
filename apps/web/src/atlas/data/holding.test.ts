@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { DOOR_KEY, doorHolding, handOffHolding, takeHandOff, waitingDoorHolding } from './holding';
 import type { CardReply } from './directory';
@@ -16,7 +17,7 @@ const world = {
 
 const settler = (over: Partial<Settler> = {}): Settler => ({
   index: 0, ordinal: 0, id: '71092938', login: 'example', name: 'Example', freshUntil: 1_793_540_000_000, withheld: false,
-  tier: 'town', tierRank: 2, x: 12, y: -4, average: 312.4, game: 'VALORANT', region: 0, realm: 0, realmName: 'Shooters', ...over,
+  tier: 'town', tierRank: 2, foundingHolding: true, x: 12, y: -4, average: 312.4, game: 'VALORANT', region: 0, realm: 0, realmName: 'Shooters', ...over,
 });
 
 const memory = (): StorageLike & { items: Map<string, string> } => {
@@ -49,6 +50,7 @@ describe('the door into a holding', () => {
       stream: { game: 'VALORANT' },
     } as unknown as CardReply;
     expect(waitingDoorHolding(card, world)).toMatchObject({ tier: null, x: null, y: null, game: null, average: 7, realm: { family: 'shooters' } });
+    expect(waitingDoorHolding({ ...card, average: null }, world)).toBeNull();
     expect(waitingDoorHolding({ ...card, channel: { ...card.channel, name: null, login: null, freshUntil: null } }, world)).toBeNull();
     expect(waitingDoorHolding({ ...card, channel: { ...card.channel, place: 'unseen' } }, world)).toBeNull();
     expect(waitingDoorHolding({ ...card, revision: 'another-survey' }, world)).toBeNull();

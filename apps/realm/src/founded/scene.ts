@@ -9,6 +9,7 @@ import { FoundedSceneError, encodeFoundedScene, validateFoundedScene } from './v
 import { FOUNDED_PHYSICS_VERSION } from './collision';
 import { arrivalFurnishings } from './arrival-furnishings';
 import { installFoundedCivicGrowth, type FoundedCivicDiagnostic } from './civic-growth';
+import { pierFurnishings } from '../fishing/site';
 
 export interface FoundedSceneInput {
   readonly kingdomId: KingdomId;
@@ -84,8 +85,8 @@ export async function assembleFoundedScene(input: FoundedSceneInput): Promise<Fo
   const attach = (home: RealmOwnedForgeHost, origin: Vec3, rotation: CardinalTurn, plotId?: string): string[] => {
     const profile = 'moduleId' in home ? 'castle-keep' : 'street-home';
     const blueprint = home.blueprint;
-    const sockets = Object.keys(home.attachments).length ? findForgeSockets(blueprint, profile) : [];
-    const fingerprint = sockets.length ? homeFingerprint(blueprint) : '';
+    // Each part reconstructs with the kit revision it was forged and approved with (SEAMS.md §9).
+    const fingerprint = Object.keys(home.attachments).length ? homeFingerprint(blueprint) : '';
     const parts: string[] = [];
     for (const socketId of Object.keys(home.attachments).sort()) {
       const id = home.attachments[socketId]!, item = Object.hasOwn(state.attachments, id) ? state.attachments[id] : undefined;
@@ -93,10 +94,12 @@ export async function assembleFoundedScene(input: FoundedSceneInput): Promise<Fo
       const part = item!.attachment;
       if (part.socketId !== socketId || part.hostId !== blueprint.id || part.slot !== home.slot || part.kingdomId !== kingdomId
         || part.hostFingerprint !== fingerprint || (part.hostProfile ?? 'street-home') !== profile) fail(`part ${id} does not fit the committed home ${home.id}`);
+      let kit: ReturnType<typeof forgeStyleKit>;
+      try { kit = forgeStyleKit(part.family, part.kitRevision); } catch { return fail(`part ${id} names an unregistered kit`); }
+      if (kit.id !== part.kitId) fail(`part ${id} names an unregistered kit`);
+      const sockets = findForgeSockets(blueprint, profile, kit.revision);
       const socket = sockets.find(s => s.id === socketId) ?? fail(`home ${home.id} no longer has socket ${socketId}`);
       if (socket.origin.some((n, axis) => n !== part.origin[axis])) fail(`part ${id} sits away from its socket`);
-      const kit = forgeStyleKit(part.family);
-      if (kit.id !== part.kitId || kit.revision !== part.kitRevision) fail(`part ${id} names an unregistered kit`);
       let piece: VoxelBlueprint;
       try { const assembled = assembleForge(part.draft.plan, kit, socket); checkForge(assembled, blueprint, profile); piece = assembled.blueprint; }
       catch { return fail(`part ${id} no longer assembles on home ${home.id}`); }
@@ -143,6 +146,7 @@ export async function assembleFoundedScene(input: FoundedSceneInput): Promise<Fo
     blueprint: ownedCastle && fixture.id === keepId ? ownedCastle.blueprint : fixture.blueprint,
     position: fixture.position, rotation: fixture.rotation });
   pieces.push(...arrivalFurnishings(plan, pieces));
+  pieces.push(...pierFurnishings(plan, pieces));
 
   // Content identity is the exact bytes; one factory object is hashed once, distinct bytes stay distinct.
   const hashes = new Map<VoxelBlueprint, string>(), assets = new Map<string, RealmFoundedBlueprint>();

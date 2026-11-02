@@ -133,7 +133,7 @@ export async function provisionSource(options: ProvisionOptions): Promise<Provis
     print('Subscriptions');
     for (const entry of result.coverage) {
       const mark = entry.state === 'enabled' ? '✓' : '✗';
-      print(`  ${mark} ${entry.type.padEnd(34)} ${COVERAGE_LINE[entry.state]}${entry.reason ? ` (${entry.reason})` : ''}`);
+      print(`  ${mark} ${entry.key.padEnd(34)} ${COVERAGE_LINE[entry.state]}${entry.reason ? ` (${entry.reason})` : ''}`);
     }
     if (result.created + result.deleted > 0) print(`  ${result.created} created, ${result.deleted} stale removed on this conduit`);
     if (result.unexpected > 0) print(`  ${result.unexpected} other subscription(s) on this conduit match nothing Herald reads; left untouched`);

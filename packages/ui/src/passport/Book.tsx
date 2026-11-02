@@ -143,7 +143,7 @@ export function PassportBook(props: PassportBookProps): JSX.Element {
         aria-label={at() === 0 ? 'Open the passport' : 'Turn the page'}><TurnGlyph dir="next" /></button>
     </div>
     <Show when={simulated() && current()?.kind === 'leaves'}>
-      <ProvenanceSeal class="pp-provenance" state="simulated" detail="an illustrative passport" />
+      <ProvenanceSeal class="pp-provenance" state="simulated" />
     </Show>
   </section>;
 }
@@ -179,7 +179,7 @@ function Cover(props: { book: VisiblePassportView; simulated: boolean; onOpen: (
       <span class="pp-cover-name" dir="auto">{props.book.holder.name}</span>
       <span class="pp-cover-open" aria-hidden="true">Open the book</span>
     </button>
-    <Show when={props.simulated}><ProvenanceSeal class="pp-provenance pp-provenance-cover" state="simulated" detail="an illustrative passport" /></Show>
+    <Show when={props.simulated}><ProvenanceSeal class="pp-provenance pp-provenance-cover" state="simulated" /></Show>
   </div>;
 }
 

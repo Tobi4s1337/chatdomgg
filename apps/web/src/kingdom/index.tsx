@@ -13,6 +13,7 @@ import { BuildTools } from '../build';
 import type { KingdomBuildSession } from './build-scene';
 import './kingdom.css';
 import { ForgePanel } from '../forge';
+import { AnvilEntry } from '../forge/play/anvil-entry';
 import type { ForgeStatus } from '../forge/scene';
 import { parseKingdomPresentationParams } from '../stream/params';
 import { ProvenanceSeal, provenanceFromSource } from '@chatdom/ui';
@@ -22,6 +23,8 @@ import type { ScreenCaption, TwitchMomentFeed } from '../twitch-moments';
 import './moment-captions.css';
 import { PeopleLabels, peopleFromLabels, measureReservedElements } from '../walk/labels/index';
 import { openDurableChronicle } from '../chronicle/native-overlay';
+import { createOpeningJournal } from './grand-land/opening/journal';
+import { mountOpeningLoader, type OpeningLoader } from './grand-land/opening/loader';
 
 /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
 export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:RealmFoundedScene;growthFeed?:GrowthSceneFeed;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;forgeFeed?:RealmForgeFeed;momentFeed?:TwitchMomentFeed;walkerFeed?:RealmWalkerFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
@@ -38,6 +41,9 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
   const peopleHud=()=>peopleLabelsRoot?measureReservedElements(peopleLabelsRoot,[...host.querySelectorAll('.kingdom-heading,.kingdom-seal,.kingdom-controls,.walk-look,.walk-stick,.walk-jump,.walk-gestures-trigger,.walk-gestures-panel:not([hidden]),.kingdom-moment-caption')]):[];
   const [source,setSource]=createSignal(props.presenceFeed?.label??(query.get('source')==='herald'?'CONNECTING':'SIMULATED')),[error,setError]=createSignal<string|null>(null),[sound,setSound]=createSignal(false);
   const stream=location.pathname.endsWith('/stream')||location.pathname==='/stream';
+  let openingHost:HTMLDivElement|undefined,opener:OpeningLoader|undefined;
+  const [opening,setOpening]=createSignal(false);
+  onCleanup(()=>opener?.dispose());
   let canvas!:HTMLCanvasElement,engine:Awaited<ReturnType<typeof createKingdomScene>>|undefined,unmounted=false,openingFrame=0;
   const [buildSession,setBuildSession]=createSignal<KingdomBuildSession|null>(null),[housewarming,setHousewarming]=createSignal<string|null>(null);
   const construction=new AbortController();
@@ -62,7 +68,7 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
   const practice=()=>!!forgeStatus()?.open||buildSession()?.controller.snapshot().mode==='SIMULATED'||!!housewarming();
   async function attachWalk(binding:KingdomWalkBinding){
     if(!engine||unmounted)return;
-    await engine.attachWalk({...binding,hud:host,interactionPlaces:binding.interactionPlaces??{
+    await engine.attachWalk({...binding,hud:host,play:{live:()=>source()==='LIVE CHAT',hour:()=>hour(),kingdomName:props.kingdomName??'',...binding.play},interactionPlaces:binding.interactionPlaces??{
       open(accepted,closed){
         if(accepted.action!=='forge')return null;
         setAnvilVisit({leave:closed});
@@ -81,8 +87,11 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
     const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
     testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
-    void createKingdomScene(canvas,{...(dock?{dockFeed:dock}:{}),...(props.potential?{potential:props.potential,nativeStyle:props.potential.style}:{}),...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.growthFeed?{growthFeed:props.growthFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),...(props.momentFeed?{momentFeed:props.momentFeed}:{}),...(props.walkerFeed?{walkerFeed:props.walkerFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:props.potential?.plan.config.seed??query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(!props.potential&&(realm==='hearth'||realm==='grove')?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
-      onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onMomentCaptions:setMomentCaptions,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:message=>{setError(message||'The kingdom renderer did not give a reason.');setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
+    // The parchment opening: it reads only what this scene really does, and dissolves after the first lit frame.
+    const journal=createOpeningJournal();
+    if(openingHost){opener=mountOpeningLoader(openingHost,{variant:stream?'stream':'page',name:realmName,onGone:()=>{opener=undefined;setOpening(false);}});setOpening(true);opener.follow(journal);}
+    void createKingdomScene(canvas,{opening:journal,...(dock?{dockFeed:dock}:{}),...(props.potential?{potential:props.potential,nativeStyle:props.potential.style}:{}),...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.growthFeed?{growthFeed:props.growthFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),...(props.momentFeed?{momentFeed:props.momentFeed}:{}),...(props.walkerFeed?{walkerFeed:props.walkerFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:props.potential?.plan.config.seed??query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(!props.potential&&(realm==='hearth'||realm==='grove')?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
+      onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onMomentCaptions:setMomentCaptions,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:message=>{journal.fail(message||'The kingdom renderer did not give a reason.');setError(message||'The kingdom renderer did not give a reason.');setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;
       // OBS may allow autoplay; a browser that requires a gesture stays honestly locked until the retry.
@@ -135,21 +144,16 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
     <div class="window-names" aria-live="polite"><For each={names()}>{label=><div class="window-name" style={{left:`${label.x}px`,top:`${label.y}px`}}><span class="name-diamond" />{label.name}<small>home again</small></div>}</For></div>
     <PeopleLabels people={peopleFromLabels(walkers(),speech())} reserved={peopleHud()} onRoot={root=>{peopleLabelsRoot=root;}} />
     <div class="kingdom-moment-captions"><For each={momentCaptions()}>{caption=><div class="kingdom-moment-caption" style={{left:`${caption.x}px`,top:`${caption.y}px`,opacity:caption.opacity}}><strong>{caption.title}</strong><p>{caption.line}</p><Show when={caption.detail}><small>{caption.detail}</small></Show></div>}</For></div>
-    <Show when={!ready()||error()}><div class="kingdom-gate" role="status">
+    <div class="kingdom-opening" classList={{hidden:!!error()}} ref={element=>{openingHost=element;}} />
+    <Show when={error()||!ready()&&!opening()}><div class="kingdom-gate" role="status">
       <svg viewBox="0 0 80 80" aria-hidden="true"><path d="M17 70V25l12-12h22l12 12v45M26 70V31a14 14 0 0 1 28 0v39M12 70h56M31 13V7h6v6m6 0V7h6v6"/></svg>
       <h2>{error()?'The road needs a moment.':phase()}</h2>
       <p>{error()??'A place is waiting for you.'}</p>
       <Show when={!error()} fallback={<button onClick={()=>location.reload()}>Try the gate again</button>}><div class="gate-progress"><i style={{width:`${Math.round(progress()*100)}%`}} /></div></Show>
     </div></Show>
     <Show when={!stream&&forgeStatus()?.open}><ForgePanel status={forgeStatus()!} submit={words=>engine!.forge.submit(words)} close={()=>engine?.forge.close()} refit={()=>{void engine?.forge.refit();}} family={value=>{location.href=`/?tier=${tier}&hour=${hour()}&forge=1&realm=${value}`;}} /></Show>
-    <Show when={!stream&&anvilVisit()}>{visit=><section class="forge-panel" role="dialog" aria-label="At the anvil">
-      <div class="forge-panel-top"><span class="forge-eyebrow">THE FORGE</span><button onClick={()=>visit().leave()} aria-label="Leave the anvil">×</button></div>
-      <h2>Give the smith a wish.</h2>
-      <p class="forge-message">Write <code>!forge a chimney shaped like a sleeping dragon</code> in Twitch chat. When the fire is awake and you have a coal, your words can become part of your home.</p>
-      <p class="forge-footnote">The anvil listens to chat. Escape returns you to the street.</p>
-      <button class="forge-submit" onClick={()=>visit().leave()}>Back to the street</button>
-    </section>}</Show>
-    <Show when={!stream&&buildSession()}>{session=><BuildTools controller={session().controller} ownerName="Juniper" imports={session().imports}/>}</Show>
+    <Show when={!stream&&anvilVisit()}>{visit=><AnvilEntry kingdomId={props.founded?.kingdomId} onLeave={()=>visit().leave()}/>}</Show>
+    <Show when={!stream&&buildSession()}>{session=><BuildTools controller={session().controller} {...(props.walk?.client.room.state.walkers.get(props.walk.client.selfId)?.name?{ownerName:props.walk.client.room.state.walkers.get(props.walk.client.selfId)!.name}:{})} imports={session().imports}/>}</Show>
     <Show when={housewarming()}>{name=><div class="housewarming-name">{name()}’s home<small>Welcome to the street</small></div>}</Show>
     <Show when={ready()&&walking()&&!error()&&!stream}><button class="walk-overlook" onClick={()=>chooseView('hero')}>Above the streets</button></Show>
     <Show when={ready()&&props.founded&&!error()&&!stream}><button class="kingdom-chronicle-button" onClick={openChronicle}>The Chronicle</button></Show>

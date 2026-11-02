@@ -1,10 +1,11 @@
 import { createKingdomScene, type NameLabel, type SceneOptions } from '../kingdom/scene';
 import type { RealmChatFeed } from '../realm/adapters/chat';
 import type { SpeechLabel } from '../kingdom/citizen-scene';
+import { createOpeningJournal, type OpeningJournal } from '../kingdom/grand-land/opening/journal';
 
 export type KingdomScene = Awaited<ReturnType<typeof createKingdomScene>>;
 export type StreamPhase = 'waking' | 'ready' | 'hidden' | 'failed';
-type SceneSettings = Omit<SceneOptions, 'signal' | 'onProgress' | 'onNames' | 'onSpeech' | 'onSource' | 'onError'>;
+type SceneSettings = Omit<SceneOptions, 'signal' | 'onProgress' | 'onNames' | 'onSpeech' | 'onSource' | 'onError' | 'opening'>;
 export interface PreparedStreamScene {
   settings: Partial<SceneSettings>;
   chatFeed?: RealmChatFeed;
@@ -29,6 +30,8 @@ interface Entry {
   resumePrevious?: (() => void) | undefined;
   released: boolean;
   publications: Map<string, () => void>;
+  /** What the visible opening has really done; replacements open behind the drawn kingdom and keep none. */
+  opening?: OpeningJournal;
 }
 
 // A software-rendered first draw can take minutes; the loaded town keeps drawing meanwhile.
@@ -45,6 +48,8 @@ export function createSceneMount(hooks: {
   prepare?(signal: AbortSignal, revision: () => void, unavailable: () => void): Promise<PreparedStreamScene>;
   onPhase(phase: StreamPhase): void;
   onProgress(text: string, fraction: number): void;
+  /** A new visible opening began: the loader follows this journal. */
+  onOpening?(journal: OpeningJournal): void;
   onSource(label: string): void;
   /** The renderer's permitted public names near the camera. The view decides whether one is shown. */
   onNames(names: NameLabel[]): void;
@@ -106,6 +111,7 @@ export function createSceneMount(hooks: {
   function fail(entry: Entry, reason = 'The kingdom revision could not be prepared'): void {
     if (!owns(entry)) return;
     stats.lastFailure = reason;
+    entry.opening?.fail(reason);
     if (pending !== entry) { unmount('failed'); return; }
     pending = undefined;
     release(entry, 'scene-revision');
@@ -178,7 +184,9 @@ export function createSceneMount(hooks: {
     } else {
       current = entry;
       failed = false;
+      entry.opening = createOpeningJournal();
       hooks.onPhase('waking');
+      hooks.onOpening?.(entry.opening);
     }
     stats.mounts++;
     stats.alive++;
@@ -208,6 +216,7 @@ export function createSceneMount(hooks: {
         onBuild: value => publish(entry, 'build', () => settings.onBuild?.(value)),
         onHousewarming: value => publish(entry, 'housewarming', () => settings.onHousewarming?.(value)),
         signal: entry.controller.signal,
+        ...(entry.opening ? { opening: entry.opening } : {}),
         onProgress: (text, fraction) => { if (visible(entry)) hooks.onProgress(text, fraction); },
         onNames: names => publish(entry, 'names', () => hooks.onNames(names)),
         onSpeech: labels => publish(entry, 'speech', () => hooks.onSpeech?.(labels)),

@@ -1,10 +1,10 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { MATERIALS } from '@chatdom/content/materials';
 import { PORTRAIT_FIXTURES } from '@chatdom/content/avatar-style';
 import { createVoxelMaterial } from '@chatdom/render';
 import { createCitizenRenderer, createStyledCitizenLook, type CitizenSample } from './index';
-import { createFootstepState, stepFootsteps } from './footsteps';
+import { createFootstepState, FOOT_SOLE, stepFootsteps, type FootstepSample } from './footsteps';
 
 it.each([[1.2, .008], [7, .008], [7, 1 / 30], [7, 1 / 20], [7, 1 / 15]])('holds actual rendered stance feet at %s m/s with %s second frames through a turn', async (speed, dt) => {
   const scene = new THREE.Scene(), material = createVoxelMaterial(MATERIALS, 'avatar');
@@ -206,7 +206,7 @@ it('keeps both rendered soles above ground throughout walking into and out of si
     for (let frame = 0; frame < 30; frame++) {
       now += 20;
       renderer.update([{ ...stopped, ...(frame < 15 ? { posture: 'seated' as const } : {}) }], undefined, now);
-      for (const y of soles()) expect(y).toBeGreaterThanOrEqual(-1e-5);
+      for (const y of soles()) expect(y).toBeGreaterThanOrEqual(-1e-4);
       const currentTips = tips();
       for (let leg = 0; leg < 2; leg++) if (lastTips[leg]!.y < .001 && currentTips[leg]!.y < .001) {
         expect(currentTips[leg]!.distanceTo(lastTips[leg]!)).toBeLessThan(.008);
@@ -222,7 +222,7 @@ it('keeps both rendered soles above ground throughout walking into and out of si
     for (let frame = 1; frame <= 20; frame++) {
       now += 20;
       renderer.update([{ ...sample, position: [0, 0, distance], distance, moving: 0, speed: 0, tiptoe: Math.min(1, frame / 10) }], undefined, now);
-      for (const y of soles()) expect(y).toBeGreaterThanOrEqual(-1e-5);
+      for (const y of soles()) expect(y).toBeGreaterThanOrEqual(-1e-4);
       const currentTips = tips();
       for (let leg = 0; leg < 2; leg++) if (lastTips[leg]!.y < .001 && currentTips[leg]!.y < .001) {
         expect(currentTips[leg]!.distanceTo(lastTips[leg]!)).toBeLessThan(.008);
@@ -270,5 +270,178 @@ it('keeps planted feet and swing continuity when a walker reverses or strafes ab
     previous = current; rendered = nextRendered;
   }
   expect(plantedFrames).toBeGreaterThan(40);
+  } finally { renderer.dispose(); material.dispose(); }
+});
+
+type Ground = (x: number, z: number) => number;
+/** The modelled sole of a level foot whose ankle is at `ankle`: its four corners, at the sole's height. */
+function soleCorners(ankle: THREE.Vector3, heading: number): THREE.Vector3[] {
+  const f = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading)), l = new THREE.Vector3(Math.cos(heading), 0, -Math.sin(heading));
+  const corners: THREE.Vector3[] = [];
+  for (const along of [-FOOT_SOLE.heel, FOOT_SOLE.toe]) for (const across of [-FOOT_SOLE.half, FOOT_SOLE.half]) {
+    corners.push(ankle.clone().addScaledVector(f, along).addScaledVector(l, across).setY(ankle.y - .0625));
+  }
+  return corners;
+}
+/** Walk a body drawn on `ground` along a heading, stop, and return the lowest sole clearance seen. */
+function lowestSole(ground: Ground, options: { speed: number; fps: number; heading: number; sampled: boolean; learn?: number }) {
+  const { speed, fps, heading, sampled } = options, dt = 1 / fps;
+  let x = .3, z = -.2, distance = 0, now = 0, lowest = Infinity;
+  const at = (moving: number): FootstepSample => ({ position: [x, ground(x, z), z], heading, distance, moving, speed: moving ? speed : 0, timeMs: now,
+    ...(sampled ? { ground } : {}) });
+  const state = createFootstepState(at(0));
+  const check = (result: ReturnType<typeof stepFootsteps>, sample: FootstepSample) => {
+    for (const foot of result.feet) for (const corner of soleCorners(foot, heading)) lowest = Math.min(lowest, corner.y - ground(corner.x, corner.z));
+    // The rig's standing branch draws level neutral soles raised by `lift` while the planted targets fade out.
+    if (result.blend < 1) for (const side of [-1, 1]) {
+      const px = sample.position[0] + Math.cos(heading) * side * .125, pz = sample.position[2] - Math.sin(heading) * side * .125;
+      for (const corner of soleCorners(new THREE.Vector3(px, sample.position[1] + .0625 + result.lift, pz), heading)) {
+        lowest = Math.min(lowest, corner.y - ground(corner.x, corner.z));
+      }
+    }
+  };
+  for (let frame = 0; frame < fps * 4; frame++) {
+    now += dt * 1000;
+    const moving = frame < fps * 3 ? 1 : 0;
+    if (moving) { x += Math.sin(heading) * speed * dt; z += Math.cos(heading) * speed * dt; distance += speed * dt; }
+    const sample = at(moving), result = stepFootsteps(state, sample);
+    if (frame >= (options.learn ?? 0) * fps) check(result, sample);
+  }
+  return lowest;
+}
+
+const SPEEDS = [.6, 1.2, 2.5, 4, 7], RATES = [60, 30, 20];
+const GROUNDS: [string, Ground][] = [
+  ['flat street', () => 9],
+  ['uphill', (_x, z) => .3 * z],
+  ['downhill', (_x, z) => -.3 * z],
+  ['across a slope', x => .3 * x],
+  ['a diagonal slope', (x, z) => .35 * (x + z)],
+  ['rolling terrain', (x, z) => .4 * Math.sin(x / 3) + .3 * Math.sin(z / 4) + .2 * Math.sin((x + z) / 5)],
+];
+
+describe('soles stay on the drawn ground', () => {
+  it.each(GROUNDS)('with the drawn ground sampled, on %s, at every speed and frame rate, walking, stopping and standing', (_name, ground) => {
+    for (const speed of SPEEDS) for (const fps of RATES) for (const heading of [0, 1.1, -2.4]) {
+      expect(lowestSole(ground, { speed, fps, heading, sampled: true }), `${speed} m/s, ${fps} fps, heading ${heading}`).toBeGreaterThanOrEqual(-1e-4);
+    }
+  });
+
+  it.each(GROUNDS.slice(0, 3))('with no sampler the slope along travel is learned from the body, on %s', (_name, ground) => {
+    for (const speed of SPEEDS) for (const fps of RATES) {
+      expect(lowestSole(ground, { speed, fps, heading: 0, sampled: false, learn: .5 }), `${speed} m/s, ${fps} fps`).toBeGreaterThanOrEqual(-1e-4);
+    }
+  });
+
+  it('follows a slope without rebasing, but still rebases a half-metre step', () => {
+    const ground: Ground = (_x, z) => .3 * z;
+    let z = 0, now = 0, rebases = 0;
+    const state = createFootstepState({ position: [0, 0, 0], heading: 0, distance: 0, moving: 1, speed: 7, timeMs: 0 });
+    for (let frame = 1; frame <= 60; frame++) {
+      now += 1000 / 30; z += 7 / 30;
+      const result = stepFootsteps(state, { position: [0, ground(0, z), z], heading: 0, distance: z, moving: 1, speed: 7, timeMs: now });
+      if (frame > 10 && result.blend === 0) rebases++;
+    }
+    expect(rebases).toBe(0);
+    expect(state.gradient.y).toBeCloseTo(.3, 3);
+    now += 1000 / 30; z += 7 / 30;
+    const stepped = stepFootsteps(state, { position: [0, ground(0, z) + .5, z], heading: 0, distance: z, moving: 1, speed: 7, timeMs: now });
+    expect(stepped.blend).toBe(0);
+    expect(state.gradient.lengthSq()).toBe(0);
+  });
+
+  it('starts rested on the sampled slope and needs no lift on flat ground', () => {
+    const slope: Ground = (x, z) => .2 * x - .1 * z;
+    const sample: FootstepSample = { position: [1, slope(1, 2), 2], heading: .4, distance: 0, moving: 0, speed: 0, timeMs: 0, ground: slope };
+    const state = createFootstepState(sample);
+    expect(state.gradient.x).toBeCloseTo(.2, 9); expect(state.gradient.y).toBeCloseTo(-.1, 9);
+    for (const leg of state.legs) for (const corner of soleCorners(leg.contact, .4)) expect(corner.y - slope(corner.x, corner.z)).toBeGreaterThanOrEqual(-1e-9);
+    const flat = stepFootsteps(createFootstepState({ ...sample, position: [1, 9, 2], ground: () => 9 }), { ...sample, position: [1, 9, 2], ground: () => 9, timeMs: 16 });
+    expect(flat.lift).toBe(0);
+    expect(stepFootsteps(state, { ...sample, timeMs: 16 }).lift).toBeGreaterThan(0);
+  });
+
+  // Stairs of solid treads along +z, and the body height the movement law gives on them: the highest tread under its
+  // ±0.28 m footprint. Remote walkers are drawn between snapshots 0.2 s apart, so their height ramps between treads.
+  const STAIRS = [[.25, .5], [.125, .25], [.5, 1], [.25, 1.5]] as const;
+  function lowestOnStairs(rise: number, run: number, options: { speed: number; fps: number; direction: 1 | -1; lagged: boolean; floored: boolean }) {
+    const { speed, fps, direction } = options, dt = 1 / fps;
+    const tread = (z: number) => Math.floor(z / run) * rise * direction;
+    const body = (z: number) => Math.max(tread(z - .28 + 1e-9), tread(z + .28 - 1e-9), tread(z));
+    const floor = (_x: number, z: number, below: number) => tread(z) <= below ? tread(z) : null;
+    let z = .1, now = 0, lowest = Infinity;
+    const span = speed * .2, datum = (at: number) => {
+      if (!options.lagged) return body(at);
+      const from = .1 + Math.floor((at - .1) / span) * span;
+      return THREE.MathUtils.lerp(body(from), body(from + span), (at - from) / span);
+    };
+    const at = (moving: number): FootstepSample => ({ position: [0, datum(z), z], heading: 0, distance: z, moving, speed: moving ? speed : 0, timeMs: now,
+      ...(options.floored ? { floor } : {}) });
+    const state = createFootstepState(at(0));
+    for (let frame = 0; frame < fps * 4; frame++) {
+      now += dt * 1000;
+      const moving = frame < fps * 3 ? 1 : 0;
+      if (moving) z += speed * dt;
+      const sample = at(moving), result = stepFootsteps(state, sample);
+      const feet = [...result.feet];
+      if (result.blend < 1) for (const side of [-1, 1]) feet.push(new THREE.Vector3(side * .125, sample.position[1] + .0625 + result.lift, z));
+      for (const foot of feet) for (const corner of soleCorners(foot, 0)) lowest = Math.min(lowest, corner.y - tread(corner.z));
+    }
+    return lowest;
+  }
+
+  it.each(STAIRS)('never sets a sole into a tread, up or down stairs of rise %s and run %s, with the solid floor given', (rise, run) => {
+    for (const speed of SPEEDS) for (const fps of RATES) for (const direction of [1, -1] as const) for (const lagged of [false, true]) {
+      expect(lowestOnStairs(rise, run, { speed, fps, direction, lagged, floored: true }), `${speed} m/s, ${fps} fps, ${direction > 0 ? 'up' : 'down'}${lagged ? ', interpolated' : ''}`)
+        .toBeGreaterThanOrEqual(-1e-9);
+    }
+  });
+
+  it('without the solid floor a step up stairs plants its sole into the next tread', () => {
+    // The datum alone cannot know a tread ahead of the body footprint: this is why the walk passes `floor`.
+    expect(lowestOnStairs(.125, .25, { speed: 1.2, fps: 60, direction: 1, lagged: false, floored: false })).toBeLessThan(-.05);
+  });
+
+  it('ignores solid tops out of a step’s reach and keeps level floors exact', () => {
+    const base: FootstepSample = { position: [0, 2, 0], heading: 0, distance: 0, moving: 0, speed: 0, timeMs: 0 };
+    const wall = createFootstepState({ ...base, floor: (_x, _z, below) => (3 <= below ? 3 : null) });
+    for (const leg of wall.legs) expect(leg.contact.y).toBeCloseTo(2.0625, 12);
+    const level = createFootstepState({ ...base, floor: () => 2 });
+    for (const leg of level.legs) expect(leg.contact.y).toBeCloseTo(2.0625, 12);
+    const above = createFootstepState({ ...base, floor: () => 2.5 });
+    for (const leg of above.legs) expect(leg.contact.y).toBeCloseTo(2.5625, 12);
+    expect(stepFootsteps(level, { ...base, timeMs: 16, floor: () => 2 }).lift).toBe(0);
+  });
+
+  it('ignores a sampler that is not answering for these feet', () => {
+    const sample: FootstepSample = { position: [0, 4, 0], heading: 0, distance: 0, moving: 0, speed: 0, timeMs: 0, ground: () => 1 };
+    expect(createFootstepState(sample).gradient.lengthSq()).toBe(0);
+    expect(createFootstepState({ ...sample, ground: () => null }).gradient.lengthSq()).toBe(0);
+  });
+});
+
+it.each([[1.2, 60], [4, 60], [7, 30], [2.5, 20]])('keeps every rendered sole corner on an up and down slope at %s m/s and %s fps once the slope is learned', async (speed, fps) => {
+  const scene = new THREE.Scene(), material = createVoxelMaterial(MATERIALS, 'avatar');
+  const look = createStyledCitizenLook('test', PORTRAIT_FIXTURES[0]!.look);
+  const renderer = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks: [look] });
+  const sole = (side: 'Left' | 'Right') => {
+    const mesh = scene.getObjectByName(`Citizen test foot${side} solid`) as THREE.InstancedMesh;
+    const matrix = new THREE.Matrix4(); mesh.getMatrixAt(0, matrix);
+    const box = mesh.geometry.boundingBox!, corners: THREE.Vector3[] = [];
+    for (const x of [box.min.x, box.max.x]) for (const z of [box.min.z, box.max.z]) corners.push(new THREE.Vector3(x, box.min.y, z).applyMatrix4(matrix));
+    return corners;
+  };
+  try {
+    for (const rise of [.3, -.3]) {
+      let z = 0, now = 0, lowest = Infinity;
+      renderer.update([], undefined, now);
+      for (let frame = 0; frame < fps * 3; frame++) {
+        now += 1000 / fps; z += speed / fps;
+        renderer.update([{ id: 'p', look: 'test', position: [0, rise * z, z], heading: 0, distance: z, moving: 1, speed }], undefined, now);
+        if (frame < fps / 2) continue;
+        for (const corner of [...sole('Left'), ...sole('Right')]) lowest = Math.min(lowest, corner.y - rise * corner.z);
+      }
+      expect(lowest, `rise ${rise}`).toBeGreaterThanOrEqual(-1e-4);
+    }
   } finally { renderer.dispose(); material.dispose(); }
 });

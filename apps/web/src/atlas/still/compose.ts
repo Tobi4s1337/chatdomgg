@@ -1,10 +1,11 @@
 import type { Geography, GeoRealm, Settler, SettlerStore } from '../data/model';
-import type { PreviewWorld } from '../data/preview';
+import { holdingRadii, TIER_CODES, type PreviewWorld } from '../data/preview';
 import { SHIELD_ASPECT } from '../heraldry/geometry';
 import { Camera, DISTANCE_SCALE, distanceFor, NO_INSETS, type Box, type Distance, type Insets, type Viewport } from '../map/camera';
-import { CollisionGrid, comparePriority, type Rect } from '../map/collide';
+import { blockPieces, CollisionGrid, comparePriority, MARK_PX, SHIELD_GAP, underLettering, type Rect } from '../map/collide';
 import type { Stamp } from '../map/paint';
 import { decorBand, levelFor, parentOf, pyramidFor, tileBox, tilesFor, type Pyramid, type TileKey } from '../map/pyramid';
+import { stillTitle, type EditionFacts } from '../ui/edition';
 import { formatMoment, formatTime, TIER_NAMES } from '../ui/format';
 
 /**
@@ -23,18 +24,23 @@ export const FACE_TEXT = '"IM Fell English", "Alegreya", "Noto Serif", Georgia, 
 export const FACE_CAPS = '"IM Fell English SC", "IM Fell English", "Alegreya", "Noto Serif", Georgia, serif';
 export const FACE_ITALIC = '"IM Fell English", "Alegreya", "Noto Serif", Georgia, serif';
 
-export const STAMP_SCALE = [0, DISTANCE_SCALE.continent, DISTANCE_SCALE.realm, DISTANCE_SCALE.kingdom] as const;
-export const MARKED_TIERS = [1, 2, 3, 4, 4] as const;
-const STAMP_PX: readonly (readonly [number, number])[] = [[30, 132], [18, 108], [16, 84], [14, 64]];
-export const LABEL_PX = [15, 13, 12, 11.5] as const;
-export const SHIELD_PX = [15, 13, 12, 11] as const;
+export const STAMP_SCALE = [0, DISTANCE_SCALE.continent, DISTANCE_SCALE.realm, DISTANCE_SCALE.kingdom, DISTANCE_SCALE.kingdom] as const;
+export const MARKED_TIERS = [1, 2, 3, 5, 5] as const;
+const STAMP_PX: readonly (readonly [number, number])[] = [[30, 132], [18, 108], [16, 84], [14, 64], [12, 48]];
+export const LABEL_PX = [15, 13, 12, 11.5, 11] as const;
+export const SHIELD_PX = [15, 13, 12, 11, 10] as const;
 export const SHIELD_LIMIT = 300;
 /** Survey-mark diameters in CSS px by tier, as the overlay's mark textures draw them. */
-export const MARK_PX = [9, 7, 5, 3.6] as const;
+export { MARK_PX };
 export const REALM_LABEL_FROM = DISTANCE_SCALE.continent * 0.4;
-/** The world file carries capitals and cities; towns and villages arrive per region and are never marked on a still. */
+/**
+ * The world file carries capitals and cities; towns, villages and hamlets arrive per region and are never marked on a
+ * still (a selected one is drawn all the same).
+ */
 const HEAD_TIERS = 2;
-const STAMP_GROUPS = ['capital', 'city', 'town', 'village'] as const;
+/** Stamp groups by tier: hamlets borrow the village drawings, one step smaller. */
+export const STAMP_GROUPS = ['capital', 'city', 'town', 'village', 'village'] as const;
+export const STAMP_ALPHA = [1, 1, 1, 1, 0.82] as const;
 
 const ramp = (value: number, from: number, to: number) => Math.min(1, Math.max(0, (value - from) / (to - from)));
 
@@ -121,8 +127,7 @@ export function stillPixelRatio(devicePixelRatio: number): number {
 
 /** Screen kept clear for the Atlas's panels, exactly as the moving map's opening view keeps it (index.tsx). */
 export function stillInsets(view: Viewport): Insets {
-  if (view.width < 720) return { left: 0, right: 0, top: 76, bottom: 60 };
-  if (view.width >= 1100) return { left: 370, right: 0, top: 0, bottom: 0 };
+  if (view.width < 720) return { left: 0, right: 0, top: 124, bottom: 60 };
   return NO_INSETS;
 }
 
@@ -232,7 +237,8 @@ export interface StillMark {
   settler: Settler;
   /** The button itself: the stamp as drawn, or a touch-sized square around a survey mark. */
   box: Rect;
-  stamp: { group: string; index: number; x: number; y: number; w: number; h: number } | null;
+  /** The stamp as drawn; `alpha` below 1 is a quieter tier's ink (a hamlet's). */
+  stamp: { group: string; index: number; x: number; y: number; w: number; h: number; alpha: number } | null;
   mark: { size: number } | null;
   /** Top-left of the shield's canvas (the shield is `width` wide inside a 3 px paper halo). */
   shield: { x: number; y: number; width: number } | null;
@@ -266,11 +272,45 @@ export interface LayoutInput {
   selected?: Settler | null;
 }
 
+const onScreen = (rect: Rect, view: Viewport) => rect.x < view.width && rect.y < view.height && rect.x + rect.w > 0 && rect.y + rect.h > 0;
+
+/** One projection shared by normal placement and the cheap selection relevance check. */
+function stampPlacement(settler: Settler, point: { x: number; y: number }, radius: number, scale: number, choices: readonly Stamp[]) {
+  if (!choices.length) return null;
+  const w = stampPx(settler.tierRank, radius, scale);
+  const index = hashId(settler.id) % choices.length;
+  const choice = choices[index]!;
+  const aspect = choice.ink.h / choice.ink.w;
+  const h = w * aspect;
+  const drawn = { x: point.x - w * choice.anchor.x, y: point.y - h * choice.anchor.y, w, h };
+  const occupied = { x: drawn.x + w * 0.12, y: drawn.y + h * 0.18, w: w * 0.76, h: h * 0.76 };
+  return { index, choice, drawn, occupied };
+}
+
+/**
+ * A card for land outside this fixed still must not relayout its visible neighbours. Only an actually drawable,
+ * suppressed selection needs the full selected-first collision pass. Reuse also avoids touching the store or
+ * measuring lettering when an already drawn holding is selected.
+ */
+export function layoutStillSelection(base: StillLayout, input: LayoutInput): StillLayout {
+  const selected = input.selected;
+  if (!selected || selected.withheld || input.store.byId.get(selected.id) !== selected || base.marks.some(mark => mark.settler === selected)) return base;
+  const near = input.camera.visibleBox(input.view, 160);
+  if (selected.x < near.minX || selected.x > near.maxX || selected.y < near.minY || selected.y > near.maxY) return base;
+  const point = input.camera.worldToScreen(selected.x, selected.y, input.view);
+  const group = STAMP_GROUPS[selected.tierRank]!;
+  const radius = holdingRadii(input.world)[selected.tierRank]!;
+  const placement = stampPlacement(selected, point, radius, input.camera.scale, input.stamps.filter(stamp => stamp.group === group));
+  const box = placement?.drawn ?? { x: point.x - 12, y: point.y - 12, w: 24, h: 24 };
+  if (!onScreen(box, input.view)) return base;
+  return layoutStill(input);
+}
+
 /** The accessible name of a holding's button. Withheld holdings never reach this. */
-export function markLabel(settler: Settler, geo: Geography): string {
+export function markLabel(settler: Settler, geo: Geography, map = 'the survey'): string {
   const tier = TIER_NAMES[settler.tierRank]!.toLowerCase();
   const region = geo.regions[settler.region];
-  const where = region && region.kind === 'continent' && region.name !== settler.realmName ? `${settler.realmName}, ${region.name}` : settler.realmName || region?.name || 'the survey';
+  const where = region && region.kind === 'continent' && region.name !== settler.realmName ? `${settler.realmName}, ${region.name}` : settler.realmName || region?.name || map;
   return settler.name === null ? `Unnamed ${tier} in ${where}` : `${settler.name}, ${tier} in ${where}`;
 }
 
@@ -308,8 +348,8 @@ export function layoutStill(input: LayoutInput): StillLayout {
   const texts: StillText[] = [];
   placeRegions(geo, camera, view, measure, take, texts);
 
-  const radius = world.tiers.holdingRadius;
-  const radii = [radius.capital, radius.city, radius.town, radius.village];
+  const radii = holdingRadii(world);
+  const mapName = world.status === 'edition' ? world.label : 'the survey';
   const choicesByTier = STAMP_GROUPS.map((group) => input.stamps.filter((stamp) => stamp.group === group));
   const marks: StillMark[] = [];
   let shields = 0;
@@ -326,7 +366,7 @@ export function layoutStill(input: LayoutInput): StillLayout {
     const labelH = text === null ? 0 : Math.ceil(size * LINE + 3.2);
     const withShield = shields < SHIELD_LIMIT;
     if (text === null && !withShield) return { shield: null, name: null };
-    const gap = withShield ? shieldW + (text === null ? 0 : 4) : 0;
+    const gap = withShield ? shieldW + (text === null ? 0 : SHIELD_GAP) : 0;
     const totalW = labelW + gap;
     const height = Math.max(labelH, withShield ? shieldW * SHIELD_ASPECT : 0);
     const mid = sy - h / 2;
@@ -336,15 +376,18 @@ export function layoutStill(input: LayoutInput): StillLayout {
       { x: sx - w * 0.42 - totalW, y: mid - height / 2, w: totalW, h: height },
       { x: sx - totalW / 2, y: sy - h - height - 1, w: totalW, h: height },
     ];
-    const rect = candidates.find((candidate) => grid.free(candidate)) ?? (forced ? candidates[0]! : null);
-    if (!rect) return { shield: null, name: null };
+    const free = candidates.findIndex((candidate) => grid.free(candidate));
+    const side = free >= 0 ? free : forced ? 0 : -1;
+    if (side < 0) return { shield: null, name: null };
+    const rect = candidates[side]!;
     claim(rect);
-    const name = text === null ? null : { text, x: Math.round(rect.x + gap), y: Math.round(rect.y + (rect.h - labelH) / 2), w: labelW, h: labelH, size, spacing };
+    const { nameX, shieldX } = blockPieces(rect, side, text !== null, withShield ? shieldW : null);
+    const name = text === null ? null : { text, x: Math.round(nameX), y: Math.round(rect.y + (rect.h - labelH) / 2), w: labelW, h: labelH, size, spacing };
     if (name) names++;
-    if (!withShield) return { shield: null, name };
+    if (shieldX === null) return { shield: null, name };
     shields++;
     const shieldTop = Math.round(rect.y + (rect.h - shieldW * SHIELD_ASPECT) / 2 - 3);
-    return { shield: { x: Math.round(rect.x - 3), y: shieldTop, width: shieldW }, name };
+    return { shield: { x: Math.round(shieldX - 3), y: shieldTop, width: shieldW }, name };
   };
 
   for (const settler of visible) {
@@ -356,21 +399,16 @@ export function layoutStill(input: LayoutInput): StillLayout {
     const s = camera.worldToScreen(settler.x, settler.y, view);
     const r = radii[settler.tierRank]!;
     const choices = choicesByTier[settler.tierRank] ?? [];
-    const label = markLabel(settler, geo);
+    const label = markLabel(settler, geo, mapName);
     if ((forced || stampVisible(settler.tierRank, scale)) && choices.length) {
-      const w = stampPx(settler.tierRank, r, scale);
-      const index = hashId(settler.id) % choices.length;
-      const choice = choices[index]!;
-      const aspect = choice.ink.h / choice.ink.w;
-      const h = w * aspect;
-      const rect: Rect = { x: s.x - w * choice.anchor.x + w * 0.12, y: s.y - h * choice.anchor.y + h * 0.18, w: w * 0.76, h: h * 0.76 };
-      if (forced || grid.free(rect)) {
-        claim(rect);
-        const drawn = { x: s.x - w * choice.anchor.x, y: s.y - h * choice.anchor.y, w, h };
+      const { index, choice, drawn, occupied } = stampPlacement(settler, s, r, scale, choices)!;
+      const { w, h } = drawn;
+      if (forced || grid.free(occupied)) {
+        claim(occupied);
         const plate = placeName(settler, s.x, s.y, w, h * choice.anchor.y, forced);
         marks.push({
           id: settler.id, settler, box: drawn, label,
-          stamp: { group: STAMP_GROUPS[settler.tierRank]!, index, ...drawn },
+          stamp: { group: STAMP_GROUPS[settler.tierRank]!, index, ...drawn, alpha: STAMP_ALPHA[settler.tierRank] ?? 1 },
           mark: null,
           ...plate,
           ring: { x: s.x, y: s.y - h * choice.anchor.y * 0.45, r: Math.max(w, h) * 0.45 + 7 },
@@ -391,10 +429,12 @@ export function layoutStill(input: LayoutInput): StillLayout {
     });
   }
   if (!realmsPlaced) placeRealms(geo, camera, view, measure, take, texts);
+  // Names knock out the survey marks under them (map/collide underLettering, as the moving map does).
+  const lettering = texts.map((text): Rect => ({ x: text.x, y: text.y, w: text.w, h: text.h }));
+  const legible = marks.filter(mark => !mark.mark || mark.settler === selected || !underLettering(mark.box.x + mark.box.w / 2, mark.box.y + mark.box.h / 2, mark.settler.tierRank, lettering));
   // Holdings in the margin are placed (so the screen's own give way to them as the map's do) but are not drawn here:
   // a button for one would sit off screen, reachable by Tab and a screen reader, and scroll the still to it.
-  const onScreen = marks.filter((mark) => mark.box.x < view.width && mark.box.y < view.height && mark.box.x + mark.box.w > 0 && mark.box.y + mark.box.h > 0);
-  return { marks: onScreen, texts, shields, names, tiers, claims };
+  return { marks: legible.filter(mark => onScreen(mark.box, view)), texts, shields, names, tiers, claims };
 }
 
 type Take = (rect: Rect) => boolean;
@@ -481,9 +521,9 @@ export interface LiveSource {
   liveClass(settler: Settler): number;
   startedAt(settler: Settler): number | null;
   bloom(startedAt: number | null, at?: number): number;
-  readonly dabs: readonly { x: number; y: number; hash: string; startedAt: number }[];
+  readonly dabs: readonly { x: number; y: number; hash: string; startedAt: number; placed: boolean }[];
   dryingWashes(at?: number): Iterable<{ ordinal: number; liveClass: number; x: number; y: number; left: number }>;
-  dryingDabWashes(at?: number): Iterable<{ dab: { x: number; y: number; hash: string }; left: number }>;
+  dryingDabWashes(at?: number): Iterable<{ dab: { x: number; y: number; hash: string; placed: boolean }; left: number }>;
 }
 
 /** One deposit of pigment in screen CSS px: a rimless density stain (variant −1) or a seeded watercolour blot. */
@@ -516,7 +556,7 @@ export function washStains(store: SettlerStore, live: LiveSource, camera: Camera
     }
   };
   if (live.frame) {
-    const holdings = store.query(box.minX, box.minY, box.maxX, box.maxY, 3)
+    const holdings = store.query(box.minX, box.minY, box.maxX, box.maxY, TIER_CODES.length - 1)
       .map((settler) => ({ settler, liveClass: live.liveClass(settler) }))
       .filter((item) => item.liveClass > 0)
       .sort((a, b) => a.liveClass - b.liveClass || a.settler.ordinal - b.settler.ordinal);
@@ -527,22 +567,22 @@ export function washStains(store: SettlerStore, live: LiveSource, camera: Camera
     }
     for (const dab of live.dabs) {
       if (stains.length >= limit) break;
-      if (!inBox(dab.x, dab.y)) continue;
+      if (!dab.placed || !inBox(dab.x, dab.y)) continue;
       const bloom = live.bloom(dab.startedAt, now);
       if (bloom > 0.01) lay(dab.x, dab.y, 5, bloom, parseInt(dab.hash.slice(0, 4), 16));
     }
   }
   for (const dry of live.dryingWashes(now)) if (inBox(dry.x, dry.y)) lay(dry.x, dry.y, dry.liveClass, dry.left, dry.ordinal);
-  for (const { dab, left } of live.dryingDabWashes(now)) if (inBox(dab.x, dab.y)) lay(dab.x, dab.y, 5, left, parseInt(dab.hash.slice(0, 4), 16));
+  for (const { dab, left } of live.dryingDabWashes(now)) if (dab.placed && inBox(dab.x, dab.y)) lay(dab.x, dab.y, 5, left, parseInt(dab.hash.slice(0, 4), 16));
   return { stains, opacity: DENSITY_CAP + (1 - DENSITY_CAP) * detail };
 }
 
 // ── The ribbon ───────────────────────────────────────────────────────────────────────────────────
 
 /** What the still says about itself: what it is, when it was observed and drawn, and why it is not moving. */
-export function stillRibbon(input: { asOf: number; drawnAt: number; liveAsOf: number | null; now: number; landMissing: boolean }): { title: string; facts: string[]; live: string | null; why: string } {
+export function stillRibbon(input: { asOf: number; drawnAt: number; liveAsOf: number | null; now: number; landMissing: boolean; edition?: EditionFacts | null }): { title: string; facts: string[]; live: string | null; why: string } {
   return {
-    title: 'A still of the survey',
+    title: stillTitle(input.edition),
     facts: [`observed to ${formatMoment(input.asOf)}`, `drawn ${formatTime(input.drawnAt, input.now)}`],
     live: input.liveAsOf === null ? null : `Live as of ${formatTime(input.liveAsOf, input.now)}`,
     why: input.landMissing

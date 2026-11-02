@@ -1,0 +1,3 @@
+html:has(.panel-painter), body:has(.panel-painter), #root:has(.panel-painter) { width:100%; height:100%; margin:0; overflow:hidden; background:#171c23; }
+.panel-painter { position:fixed; inset:0; }
+.panel-painter canvas { display:block; width:100%; height:100%; }

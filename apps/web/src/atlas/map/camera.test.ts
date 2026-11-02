@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { Camera, DISTANCE_SCALE, distanceFor, MAX_SCALE, NO_INSETS, type Box, type Insets, type Viewport } from './camera';
 

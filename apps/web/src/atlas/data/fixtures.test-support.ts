@@ -1,9 +1,12 @@
 /**
- * Test support only (not a test file, not shipped): a small synthetic survey preview with the same shape as the
- * files the Atlas service publishes, and a fake fetch that serves it.
+ * Test support only (not a test file, not shipped): a small synthetic survey preview and an edition publication of
+ * the same land, with the same shapes as the files the Atlas service publishes, and a fake fetch that serves them.
  */
 import { createHash } from 'node:crypto';
-import { PREVIEW_LABEL, type PreviewChunk, type PreviewPointer, type PreviewSource, type PreviewWorld, type ServedNames, type SettlerColumns } from './preview';
+import {
+  PREVIEW_LABEL, type EditionLabel, type EditionWorld, type PreviewChunk, type PreviewPointer, type PreviewSource, type PreviewWorld, type ServedNames,
+  type SettlerColumns,
+} from './preview';
 
 export const BASE = 'https://atlas.test/map-data';
 export const ID_A = 'pv-20261030T015627Z-97344f8ef397';
@@ -111,7 +114,52 @@ export const CHUNK_ROWS: Row[][] = [
 ];
 
 export function makeChunk(world: PreviewWorld, region: number): PreviewChunk {
+  if (world.status === 'edition') {
+    const rows = EDITION_CHUNK_ROWS[region] ?? { rows: [], founded: 0 };
+    return { version: 1, kind: 'chatdom-atlas-survey-preview-region', preview: world.id, region, settlers: { ...columns(rows.rows), founded: rows.founded } };
+  }
   return { version: 1, kind: 'chatdom-atlas-survey-preview-region', preview: world.id, region, settlers: columns(CHUNK_ROWS[region] ?? []) };
+}
+
+// ── An edition publication of the same land ───────────────────────────────────────────────────────────────────
+export const ID_E = 'pv-20261106T020000Z-ed1a5c0ffee1';
+export const REV_E = 'obs-20261106T020000Z-0ff1ce5eed01';
+/** Edition I was founded on 5 Nov 2026 at 16:00 UTC; this publication draws the night after. */
+export const FOUNDED_AT = Date.UTC(2026, 10, 5, 16, 0);
+export const EDITION_AS_OF = Date.UTC(2026, 10, 6, 2, 0);
+
+/** A founding hamlet (a founded kingdom under 25 viewers, settled at once) and one granted by a raid on a later night. */
+export const FOUNDING_HAMLET: Row = { id: '901234567', login: 'emberwick', name: 'Emberwick', tier: 4, x: 1660, y: 300, average: 14, game: 2, region: 1, realm: 4 };
+export const LATER_HAMLET: Row = { id: '912345678', login: 'littlelantern', name: 'LittleLantern', tier: 4, x: 200, y: 100, average: 9, game: 0, region: 0, realm: 1 };
+
+/** Each region's rows in file order: its founding holdings first, then those granted on later nights. */
+export const EDITION_CHUNK_ROWS: { rows: Row[]; founded: number }[] = [
+  { rows: [...CHUNK_ROWS[0]!, LATER_HAMLET], founded: CHUNK_ROWS[0]!.length },
+  { rows: [...CHUNK_ROWS[1]!, FOUNDING_HAMLET], founded: CHUNK_ROWS[1]!.length + 1 },
+  { rows: [], founded: 0 },
+];
+
+/**
+ * The fixture land as one night of a founded edition: same geometry, its founding record, two hamlets in the region
+ * chunks and every file saying how many of its holdings were founded. `rehearsal` stages it as a rehearsal.
+ */
+export function makeEdition(opts: { rehearsal?: boolean; label?: EditionLabel; id?: string; revision?: string; asOf?: number } = {}): EditionWorld {
+  const label = opts.label ?? 'Edition I';
+  const revision = opts.revision ?? REV_E;
+  const asOf = opts.asOf ?? EDITION_AS_OF;
+  const land = makeWorld(opts.id ?? ID_E, revision, asOf);
+  return {
+    ...land,
+    label,
+    status: 'edition',
+    founding: {
+      status: 'founded', edition: label === 'Edition 0' ? 'ed-0' : 'ed-1', label, foundedAt: FOUNDED_AT,
+      worldHash: 'a1'.repeat(32), address: 'b2'.repeat(32), rehearsal: opts.rehearsal ?? false,
+      ledger: { lines: 9, settlers: 9, head: 'c3'.repeat(32) }, night: { revision, asOf },
+    },
+    counts: { ...land.counts, mapped: 9, hamlet: 2 },
+    head: { ...land.head, founded: HEAD_ROWS.length },
+  };
 }
 
 /**
@@ -119,7 +167,7 @@ export function makeChunk(world: PreviewWorld, region: number): PreviewChunk {
  * otherwise; `withheld` holdings are listed without names, as the service lists them.
  */
 export function makeNames(world: PreviewWorld, opts: { withheld?: string[]; freshUntil?: Record<string, number>; omit?: string[] } = {}): ServedNames {
-  const rows = [...HEAD_ROWS, ...CHUNK_ROWS.flat()]
+  const rows = [...HEAD_ROWS, ...(world.status === 'edition' ? EDITION_CHUNK_ROWS.flatMap(chunk => chunk.rows) : CHUNK_ROWS.flat())]
     .filter((row) => !opts.withheld?.includes(row.id) && !opts.omit?.includes(row.id));
   return {
     version: 1,
@@ -157,6 +205,9 @@ export function publish(world: PreviewWorld = makeWorld()): Published {
     revision: world.revision,
     asOf: world.asOf,
     world: { url: `/map-data/v1/preview/${world.id}/world.json`, sha256: sha(worldText), bytes: Buffer.byteLength(worldText) },
+    ...(world.status === 'edition' ? {
+      edition: { id: world.founding.edition, label: world.founding.label, foundedAt: world.founding.foundedAt, worldHash: world.founding.worldHash, address: world.founding.address },
+    } : {}),
   };
   return { world, worldText, pointer, chunkTexts };
 }

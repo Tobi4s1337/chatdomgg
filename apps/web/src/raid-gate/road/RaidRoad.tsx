@@ -24,8 +24,8 @@ import './road.css';
  * Raid Gate, along the Atlas road between two real holdings, to the destination's gate, its welcome and its gift.
  *
  * Its two ends are real Twitch channels on the real survey (their positions, names and arms), whose land is grown from
- * each channel's own seed as the Genesis previews grow it. The raid itself is SIMULATED: the real gate application
- * runs in the page against SIMULATED Twitch, rooms, people and things (the gate's bench), and every surface says so.
+ * each channel's own seed as the Genesis previews grow it. The real gate application runs against private
+ * simulated Twitch, rooms, people and things; internal origins remain isolated without visible provenance chips.
  * The director holds each act until the fact behind the next one is observed; nothing moves on a timer alone.
  *
  * `?capture=1` freezes the presentation clock and hands it to `window.__raidRoad.seek(t)`, so captures are exact.
@@ -100,7 +100,6 @@ export default function RaidRoad() {
   const [seats, setSeats] = createSignal<number[]>([]);
   const [you, setYou] = createSignal<number | null>(null);
   const [marks, setMarks] = createSignal<ReturnType<RoadAtlas['marks']> | null>(null);
-  const [surveyed, setSurveyed] = createSignal<number | null>(null);
 
   const effective = () => ({ ...timing, ride: reduced ? timing.ride : rideSeconds() });
   const moment = createMemo<RoadMoment>(() => momentAt(facts(), effective(), t()));
@@ -246,7 +245,7 @@ export default function RaidRoad() {
         try {
           const map = await openRoadAtlas(mapHost, { from: from.id, to: to.id, viewers: RIDERS, signal: life.signal, reduceMotion: () => reduced });
           if (life.signal.aborted) { map.dispose(); return; }
-          setAtlas(map); setRideSeconds(map.rideSeconds); setSurveyed(map.surveyedAt);
+          setAtlas(map); setRideSeconds(map.rideSeconds);
           unfold();
           await map.ready;
           note('mapReadyAt');
@@ -339,10 +338,6 @@ export default function RaidRoad() {
     const gift = g?.taken ? ` ${g.name}'s gift, ${g.title}, goes home with you, its story kept.` : '';
     return { eyebrow: `The gate of ${to.name}`, title: `${to.name} welcomes the guests of ${from.name}`, line: walk + receive + gift };
   };
-  const surveyDate = () => {
-    const at = surveyed();
-    return at ? new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
-  };
   const caravanLabel = () => {
     const m = marks();
     if (!m?.head.visible || !onRoad()) return null;
@@ -378,7 +373,6 @@ export default function RaidRoad() {
           <For each={CHAPTERS}>{(c, i) => <li classList={{ 'rr-now': chapter() === c.id, 'rr-past': CHAPTERS.findIndex(x => x.id === chapter()) > i() }}><span>{['I', 'II', 'III'][i()]}</span>{c.title}</li>}</For>
         </ol>
         <h1>{chapter() === 'gate' ? from.name : chapter() === 'welcome' ? to.name : `${from.name} to ${to.name}`}</h1>
-        <p class="rr-provenance"><span class="rg-pip" />SIMULATED raid · real Atlas holdings{surveyDate() ? `, survey of ${surveyDate()}` : ''}</p>
       </div>
     </header>
 
@@ -391,7 +385,6 @@ export default function RaidRoad() {
       <div class="rr-caravan-tag">
         <Seal kingdomId={from.id} size={34} />
         <span><b>{from.name}'s raid</b><small>{act() === 'hold' ? `Waiting at ${to.name}'s gate while its land is drawn` : `${(raid()?.viewers ?? RIDERS).toLocaleString('en')} travellers · to ${to.name}`}</small></span>
-        <em><span class="rg-pip" />SIMULATED</em>
       </div>
     </div>}</Show>
     <Show when={mapError() && onRoad()}><p class="rr-map-note" role="status">{mapError()}</p></Show>

@@ -177,3 +177,28 @@ export function insideFree(point: { x: number; y: number }, camera: CameraState,
   const okY = top <= bottom ? sy >= top && sy <= bottom : Math.abs(sy - (insets.top + view.height - insets.bottom) / 2) < 1;
   return okX && okY;
 }
+
+/**
+ * The hero's breathing drift: a slow wander of at most 36 × 22 screen pixels and 1.8 % of scale, with periods of
+ * many minutes. Its fastest point moves about a third of a pixel per second.
+ */
+export function heroDrift(base: CameraState, seconds: number): CameraState {
+  return {
+    x: base.x + Math.sin(seconds / 120) * 36 / base.scale,
+    y: base.y + Math.sin(seconds / 170) * 22 / base.scale,
+    scale: base.scale * (1 + Math.sin(seconds / 210) * 0.018),
+  };
+}
+
+/**
+ * The drift is drawn only once it has moved this far (device pixels) anywhere on screen. Marks already land on whole
+ * device pixels, so a quarter-pixel step of the paper is never seen, and the frames between cost nothing.
+ */
+export const HERO_DRIFT_STEP_PX = 0.25;
+
+/** How far (device pixels) any point of the view moves between two cameras: the shift plus the zoom at a corner. */
+export function screenShift(from: CameraState, to: CameraState, view: Viewport, pixelRatio: number): number {
+  const shift = Math.hypot(to.x - from.x, to.y - from.y) * from.scale;
+  const zoom = Math.abs(to.scale / from.scale - 1) * Math.hypot(view.width, view.height) / 2;
+  return (shift + zoom) * pixelRatio;
+}

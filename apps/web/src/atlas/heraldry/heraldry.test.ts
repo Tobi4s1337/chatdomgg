@@ -1,10 +1,15 @@
+// @vitest-environment node
 import { createHash, randomBytes } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   blazon, channelSeed, chargeSpots, CHARGE_KINDS, COLOURS, designFromSeed, DIVISIONS, drawShield, isMetal,
   METALS, obeysRuleOfTincture, ORDINARIES, PARTITION_LINES, patternKind, sha256, SHIELD_ASPECT, shieldDesign,
   shieldPath, shieldPolygon, toHex, type FieldPattern, type ShieldContext, type ShieldDesign, type Tincture,
 } from './index';
+
+// Several sweeps here walk tens of thousands of IDs or every design at every size: seconds of pure CPU on a busy
+// shared host, more when the web package runs its files in parallel workers.
+vi.setConfig({ testTimeout: 30_000 });
 
 const nodeSha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 

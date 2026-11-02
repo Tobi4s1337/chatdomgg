@@ -1,6 +1,8 @@
 import { TokenSchema, type CitizenChatCue, type KingdomId, type PersonId, type PresenceInput } from '@chatdom/shared';
 import { z } from 'zod';
 import type { RealmMomentObservation, RealmStrike, RealmSupportObservation } from '@chatdom/shared/realm';
+import type { RaidObservation } from '../../../api/src/raid-gate/observations';
+import type { ChatCommandEnvelope } from '@chatdom/shared';
 
 /** Optional private service port. Producers pass only normalized, already verified observations. */
 export interface RealmDeliverySink {
@@ -8,6 +10,10 @@ export interface RealmDeliverySink {
   support?(input: RealmSupportObservation): Promise<void>;
   /** Bits, Hype Train and raid evidence: durable, resent under its EventSub message ID until the realm answers. */
   moment?(input: RealmMomentObservation): Promise<void>;
+  /** Full channel.raid evidence, retained until authority acknowledges it, independently of spectacle age. */
+  raid?(input: RaidObservation): Promise<void>;
+  /** Generic bang commands and moderation cleanup; no game-specific command catalogue lives in Herald. */
+  command?(input: ChatCommandEnvelope): Promise<void>;
   /** A witnessed `!strike`: transient, never stored or retried. */
   strike?(input: RealmStrike, current: () => boolean): void;
   speech(input: { readonly kingdomId: KingdomId; readonly personId: PersonId; readonly messageId: string;

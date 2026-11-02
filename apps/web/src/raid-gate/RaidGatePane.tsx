@@ -22,7 +22,6 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
     onCleanup(() => { stop(); window.clearInterval(timer); window.removeEventListener('keydown', keys); });
   });
   const s = snap;
-  const simulated = () => s().origin === 'simulated';
   const name = () => s().source.name;
 
   return <aside class="rg-pane" data-phase={s().journey ? 'journey' : s().phase} data-viewer={s().viewer ?? 'none'} aria-labelledby="rg-title">
@@ -146,7 +145,6 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
         </Switch>
         </Show>
       </div>
-      <Show when={simulated()}><p class="rg-simulated" title="Bench authority, walkers and Twitch answers; nothing reaches Twitch"><span class="rg-pip" />SIMULATED</p></Show>
     </div>
   </aside>;
 }
@@ -193,9 +191,9 @@ function AuthorityState(props: { snap: GateSnapshot; controller: RaidGateControl
     <p class="rg-lede">{body[props.snap.authority ?? 'unavailable']}</p>
     <div class="rg-actions">
       <Show when={reconnect && props.snap.canReconnect}><button class="rg-button rg-primary" onClick={() => props.controller.reconnect()}><Glyph kind="key" />{props.snap.authority === 'revoked' ? 'Reconnect Twitch' : 'Connect Twitch raids'}</button></Show>
-      <Show when={props.snap.authority === 'unavailable' || props.snap.authority === 'offline'}><button class="rg-button" onClick={() => void props.controller.refresh()}>Check again</button></Show>
+      <Show when={props.snap.authority === 'unavailable' || props.snap.authority === 'offline' || (reconnect && !props.snap.canReconnect)}><button class="rg-button" onClick={() => void props.controller.refresh()}>Check again</button></Show>
     </div>
-    <Show when={reconnect && !props.snap.canReconnect}><p class="rg-quiet">Reconnect from the throne's Twitch settings; this view has no account controls.</p></Show>
+    <Show when={reconnect && !props.snap.canReconnect}><p class="rg-quiet">Your kingdom's keeper renews this permission with Twitch. Check again once it is renewed.</p></Show>
   </>;
 }
 

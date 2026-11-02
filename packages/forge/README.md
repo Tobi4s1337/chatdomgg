@@ -14,6 +14,13 @@ material count and occupied/source budgets. Worker meshing adds the actual trian
 These are craft/fit checks, **not beauty or safety approval**; looked-at authored silhouettes and external judges
 are separate requirements. The mesh is never cropped or thinned to meet a budget.
 
+The style kit resolver accepts an explicit saved revision. Revision one remains the default and retains its
+existing geometry, including version-two plans. Revision two is an explicit content-review candidate with a
+framed lantern chamber and a clearer sleeping fox. It is not yet activated for new authority work. Saved pieces
+must use their recorded kit revision; an unknown revision fails closed. The approval binds the exact kit as well
+as the draft and home. Core scene/growth integration needs and promotion checks are in
+`work/lanes/forge-wish/SEAMS.md`.
+
 Attachments are exact geometry beside the shaped source. They never go through `BuildDraft.insertBlueprint`
 (which replaces a whole box) or architectural shaping (which would reinterpret a sculpture). Local placement
 receipts are a separate versioned sidecar. The browser reassembles and checks them on reload; a changed house
@@ -32,3 +39,8 @@ the team. The prototype lessons are in `work/references/prototypes.md`; all impl
 Check: `pnpm exec vitest run packages/forge/src/forge.test.ts`.
 See: `/?tier=town&hour=19.5&forge=1`. Capture: `node packages/testing/forge.mjs` (shared lock, standard sizes and
 an offline sampled end-to-end clip; `--look-only` skips clip frames).
+
+Socket surveys are revision-bound too: pass `findForgeSockets(home, profile, kit.revision)` when reconstructing
+a persisted attachment. The default remains revision one. Revision two clears the complete authored lantern
+envelope; expanding its vocabulary must not change saved socket outputs. Core scene/growth promotion needs
+are recorded in the lane seam.

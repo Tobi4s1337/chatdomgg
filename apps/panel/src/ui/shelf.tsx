@@ -36,7 +36,7 @@ function Product(props: { product: ShelfProduct; shelf: Offered; onUse: (sku: st
       <p class="cp-product-answer" role="status" classList={{ pending: kind() === 'confirming' }}>
         <WindowGlyph lit={false} pending={kind() === 'confirming'} />
         <span>{kind() === 'confirming'
-          ? <><strong>Simulating confirmation…</strong><small>No Twitch window opens and no Bits are used.</small></>
+          ? <><strong>Waiting for Twitch…</strong><small>Continue in Twitch’s window.</small></>
           : <><strong>Closed without using Bits</strong><small>Nothing was used and nothing changed in the kingdom.</small></>}</span>
       </p>}
     </Show>
@@ -52,9 +52,6 @@ export function ShelfSheet(props: { snap: PanelSnapshot; onUse: (sku: string) =>
         <For each={offered().products}>{product => <Product product={product} shelf={offered()} onUse={props.onUse} />}</For>
       </ul>
       <p class="cp-fine">Nothing here lasts past a day, and nothing brings light, rank, coals or a place. Twitch confirms every use of Bits in its own window.</p>
-      <Show when={props.snap.source.kind === 'simulated'}>
-        <p class="cp-fine cp-simulated-note">Simulated: Twitch’s window never opens here, and no Bits are ever used.</p>
-      </Show>
     </div>}
   </Show>;
 }

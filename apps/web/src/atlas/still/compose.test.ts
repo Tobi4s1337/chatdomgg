@@ -1,15 +1,16 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment node
+import { describe, expect, it, vi } from 'vitest';
 import stampSheet from '../assets/stamps.json';
-import { columns, HEAD_ROWS, makeNames, makeWorld, type Row } from '../data/fixtures.test-support';
+import { columns, FOUNDED_AT, FOUNDING_HAMLET, HEAD_ROWS, LATER_HAMLET, makeChunk, makeEdition, makeNames, makeWorld, type Row } from '../data/fixtures.test-support';
 import { geographyOf, SettlerStore, type Settler } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
-import { DISTANCE_SCALE, type Box } from '../map/camera';
-import { overlaps } from '../map/collide';
+import { Camera, DISTANCE_SCALE, type Box } from '../map/camera';
+import { overlaps, underLettering } from '../map/collide';
 import type { Stamp } from '../map/paint';
 import { levelFor, tileBox, tileKey } from '../map/pyramid';
 import { formatMoment } from '../ui/format';
 import {
-  ancestorCrop, ancestorsOf, DENSITY_CAP, layoutStill, SHIELD_LIMIT, sheetFrame, stillInsets, stillRibbon, stillView, tileRect, washStains,
+  ancestorCrop, ancestorsOf, DENSITY_CAP, layoutStill, layoutStillSelection, markLabel, SHIELD_LIMIT, sheetFrame, stillInsets, stillRibbon, stillView, tileRect, washStains,
   type LiveSource, type Measure, type StillLayout,
 } from './compose';
 
@@ -132,7 +133,7 @@ describe('layoutStill', () => {
       expect(mark.name?.text).toBe(mark.settler.name);
     }
     expect(result.marks[0]!.label).toBe('zackrawrr, capital in Just Chatting & IRL, English');
-    expect(result.marks[2]!.label).toBe('GRONKH, city in Deutsch');
+    expect(result.marks[2]!.label).toBe('GRONKH, city in German');
     expect(result.names).toBe(3);
     expect(result.shields).toBe(3);
   });
@@ -156,7 +157,7 @@ describe('layoutStill', () => {
     expect(result.marks.map((mark) => mark.label)).toEqual([
       'Unnamed capital in Just Chatting & IRL, English',
       'Unnamed city in Just Chatting & IRL, English',
-      'Unnamed city in Deutsch',
+      'Unnamed city in German',
     ]);
   });
 
@@ -165,12 +166,75 @@ describe('layoutStill', () => {
     world.head = columns([...HEAD_ROWS, ...capitals(120).map((row) => ({ ...row, x: (row.x % 2200) / 1, y: row.y % 1000 }))]);
     for (const view of [LAPTOP, PHONE, { width: 1920, height: 1080 }]) {
       const result = layout(setup(world), view);
+      const clashes: [number, number][] = [];
       for (let i = 0; i < result.claims.length; i++) {
-        for (let j = i + 1; j < result.claims.length; j++) expect(overlaps(result.claims[i]!, result.claims[j]!)).toBe(false);
+        for (let j = i + 1; j < result.claims.length; j++) if (overlaps(result.claims[i]!, result.claims[j]!)) clashes.push([i, j]);
       }
+      expect(clashes).toEqual([]);
       // Crowded capitals fall back to survey marks rather than piling up.
       expect(result.marks.some((mark) => mark.mark)).toBe(true);
     }
+  });
+
+  it('lifts survey marks out of the lettering of a language or realm, but never the selection', () => {
+    // A dense patch of cities right where the first name is lettered (names go down before cities): most become marks.
+    const plainEnv = setup();
+    const v = stillView(plainEnv.geo.bounds, LAPTOP);
+    const first = layout(plainEnv).texts[0]!;
+    const at = v.camera.screenToWorld(first.x + first.w / 2, first.y + first.h / 2, LAPTOP);
+    const spanX = first.w / v.camera.scale;
+    const spanY = first.h / v.camera.scale;
+    const dense: Row[] = Array.from({ length: 160 }, (_, i) => ({
+      id: String(2_000_000 + i), login: `dense${i}`, name: `Dense ${i}`, tier: 1,
+      x: at.x - spanX * 0.6 + (i % 16) * spanX * 0.08, y: at.y - spanY * 0.6 + Math.floor(i / 16) * spanY * 0.12,
+      average: 40_000 - i, game: 0, region: 0, realm: 1,
+    }));
+    const world = makeWorld();
+    world.head = columns([...HEAD_ROWS, ...dense]);
+    const env = setup(world);
+    const lettered = (result: StillLayout) => result.texts.map((t) => ({ x: t.x, y: t.y, w: t.w, h: t.h }));
+    let knocked: Settler | null = null;
+    for (const view of [LAPTOP, PHONE]) {
+      const result = layout(env, view);
+      expect(result.texts.length).toBeGreaterThan(0);
+      for (const mark of result.marks.filter((m) => m.mark)) {
+        expect(underLettering(mark.box.x + mark.box.w / 2, mark.box.y + mark.box.h / 2, mark.settler.tierRank, lettered(result))).toBe(false);
+      }
+      const shown = new Set(result.marks.map((m) => m.settler));
+      knocked ??= dense.map((row) => env.store.byId.get(row.id)!).find((settler) => !shown.has(settler)) ?? null;
+    }
+    // Something really was lifted, and selecting it brings it back first, wherever it stands.
+    expect(knocked).not.toBeNull();
+    const selected = layout(env, LAPTOP, knocked);
+    expect(selected.marks[0]!.settler).toBe(knocked);
+  });
+
+  it('keeps every shield between its name and its holding, whichever side the name goes', () => {
+    // Crowd the cities so some names have to go left of their stamp.
+    const rows: Row[] = Array.from({ length: 120 }, (_, i) => ({
+      id: String(3_000_000 + i), login: `crowd${i}`, name: `Crowd ${i}`, tier: 1,
+      x: HEAD_ROWS[0]!.x + ((i % 12) - 6) * 14, y: HEAD_ROWS[0]!.y + (Math.floor(i / 12) - 5) * 9,
+      average: 30_000 - i, game: 0, region: 0, realm: 1,
+    }));
+    const world = makeWorld();
+    world.head = columns([...HEAD_ROWS, ...rows]);
+    const env = setup(world);
+    let left = 0;
+    for (const view of [LAPTOP, PHONE]) {
+      for (const mark of layout(env, view).marks) {
+        if (!mark.shield || !mark.name) continue;
+        const centre = mark.box.x + mark.box.w / 2;
+        const shieldL = mark.shield.x + 3;
+        const shieldR = shieldL + mark.shield.width;
+        if (mark.name.x + mark.name.w <= centre) {
+          left++;
+          expect(shieldL).toBeGreaterThanOrEqual(mark.name.x + mark.name.w - 1);
+        } else {
+          expect(shieldR).toBeLessThanOrEqual(mark.name.x + 1);
+        }
+      }
+    }
+    expect(left).toBeGreaterThan(0);
   });
 
   it('draws at most 300 shields; names go on without them', () => {
@@ -235,6 +299,91 @@ describe('layoutStill', () => {
   });
 });
 
+describe('cached still selection', () => {
+  function selection(scale = 10, x = 0) {
+    const env = setup();
+    const camera = new Camera(env.geo.bounds);
+    camera.x = x; camera.y = 0; camera.scale = scale;
+    const selected = env.store.byId.get(HEAD_ROWS[2]!.id)!;
+    const input = { ...env, camera, view: PHONE, stamps, measure, selected };
+    const base = layoutStill({ ...input, selected: null });
+    return { input, base };
+  }
+
+  it('does no query or lettering work for land outside the padded view', () => {
+    const { input, base } = selection();
+    expect(base.marks.some(mark => mark.id === input.selected.id)).toBe(false);
+    const query = vi.spyOn(input.store, 'query');
+    const lettering = vi.fn(measure);
+    expect(layoutStillSelection(base, { ...input, measure: lettering })).toBe(base);
+    expect(query).not.toHaveBeenCalled();
+    expect(lettering).not.toHaveBeenCalled();
+  });
+
+  it('keeps the same visible layout for a selected stamp wholly offscreen inside the margin', () => {
+    const { input, base } = selection(10, 50);
+    const point = input.camera.worldToScreen(input.selected.x, input.selected.y, PHONE);
+    expect(point.x).toBeGreaterThan(PHONE.width);
+    expect(point.x).toBeLessThan(PHONE.width + 160);
+    const query = vi.spyOn(input.store, 'query');
+    expect(layoutStillSelection(base, input)).toBe(base);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('reuses an already drawn holding and rejects withheld or stale-store selections', () => {
+    const { input, base } = selection(0.2);
+    const drawn = base.marks[0]!.settler;
+    const query = vi.spyOn(input.store, 'query');
+    for (const selected of [drawn, null, { ...input.selected }, { ...input.selected, withheld: true }]) {
+      expect(layoutStillSelection(base, { ...input, selected })).toBe(base);
+    }
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('still gives a lower-tier visible selection first priority with its stamp, shield and name', () => {
+    const { input, base } = selection(0.2);
+    expect(base.marks.some(mark => mark.id === input.selected.id)).toBe(false);
+    const selected = layoutStillSelection(base, input);
+    expect(selected).not.toBe(base);
+    expect(plain(selected)).toEqual(plain(layoutStill(input)));
+    expect(selected.marks[0]!.settler).toBe(input.selected);
+    expect(selected.marks[0]!.stamp).not.toBeNull();
+    expect(selected.marks[0]!.shield).not.toBeNull();
+    expect(selected.marks[0]!.name?.text).toBe(input.selected.name);
+  });
+
+  it('retains a forced stamp reaching into the viewport even when its anchor lies outside', () => {
+    const { input } = selection(0.2);
+    input.camera.x = input.selected.x - (PHONE.width + 4 - PHONE.width / 2) / input.camera.scale;
+    const currentBase = layoutStill({ ...input, selected: null });
+    const result = layoutStillSelection(currentBase, input);
+    expect(result).not.toBe(currentBase);
+    const mark = result.marks.find(mark => mark.id === input.selected.id)!;
+    expect(input.camera.worldToScreen(input.selected.x, input.selected.y, PHONE).x).toBeGreaterThan(PHONE.width);
+    expect(mark.box.x).toBeLessThan(PHONE.width);
+    expect(mark.box.x + mark.box.w).toBeGreaterThan(PHONE.width);
+  });
+
+  it('refreshes the selected lower-tier name and removes its mark when withheld', () => {
+    const world = makeWorld();
+    const env = setup(world);
+    env.store.addChunk(makeChunk(world, 0));
+    const selected = env.store.byId.get('506611431')!;
+    const camera = stillView(env.geo.bounds, PHONE).camera;
+    const input = { ...env, camera, view: PHONE, stamps, measure, selected };
+    const current = () => layoutStillSelection(layoutStill({ ...input, selected: null }), input);
+    expect(current().marks.find(mark => mark.id === selected.id)?.name?.text).toBe('mira004');
+    const renamed = makeNames(world);
+    renamed.names[renamed.ids.indexOf(selected.id)] = 'Mira';
+    env.store.applyNames(renamed);
+    expect(current().marks.find(mark => mark.id === selected.id)?.name?.text).toBe('Mira');
+    env.store.applyNames(makeNames(world, { withheld: [selected.id] }));
+    expect(current().marks.some(mark => mark.id === selected.id)).toBe(false);
+    env.store.applyNames(makeNames(world));
+    expect(current().marks.find(mark => mark.id === selected.id)?.name?.text).toBe('mira004');
+  });
+});
+
 describe('washStains', () => {
   function live(classes: Record<string, number>, frame = true): LiveSource {
     return {
@@ -268,6 +417,63 @@ describe('washStains', () => {
     expect(washStains(env.store, live({ [HEAD_ROWS[0]!.id]: 1 }), v.camera, LAPTOP, 0).stains).toEqual([]);
     expect(washStains(env.store, live({ [HEAD_ROWS[1]!.id]: 2 }, false), v.camera, LAPTOP, 0).stains).toEqual([]);
   });
+
+  it('never paints the raw hash target before complete land placement, including while drying', () => {
+    const env = setup();
+    const v = stillView(env.geo.bounds, LAPTOP);
+    const dab = { x: 0, y: 0, hash: '0000000000000000', startedAt: 0, placed: false };
+    const source: LiveSource = { ...live({}), dabs: [dab], dryingDabWashes: () => [{ dab, left: 0.5 }] };
+    expect(washStains(env.store, source, v.camera, LAPTOP, 0).stains).toEqual([]);
+    dab.placed = true;
+    expect(washStains(env.store, source, v.camera, LAPTOP, 0).stains.length).toBeGreaterThan(0);
+  });
+});
+
+describe('an edition’s hamlets on the still', () => {
+  function edition() {
+    const world = makeEdition();
+    const env = setup(world);
+    for (const region of world.regions) env.store.addChunk(makeChunk(world, region.index));
+    env.store.applyNames(makeNames(world));
+    return env;
+  }
+
+  it('never marks a hamlet at the opening view, but draws a selected one with a quieter village stamp, a step smaller', () => {
+    const env = edition();
+    const v = stillView(env.geo.bounds, LAPTOP);
+    expect(layoutStill({ ...env, camera: v.camera, view: LAPTOP, stamps, measure }).marks.some(mark => mark.settler.tier === 'hamlet')).toBe(false);
+    const hamlet = env.store.byId.get(FOUNDING_HAMLET.id)!;
+    const village = env.store.byId.get('558501883')!;
+    expect(hamlet.tierRank).toBe(4);
+    const drawn = (selected: Settler) => layoutStill({ ...env, camera: v.camera, view: LAPTOP, stamps, measure, selected }).marks.find(mark => mark.settler === selected)!;
+    const h = drawn(hamlet);
+    const vi = drawn(village);
+    expect(h.stamp!.group).toBe('village');
+    expect(h.stamp!.alpha).toBeLessThan(1);
+    expect(vi.stamp!.alpha).toBe(1);
+    expect(h.stamp!.w).toBeLessThan(vi.stamp!.w);
+    expect(h.label).toBe(`Emberwick, hamlet in ${village.realmName}`);
+  });
+
+  it('places a hamlet after every village, and names an unnamed one as a hamlet of its edition', () => {
+    const env = edition();
+    const all = env.store.query(-1e6, -1e6, 1e6, 1e6, 4);
+    const ranks = all.map(settler => settler.tierRank).sort((a, b) => a - b);
+    expect(ranks.slice(-2)).toEqual([4, 4]);
+    expect(env.store.query(-1e6, -1e6, 1e6, 1e6, 3).some(settler => settler.tierRank === 4)).toBe(false);
+    const lost = { ...env.store.byId.get(LATER_HAMLET.id)!, name: null, realmName: '', region: 99 };
+    expect(markLabel(lost, env.geo, 'Edition I')).toBe('Unnamed hamlet in Edition I');
+  });
+
+  it('washes a live hamlet like any holding', () => {
+    const env = edition();
+    const v = stillView(env.geo.bounds, LAPTOP);
+    const live: LiveSource = {
+      frame: { asOf: 0 }, liveClass: (settler) => (settler.id === FOUNDING_HAMLET.id ? 5 : 0), startedAt: () => null, bloom: () => 1,
+      dabs: [], dryingWashes: () => [], dryingDabWashes: () => [],
+    };
+    expect(washStains(env.store, live, v.camera, LAPTOP, 0).stains).toHaveLength(1);
+  });
 });
 
 describe('stillRibbon', () => {
@@ -279,6 +485,12 @@ describe('stillRibbon', () => {
     expect(text.facts).toEqual([`observed to ${formatMoment(asOf)}`, 'drawn 10:07 UTC']);
     expect(text.live).toBeNull();
     expect(text.why).toMatch(/WebGL is off/);
+  });
+
+  it('titles a still of an edition by its name, and a rehearsal as one', () => {
+    expect(stillRibbon({ asOf, drawnAt: now, liveAsOf: null, now, landMissing: false }).title).toBe('A still of the survey');
+    expect(stillRibbon({ asOf, drawnAt: now, liveAsOf: null, now, landMissing: false, edition: { label: 'Edition I', foundedAt: FOUNDED_AT, rehearsal: false } }).title).toBe('A still of Edition I');
+    expect(stillRibbon({ asOf, drawnAt: now, liveAsOf: null, now, landMissing: true, edition: { label: 'Edition I', foundedAt: FOUNDED_AT, rehearsal: true } }).title).toBe('A still of the Edition I rehearsal');
   });
 
   it('adds the live frame’s own time, and owns up to land it could not ink', () => {

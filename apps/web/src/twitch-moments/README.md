@@ -94,8 +94,8 @@ fact, and never as current state. Pure timings and poses live in `raid-beat.ts` 
 
 **Size.** Twitch's viewer count only sizes the column, on a gently convex log curve (`raidUnits`): 1–3 is one
 treasured wagon, 10 two, 50 three, 140 four, 1,000 six, 10,000 nine, twelve at most (from about 70,000). The lead
-wagon carries the great standard and tribute; then covered wagons (a cream tilt banded in the raider's colour) and
-open tribute wagons (crates, sacks and a brass-bound chest) in turn. Nobody rides: no figures, no names on the
+wagon carries the great standard; then covered wagons (a cream tilt banded in the raider's colour) and
+open festival wagons with lanterns and cloth fittings in turn. Nobody rides: no figures, no names on the
 wagons, nothing invented.
 
 **Whose banner.** The raider's arms are its Atlas arms (`shieldDesign(channelId)`), woven into cloth: the shield's
@@ -104,8 +104,8 @@ fabric dyes, with a swallowtail. A channel without a kingdom here (`founded: fal
 name and arms; nothing is forged for it. The pony saddles and the wagons' sideboards take the arms' colour.
 
 **Words.** Over the standard's crossbar: title `‹name› rides in`, line `A raid of 140` (`A raid of one`,
-`A raid of 10,000`), detail `Raiders who chat are our guests tonight`. The frame carries `SIMULATED` from a
-simulated feed exactly as every other moment (the stream and bench show it).
+`A raid of 10,000`), detail `Raiders who chat are our guests tonight`. The frame retains its internal `SIMULATED` provenance from a
+simulated feed, isolated from live scenes. The stream and private bench render no provenance chip.
 
 | ms from the raid | What happens |
 |---|---|
@@ -121,14 +121,22 @@ simulated feed exactly as every other moment (the stream and bench show it).
 | last wagon + 6,000 + 2,500 (≥ 14,000) | the plate fades (1 s) and the director hands the camera back |
 | hold + 3,500 | farewell horn (−600); the braziers sink to embers, the gate thins away over 1.4 s |
 
-A raid of 3 holds the gate 14 s; 140 holds 22.7 s; 10,000 holds 40.7 s (its column takes 35 s to pass the gate);
-twelve wagons take 51.5 s. The stage profile is rank 5, town-wide: people turn to the gate, the lamps hush before the
-lead wagon and the crowd cheers as it comes through.
+A raid of 3 holds the gate 14 s; 140 holds 28.3 s (its four wagons take 22.4 s to pass the gate); 10,000 holds
+63.9 s (nine wagons, 58 s); twelve wagons at 70,000 hold 79.9 s (74 s). The stage profile is rank 5, town-wide:
+people turn to the gate, the lamps hush before the lead wagon and the crowd cheers as it comes through.
 
-**Shot.** While a raid holds the gate, `shotFor('gate')` stands over the road 13 m inside the town (16 m in a
-portrait picture), on the side away from the standard and 7.2 m up — above the lead standard's 5.5 m, so the column
-passes under the shot, not through it — looking back at the gate. Five candidates, each through the host's
-`validatePose`; with none legal, the gift gate shot as before.
+**Shot.** While a raid holds the gate, `shotFor('gate')` stands beside the actual street 21–25 m inside the town
+(18–25 m in a portrait picture, nearer the road's line), 6.5–9.5 m up, and looks back out through the standard, so
+the column comes towards the viewer, ponies and standards first. Candidates follow the supplied road, each through
+the host's `validatePose`; only with none legal does it look in from outside the gate along the road, and after
+that the gift gate shot as before.
+
+**Scale in the world.** The town lines its street with torch pairs for the raid (one pair for a single wagon, two
+at 140, five at 10,000, six at 70,000), from 4.2 m inside the gate every 3.4 m, catching in a wave after the
+braziers and going out with the gate. Each post stands only on ground the conservative chat-lamp sampler supports,
+chosen once per raid. Columns of 10,000 and more also release sky lanterns over each wagon once it is through the
+gate (six per wagon, nine from 50,000; at most 96 on screen). Both are light and props from the beat alone, never
+people, with their own instance budgets.
 
 **One gate at a time; no merging.** A raid that arrives while another holds the gate waits until that gate has gone
 to sleep and the caravan before it has left the road, so at most two caravans are ever on it; it takes its turn on
@@ -138,7 +146,7 @@ same road, so a cart waits until the last wagon is off it; parcels from the sky 
 
 **Caps** (`RAID_LIMITS`, `RAID_VIEW_LIMITS`): 12 wagons a caravan, 2 caravans drawn, 4 raids waiting, 4 rolls. The
 view draws everything instanced from parts meshed once in `prepare()`, posed from the frame alone: per part at most
-24 wagons, 96 wheels and legs, 144 tribute pieces, 1,400 dye cells per tincture; 96 flame cores, 40 glows and 40
+24 wagons, 96 wheels and legs, bounded festival fittings, 1,400 dye cells per tincture; 96 flame cores, 40 glows and 40
 light pools. Pools are created on first use and reused; everything is released on `dispose()`. Arms are cached for
 the last 8 raiders.
 
@@ -151,3 +159,8 @@ the last 8 raiders.
   beats under the shared capture lock into `shots/sky-moments/`; `--wired` previews main's side of the seam from
   `wiring.mjs`, in memory only; `--before` serves the committed sky layer instead, for a before/after.
 - `… sky-capture.mjs --ladder --wired` — every rung at its high point over the same picture, one row.
+
+## Decisions
+
+- 2026-11-02: The 2026-11-01 founder decision 25 removes visible simulation labels, including private benches and accessibility text. Internal simulated origins, feed isolation and transport guards remain unchanged. Private fixtures remain on `/-/` routes.
+- 2026-11-02: Raid wagons carry standards, colours, lanterns and cloth fittings; they carry no tribute. The caravan description and pool inventory above now reflect this rule.

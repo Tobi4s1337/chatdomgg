@@ -1,12 +1,13 @@
 import { For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import '@chatdom/ui/kit.css';
+import './chrome.css';
 import { DISTANCES, type Distance } from '../map/camera';
-import { PREVIEW_LABEL, type PreviewWorld } from '../data/preview';
-import { formatCount, formatDayRange, scaleBar } from './format';
+import type { PreviewWorld } from '../data/preview';
+import { formatCount, scaleBar } from './format';
 import { StampIcon } from './marks';
 
-/** The title cartouche: what this is, that it is a survey preview, and when it was observed. */
-export function Cartouche(props: { world: PreviewWorld; children?: JSX.Element }) {
-  const w = () => props.world;
+/** The carved map title and search; the dated survey seal is supplied by the scene. */
+export function Cartouche(props: { world: PreviewWorld; children?: JSX.Element; seal?: JSX.Element }) {
   let header: HTMLElement | undefined;
   // The key below gives way to however tall the cartouche is (its live seal wraps): the page reads it as a variable.
   onMount(() => {
@@ -22,16 +23,15 @@ export function Cartouche(props: { world: PreviewWorld; children?: JSX.Element }
     });
   });
   return (
-    <header ref={(element) => (header = element)} class="atlas-cartouche">
-      <p class="atlas-eyebrow">Chatdom</p>
-      <h1 class="atlas-title">The Atlas of Kingdoms</h1>
-      <div class="atlas-flourish" aria-hidden="true"><span /><i /><span /></div>
-      <p class="atlas-preview-label">{PREVIEW_LABEL}</p>
-      <p class="atlas-cartouche-facts">
-        <span>{formatCount(w().counts.mapped)} channels in {w().counts.languages} tongues,</span>
-        <span>observed {formatDayRange(w().window.firstObservationAt, w().window.lastObservationAt)}</span>
-      </p>
-      {props.children}
+    <header ref={(element) => (header = element)} class="atlas-cartouche cd-plate">
+      <div class="atlas-cartouche-heading">
+        <span class="atlas-cartouche-ornament" aria-hidden="true">
+          <svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="14" /><circle cx="20" cy="20" r="8" /><path d="M20 2v36M2 20h36M7.3 7.3l25.4 25.4M32.7 7.3 7.3 32.7" /><path class="atlas-cartouche-needle" d="m20 5 2.4 12.6L35 20l-12.6 2.4L20 35l-2.4-12.6L5 20l12.6-2.4z" /></svg>
+        </span>
+        <h1 class="atlas-title">Chatdom <span>Atlas</span></h1>
+        {props.seal}
+      </div>
+      <div class="atlas-cartouche-search">{props.children}</div>
     </header>
   );
 }
@@ -54,10 +54,11 @@ export function Controls(props: {
   distance: Distance;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  children?: JSX.Element;
 }) {
   return (
     <div class="atlas-controls" role="group" aria-label="Map view">
-      <button type="button" onClick={() => props.onZoomIn()} disabled={!props.canZoomIn} aria-label="Zoom in" title="Zoom in (+)"><Icon d="M12 5v14M5 12h14" /></button>
+      <button type="button" on:click={() => props.onZoomIn()} disabled={!props.canZoomIn} aria-label="Zoom in" title="Zoom in (+)"><Icon d="M12 5v14M5 12h14" /></button>
       <div class="atlas-ladder" role="group" aria-label="Distance">
         <For each={[...DISTANCES].reverse()}>
           {(distance) => (
@@ -68,15 +69,16 @@ export function Controls(props: {
               aria-pressed={props.distance === distance}
               aria-label={`${DISTANCE_LABELS[distance]} distance`}
               title={`${DISTANCE_LABELS[distance]} (${DISTANCES.indexOf(distance) + 1})`}
-              onClick={() => props.onDistance(distance)}
+              on:click={() => props.onDistance(distance)}
             >
               <span aria-hidden="true" />
             </button>
           )}
         </For>
       </div>
-      <button type="button" onClick={() => props.onZoomOut()} disabled={!props.canZoomOut} aria-label="Zoom out" title="Zoom out (−)"><Icon d="M5 12h14" /></button>
-      <button type="button" onClick={() => props.onHome()} aria-label="Show the whole map" title="Whole map (0)"><Icon d="M4 11.5L12 5l8 6.5M6.5 10v8.5h11V10M10 18.5v-5h4v5" /></button>
+      <button type="button" on:click={() => props.onZoomOut()} disabled={!props.canZoomOut} aria-label="Zoom out" title="Zoom out (−)"><Icon d="M5 12h14" /></button>
+      <button type="button" on:click={() => props.onHome()} aria-label="Show the whole map" title="Whole map (0)"><Icon d="M4 11.5L12 5l8 6.5M6.5 10v8.5h11V10M10 18.5v-5h4v5" /></button>
+      {props.children}
     </div>
   );
 }
@@ -100,8 +102,8 @@ export function Notice(props: { children: unknown; action?: { label: string; run
   return (
     <div class="atlas-notice" role="status">
       <span>{props.children as string}</span>
-      <Show when={props.action}>{(action) => <button type="button" onClick={() => action().run()}>{action().label}</button>}</Show>
-      <Show when={props.onDismiss}>{(dismiss) => <button type="button" class="atlas-notice-x" aria-label="Dismiss" onClick={() => dismiss()()}>×</button>}</Show>
+      <Show when={props.action}>{(action) => <button type="button" on:click={() => action().run()}>{action().label}</button>}</Show>
+      <Show when={props.onDismiss}>{(dismiss) => <button type="button" class="atlas-notice-x" aria-label="Dismiss" on:click={() => dismiss()()}>×</button>}</Show>
     </div>
   );
 }

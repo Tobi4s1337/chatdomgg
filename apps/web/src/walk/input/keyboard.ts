@@ -31,15 +31,24 @@ export interface WalkKeys {
   dispose(): void;
 }
 
-const FORWARD = new Set(['KeyW', 'ArrowUp']);
-const BACK = new Set(['KeyS', 'ArrowDown']);
-const LEFT = new Set(['KeyA', 'ArrowLeft']);
-const RIGHT = new Set(['KeyD', 'ArrowRight']);
-const SPRINT = new Set(['ShiftLeft', 'ShiftRight']);
-const JUMP = 'Space';
-const OWNED = new Set([...FORWARD, ...BACK, ...LEFT, ...RIGHT, ...SPRINT, JUMP]);
-/** Keys no control uses for itself: they walk even while a button keeps focus. */
-const LETTERS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight']);
+/** The walking actions and their default physical keys; the ledger may rebind them per device. */
+export type WalkBindingAction = 'forward' | 'back' | 'left' | 'right' | 'jump' | 'sprint';
+export type WalkBindings = Readonly<Record<WalkBindingAction, string>>;
+export const DEFAULT_WALK_BINDINGS: WalkBindings = { forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft' };
+/** The arrows always walk too, whatever the bindings. */
+const ARROWS: Readonly<Record<'forward' | 'back' | 'left' | 'right', string>> = { forward: 'ArrowUp', back: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+const SHIFT_PAIR: Readonly<Record<string, string>> = { ShiftLeft: 'ShiftRight', ShiftRight: 'ShiftLeft' };
+
+interface KeyMap { readonly forward: ReadonlySet<string>; readonly back: ReadonlySet<string>; readonly left: ReadonlySet<string>; readonly right: ReadonlySet<string>; readonly sprint: ReadonlySet<string>; readonly jump: string; readonly owned: ReadonlySet<string>; readonly letters: ReadonlySet<string> }
+function keyMap(bindings: WalkBindings): KeyMap {
+  const direction = (action: 'forward' | 'back' | 'left' | 'right') => new Set([bindings[action], ARROWS[action]].filter(Boolean));
+  const sprint = new Set([bindings.sprint, SHIFT_PAIR[bindings.sprint] ?? ''].filter(Boolean));
+  const map = { forward: direction('forward'), back: direction('back'), left: direction('left'), right: direction('right'), sprint, jump: bindings.jump };
+  const owned = new Set([...map.forward, ...map.back, ...map.left, ...map.right, ...sprint, bindings.jump].filter(Boolean));
+  // Keys no control uses for itself (letters, digits, Shift): they walk even while a button keeps focus.
+  const letters = new Set([...owned].filter(code => /^(Key[A-Z]|Digit[0-9]|Shift(Left|Right))$/.test(code)));
+  return { ...map, owned, letters };
+}
 
 /** A focused text field, select or contenteditable keeps its keys. */
 export function isEditableTarget(target: unknown): boolean {
@@ -70,19 +79,23 @@ export function isKeyboardControl(target: unknown): boolean {
   try { return element.matches?.(':focus-visible') ?? true; } catch { return true; }
 }
 
-export function createWalkKeys(keyboard: EventTarget, page?: PageLike): WalkKeys {
+export function createWalkKeys(keyboard: EventTarget, page?: PageLike, bindings: () => WalkBindings = () => DEFAULT_WALK_BINDINGS): WalkKeys {
   const held = new Set<string>();
+  let bound = '', map = keyMap(DEFAULT_WALK_BINDINGS);
+  /** Read the bindings at the moment of use, so a key rebound in the ledger walks at once. */
+  const current = () => { const next = bindings(), key = JSON.stringify(next); if (key !== bound) { bound = key; map = keyMap(next); held.clear(); jump = false; } return map; };
   let jump = false, enabled = true;
   const has = (codes: ReadonlySet<string>) => { for (const code of codes) if (held.has(code)) return true; return false; };
   const clear = () => { held.clear(); jump = false; };
   const keydown = (raw: Event) => {
     const event = raw as unknown as KeyEventLike;
-    if (!enabled || event.defaultPrevented || !OWNED.has(event.code) || event.isComposing || isEditableTarget(event.target)) return;
+    const keys = current();
+    if (!enabled || event.defaultPrevented || !keys.owned.has(event.code) || event.isComposing || isEditableTarget(event.target)) return;
     // Browser and system shortcuts (Ctrl+W, Cmd+A, Alt+arrows) are never walking.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (!LETTERS.has(event.code) && isKeyboardControl(event.target)) return;
+    if (!keys.letters.has(event.code) && isKeyboardControl(event.target)) return;
     event.preventDefault();
-    if (event.code === JUMP) { if (!event.repeat && !held.has(JUMP)) jump = true; }
+    if (event.code === keys.jump) { if (!event.repeat && !held.has(keys.jump)) jump = true; }
     held.add(event.code);
   };
   const keyup = (raw: Event) => {
@@ -103,9 +116,9 @@ export function createWalkKeys(keyboard: EventTarget, page?: PageLike): WalkKeys
   keyboard.addEventListener('contextmenu', contextmenu);
   page?.addEventListener('visibilitychange', visibility);
   return {
-    get forward() { return Number(has(FORWARD)) - Number(has(BACK)); },
-    get right() { return Number(has(RIGHT)) - Number(has(LEFT)); },
-    get sprint() { return has(SPRINT); },
+    get forward() { const keys = current(); return Number(has(keys.forward)) - Number(has(keys.back)); },
+    get right() { const keys = current(); return Number(has(keys.right)) - Number(has(keys.left)); },
+    get sprint() { return has(current().sprint); },
     takeJump() { const pressed = jump; jump = false; return pressed; },
     setEnabled(value) { enabled = value; if (!value) clear(); },
     clear,

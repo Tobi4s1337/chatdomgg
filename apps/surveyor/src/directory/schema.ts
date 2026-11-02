@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { DisplayNameSchema, EpochMsSchema, KingdomIdSchema, TwitchLoginSchema, UIntSchema } from '@chatdom/shared';
-import { RevisionIdSchema } from '../export/schema';
+import { AvatarUrlSchema, RevisionIdSchema } from '../export/schema';
 import { PreviewIdSchema } from '../preview/schema';
 
 /**
@@ -19,7 +19,7 @@ export const CARD_ROADS = 3;
 const Int = z.number().int().min(0).max(65_535);
 
 /**
- * How a channel appears: `mapped` holds land in this preview; `waiting` was observed and named but holds none (a small
+ * How a channel appears: `mapped` holds land in this preview; `waiting` is publicly named but holds none (a small
  * stream, or one the survey has not mapped); `unseen` is a raid counterpart the survey never observed live (under its
  * five-viewer sweep floor), known only by its ID.
  */
@@ -32,9 +32,9 @@ export const ChannelFaceSchema = z.strictObject({
   name: DisplayNameSchema.nullable(),
   freshUntil: EpochMsSchema.nullable(),
   place: PlaceSchema,
-  /** Settler ordinal and holding tier rank (0 capital … 3 village) for mapped land. */
+  /** Settler ordinal and holding tier rank (0 capital … 3 village, 4 an edition's hamlet) for mapped land. */
   ordinal: UIntSchema.nullable(),
-  tier: z.number().int().min(0).max(3).nullable(),
+  tier: z.number().int().min(0).max(4).nullable(),
   /** The land it holds, or the realm it is pencilled into while it waits; null when unseen. */
   region: Int.nullable(),
   realm: Int.nullable(),
@@ -51,19 +51,27 @@ export const ChannelFaceSchema = z.strictObject({
 });
 export type ChannelFace = z.infer<typeof ChannelFaceSchema>;
 
+/** The source avatar's own expiry; never the name freshness clock or time of serving. */
+export const ChannelPortraitSchema = z.strictObject({ url: AvatarUrlSchema, freshUntil: EpochMsSchema });
+export type ChannelPortrait = z.infer<typeof ChannelPortraitSchema>;
+
 const Reply = {
   version: z.literal(1),
   preview: PreviewIdSchema,
   revision: RevisionIdSchema,
   servedAt: EpochMsSchema,
-  /** The observation cut of the survey these facts come from. */
+  /** The observation cut of these facts (the survey, or a public lookup). */
   asOf: EpochMsSchema,
 };
 
+export const PencilPointSchema = z.strictObject({ x: z.number().finite().min(-100_000).max(100_000), y: z.number().finite().min(-100_000).max(100_000) });
+
 export const SearchResultSchema = z.strictObject({
   channel: ChannelFaceSchema,
+  portrait: ChannelPortraitSchema.nullable().optional(),
   /** Observed average audience over the survey window, rounded. */
-  average: UIntSchema,
+  average: UIntSchema.nullable(),
+  position: PencilPointSchema.optional(),
   language: z.string().min(1).max(16),
 });
 
@@ -75,6 +83,7 @@ export const SearchReplySchema = z.strictObject({
   results: z.array(SearchResultSchema).max(MAX_RESULTS),
   /** More channels matched than were returned. */
   more: z.boolean(),
+  unavailable: z.enum(['disabled', 'limited', 'upstream']).optional(),
 });
 export type SearchReply = z.infer<typeof SearchReplySchema>;
 
@@ -111,10 +120,12 @@ export const CardReplySchema = z.strictObject({
   ...Reply,
   kind: z.literal(`${DIRECTORY_KIND}-card`),
   channel: ChannelFaceSchema,
-  average: UIntSchema,
+  portrait: ChannelPortraitSchema.nullable().optional(),
+  average: UIntSchema.nullable(),
+  position: PencilPointSchema.optional(),
   language: z.string().min(1).max(16),
-  firstSeenAt: EpochMsSchema,
-  lastLiveAt: EpochMsSchema,
+  firstSeenAt: EpochMsSchema.nullable(),
+  lastLiveAt: EpochMsSchema.nullable(),
   /** The last stream the survey saw, kept until a day after the channel was last live. */
   stream: z.strictObject({
     live: z.boolean(),
@@ -128,7 +139,7 @@ export const CardReplySchema = z.strictObject({
     /** Counterparts the card may show (the gate removes the others before counting). */
     total: UIntSchema,
     strongest: z.array(CardRoadSchema).max(CARD_ROADS),
-  }),
+  }).nullable(),
   coverage: CoverageSchema,
 });
 export type CardReply = z.infer<typeof CardReplySchema>;

@@ -83,6 +83,8 @@ export function createKingdomSound() {
     moments,
     /** Soul shares the existing unlocked mixer and follows its mute/visibility policy. */
     soulHost: () => !disposed && canSound() ? kingdomAudioHost(audio) : null,
+    /** Walk features play through the same unlocked mixer under the same policy (play SEAMS B1c). */
+    audio: () => !disposed && canSound() ? audio : null,
     ...({ forgeUpdate } as { forgeUpdate?: typeof forgeUpdate }),
     get enabled() {
       const { status, settings } = audio.getState();

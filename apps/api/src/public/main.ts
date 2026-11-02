@@ -8,12 +8,13 @@ import { createRealmAuthHttp } from '../realm-auth/http';
 import { twitchOidc } from '../realm-auth/oidc';
 import { createRealmAuthService } from '../realm-auth/service';
 import { createSimulatedOidcProvider } from '../realm-auth/simulated-provider';
-import { readPublicConfig } from './config';
-import { createPanelHttp } from './panel/http';
+import { readPublicConfig, refuseSimulatedOnHttps } from './config';
+import { createPanelHttp } from '../panel/http';
 import { createPanelAuthority } from './panel/reading';
 import { createTwitchUsers } from './panel/twitch-users';
 import { fetchTargetJson, proxyHttp, proxyUpgrade, type ProxyTarget } from './proxy';
 import { classify, isRealmSocket } from './routes';
+import { createSite, robotsHeaderFor } from './site';
 import { indexBuild, sendFile, type StaticFile } from './static';
 import { bindPublicGateway, supervise, type Supervised } from './supervisor';
 
@@ -29,6 +30,7 @@ const repoRoot = process.env.PUBLIC_REPO_ROOT ?? resolve(dirname(fileURLToPath(i
 const config = readPublicConfig(process.env, repoRoot);
 const auth = readRealmAuthConfig({ ...process.env, API_PORT: String(config.port), REALM_PUBLIC_ORIGIN: process.env.REALM_PUBLIC_ORIGIN ?? `http://localhost:${config.port}` });
 // The existing dock bridge reads this default too; an explicit DOCK_REALM_URL still takes precedence there.
+refuseSimulatedOnHttps(auth.mode, auth.publicOrigin);
 process.env.CHATDOM_REALM_TARGET ??= `http://${config.realm.target.host.includes(':') ? `[${config.realm.target.host}]` : config.realm.target.host}:${config.realm.target.port}`;
 
 const pool = new pg.Pool({
@@ -61,8 +63,8 @@ const authRoutes = createRealmAuthHttp({
 let files: Map<string, StaticFile>;
 try { files = await indexBuild(config.webRoot); }
 catch { console.error(`public: the web build is missing at ${config.webRoot}; run node scripts/public/build.mjs first`); await pool.end(); process.exit(1); }
-const page = files.get('/index.html'), door = files.get('/door/index.html');
-if (!page || !door) { console.error('public: the build has no app page or front door; run node scripts/public/build.mjs'); await pool.end(); process.exit(1); }
+const page = files.get('/index.html');
+if (!page) { console.error('public: the build has no app page; run node scripts/public/build.mjs'); await pool.end(); process.exit(1); }
 
 const origin = auth.mode === 'live' ? 'live' : 'simulated';
 const names = new Map<string, { at: number; name: Promise<string | null>; last: string | null }>();
@@ -112,6 +114,9 @@ const PAGE_HEADERS = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
   ...(config.proto === 'https' ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}),
 };
+let site: ReturnType<typeof createSite>;
+try { site = createSite({ files, indexing: config.indexing, origin: auth.publicOrigin, pageHeaders: PAGE_HEADERS }); }
+catch (error) { console.error(`public: ${error instanceof Error ? error.message : 'the site build is missing'}`); await pool.end(); process.exit(1); }
 const unavailableJson = (response: ServerResponse, status: number, message: string) =>
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
     .end(JSON.stringify({ version: 1, status: status === 404 ? 'refused' : 'unavailable', message }));
@@ -139,6 +144,8 @@ async function route(request: IncomingMessage, response: ServerResponse) {
   const target = classify(url.pathname, url.search);
   // Forward the same normalized path we authorized, never the raw spelling a downstream parser may interpret differently.
   request.url = `${url.pathname}${url.search}`;
+  // While indexing is closed every answer says noindex; once open, only service, data and sign-in answers do.
+  for (const [name, value] of Object.entries(robotsHeaderFor(config.indexing, target.kind))) response.setHeader(name, value);
   switch (target.kind) {
     case 'health': {
       const { ok, body } = await health();
@@ -167,12 +174,12 @@ async function route(request: IncomingMessage, response: ServerResponse) {
     default: break;
   }
   if (request.method !== 'GET' && request.method !== 'HEAD') { response.writeHead(405, { Allow: 'GET, HEAD' }).end(); return; }
-  if (target.kind === 'door') { sendFile(request, response, door!, PAGE_HEADERS); return; }
-  if (target.kind === 'page') { sendFile(request, response, page!, PAGE_HEADERS); return; }
+  if (site.handle(request, response, target)) return;
+  if (target.kind === 'page') { sendFile(request, response, page!, site.appPageHeaders()); return; }
   const file = target.kind === 'file' ? files.get(url.pathname) : undefined;
   // HTML outside the listed pages (benches, references) stays off the public origin.
   if (file && !file.path.endsWith('.html')) { sendFile(request, response, file, { 'X-Content-Type-Options': 'nosniff' }); return; }
-  sendFile(request, response, door!, PAGE_HEADERS, 404);
+  site.notFound(request, response);
 }
 
 const server = createServer((request, response) => {

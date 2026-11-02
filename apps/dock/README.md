@@ -9,8 +9,7 @@ availability. Sign-out uses `/api/realm/signout` with the canonical session CSRF
 For development, set `CHATDOM_DOCK_API` to an API you own and run
 `pnpm --filter @chatdom/dock dev` (strict port 5176). Build with
 `pnpm --filter @chatdom/dock build`; preview uses strict port 5177. Check ports are free first.
-No fixture or fake success runs in this app. The separate evidence harness supplies visibly
-SIMULATED HTTP responses. API failures disable controls.
+No fixture or fake success runs in this app. The separate evidence harness supplies simulated HTTP responses; provenance remains in the response mode. API failures disable controls.
 
 Once the public origin serves this build and its API, add the `/dock/` URL as an OBS Custom
 Browser Dock. A moderator selects their kingdom with `/dock/?kingdom=<Twitch broadcaster ID>`;
@@ -37,3 +36,7 @@ cleared. No receipt or browser storage value grants authority by itself.
 
 The app reuses the shared UI typefaces and quiet audio kit. The sound toggle controls only
 this dock's cues. It does not mute the kingdom's stream audio.
+
+## Decisions
+
+- 2026-11-02: The 2026-11-01 founder decision 25 removes visible simulation labels. Internal response modes and validation remain unchanged.

@@ -1,0 +1,63 @@
+diff --git a/packages/shared/src/presence.ts b/packages/shared/src/presence.ts
+index 6d17bbb7..6f5575fb 100644
+--- a/packages/shared/src/presence.ts
++++ b/packages/shared/src/presence.ts
+@@ -29,7 +29,10 @@ export const PresenceInputSchema = z.discriminatedUnion('kind', [
+   z.strictObject({ ...common, kind: z.literal('remove'), personId: PersonIdSchema,
+     reason: z.enum(['timeout', 'moderated', 'ban', 'forget']), until: EpochMsSchema.nullable(),
+   }),
+-  z.strictObject({ ...common, kind: z.literal('restore'), personId: PersonIdSchema }),
++  z.strictObject({ ...common, kind: z.literal('restore'), personId: PersonIdSchema,
++    /** The person took their place again after forget. It lifts only a forget hold, never a moderation hold. */
++    consent: z.literal('renewed').optional(),
++  }),
+ ]).superRefine((input, ctx) => {
+   if (input.kind === 'source-lost' && new Set(input.sources).size !== input.sources.length) ctx.addIssue({ code: 'custom', message: 'Duplicate lost source' });
+   if (input.kind === 'stream' && input.live !== (input.sessionId !== null)) ctx.addIssue({ code: 'custom', message: 'Live streams need a session; offline streams have none' });
+diff --git a/packages/world/src/presence.test.ts b/packages/world/src/presence.test.ts
+index 762eeadf..41a32650 100644
+--- a/packages/world/src/presence.test.ts
++++ b/packages/world/src/presence.test.ts
+@@ -251,6 +251,26 @@ describe('stream liveness and moderation', () => {
+     }
+   });
+ 
++  it('renewed consent lifts only a forget hold, and only when newer than it', () => {
++    const renew = (at: number): PresenceInput => ({ ...common(at, `renew.${at}`), kind: 'restore', personId: alice, consent: 'renewed' });
++    let state = applyPresence(awake(), observe(1, [named()]), 1);
++    state = applyPresence(state, remove(10, 'forget'), 10);
++    state = applyPresence(state, renew(10), 10);
++    state = applyPresence(state, observe(11, [named()]), 11);
++    expect(windowFor(state, 11).present).toBe(false);
++    state = applyPresence(state, renew(20), 20);
++    state = applyPresence(state, observe(15, [named()]), 20);
++    expect(windowFor(state, 20).present).toBe(false);
++    state = applyPresence(state, observe(21, [named()], 'panel'), 21);
++    expect(windowFor(state, 21)).toMatchObject({ present: true, publicName: 'SIMULATED Alice' });
++    for (const reason of ['timeout', 'moderated', 'ban'] as const) {
++      let held = applyPresence(awake(), remove(10, reason, reason === 'ban' ? null : 1_000_000), 10);
++      held = applyPresence(held, renew(20), 20);
++      held = applyPresence(held, observe(21, [named()]), 21);
++      expect(windowFor(held, 21).present).toBe(false);
++    }
++  });
++
+   it('orders control separately; old removal cannot undo a newer restore, equal removal wins', () => {
+     let state = applyPresence(awake(), remove(10, 'ban'), 10);
+     state = applyPresence(state, restore(20), 20);
+diff --git a/packages/world/src/presence.ts b/packages/world/src/presence.ts
+index 6a7d9868..c435e9cd 100644
+--- a/packages/world/src/presence.ts
++++ b/packages/world/src/presence.ts
+@@ -286,9 +286,9 @@ export function applyPresence(state: PresenceState, input: PresenceInput, now: n
+   const people = new PeopleEdit(state.people);
+   if (event.kind === 'remove' || event.kind === 'restore') {
+     const person = people.get(event.personId) ?? emptyPerson(event.observedAt);
+-    // This restore is a moderation release, never renewed privacy consent.
++    // A moderation restore is never renewed privacy consent, and renewed consent never releases moderation.
+     // A delayed forget also survives a newer moderation restore in either order.
+-    if (event.kind === 'restore' && person.restriction?.reason === 'forget') return next;
++    if (event.kind === 'restore' && (person.restriction?.reason === 'forget') !== (event.consent === 'renewed')) return next;
+     if (event.kind === 'restore' ? event.observedAt <= person.controlAt : event.reason !== 'forget' && event.observedAt < person.restoredAt) return next;
+     const restriction = event.kind === 'restore' ? null : mergeRestriction(person.restriction, { reason: event.reason, until: event.until });
+     if (event.kind === 'remove' && event.observedAt <= person.controlAt

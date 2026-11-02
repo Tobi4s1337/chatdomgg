@@ -23,6 +23,6 @@ export * from './citizen-behaviours';
 export { homeLifeAnchors, type HomeLifeAnchors } from './home-life';
 export type { RealmFoundedBlueprint, RealmFoundedPlacement, RealmFoundedScene } from './founded-world/types';
 
-export { createKingdomLandInterface, type KingdomLandInterface, type LandGroundSource, type LandGroundAt } from './land-interface';
+export { createKingdomLandInterface, pinnedCampfireSite, grandFloorSurface, GROUND_SURFACES, type KingdomLandInterface, type LandGroundSource, type LandGroundAt, type GroundSurface, type LandSurfaceSample, type LandSurfaceAt, type GrandFloorSurfaceOptions } from './land-interface';
 
 export * from './grand-adoption';

@@ -9,12 +9,12 @@ export const READER_SCOPES = ['user:bot', 'user:read:chat', 'user:write:chat'] a
  * own scripts create Chatdom's rewards and open a decree poll on their channel, and Herald settle the redemptions.
  */
 export const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train',
-  'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls'] as const;
+  'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls', 'channel:manage:raids', 'moderator:read:shield_mode'] as const;
 export const HERALD_SCOPES: readonly string[] = [...READER_SCOPES, ...BROADCASTER_SCOPES];
 
 export type Role = 'reader' | 'broadcaster';
-export type Capability = 'chat' | 'chatters' | 'stream' | 'revocation' | 'bits' | 'hype' | 'follows' | 'rewards' | 'polls';
-export const CAPABILITIES: readonly Capability[] = ['chat', 'chatters', 'stream', 'revocation', 'bits', 'hype', 'follows', 'rewards', 'polls'];
+export type Capability = 'chat' | 'chatters' | 'stream' | 'revocation' | 'bits' | 'hype' | 'follows' | 'rewards' | 'polls' | 'raids' | 'shield';
+export const CAPABILITIES: readonly Capability[] = ['chat', 'chatters', 'stream', 'revocation', 'bits', 'hype', 'follows', 'rewards', 'polls', 'raids', 'shield'];
 
 export const ROLE_SCOPES: Readonly<Record<Role, readonly string[]>> = { reader: READER_SCOPES, broadcaster: BROADCASTER_SCOPES };
 
@@ -38,6 +38,9 @@ const REQUIREMENTS: Readonly<Record<Capability, ReadonlyArray<{ readonly role: R
   rewards: [{ role: 'broadcaster', scopes: ['channel:manage:redemptions'] }],
   // channel.poll.begin/progress/end: the decree board, and the decrees the kingdom carries out.
   polls: [{ role: 'broadcaster', scopes: ['channel:manage:polls'] }],
+  // These grants do not gate observing raids: only the monarch's Start/Cancel presses and Shield Mode reads.
+  raids: [{ role: 'broadcaster', scopes: ['channel:manage:raids'] }],
+  shield: [{ role: 'broadcaster', scopes: ['moderator:read:shield_mode'] }],
 };
 
 export type AccountState = 'resolved' | 'not_designated' | 'not_found' | 'unchecked';

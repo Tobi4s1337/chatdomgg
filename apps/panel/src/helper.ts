@@ -7,12 +7,21 @@
 
 export interface HelperAuthorized { channelId: string; clientId: string; token: string; helixToken: string; userId: string }
 interface HelperViewer { readonly isLinked: boolean; readonly role: string; onChanged(callback: () => void): void }
-interface HelperContext { theme?: 'light' | 'dark'; mode?: 'viewer' | 'dashboard' | 'config' }
+interface HelperContext { theme?: 'light' | 'dark'; mode?: 'viewer' | 'dashboard' | 'config'; isPaused?: boolean }
+export interface HelperProduct { readonly sku: string; readonly cost: { readonly amount: number | string; readonly type?: string }; readonly expiration?: string | null; readonly isBroadcast?: boolean }
+export interface HelperTransaction { readonly initiator?: string; readonly product?: { readonly sku?: string }; readonly transactionReceipt?: string }
 /** The part of `window.Twitch.ext` the panel uses. */
 export interface HelperExt {
   onAuthorized(callback: (auth: HelperAuthorized) => void): void;
   onContext(callback: (context: HelperContext, changed: readonly string[]) => void): void;
   onVisibilityChanged?(callback: (visible: boolean) => void): void;
+  listen?(topic: string, callback: (topic: string, contentType: string, message: string) => void): void;
+  readonly bits?: {
+    getProducts(): Promise<readonly HelperProduct[]>;
+    useBits(sku: string): void;
+    onTransactionComplete(callback: (transaction: HelperTransaction) => void): void;
+    onTransactionCancelled(callback: () => void): void;
+  };
   readonly viewer?: HelperViewer;
   readonly actions?: { requestIdShare(): void };
   readonly features?: { readonly isBitsEnabled?: boolean; onChanged?(callback: (changed: readonly string[]) => void): void };
@@ -32,8 +41,21 @@ export interface HelperBridge {
   subscribe(listener: (status: HelperStatus) => void): () => void;
   /** The latest token for a future kingdom request; never rendered or stored. */
   token(): string | null;
+  /** Helper visibility and playback are gates, never proof of presence. */
+  visible?(): boolean;
+  active?(): boolean;
+  /** Increments only on onAuthorized, never on viewer.onChanged. */
+  authorization?(): number;
+  /** Unverified Helper identity, used only to retain or clear local form state. */
+  uiIdentity?(): string | null;
   /** Asks Twitch to share the viewer's identity. Only meaningful from a gesture. */
   requestIdShare(): boolean;
+  getProducts?(): Promise<readonly HelperProduct[]>;
+  useBits?(sku: string): boolean;
+  onGiftTransaction?(listener: (transaction: HelperTransaction) => void): () => void;
+  onGiftCancelled?(listener: () => void): () => void;
+  /** Invalidation only: the listener must re-read verified API state. */
+  onPanelRefresh?(listener: () => void): () => void;
 }
 
 function findHelper(): HelperExt | undefined {
@@ -48,17 +70,40 @@ function findHelper(): HelperExt | undefined {
  */
 export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
   const listeners = new Set<(status: HelperStatus) => void>();
+  const transactions = new Set<(transaction: HelperTransaction) => void>();
+  const cancellations = new Set<() => void>();
+  const refreshes = new Set<() => void>();
   let current: HelperStatus = ext ? { kind: 'waiting' } : { kind: 'absent' };
   let token: string | null = null;
+  let uiIdentity: string | null = null;
+  let visible = true, playing = false, authorization = 0;
   const emit = (next: HelperStatus) => { current = next; for (const listener of listeners) listener(next); };
   if (ext) {
+    // Registered once with the page bridge, never on authorization refresh or per adapter.
+    ext.listen?.('broadcast', (topic, _contentType, message) => {
+      if (topic !== 'broadcast' || typeof message !== 'string' || message.length > 128) return;
+      try {
+        const value: unknown = JSON.parse(message);
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+        const payload = value as Record<string, unknown>;
+        if (Object.keys(payload).length !== 2 || payload.version !== 1 || payload.type !== 'panel.refresh') return;
+        for (const listener of refreshes) listener();
+      } catch { /* Other extension traffic is never panel state. */ }
+    });
+    ext.bits?.onTransactionComplete(transaction => { for (const listener of transactions) listener(transaction); });
+    ext.bits?.onTransactionCancelled(() => { for (const listener of cancellations) listener(); });
     let last: HelperAuthorized | undefined;
     const read = () => {
       if (!last) return;
       // An `A…` opaque ID is a logged-out viewer and a `U…` one is logged in. Neither is a Chatdom person.
+      uiIdentity = JSON.stringify([last.channelId, last.userId, ext.viewer?.role ?? 'viewer']);
       emit({ kind: 'authorized', loggedIn: last.userId.startsWith('U'), shared: ext.viewer?.isLinked === true, role: ext.viewer?.role ?? 'viewer', bits: ext.features?.isBitsEnabled === true });
     };
-    ext.onAuthorized(auth => { last = auth; token = auth.token; read(); });
+    ext.onAuthorized(auth => { last = auth; token = auth.token; authorization++; read(); });
+    ext.onVisibilityChanged?.(value => { visible = value; emit(current); });
+    ext.onContext(context => {
+      if (typeof context.isPaused === 'boolean') { playing = !context.isPaused; emit(current); }
+    });
     ext.viewer?.onChanged(read);
     // Twitch's feature flags arrive after the first authorization and may change during a stream.
     ext.features?.onChanged?.(read);
@@ -67,10 +112,20 @@ export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
     status: () => current,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     token: () => token,
+    visible: () => visible,
+    active: () => visible && playing,
+    authorization: () => authorization,
+    uiIdentity: () => uiIdentity,
+    ...(ext?.bits ? {
+      getProducts: () => ext.bits!.getProducts(),
+      useBits: (sku: string) => { try { ext.bits!.useBits(sku); return true; } catch { return false; } },
+    } : {}),
+    onGiftTransaction(listener) { transactions.add(listener); return () => transactions.delete(listener); },
+    onGiftCancelled(listener) { cancellations.add(listener); return () => cancellations.delete(listener); },
+    onPanelRefresh(listener) { refreshes.add(listener); return () => refreshes.delete(listener); },
     requestIdShare() {
       if (!ext?.actions || current.kind !== 'authorized' || !current.loggedIn) return false;
-      ext.actions.requestIdShare();
-      return true;
+      try { ext.actions.requestIdShare(); return true; } catch { return false; }
     },
   };
 }

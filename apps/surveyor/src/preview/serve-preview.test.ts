@@ -23,6 +23,9 @@ afterEach(async () => {
   while (cleanup.length) await cleanup.pop()!();
 });
 
+/** Close the service started last (a data directory has one road-ledger writer at a time). */
+const stopLast = async () => { await cleanup.pop()?.(); };
+
 const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 
 async function start(dataDir: string, options: AtlasServiceOptions = {}): Promise<number> {
@@ -102,8 +105,9 @@ describe('survey preview routes', () => {
     // The fixture's three candidates are drawn; its small stream and its source paths are not.
     const world = PreviewWorldSchema.parse(JSON.parse(worldBytes.toString('utf8')));
     expect(world).toMatchObject({ label: PREVIEW_LABEL, status: 'preview', revision: first.revision, counts: { channelsObserved: 4, mapped: 3, capital: 1, town: 1, village: 1 } });
+    // Land is named by its language code in the immutable files; the reviewed name table labels it at reading time.
     expect(world.regions.map((r) => [r.language, r.kind, r.name])).toEqual(
-      expect.arrayContaining([['en', 'isle', 'English'], ['ja', 'isle', '日本語'], ['de', 'isle', 'Deutsch']]),
+      expect.arrayContaining([['en', 'isle', 'en'], ['ja', 'isle', 'ja'], ['de', 'isle', 'de']]),
     );
     expect(world.head.ids).toEqual(['900000000000000001']);
     // The immutable files carry no raw names at all; those come only from the names projection.
@@ -314,6 +318,8 @@ describe('names projection (R16)', () => {
     expect(names.logins).toContain('fixture_town');
     expect(names.freshUntil).toEqual(Array(3).fill(sweepAt(3) + 48 * HOUR));
 
+    // One service holds a data directory's road ledger at a time: the first stops before the later one opens.
+    await stopLast();
     const later = await start(dataDir, { now: () => sweepAt(5) + 24 * HOUR });
     expect(ServedNamesSchema.parse(JSON.parse((await get(later, `/map-data/v1/preview/${first.preview.id}/names`)).text)).ids).toEqual([CAPITAL, TOWN, VILLAGE]);
   });
@@ -366,6 +372,7 @@ describe('names projection (R16)', () => {
 
     const path = join(previewDir(dataDir, third.preview.id), 'names.json');
     writeFileSync(path, readFileSync(path, 'utf8').replace('Fixture Capital', 'Fixture Capitol'));
+    await stopLast();
     const fresh = await start(dataDir, { now: () => sweepAt(60) });
     expect((await get(fresh, `/map-data/v1/preview/${third.preview.id}/names`)).status).toBe(404);
   });

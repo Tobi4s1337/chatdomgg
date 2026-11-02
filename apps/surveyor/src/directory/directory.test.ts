@@ -9,6 +9,7 @@ import { WITHHELD_FILE } from '../policy/visibility';
 import { createAtlasService } from '../serve';
 import { FixtureSource, RECENT, clock, configFor, fakeSurveyor, sweepAt, tempDataDir } from '../test/fixture-source';
 import { allowRealImports } from '../test/timeouts';
+import { loadLiveTarget } from '../live/target';
 import { loadDirectory } from './directory';
 import { matchRank, queryKey, searchKey } from './normalize';
 import { CardReplySchema, RoadReplySchema, SearchReplySchema } from './schema';
@@ -35,7 +36,7 @@ const NOW = sweepAt(12);
 const NONE: ReadonlySet<string> = new Set();
 
 /** The standard fixture plus names in other scripts, a gambling and a gone channel, and raids touching each kind. */
-async function imported() {
+async function imported(change?: (source: FixtureSource) => void) {
   const source = FixtureSource.standard();
   source.addChannel({ id: ACCENTED, login: 'eloise_cafe', name: 'Éloïse Café', lang: 'fr', firstSweep: 0, lastSweep: 4, live: true, liveMin: 15, viewerMin: 600 });
   source.addChannel({ id: WIDE, login: 'widechannel', name: 'ＷｉｄｅＣｈａｎｎｅｌ', firstSweep: 0, lastSweep: 4, live: false, liveMin: 15, viewerMin: 450 });
@@ -48,6 +49,7 @@ async function imported() {
   source.addRaidPair(CAPITAL, GONE, 3, 900, sweepAt(1));
   source.addRaidPair(CAPITAL, UNSEEN, 1, 12, sweepAt(3));
   source.addRaidPair(SMALL, CAPITAL, 1, 6, sweepAt(4));
+  change?.(source);
   const dataDir = tempDataDir();
   cleanup.push(() => source.close(), () => rmSync(dataDir, { recursive: true, force: true }));
   const outcome = await runImport(configFor(source, dataDir), { fetchImpl: fakeSurveyor({ status: source.status(), 'raids/recent': RECENT }).fetchImpl, now: clock(sweepAt(10)) });
@@ -92,6 +94,23 @@ describe('search keys', () => {
 });
 
 describe('the register of a preview', () => {
+  it('uses the avatar refresh clock for cards and search, never a later live/name confirmation', async () => {
+    const avatarAt = sweepAt(1);
+    const { dataDir, preview } = await imported(source => source.db.prepare('UPDATE channels SET facts_at = ? WHERE id = ?').run(avatarAt, CAPITAL));
+    const register = await loadDirectory(dataDir, preview);
+    const fresh = ok(register.card({ id: CAPITAL }, NONE, NOW));
+    expect(fresh.portrait).toEqual({ url: expect.stringMatching(/^https:\/\/static-cdn\.jtvnw\.net\//), freshUntil: avatarAt + DAY });
+    expect(fresh.channel.freshUntil).toBeGreaterThan(fresh.portrait!.freshUntil);
+    expect(ok(register.search('fixture_capital', NONE, NOW)).results[0]!.portrait).toEqual(fresh.portrait);
+    expect(ok(register.card({ id: SMALL }, NONE, NOW)).portrait).toBeNull();
+    expect(ok(register.card({ id: CAPITAL }, NONE, avatarAt + DAY - 1)).portrait).not.toBeNull();
+    expect(ok(register.card({ id: CAPITAL }, NONE, avatarAt + DAY)).portrait).toBeNull();
+    expect(ok(register.search('fixture_capital', NONE, avatarAt + DAY)).results[0]!.portrait).toBeNull();
+    expect(register.card({ id: CAPITAL }, new Set([CAPITAL]), NOW)).toBe('not-found');
+    expect(ok(register.search('fixture_capital', new Set([CAPITAL]), NOW)).results).toEqual([]);
+    expect(JSON.stringify(ok(register.road({ id: CAPITAL }, { id: TOWN }, NONE, NOW)))).not.toMatch(/portrait|jtvnw/);
+  });
+
   it('finds names in every script with their original spelling, best match first, and only public channels', async () => {
     const { dataDir, preview, revision } = await imported();
     const register = await loadDirectory(dataDir, preview);
@@ -125,7 +144,7 @@ describe('the register of a preview', () => {
     expect(ok(register.search('fixture', withheld, NOW)).results.map((r) => r.channel.id)).not.toContain(VILLAGE);
     expect(register.card({ id: VILLAGE }, withheld, NOW)).toBe('not-found');
     expect(register.card({ login: 'fixture_village' }, withheld, NOW)).toBe('not-found');
-    expect(ok(register.card({ id: CAPITAL }, withheld, NOW)).roads.strongest.map((r) => r.other.id)).not.toContain(VILLAGE);
+    expect(ok(register.card({ id: CAPITAL }, withheld, NOW)).roads!.strongest.map((r) => r.other.id)).not.toContain(VILLAGE);
 
     const later = sweepAt(4) + DAY + 1;
     expect(ok(register.search('fixture', NONE, later)).results.length).toBeGreaterThan(0);
@@ -146,14 +165,14 @@ describe('the register of a preview', () => {
     expect(card.stream).toMatchObject({ live: true, game: 'Just Chatting', title: 'A fixture stream', viewers: 30 });
     expect(card.coverage).toEqual({ raidWatch: { enabled: true, watching: 2, liveCandidates: expect.any(Number) }, contentLabels: 'not-collected' });
     // Gambling and gone counterparts are not roads at all; an unseen target is a road to an unnamed, unplaced channel.
-    expect(card.roads.total).toBe(4);
-    expect(card.roads.strongest.map((r) => [r.other.id, r.sent, r.received])).toEqual([[VILLAGE, 2, 1], [TOWN, 1, 0], [UNSEEN, 1, 0]]);
-    expect(card.roads.strongest[0]!.travellers).toBe(165);
+    expect(card.roads!.total).toBe(4);
+    expect(card.roads!.strongest.map((r) => [r.other.id, r.sent, r.received])).toEqual([[VILLAGE, 2, 1], [TOWN, 1, 0], [UNSEEN, 1, 0]]);
+    expect(card.roads!.strongest[0]!.travellers).toBe(165);
     expect(JSON.stringify(card)).not.toMatch(new RegExp(`${SLOTS}|${GONE}`));
-    expect(card.roads.strongest[2]!.other).toEqual({ id: UNSEEN, login: null, name: null, freshUntil: null, place: 'unseen', ordinal: null, tier: null, region: null, realm: null });
+    expect(card.roads!.strongest[2]!.other).toEqual({ id: UNSEEN, login: null, name: null, freshUntil: null, place: 'unseen', ordinal: null, tier: null, region: null, realm: null });
     const small = ok(register.card({ id: SMALL }, NONE, NOW));
     expect(small.channel).toMatchObject({ place: 'waiting', name: 'Fixture Small', ordinal: null });
-    expect(small.roads.strongest.map((r) => [r.other.id, r.sent, r.received])).toEqual([[CAPITAL, 1, 0]]);
+    expect(small.roads!.strongest.map((r) => [r.other.id, r.sent, r.received])).toEqual([[CAPITAL, 1, 0]]);
 
     // A dab is found by its live hash while named; a holding never is.
     expect(ok(register.card({ dab: dabHash(SMALL) }, NONE, NOW)).channel.login).toBe('fixture_small');
@@ -208,6 +227,13 @@ describe('register routes', () => {
     expect(search.status).toBe(200);
     expect(search.headers['cache-control']).toBe('no-cache');
     expect(SearchReplySchema.parse(JSON.parse(search.text)).results[0]!.channel.id).toBe(ACCENTED);
+    expect(JSON.parse(search.text).results[0]).not.toHaveProperty('portrait');
+    const picturedSearch = JSON.parse((await get(port, `${base}/search?q=fixture_capital&portraits=1`)).text);
+    expect(picturedSearch.results[0].portrait).toMatchObject({ freshUntil: sweepAt(4) + DAY });
+    const olderCard = JSON.parse((await get(port, `${base}/card/${CAPITAL}`)).text);
+    expect(olderCard).not.toHaveProperty('portrait');
+    const picturedCard = JSON.parse((await get(port, `${base}/card/${CAPITAL}?portraits=1`)).text);
+    expect(picturedCard.portrait).toEqual(picturedSearch.results[0].portrait);
 
     expect(CardReplySchema.parse(JSON.parse((await get(port, `${base}/card/${CAPITAL}`)).text)).channel.id).toBe(CAPITAL);
     expect(CardReplySchema.parse(JSON.parse((await get(port, `${base}/card/login/fixture_town`)).text)).channel.id).toBe(TOWN);
@@ -227,5 +253,36 @@ describe('register routes', () => {
     expect(await get(port, `${base}/card/login/fixture_town`)).toMatchObject({ status: 404 });
     writeFileSync(join(dataDir, WITHHELD_FILE), '{"version":1,"kingdomIds":[');
     expect(await get(port, `${base}/search?q=fixture`)).toMatchObject({ status: 503, text: '{"error":"names-unavailable"}' });
+  });
+});
+
+describe('register places and facts', () => {
+  it('places holdings at their holding point and waiting channels at their pencil place, and gates faces', async () => {
+    const { dataDir, preview } = await imported();
+    const register = await loadDirectory(dataDir, preview);
+    const target = await loadLiveTarget(dataDir, preview);
+    const capital = target.ordinalOf.get(CAPITAL)!;
+    const holding = target.holdingGeometry![capital]!;
+    expect(register.position(CAPITAL)).toEqual({ x: holding.x, y: holding.y });
+    expect(register.facts(CAPITAL)).toEqual({ average: 6_000, region: holding.region, realm: target.realmOf[capital], ordinal: capital, language: 'en' });
+    // A waiting channel stands where search and its card already put it.
+    const waiting = ok(register.search('fixture_small', NONE, NOW, false, true)).results[0]!;
+    expect(register.position(SMALL)).toEqual(waiting.position);
+    expect(register.facts(SMALL)).toMatchObject({ average: 8, ordinal: null, language: 'en' });
+    expect(register.position(UNSEEN)).toBeNull();
+    expect(register.facts(UNSEEN)).toEqual({ average: null, region: null, realm: null, ordinal: null, language: null });
+    expect(register.face(UNSEEN, NONE, NOW)).toMatchObject({ id: UNSEEN, place: 'unseen', name: null });
+    expect(register.face(CAPITAL, new Set([CAPITAL]), NOW)).toBeNull();
+    expect(register.face(SLOTS, NONE, NOW)).toBeNull();
+    expect(register.face(GONE, NONE, NOW)).toBeNull();
+    expect(register.resolve({ login: 'fixture_town' })).toBe(TOWN);
+    expect(register.stream(CAPITAL, NOW)).toMatchObject({ live: true, game: 'Just Chatting' });
+    expect(register.stream(CAPITAL, NOW + 2 * DAY)).toBeNull();
+    // The live frame's slots and dabs name only public channels.
+    const slots = new Uint8Array(target.ids.length * 2);
+    slots[capital * 2] = 1;
+    const slotsOrdinal = target.ordinalOf.get(SLOTS);
+    if (slotsOrdinal !== undefined) slots[slotsOrdinal * 2] = 2;
+    expect([...register.liveIds({ slots, dabs: [{ channelHash: dabHash(SMALL) }, { channelHash: dabHash(UNSEEN) }] })].sort()).toEqual([CAPITAL, SMALL]);
   });
 });

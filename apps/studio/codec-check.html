@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Codec check</title>
+    <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block;width:100vw;height:100vh}</style>
+  </head>
+  <body>
+    <!-- The recorder's own check: a WebGL canvas whose colour is a function of the clock, so a WebCodecs take can be
+         verified frame by frame without a heavy scene. -->
+    <canvas id="set"></canvas>
+    <script type="module">
+      const canvas = document.getElementById('set');
+      const gl = canvas.getContext('webgl2');
+      const resize = () => { canvas.width = innerWidth * devicePixelRatio; canvas.height = innerHeight * devicePixelRatio; };
+      resize();
+      const start = performance.now();
+      const t = () => (performance.now() - start) / 1000;
+      const draw = () => {
+        const s = t();
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.clearColor(0.5 + 0.5 * Math.sin(s * 3), 0.3, 0.5 + 0.5 * Math.cos(s * 2), 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(Math.round((s * 0.4 % 1) * canvas.width), canvas.height / 3, canvas.width / 8, canvas.height / 3);
+        gl.clearColor(1, 0.85, 0.5, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.disable(gl.SCISSOR_TEST);
+        requestAnimationFrame(draw);
+      };
+      requestAnimationFrame(draw);
+      window.__set = { scene: 'codec-check', duration: 1, canvas, idle: () => true, t, stats: () => ({}) };
+      window.__chatdomReady = true;
+    </script>
+  </body>
+</html>

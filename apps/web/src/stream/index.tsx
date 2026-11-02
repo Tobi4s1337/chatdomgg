@@ -10,6 +10,8 @@ import { Corner, Crest, Flame, StreamDefs } from './fittings';
 import { SkyCaptions, type ScreenCaption } from '../twitch-moments';
 import { createRealmSpectatorSource } from '../kingdom-entry/spectator';
 import type { SpeechLabel } from '../kingdom/citizen-scene';
+import { mountOpeningLoader, type OpeningLoader } from '../kingdom/grand-land/opening/loader';
+import type { OpeningJournal } from '../kingdom/grand-land/opening/journal';
 import type { WalkerLabel } from '../kingdom/walk-scene';
 import type { ArrivalAttention } from '../kingdom/arrival-director';
 import './stream.css';
@@ -94,6 +96,8 @@ export default function StreamView(props: StreamViewProps = {}) {
       if (view === 'hero') return true;
       // The grand land's wide shots exist once its land is searched; a kingdom without them never cuts to one.
       if (view === 'island' || view === 'vista') return !!mount.scene?.offers(view);
+      // The pier shot has its subject whenever the kingdom has a pier standing.
+      if (view === 'pier') return !!mount.scene?.pierShot();
       const subject = fresh() ? mount.scene?.subject() : undefined;
       // A close window needs its light; the street needs someone in it.
       return view === 'window' ? !!subject?.homeLit : !!subject;
@@ -115,11 +119,21 @@ export default function StreamView(props: StreamViewProps = {}) {
   let offCues: (() => void)[] = [];
   onCleanup(()=>chronicle?.close());
 
+  // The parchment opening covers the stage while a kingdom opens; the small layouts keep their crest and rule.
+  let openingHost: HTMLDivElement | undefined, opener: OpeningLoader | undefined;
+  const [opening, setOpening] = createSignal(false);
+  function follow(journal: OpeningJournal) {
+    if (!openingHost || layout() !== 'stage') return;
+    opener ??= mountOpeningLoader(openingHost, { variant: 'stream', ...(named() ? { name: kingdomName() } : {}), onGone: () => { opener = undefined; setOpening(false); } });
+    setOpening(true); opener.follow(journal);
+  }
+  onCleanup(() => opener?.dispose());
   const mount = createSceneMount({
     host: () => lens,
+    onOpening: follow,
     // Build the opening's light fields with nobody home yet. Rewinding a fully
     // inhabited town after loading leaves its warm ground light behind for a beat.
-    settings: () => ({ ...(props.places ? { places: props.places } : {}), ...(dockFixture ? { dockFeed: dockFixture, simulatedDockSites: true, kingdomId: dockFixture.kingdomId } : {}), directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), opening: params.opening && params.camera === 'hero' && seam() !== 'ending', hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: dockFixture ? 'simulated' : params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
+    settings: () => ({ ...(props.places ? { places: props.places } : {}), ...(dockFixture ? { dockFeed: dockFixture, simulatedDockSites: true, kingdomId: dockFixture.kingdomId } : {}), directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), islandOpening: params.opening && params.camera === 'hero' && seam() !== 'ending', hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: dockFixture ? 'simulated' : params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
     ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
       if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
@@ -316,8 +330,8 @@ export default function StreamView(props: StreamViewProps = {}) {
         <strong>{mark().title}</strong><Show when={layout() === 'stage' && mark().kind !== 'simulated'}><small>{mark().note}</small></Show>
       </div>
     </Show>
-    <div class="stream-curtain" classList={{ open: phase() === 'ready', failed: phase() === 'failed' }} role="status" aria-live="polite">
-      <Crest class="large" />
+    <div class="stream-curtain" classList={{ open: phase() === 'ready', failed: phase() === 'failed', 'opening-held': opening() }} role="status" aria-live="polite">
+      <Show when={!opening() || phase() === 'failed'}><Crest class="large" /></Show>
       <Switch>
         <Match when={phase() === 'failed'}>
           <div class="stream-gate kingdom-gate">
@@ -328,6 +342,7 @@ export default function StreamView(props: StreamViewProps = {}) {
             </Show>
           </div>
         </Match>
+        <Match when={opening()}><span class="stream-opening-mark" /></Match>
         <Match when={true}>
           <h2>{kingdomName()}</h2>
           <p>{loading()}</p>
@@ -335,6 +350,7 @@ export default function StreamView(props: StreamViewProps = {}) {
         </Match>
       </Switch>
     </div>
+    <div class="stream-opening" classList={{ hidden: phase() === 'failed' }} ref={element => { openingHost = element; }} />
   </div>;
 
   // The source is the whole browser-source rectangle; the kingdom sits inside its chosen part.

@@ -26,7 +26,7 @@ function click(target: EventTarget) {
   return { heard, prevented: event.defaultPrevented };
 }
 
-describe('free-cursor camera input', () => {
+describe('wheel zoom and drag orbit', () => {
   it('keeps a short press a click for the interaction owner', () => {
     const { target } = surface(), input = createWalkPointer(target, new EventTarget());
     pointer(target, 'pointerdown', { x: 100, y: 100 });
@@ -41,6 +41,8 @@ describe('free-cursor camera input', () => {
 
   it('orbits once a press travels, gathers every move until the next frame, and eats the trailing click', () => {
     const { target, captured } = surface(), input = createWalkPointer(target, new EventTarget());
+    // Only a page that can never capture the mouse drags to look with it.
+    input.setMouseDrag(true);
     pointer(target, 'pointerdown', { x: 100, y: 100 });
     pointer(target, 'pointermove', { x: 112, y: 100 });
     expect(input.dragging).toBe(true);
@@ -59,6 +61,8 @@ describe('free-cursor camera input', () => {
 
   it('ends a drag whose button was released outside the window', () => {
     const { target } = surface(), input = createWalkPointer(target, new EventTarget());
+    // Only a page that can never capture the mouse drags to look with it.
+    input.setMouseDrag(true);
     pointer(target, 'pointerdown', { x: 0, y: 0 });
     pointer(target, 'pointermove', { x: 20, y: 0 });
     pointer(target, 'pointermove', { x: 40, y: 0, buttons: 0 });
@@ -95,8 +99,16 @@ describe('free-cursor camera input', () => {
     expect(input.takeOrbit().dx).toBe(20);
   });
 
-  it('never drags while mouse look holds the pointer, and switching drops a drag', () => {
+  it('never drags the mouse while walking: the mouse is captured, not dragged (decision 2)', () => {
     const { target, captured } = surface(), input = createWalkPointer(target, new EventTarget());
+    pointer(target, 'pointerdown', { x: 0, y: 0 });
+    pointer(target, 'pointermove', { x: 30, y: 0 });
+    expect([input.dragging, captured.size, input.takeOrbit().dx]).toEqual([false, 0, 0]);
+  });
+
+  it('never drags while the lock holds the pointer, and switching drops a drag', () => {
+    const { target, captured } = surface(), input = createWalkPointer(target, new EventTarget());
+    input.setMouseDrag(true);
     pointer(target, 'pointerdown', { x: 0, y: 0 });
     pointer(target, 'pointermove', { x: 30, y: 0 });
     input.setLocked(true);
@@ -104,12 +116,14 @@ describe('free-cursor camera input', () => {
     pointer(target, 'pointerdown', { x: 0, y: 0 });
     pointer(target, 'pointermove', { x: 30, y: 0 });
     expect([input.dragging, input.takeOrbit().dx]).toEqual([false, 0]);
-    // The lock refused or let go: the bounded drag is back.
+    // A page that can never capture: the bounded drag is its only way to look around.
     input.setLocked(false);
     pointer(target, 'pointerup', { x: 30, y: 0, buttons: 0 });
     pointer(target, 'pointerdown', { x: 0, y: 0 });
     pointer(target, 'pointermove', { x: 30, y: 0 });
     expect(input.takeOrbit().dx).toBe(30);
+    input.setMouseDrag(false);
+    expect([input.dragging, input.takeOrbit().dx]).toEqual([false, 0]);
   });
 
   it('reads wheel lines and pages, bounds a single flick, and only scrolls the world', () => {

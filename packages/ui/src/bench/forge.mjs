@@ -1,4 +1,4 @@
-// The Forge fittings: the isolated SIMULATED bench (crest rail and parchment field in every state) driven by a
+// The Forge fittings: the isolated bench (crest rail and parchment field in every typed state) driven by a
 // real keyboard, Tab and touch, and with --kingdom (or --base-url) the actual Forge panel in the kingdom.
 // node packages/ui/src/bench/forge.mjs [--kingdom] [--base-url http://127.0.0.1:<port>]
 // The kingdom page never reaches a Forge service: /forge-data is answered 503 inside this browser, which is the
@@ -10,6 +10,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { acquireCaptureLock } from '../../../testing/capture-lock.mjs';
+import { CAPTURE_PORTS } from '../../../testing/capture-ports.mjs';
 
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
@@ -17,15 +18,16 @@ const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 const benchRoot = fileURLToPath(new URL('./', import.meta.url));
 const { default: solid } = await import(createRequire(`${repo}apps/web/package.json`).resolve('vite-plugin-solid'));
 const out = `${repo}shots/first-look/fl02`;
-const report = { bench: 'SIMULATED typed Forge fittings; no request, travel or Forge', ports: [], checks: [] };
+const report = { bench: 'typed Forge fittings; no request, travel or Forge', ports: [], checks: [] };
 
 async function serve(config) {
-  for (let port = 5170; port <= 5199; port++) {
+  // Only capture ports: 5187 and 5190–5197 belong to services even when they are down.
+  for (const port of CAPTURE_PORTS) {
     const server = await createServer({ ...config, logLevel: 'error', server: { host: '127.0.0.1', port, strictPort: true, ...config.server } });
     try { await server.listen(); report.ports.push(port); return { server, base: `http://127.0.0.1:${port}` }; }
     catch (error) { await server.close(); if (error?.code !== 'EADDRINUSE' && !/already in use/.test(error?.message ?? '')) throw error; }
   }
-  throw new Error('No free port in 5170–5199');
+  throw new Error('No free capture port');
 }
 const settle = page => page.evaluate(() => document.fonts.ready.then(() => new Promise(r => window.requestAnimationFrame(() => window.requestAnimationFrame(r)))));
 function watch(page, allowed = []) {
@@ -125,10 +127,11 @@ try {
       await page.setViewportSize({ width, height });
       const facts = await census(page, '.forge-panel');
       assert.deepEqual(facts, { small: [], targets: [], selects: 0, overflow: false }, `forge ${width}x${height}`);
-      const seal = await page.evaluate(() => { const s = document.querySelector('.kingdom-seal'), b = s.getBoundingClientRect(), p = document.querySelector('.forge-panel').getBoundingClientRect(); return { text: s.innerText, clear: b.bottom <= p.top || b.left >= p.right, panel: [p.left, p.top, p.width, p.height].map(Math.round) }; });
-      assert.equal(seal.text, 'SIMULATED'); assert.ok(seal.clear, 'the SIMULATED seal stays visible beside the panel');
+      // A staged night with practice open and no owner words: the seal stays in place but presses nothing.
+      const seal = await page.evaluate(() => { const s = document.querySelector('.kingdom-seal'), p = document.querySelector('.forge-panel').getBoundingClientRect(); return { text: s.innerText, hidden: s.hidden, rects: s.getClientRects().length, practice: s.dataset.practice, role: s.getAttribute('role'), panel: [p.left, p.top, p.width, p.height].map(Math.round) }; });
+      assert.deepEqual([seal.text, seal.hidden, seal.rects, seal.practice, seal.role], ['', true, 0, 'true', 'status'], 'the staged seal is in place, marked practice, and hidden beside the panel');
       await shot(`forge-panel@${width}x${height}.png`);
-      report.checks.push(`forge ${width}x${height}: no select, radiogroup present, no text under 12 px, 44 px targets, SIMULATED seal visible, panel at ${seal.panel.join(',')}`);
+      report.checks.push(`forge ${width}x${height}: no select, radiogroup present, no text under 12 px, 44 px targets, staged seal hidden in place, panel at ${seal.panel.join(',')}`);
     }
     // Keyboard through the real panel, then the real cold-forge reply.
     await page.focus('#forge-wish');

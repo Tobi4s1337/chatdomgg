@@ -14,6 +14,8 @@ export interface FoundingGateInput {
   number: EditionNumber;
   manifest: Pick<SnapshotManifest, 'revision' | 'founding' | 'window'>;
   taxonomy: { id: string; status: 'proposed' | 'reviewed'; sha256: string };
+  /** The continent name table: Edition I needs it reviewed, though its labels never enter the land. */
+  names: { id: string; status: 'proposed' | 'reviewed' };
   authorization: Authorization | null;
   founderKey: KeyObject | null;
   existing: boolean;
@@ -38,6 +40,9 @@ export function foundingGates(input: FoundingGateInput): string[] {
   }
   if (rules.requiresReviewedTaxonomy && input.taxonomy.status !== 'reviewed') {
     problems.push(`${rules.label} needs a reviewed family taxonomy; ${input.taxonomy.id} is still a proposal.`);
+  }
+  if (rules.requiresReviewedNames && input.names.status !== 'reviewed') {
+    problems.push(`${rules.label} needs a reviewed continent name table; ${input.names.id} is still a proposal.`);
   }
   if (!input.founderKey) problems.push('No founder key is configured (ATLAS_FOUNDER_PUBLIC_KEY), so no authorization can be verified.');
   if (!input.authorization) problems.push('No founder authorization was given (--authorization <file>).');
@@ -128,6 +133,7 @@ export function draftEdition(input: {
 
 export function foundingRecord(
   draft: DraftEdition, number: EditionNumber, manifest: SnapshotManifest, authorization: Authorization, founderKey: string, withheldKey: string,
+  names?: { id: string; status: 'proposed' | 'reviewed'; sha256: string }, rehearsal?: { waived: string[] },
 ): Founding {
   const taxonomy = loadTaxonomy(draft.taxonomyText).ref;
   return FoundingSchema.parse({
@@ -143,5 +149,7 @@ export function foundingRecord(
     founderKey,
     settlers: draft.settlers.length,
     withheld: { key: withheldKey, hidden: draft.state.tombstones.size },
+    ...(names ? { names } : {}),
+    ...(rehearsal ? { rehearsal } : {}),
   });
 }

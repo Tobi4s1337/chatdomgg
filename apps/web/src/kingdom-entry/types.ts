@@ -2,7 +2,7 @@ import type { GrowthSceneFeed, PresenceFeed } from '@chatdom/shared';
 import type { TwitchMomentFeed } from '@chatdom/shared/twitch-moments';
 import type { CollisionWorld, RealmFoundedManifest } from '@chatdom/shared/realm';
 import type { RealmFoundedScene } from '@chatdom/world';
-import type { RealmClient, RealmCollision } from '../realm/client';
+import type { RealmClient, RealmCollision, RealmEntry } from '../realm/client';
 import type { RealmChatFeed } from '../realm/adapters/chat';
 import type { RealmForgeFeed } from '../realm/adapters/forge-feed';
 
@@ -19,8 +19,17 @@ export interface KingdomEntryConnection {
   readonly momentFeed?: TwitchMomentFeed;
   readonly kingdomName: string;
   readonly notice?: string;
+  /**
+   * The way through doors into rooms of their own (the tavern): an entry that asks the session for a fresh ticket each
+   * time, never bound to this connection's lifetime, and the realm transport. Absent where doors do not open.
+   */
+  readonly entry?: RealmEntry;
+  readonly endpoint?: string;
   dispose(reason?: 'scene-revision'): void;
 }
 
+/** Coming back through a door: the first join names it, and the realm decides where you stand. */
+export interface KingdomEntryArrival { readonly portal: string }
+
 /** Returns one coherent scene/room bundle, or rejects without granting entry. */
-export type KingdomEntrySource = (signal: AbortSignal) => Promise<KingdomEntryConnection>;
+export type KingdomEntrySource = (signal: AbortSignal, arrival?: KingdomEntryArrival) => Promise<KingdomEntryConnection>;

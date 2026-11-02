@@ -1,5 +1,5 @@
 // One still OR one short deterministic motion clip per shared capture-lock acquisition.
-// Review benches are explicitly SIMULATED; these are not proof of the town/realm integration.
+// Review benches are dev-only component checks; these are not proof of the town/realm integration.
 import { chromium } from '@playwright/test';
 import { createServer } from 'vite';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -18,7 +18,7 @@ const { values } = parseArgs({ options: {
 } });
 const width = Number(values.width), height = Number(values.height);
 if (![width, height].every(n => Number.isInteger(n) && n > 0 && n <= 1920)) throw new Error('Invalid review dimensions');
-if (!['motion', 'wardrobe', 'selector', 'labels'].includes(values.view)) throw new Error('Unknown review view');
+if (!['motion', 'wardrobe', 'selector', 'labels', 'bubbles'].includes(values.view)) throw new Error('Unknown review view');
 if (!['none', 'wave', 'bow', 'cheer', 'dance', 'sit', 'point'].includes(values.gesture)) throw new Error('Unknown gesture');
 if (!['straight', 'turns'].includes(values.trajectory)) throw new Error('Unknown trajectory');
 if (values.clip && values.view !== 'motion') throw new Error('Only motion review has a deterministic frame barrier');
@@ -47,7 +47,7 @@ try {
   page.on('console', message => { if (message.type() === 'error' && !message.location().url.endsWith('/favicon.ico')) errors.push(message.text()); });
   const path = values.view === 'wardrobe' ? '/src/avatar-builder/builder.html?still=1&who=lapsed&tab=earned'
     : values.view === 'selector' ? '/src/walk/gestures/review.html'
-      : values.view === 'labels' ? '/src/walk/labels/review.html' : `/src/citizens/gestures.html?gesture=${values.gesture}&trajectory=${values.trajectory}&detail=${values.detail ? 1 : 0}`;
+      : values.view === 'labels' ? '/src/walk/labels/review.html' : values.view === 'bubbles' ? '/src/walk/labels/motion.html' : `/src/citizens/gestures.html?gesture=${values.gesture}&trajectory=${values.trajectory}&detail=${values.detail ? 1 : 0}`;
   if (values.offline) offline = await createOfflineReview(context, path.split('?')[0], values.out);
   await page.goto(new URL(path, offline?.origin ?? server.resolvedUrls.local[0]).href, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 120_000 });
@@ -84,7 +84,30 @@ try {
     }
     checks.push({ name: 'measured visible labels do not overlap or escape the viewport', count: bounds.length });
   }
-  if (values.clip) {
+  if (values.view === 'bubbles') {
+    // A camera move with active chat, one frame per step: every frame's labels are read back against the anchors
+    // projected from the camera that drew it. A fully faded-in label whose tip is off its anchor is stepping or lag.
+    const frames = `${values.out}/${tag}-frames-${width}x${height}`;
+    await mkdir(frames, { recursive: true });
+    await page.evaluate(() => window.__labelsMotion.settle(900));
+    const count = await page.evaluate(() => window.__labelsMotion.frames);
+    const sequence = [];
+    for (let index = 0; index < count; index++) {
+      sequence.push(await page.evaluate(i => window.__labelsMotion.step(i), index));
+      await page.screenshot({ path: `${frames}/${String(index).padStart(4, '0')}.png` });
+    }
+    const settled = sequence.flatMap(frame => frame.labels.filter(label => label.opacity >= .99 && label.error !== null).map(label => ({ frame: frame.frame, ...label })));
+    const worst = settled.reduce((max, label) => Math.max(max, label.error), 0);
+    if (!settled.some(label => label.speech)) throw new Error('No bubble was up during the camera move');
+    if (worst > 1) throw new Error(`A label left its anchor by ${worst.toFixed(2)} px`);
+    checks.push({ name: 'every fully shown label sits on the anchor projected by the camera that drew its frame', frames: count,
+      measured: settled.length, bubbles: settled.filter(label => label.speech).length, worstPx: Number(worst.toFixed(3)) });
+    await writeFile(`${stem}-frames.json`, JSON.stringify(sequence, null, 2));
+    await new Promise((resolve, reject) => {
+      const ffmpeg = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-i', `${frames}/%04d.png`, '-vf', `scale=${Math.round(width / 3)}:-1,tile=4x${Math.ceil(count / 4)}:padding=4`, '-frames:v', '1', `${stem}-sheet.png`], { stdio: ['ignore', 'ignore', 'inherit'] });
+      ffmpeg.once('error', reject); ffmpeg.once('exit', code => code === 0 ? resolve() : reject(new Error(`ffmpeg: ${code}`)));
+    });
+  } else if (values.clip) {
     // Three seconds, before the review pass loops. No browser-clock stepping or synthetic network evidence.
     const frames = `${values.out}/${tag}-frames-${width}x${height}`;
     await mkdir(frames, { recursive: true });
@@ -96,12 +119,12 @@ try {
       const ffmpeg = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '24', '-i', `${frames}/%04d.png`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '19', `${stem}.mp4`], { stdio: ['ignore', 'ignore', 'inherit'] });
       ffmpeg.once('error', reject); ffmpeg.once('exit', code => code === 0 ? resolve() : reject(new Error(`ffmpeg: ${code}`)));
     });
-  } else {
+  } else if (values.view !== 'bubbles') {
     if (values.view === 'motion') await page.evaluate(() => window.__chatdomGestureReview.seek(1));
     await page.screenshot({ path: `${stem}.png` });
   }
   if (errors.length) throw new Error(errors.join('\n'));
-  await writeFile(`${stem}.json`, JSON.stringify({ source: 'SIMULATED review bench', offline: values.offline, view: values.view, gesture: values.gesture,
+  await writeFile(`${stem}.json`, JSON.stringify({ source: 'dev review bench', offline: values.offline, view: values.view, gesture: values.gesture,
     trajectory: values.trajectory, detail: values.detail, width, height, clip: values.clip,
     errors, checks, limitation: 'Lane component review only. Production wardrobe and gesture bindings remain main-owned needs.' }, null, 2));
   console.log(`Reviewed capture written to ${stem}`);

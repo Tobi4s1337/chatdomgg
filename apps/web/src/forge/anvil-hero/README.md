@@ -93,7 +93,7 @@ With the web dev server running (`pnpm --filter @chatdom/web dev`, port 5170):
 - `/src/forge/anvil-hero/bench/index.html?view=…&style=…&hour=…&heat=…&time=…&shaping=0|1`.
   Views: `anvil-close`, `anvil-square`, `dragon-close`, `dragon-square`, `anvil-mark` (the cheek face-on).
   Styles `hearth|tide|grove`, hour 0–23, heat 0–1, time in seconds. Defaults: anvil-close, hearth, 19, 0, 0, 0.
-  Unknown or repeated inputs are refused on screen. The page is labelled SIMULATED · ART BENCH and publishes
+  Unknown or repeated inputs are refused on screen. This is an art review bench; its displayed heat and windows are previews, and it publishes
   `window.__chatdomReady` after the first finished frame, `window.__chatdomAnvilHero` (costs, framing, mark
   rect) or `window.__chatdomAnvilHeroError`.
 - `/src/forge/anvil-hero/bench/sheet.html?hour=19`: the three kits' dragons from four angles, as a contact sheet.

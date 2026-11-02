@@ -34,7 +34,7 @@ declare global {
 /** The kingdom's work-surface height on main's anvil stage, in metres above its plinth. */
 const ANVIL: readonly [number, number, number] = [0, 1.45, 0];
 
-/** A self-contained, SIMULATED review of the forge's public mood in an empty market square. */
+/** A self-contained preview of the forge's public mood in an empty market square. */
 export default function ForgeRefusalBench() {
   let host!: HTMLDivElement;
   let caption!: HTMLParagraphElement;
@@ -170,11 +170,11 @@ export default function ForgeRefusalBench() {
     <div ref={element => { host = element; }} class="frb-stage" />
     <header class="frb-head">
       <span>CHATDOM · THE FORGE’S MOOD</span>
-      <small>SIMULATED · public beat preview · {String(input.hour).padStart(2, '0')}:00{input.motion === 'reduced' ? ' · reduced motion' : ''}</small>
+      <small>Public beat preview · {String(input.hour).padStart(2, '0')}:00{input.motion === 'reduced' ? ' · reduced motion' : ''}</small>
     </header>
     <div class="frb-caption-slot"><p ref={element => { caption = element; }} class={FORGE_MOOD_CAPTION_CLASS} /></div>
     <aside class="frb-card" aria-label="Preview controls">
-      <p class="frb-eyebrow">SIMULATED · NO REQUEST</p>
+      <p class="frb-eyebrow">No request</p>
       <p class="frb-note">Plays an already-admitted, nameless public beat. Nothing was asked, judged or refused here, and no gate or delay runs.</p>
       <button type="button" disabled={playing() || status() !== ''} onClick={() => preview?.()}>Preview the forge’s mood <span aria-hidden="true">✦</span></button>
       <p class="frb-readout">{readout()}</p>

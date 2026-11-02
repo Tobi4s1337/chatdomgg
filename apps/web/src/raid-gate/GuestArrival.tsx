@@ -61,7 +61,6 @@ export function GuestArrivalPane(props: GuestArrivalProps) {
   const spacing = () => Math.min(86, 700 / Math.max(1, drawn()));
   const walkerX = (index: number) => gate - 150 - index * spacing();
   const you = () => (drawn() > 1 ? 1 : 0);
-  const simulated = () => props.welcome.origin === 'simulated';
 
   return <section class="rg-welcome-stage" aria-label={`${props.hostName} welcomes the guests of ${props.homeName}`}>
     <header class="rg-welcome-words">
@@ -116,7 +115,6 @@ export function GuestArrivalPane(props: GuestArrivalProps) {
         <foreignObject class="rg-welcome-seal" x={gate + 100 - 34} y="18" width="68" height="68"><Seal kingdomId={props.hostKingdomId} size={62} label={`Arms of ${props.hostName}`} /></foreignObject>
       </svg>
     </div>
-    <Show when={simulated()}><p class="rg-welcome-chip"><span class="rg-pip" />SIMULATED</p></Show>
   </section>;
 }
 

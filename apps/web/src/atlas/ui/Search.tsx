@@ -1,8 +1,9 @@
 import { createEffect, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { DirectoryError, fetchSearch, type SearchReply, type SearchResult } from '../data/directory';
 import type { PreviewSource, PreviewWorld } from '../data/preview';
-import { formatCount, formatDayRange, TIER_NAMES } from './format';
-import { PlaceMark } from './Register';
+import { mapNoun } from './edition';
+import { formatCount, SEARCH_PLACEHOLDER, TIER_NAMES } from './format';
+import { ChannelFaceSeal } from './Face';
 
 type Phase =
   | { kind: 'idle' }
@@ -10,8 +11,8 @@ type Phase =
   | { kind: 'results'; query: string; reply: SearchReply }
   | { kind: 'failed'; query: string; reason: DirectoryError['reason'] };
 
-/** A keystroke waits this long for the next before the register is asked. */
-const DEBOUNCE_MS = 170;
+/** Wait for a typing pause so ordinary keystrokes do not spend the external lookup allowance. Enter asks immediately. */
+const DEBOUNCE_MS = 500;
 /** A search answered sooner than this shows no "searching" line at all, so fast answers never flicker. */
 const QUIET_MS = 280;
 
@@ -23,6 +24,7 @@ const QUIET_MS = 280;
  * list and then clears.
  */
 export function Search(props: {
+  keyboardRoot?: HTMLElement;
   source: PreviewSource;
   world: PreviewWorld;
   /** Whether a result is on air in the live frame shown now. */
@@ -38,6 +40,13 @@ export function Search(props: {
   let retry: ReturnType<typeof setTimeout> | undefined;
   let controller: AbortController | null = null;
   let lastSeed = 0;
+  let selectionFrame: number | undefined;
+  const [pressed, setPressed] = createSignal<string | null>(null);
+  const cancelSelection = () => {
+    if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+    selectionFrame = undefined;
+    setPressed(null);
+  };
   const [text, setText] = createSignal('');
   const [phase, setPhase] = createSignal<Phase>({ kind: 'idle' });
   const [showSearching, setShowSearching] = createSignal(false);
@@ -50,6 +59,7 @@ export function Search(props: {
   };
 
   const ask = (query: string) => {
+    cancelSelection();
     controller?.abort();
     clearTimeout(quiet);
     clearTimeout(retry);
@@ -80,15 +90,29 @@ export function Search(props: {
   };
 
   const onInput = (value: string) => {
+    cancelSelection();
     setText(value);
+    controller?.abort();
+    controller = null;
+    clearTimeout(quiet);
+    clearTimeout(retry);
     clearTimeout(timer);
     timer = setTimeout(() => ask(value), DEBOUNCE_MS);
   };
 
   const choose = (result: SearchResult | undefined) => {
-    if (!result) return;
-    setOpen(false);
-    props.onChoose(result);
+    if (!result || selectionFrame !== undefined) return;
+    setPressed(result.channel.id);
+    // Paint the real row's pressed wax before selection relays out a dense still or reads a region.
+    // Both frames belong to this search and are cancelled if its query, focus or owner changes.
+    selectionFrame = requestAnimationFrame(() => {
+      selectionFrame = requestAnimationFrame(() => {
+        selectionFrame = undefined;
+        setOpen(false);
+        setPressed(null);
+        props.onChoose(result);
+      });
+    });
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -102,9 +126,10 @@ export function Search(props: {
       clearTimeout(timer);
       const current = phase();
       // Enter before the answer arrives asks now; with an answer it opens the chosen result.
-      if (current.kind === 'results' && current.query === text()) choose(list[active()]);
+      if (current.kind === 'results' && current.query === text() && list.length) choose(list[active()]);
       else ask(text());
     } else if (event.key === 'Escape') {
+      cancelSelection();
       // The search is the top surface while its list is open: Escape belongs to it, not to a card beneath.
       event.stopPropagation();
       event.preventDefault();
@@ -123,9 +148,10 @@ export function Search(props: {
     input?.focus();
     input?.select();
   };
-  onMount(() => window.addEventListener('keydown', onWindowKey));
+  onMount(() => (props.keyboardRoot ?? window).addEventListener('keydown', onWindowKey as EventListener));
   onCleanup(() => {
-    window.removeEventListener('keydown', onWindowKey);
+    cancelSelection();
+    (props.keyboardRoot ?? window).removeEventListener('keydown', onWindowKey as EventListener);
     clearTimeout(timer);
     clearTimeout(quiet);
     clearTimeout(retry);
@@ -142,7 +168,6 @@ export function Search(props: {
     queueMicrotask(() => input?.focus({ preventScroll: true }));
   });
 
-  const survey = () => formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt);
   const place = (result: SearchResult) => {
     const region = props.world.regions[result.channel.region ?? -1];
     const realm = props.world.realms[result.channel.realm ?? -1];
@@ -157,10 +182,10 @@ export function Search(props: {
       class="atlas-search"
       data-open={open() ? 'true' : 'false'}
       data-phase={phase().kind === 'results' ? (results().length ? 'results' : 'none') : phase().kind === 'failed' ? (phase() as { reason: string }).reason : phase().kind}
-      onFocusOut={(event) => {
+      on:focusout={(event) => {
         // Leaving the search (a tap on the map, Tab onwards) folds the list away; the text stays for later.
         const next = event.relatedTarget as Node | null;
-        if (!next || !wrapper?.contains(next)) setOpen(false);
+        if (!next || !wrapper?.contains(next)) { cancelSelection(); setOpen(false); }
       }}
     >
       <label class="atlas-search-field">
@@ -176,16 +201,16 @@ export function Search(props: {
           autocapitalize="off"
           spellcheck={false}
           maxLength={120}
-          placeholder="Find a channel by name"
+          placeholder={SEARCH_PLACEHOLDER}
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={open()}
           aria-controls="atlas-search-results"
           aria-activedescendant={open() && results().length ? `atlas-search-result-${active()}` : undefined}
           value={text()}
-          onInput={(event) => onInput(event.currentTarget.value)}
-          onKeyDown={onKeyDown}
-          onFocus={() => {
+          on:input={(event) => onInput(event.currentTarget.value)}
+          on:keydown={onKeyDown}
+          on:focus={() => {
             if (text().trim() && phase().kind !== 'idle') setOpen(true);
           }}
         />
@@ -212,11 +237,12 @@ export function Search(props: {
                       aria-selected={i() === active()}
                       class="atlas-search-result"
                       data-place={result.channel.place}
-                      onPointerEnter={() => setActive(i())}
-                      onPointerDown={(event) => event.preventDefault()}
-                      onClick={() => choose(result)}
+                      data-atlas-press={pressed() === result.channel.id ? 'true' : undefined}
+                      on:pointerenter={() => setActive(i())}
+                      on:pointerdown={(event) => event.preventDefault()}
+                      on:click={() => choose(result)}
                     >
-                      <PlaceMark face={result.channel} onAir={props.onAir(result)} size={26} />
+                      <ChannelFaceSeal channelId={result.channel.id} name={result.channel.name} portrait={result.portrait} compact />
                       <span class="atlas-search-text">
                         <span class="atlas-search-name" dir="auto">
                           {result.channel.name}
@@ -226,7 +252,7 @@ export function Search(props: {
                         </span>
                         <span class="atlas-search-place">
                           <Show when={props.onAir(result)}><span class="atlas-search-air">On air · </span></Show>
-                          {place(result)} · {formatCount(result.average)} avg.
+                          {place(result)}<Show when={result.average !== null}> · {formatCount(result.average!)} avg.</Show>
                         </span>
                       </span>
                     </li>
@@ -239,8 +265,11 @@ export function Search(props: {
             </Match>
             <Match when={phase().kind === 'results'}>
               <div class="atlas-search-state" role="status">
-                <p>No channel called “<span dir="auto">{(phase() as { query: string }).query.trim()}</span>” is in the survey of {survey()}.</p>
-                <p class="atlas-quiet">Names are shown only for channels seen live within a day, and the survey sees streams from five viewers up.</p>
+                <p>“<span dir="auto">{(phase() as { query: string }).query.trim()}</span>” is not on the map yet.</p>
+                <Show when={(phase() as { reply: SearchReply }).reply.unavailable === 'limited' || (phase() as { reply: SearchReply }).reply.unavailable === 'upstream'}>
+                  <p class="atlas-quiet">Try again in a moment.</p>
+                  <button type="button" class="atlas-search-retry" on:click={() => ask(text())}>Search again</button>
+                </Show>
                 <a class="atlas-search-away" href={`https://www.twitch.tv/search?term=${encodeURIComponent((phase() as { query: string }).query.trim())}`} target="_blank" rel="noopener noreferrer">
                   Look for it on Twitch<span class="atlas-visually-hidden"> (opens twitch.tv in a new tab)</span>
                 </a>
@@ -250,7 +279,7 @@ export function Search(props: {
               <div class="atlas-search-state" role="status">
                 <Switch>
                   <Match when={(phase() as { reason: string }).reason === 'warming'}>
-                    <p>The register of this survey is still being opened; asking again in a moment…</p>
+                    <p>The register of this {mapNoun(props.world)} is still being opened; asking again in a moment…</p>
                   </Match>
                   <Match when={(phase() as { reason: string }).reason === 'refused'}>
                     <p>Channel names are held back just now while the map’s moderation list is checked. The map itself is unchanged.</p>
@@ -260,7 +289,7 @@ export function Search(props: {
                   </Match>
                   <Match when={true}>
                     <p>The register could not be read just now. The map is unchanged.</p>
-                    <button type="button" class="atlas-search-retry" onClick={() => ask(text())}>Search again</button>
+                    <button type="button" class="atlas-search-retry" on:click={() => ask(text())}>Search again</button>
                   </Match>
                 </Switch>
               </div>

@@ -1,88 +1,52 @@
 import * as THREE from 'three';
 import { MATERIALS } from '@chatdom/content';
 import { createVoxelMaterial, type VoxelRenderState } from '@chatdom/render';
-import { createCitizenMotion, createCitizenBehaviours, dueBehaviourSteps, type CitizenGoalAnswer, type CitizenMotion, type CitizenMotionSample, type SettlementPlan } from '@chatdom/world';
+import { createCitizenMotion, currentFootprint, type CitizenMotion, type CitizenMotionSample, type CitizenRoute, type SettlementPlan } from '@chatdom/world';
 import { CitizenChatCueSchema, type CitizenChatCue, type KingdomPresenceFrame, type Vec3 } from '@chatdom/shared';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
-import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import type { ForgeReactionCue } from './forge-flight';
-import { chooseWatchers, crowdPose, type CrowdCall } from '../twitch-moments/stage-beat';
+import type { CrowdCall } from '../twitch-moments/stage-beat';
 import { walkerSubject, type WalkerSlots } from './observed-walkers';
 import { createWalkerLanterns } from './walker-lanterns';
+import { createCanvasProbe, disposeCanvasProbe, projectToCanvas, publishSpeech, type SpeechAnchor } from '../walk/labels/bus';
+import { speechHoldUntil } from '../walk/labels/timing';
 
 export interface ForgeAudienceBarrel { position: Vec3; height: number }
-const FORGE_AUDIENCE_CAP = 32;
-const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
+/** The host's older 80 ms speech shape. Speech now travels per frame on the label bus; see `speechLabels`. */
 export interface SpeechLabel { slot: number; name: string | null; x: number; y: number; distance: number; parts: CitizenChatCue['parts'] }
 
-/** Add public standing points only inside the installed market, without changing the adopted plan. */
-function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): SettlementPlan {
-  const market = plan.nodes.find(node => node.id === plan.market.nodeId);
-  if (!market) return plan;
-  const insideMarket = (x: number, z: number) => {
-    const polygon = plan.market.boundary;
-    let inside = false;
-    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      const a = polygon[i]!, b = polygon[j]!;
-      if ((a[1] > z) !== (b[1] > z) && x < (b[0] - a[0]) * (z - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
-    }
-    return inside && !plan.reservations.some(({ lot }) => x >= lot.minX - .6 && x <= lot.maxX + .6 && z >= lot.minZ - .6 && z <= lot.maxZ + .6);
-  };
-  const nodes = [...plan.nodes], streets = [...plan.streets], activeStreetIds = [...plan.activeStreetIds];
-  // The back row uses the open west side; the other arc wraps the workshop's
-  // front apron. A second row on the same west side hid half the audience.
-  const standingPoints = [[-3.4, 8], [-3.6, 6.1], [-3.7, 4.1], [-3.2, 2.1], [-1.8, .6], [.2, .5],
-    [-3.6, 10.4], [-1.8, 12], [.6, 12.7], [2.8, 12.2], [4.5, 11.6], [5.8, 10.9], [7.3, 11.3], [-5.5, 5], [-.8, 3.8], [6.2, 13],
-    // A staggered second bank keeps shoulders visible between the front row,
-    // continuing around the open apron instead of stacking everybody to the west.
-    [-5.2,9.2],[-5.6,7.1],[-7.1,5.2],[-5.2,2.9],[-4,1],[-2.1,-.9],[.1,-1],
-    [-5.3,12.1],[-3.5,14],[-1.3,14.4],[1,14.6],[3.3,14.4],[5.6,14],[7.7,13.3],[9.4,11.6],[9.7,9.4]];
-  const installedBarrel = barrel && insideMarket(barrel.position[0], barrel.position[2]);
-  if (installedBarrel) standingPoints[14] = [barrel.position[0], barrel.position[2]];
-  const addPath = (from: string, to: string) => {
-    const start = nodes.find(node => node.id === from)?.position, end = nodes.find(node => node.id === to)?.position;
-    if (!start || !end || !Array.from({ length: 21 }, (_, i) => {
-      const x = start[0] + (end[0] - start[0]) * i / 20, z = start[2] + (end[2] - start[2]) * i / 20;
-      // Never cut diagonally through the installed hearth, awning or anvil.
-      const workshop = x > -.65 && x < 9.2 && z > 1.45 && z < 9.9;
-      const anvil = x > -1.4 && x < 1.4 && z > 6.7 && z < 9.3;
-      return insideMarket(x, z) && !workshop && !anvil;
-    }).every(Boolean)) return false;
-    const id = `${from}:${to}:path`;
-    if (streets.some(edge => edge.id === id)) return true;
-    streets.push({ id, from, to, kind: 'lane', name: 'Market', points: [start, end], width: 1.4, verge: 0 });
-    activeStreetIds.push(id);
-    return true;
-  };
-  const entryId = 'forge:walk:entry', entry: Vec3 = [-3, market.position[1], 12];
-  if (!insideMarket(entry[0], entry[2])) return plan;
-  nodes.push({ id: entryId, kind: 'junction', position: entry });
-  addPath(market.id, entryId);
-  for (const [index, [x, z]] of standingPoints.entries()) {
-    const id = `forge:watch:${index}`, position: Vec3 = [x!, market.position[1], z!];
-    if (!insideMarket(position[0], position[2]) || nodes.some(node => node.id === id)) continue;
-    nodes.push({ id, kind: 'junction', position });
+/** A chat-only person's bubble rises from just above their door, in front of the facade. */
+export const HOME_SPEECH_RISE_M = 2.7;
+const HOME_SPEECH_OUTSET_M = .15;
+/**
+ * Homes hide a home's bubble only up to this height. The plan knows every footprint but not each roofline, so a
+ * cottage's eaves stand in for all of them: a bubble is never hidden by a roof it might clear.
+ */
+export const HOME_OCCLUDER_HEIGHT_M = 4.2;
+/** Home bubbles further than this are never shown (the label layer's widest bubble range plus slack). */
+const HOME_SPEECH_REACH_M = 40;
+
+/** Where a chat-only person's speech is anchored: above the door their route ends at, facing the street. */
+export function homeSpeechAnchor(route: Pick<CitizenRoute, 'points' | 'homeHeading'>): Vec3 | undefined {
+  const door = route.points.at(-1);
+  if (!door || !door.every(Number.isFinite) || !Number.isFinite(route.homeHeading)) return undefined;
+  // homeHeading faces into the home; the street is behind the person standing at the door.
+  const outX = -Math.sin(route.homeHeading), outZ = -Math.cos(route.homeHeading);
+  return [door[0] + outX * HOME_SPEECH_OUTSET_M, door[1] + HOME_SPEECH_RISE_M, door[2] + outZ * HOME_SPEECH_OUTSET_M];
+}
+
+/** Does the segment a→b pass through the box? Slab test; both ends are in the same space as the box. */
+export function segmentHitsBox(a: Vec3, b: Vec3, min: Vec3, max: Vec3): boolean {
+  let start = 0, end = 1;
+  for (let axis = 0; axis < 3; axis++) {
+    const from = a[axis]!, delta = b[axis]! - from;
+    if (Math.abs(delta) < 1e-9) { if (from < min[axis]! || from > max[axis]!) return false; continue; }
+    const p = (min[axis]! - from) / delta, q = (max[axis]! - from) / delta;
+    start = Math.max(start, Math.min(p, q)); end = Math.min(end, Math.max(p, q));
+    if (end <= start) return false;
   }
-  const watch = (index: number) => `forge:watch:${index}`;
-  for (const start of [0, 6]) addPath(entryId, watch(start));
-  for (const [start, end] of [[0, 5], [6, 12]] as const) {
-    for (let index = start; index < end; index++) addPath(watch(index), watch(index + 1));
-  }
-  for (let index = 0; index < 5; index++) addPath(watch(index), watch(index + 6));
-  addPath(watch(5), watch(12));
-  addPath(watch(3), watch(13));
-  addPath(watch(11), watch(15));
-  addPath(watch(2), watch(14));
-  // Each extra place joins two nearby, already connected standing points. The
-  // same swept path guard keeps routes out of the hearth and the casting.
-  for(let index=16;index<standingPoints.length;index++){
-    const at=standingPoints[index]!;
-    const neighbours=standingPoints.slice(0,index).map((point,id)=>({id,distance:Math.hypot(point[0]!-at[0]!,point[1]!-at[1]!)})).sort((a,b)=>a.distance-b.distance);
-    let joined=0;
-    for(const neighbour of neighbours)if(addPath(watch(neighbour.id),watch(index))&&++joined===2)break;
-  }
-  return { ...plan, nodes, streets, activeStreetIds };
+  return true;
 }
 
 /** An in-memory handoff for a single scene rebuild; never serialised or shared with the realm. */
@@ -99,49 +63,123 @@ export interface CitizenSceneCheckpoint {
   readonly looks: ReadonlyMap<number, string>;
 }
 
-/** Render-side presentation only: the public presence projection remains unchanged. */
+/** A present person's sample. Only a walker can be seated: chat-only people have no body to sit down. */
+export type CitizenSample = CitizenMotionSample & { readonly posture?: 'seated' };
+
+interface Spoken { readonly cue: CitizenChatCue; firstSeenMs: number | null }
+
+/**
+ * Chat-only people as light (decision 13). Someone who chats but is not walking has no body in the streets: they
+ * are their lit window and a bubble rising from their home. Bodies belong only to the realm's walkers, drawn by
+ * `walk-scene.ts` (you and the people in your room) or `observed-walkers.ts` (the stream's view of them); this
+ * module still carries a walker's lantern and keeps their home slot's presence, light and speech.
+ *
+ * The public presence projection is unchanged. Windows light from presence: a person's window is lit from the
+ * moment the projection says they are present (their `since`), with no unseen walk home in between.
+ */
 export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan, pool: VoxelWorkerPool, clay: VoxelRenderState, castleHome = false, checkpoint?: CitizenSceneCheckpoint, forgeBarrel?: ForgeAudienceBarrel) {
   if (forgeBarrel && (![...forgeBarrel.position, forgeBarrel.height].every(Number.isFinite) || forgeBarrel.height <= 0)) throw new Error('Invalid Forge audience barrel.');
   const barrelKey = JSON.stringify(forgeBarrel ?? null);
-  let motion = createCitizenMotion(forgeStandingPlan(layout, forgeBarrel), { castleHome });
+  // Routes give every home its door. No goals are requested: nobody unseen walks anywhere.
+  let motion = createCitizenMotion(layout, { castleHome });
   let pendingCheckpoint = checkpoint;
-  const behaviours = createCitizenBehaviours();
   const capacity = layout.homes.length + Number(castleHome);
-  let lastStepMs: number | null = null, answers: CitizenGoalAnswer[] = [];
-  const resetBehaviours = () => { behaviours.reset(); lastStepMs=null; answers=[]; };
+  // The people material: walkers are drawn with it by the walk and observed renderers. Moving people receive
+  // open-sky fill; per-part baked cavities must not turn darker skin into a silhouette before a nearby window lights.
   const material = createVoxelMaterial(MATERIALS, 'avatar');
-  // Moving people receive open-sky fill; per-part baked cavities must not turn
-  // darker skin into a silhouette before a nearby window lights.
   material.material.fragmentShader = material.material.fragmentShader.replace('float sky=mix(.24,1.,vSky);', 'float sky=mix(.72,1.,vSky);').replace('vec3 colour=base*edge*light*ao;', 'vec3 colour=base*edge*(light+vec3(.4,.32,.25)*(1.-.85*smithyInfluence))*ao;');
   for (const key of ['uSmithyPower','uSmithyOrigin','uLight','uLightOrigin','uLightExtent','uFarLight','uFarOrigin','uFarExtent','uFarCell','uBeaconLight','uBeaconOrigin','uBeaconExtent','uBeaconCell']) material.material.uniforms[key] = clay.material.uniforms[key]!;
-  const lanterns = createWalkerLanterns(scene, capacity);
-  const looks = createDefaultCitizenLooks();
-  const knownLooks = new Set(looks.map(look => look.id)), suppliedLooks = new Map<number, string>();
-  let renderer: Awaited<ReturnType<typeof createCitizenRenderer>> | undefined;
-  let samples: readonly (CitizenMotionSample & { readonly posture?: 'seated' })[] = [], frame: KingdomPresenceFrame | undefined;
-  let carrying: readonly CitizenMotionSample[] = [];
+  const lanterns = createWalkerLanterns(scene, Math.max(1, capacity));
+  const suppliedLooks = new Map<number, string>();
+  let frame: KingdomPresenceFrame | undefined;
+  /** Every present person, standing at their own door, unseen (opacity 0). Rebuilt when presence changes. */
+  let doorSamples: readonly CitizenMotionSample[] = [], doorBuiltAt = -Infinity, nextArrivalMs = Infinity;
+  let samples: readonly CitizenSample[] = [], carrying: readonly CitizenMotionSample[] = [];
   let walkers: WalkerSlots = new Map();
-  let forge: { anchor: Vec3; atMs: number } | undefined;
-  const watchers = new Map<number, string>(), watcherArrivals = new Map<number, number>();
-  let fire: { anchor: Vec3; atMs: number } | undefined, nextFireGatherMs = 0;
-  const fireSitters = new Map<number, string>();
-  let nextForgeGatherMs = 0;
-  // A rebuilt scene can subscribe before the Forge feed replays its activity.
-  let restoredForgeGraceStart: number | undefined;
-  let restoredForgePending = false;
-  const speech = new Map<number, CitizenChatCue>();
-  let disposed = false;
-  const shadowGeometry = new THREE.CircleGeometry(.29, 12); shadowGeometry.rotateX(-Math.PI / 2);
-  const shadowMaterial = new THREE.MeshBasicMaterial({ color: '#252a24', transparent: true, opacity: .22, depthWrite: false });
-  const shadows = new THREE.InstancedMesh(shadowGeometry, shadowMaterial, capacity);
-  shadows.count = 0; shadows.frustumCulled = false; scene.add(shadows);
-  const shadowMatrix = new THREE.Matrix4();
+  const speech = new Map<number, Spoken>();
+  let lastAtMs = -Infinity, namedHomes: ReadonlySet<number> = new Set();
+  // Kept with the frame and the doors they come from, never rebuilt per drawn frame (thousands of chatters).
+  let namesBySlot: ReadonlyMap<number, string | null> = new Map(), presentSlots: ReadonlySet<number> = new Set();
+  let sampleIndex: ReadonlyMap<number, number> = new Map();
+
+  const probe = createCanvasProbe();
+  scene.add(probe);
+  const anchors = new Map<number, Vec3 | null>();
+  const anchorFor = (slot: number) => {
+    if (!anchors.has(slot)) { const route = motion.routeForSlot(slot); anchors.set(slot, route ? homeSpeechAnchor(route) ?? null : null); }
+    return anchors.get(slot) ?? undefined;
+  };
+  // Footprint boxes of every home, for the cheap wall test on home bubbles.
+  const occluders = new Float32Array(layout.homes.length * 6);
+  layout.homes.forEach((home, index) => {
+    const footprint = currentFootprint(home), y = home.position[1];
+    occluders.set([footprint.minX, y, footprint.minZ, footprint.maxX, y + HOME_OCCLUDER_HEIGHT_M, footprint.maxZ], index * 6);
+  });
+  function hidden(eye: Vec3, anchor: Vec3): boolean {
+    const minX = Math.min(eye[0], anchor[0]), maxX = Math.max(eye[0], anchor[0]), minZ = Math.min(eye[2], anchor[2]), maxZ = Math.max(eye[2], anchor[2]);
+    for (let i = 0; i < occluders.length; i += 6) {
+      if (occluders[i + 3]! < minX || occluders[i]! > maxX || occluders[i + 5]! < minZ || occluders[i + 2]! > maxZ) continue;
+      if (segmentHitsBox(eye, anchor, [occluders[i]!, occluders[i + 1]!, occluders[i + 2]!], [occluders[i + 3]!, occluders[i + 4]!, occluders[i + 5]!])) return true;
+    }
+    return false;
+  }
+
+  function buildDoors(atMs: number) {
+    doorBuiltAt = atMs; nextArrivalMs = Infinity;
+    if (!frame) { doorSamples = []; presentSlots = new Set(); sampleIndex = new Map(); return; }
+    const built: CitizenMotionSample[] = [];
+    for (const window of frame.windows) {
+      if (!window.present) continue;
+      if (window.since > atMs) { nextArrivalMs = Math.min(nextArrivalMs, window.since); continue; }
+      const route = motion.routeForSlot(window.slot), door = route?.points.at(-1);
+      if (!route || !door) continue;
+      built.push({ slot: window.slot, publicName: window.publicName, state: 'home', position: door, heading: route.homeHeading,
+        speed: 0, distance: 0, walkPhase: 0, homeLit: true, homeLitAtMs: window.since, opacity: 0,
+        goalNodeId: route.destinationNodeId, goalReached: true });
+    }
+    doorSamples = built.sort((a, b) => a.slot - b.slot);
+    presentSlots = new Set(doorSamples.map(sample => sample.slot));
+    sampleIndex = new Map(doorSamples.map((sample, index) => [sample.slot, index]));
+  }
+  /** A walker's own feet stand in for their door sample; they are drawn, so they are seen. */
+  const walkerSample = (sample: CitizenMotionSample): CitizenSample => {
+    const subject = walkerSubject(sample, walkers), walker = walkers.get(sample.slot)!;
+    return { ...subject, opacity: 1, state: walker.speed > .05 ? 'walking' : 'idle', goalReached: walker.speed <= .05,
+      ...(walker.posture ? { posture: walker.posture } : {}) };
+  };
+
+  function publish(camera: THREE.Camera) {
+    const canvas = probe.canvas;
+    if (!canvas) return;
+    const width = canvas.clientWidth, height = canvas.clientHeight;
+    const lines: SpeechAnchor[] = [];
+    if (width > 0 && height > 0 && speech.size) {
+      const toWorld = scene.matrixWorld, identity = toWorld.equals(IDENTITY);
+      const eyeWorld = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+      const eyeLocal = identity ? eyeWorld : eyeWorld.clone().applyMatrix4(new THREE.Matrix4().copy(toWorld).invert());
+      const eye: Vec3 = [eyeLocal.x, eyeLocal.y, eyeLocal.z];
+      for (const [slot, { cue }] of speech) {
+        if (cue.asOf > lastAtMs) continue;
+        const walker = walkers.get(slot);
+        const name = namedHomes.has(slot) ? null : namesBySlot.get(slot) ?? null;
+        if (walker) { lines.push({ slot, cueId: cue.id, name, parts: cue.parts, from: 'walker' }); continue; }
+        const anchor = anchorFor(slot);
+        if (!anchor) continue;
+        const point = new THREE.Vector3(...anchor);
+        if (!identity) point.applyMatrix4(toWorld);
+        const projected = projectToCanvas(point, camera, width, height);
+        if (!projected || projected.distance > HOME_SPEECH_REACH_M) continue;
+        lines.push({ slot, cueId: cue.id, name, parts: cue.parts, from: 'home', x: projected.x, y: projected.y,
+          distance: projected.distance, visibility: hidden(eye, anchor) ? 0 : 1 });
+      }
+    }
+    publishSpeech(canvas, { at: performance.now(), width, height, speech: lines });
+  }
+
   return {
     material, get motion() { return motion; },
-    async prepare() {
-      const instance = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity, pool });
-      if (disposed) instance.dispose(); else renderer = instance;
-    },
+    /** Kept for the host's loading sequence. Chat-only people have no bodies to mesh, so the voxel pool is unused. */
+    prepare(): Promise<void> { return Promise.resolve(); },
     applyFrame(next: KingdomPresenceFrame) {
       // Only restore after a fresh projection has established the same authority and
       // cannot predate the checkpoint. No checkpoint data is visible before this.
@@ -151,26 +189,26 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
         && next.sequence >= saved.frame.sequence && next.asOf >= saved.frame.asOf
         && (next.sequence > saved.frame.sequence || JSON.stringify(next) === JSON.stringify(saved.frame))) {
         saved.used = true;
-        motion = saved.motion;
-        for (const [slot, destination] of saved.watchers) if (next.windows.some(window => window.slot === slot && window.present && saved.frame.windows.some(previous => previous.slot === slot && previous.present && previous.since === window.since))) watchers.set(slot, destination);
-        for (const [slot, arrivedAt] of saved.watcherArrivals) if (watchers.has(slot)) watcherArrivals.set(slot, arrivedAt);
-        restoredForgePending = watchers.size > 0;
+        motion = saved.motion; anchors.clear();
         for (const [slot, look] of saved.looks) suppliedLooks.set(slot, look);
       }
-      if(frame&&(frame.kingdomId!==next.kingdomId||frame.epoch!==next.epoch||frame.origin!==next.origin||next.asOf<frame.asOf)){resetBehaviours();watchers.clear();watcherArrivals.clear();fireSitters.clear();suppliedLooks.clear();}
+      if (frame && (frame.kingdomId !== next.kingdomId || frame.epoch !== next.epoch || frame.origin !== next.origin || next.asOf < frame.asOf)) { suppliedLooks.clear(); speech.clear(); }
       for (const window of next.windows) if (window.look !== undefined) suppliedLooks.set(window.slot, window.look);
       frame = next; motion.applyFrame(next);
+      namesBySlot = new Map(next.windows.map(window => [window.slot, window.publicName]));
+      doorBuiltAt = -Infinity;
     },
     /** Called only after the outgoing renderer has stopped advancing its motion. */
-    restoreCheckpoint(saved:CitizenSceneCheckpoint|undefined) {
-      if(!saved)return;
-      pendingCheckpoint=saved;
-      if(frame)this.applyFrame(frame);
+    restoreCheckpoint(saved: CitizenSceneCheckpoint | undefined) {
+      if (!saved) return;
+      pendingCheckpoint = saved;
+      if (frame) this.applyFrame(frame);
     },
     checkpoint(): CitizenSceneCheckpoint | undefined {
       if (!frame) return undefined;
-      return { used: false, revision: layout.revision, seed: layout.config.seed, castleHome, barrelKey, watcherArrivals: new Map(watcherArrivals), frame, motion,
-        watchers: new Map(watchers), looks: new Map(suppliedLooks) };
+      // Nobody unseen walks to the Forge any more, so there are never watchers to carry across a rebuild.
+      return { used: false, revision: layout.revision, seed: layout.config.seed, castleHome, barrelKey, watcherArrivals: new Map(), frame, motion,
+        watchers: new Map(), looks: new Map(suppliedLooks) };
     },
     receiveChat(input: unknown) {
       const result = CitizenChatCueSchema.safeParse(input);
@@ -178,195 +216,83 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       const cue = result.data;
       if (cue.kingdomId !== frame.kingdomId || cue.epoch !== frame.epoch || cue.origin !== frame.origin || !frame.windows.some(w => w.slot === cue.slot && w.present)) return false;
       const previous = speech.get(cue.slot);
-      if (previous && previous.asOf >= cue.asOf) return false;
-      speech.set(cue.slot, cue); return true;
+      if (previous && previous.cue.asOf >= cue.asOf) return false;
+      speech.set(cue.slot, { cue, firstSeenMs: null }); return true;
     },
     clearChat(cueIds?: readonly string[]) {
       if (!cueIds) { speech.clear(); return; }
       const removed = new Set(cueIds);
-      for (const [slot, cue] of speech) if (removed.has(cue.id)) speech.delete(slot);
+      for (const [slot, { cue }] of speech) if (removed.has(cue.id)) speech.delete(slot);
     },
+    /** Chat-only people have no bodies to gather at the Forge; walkers come on their own feet. Validated, then ignored. */
     watchForge(active: boolean, atMs: number, anchor: Vec3) {
-      if (!Number.isFinite(atMs) || !anchor.every(Number.isFinite)) return;
-      if (!active) {
-        if (restoredForgePending) {
-          restoredForgeGraceStart ??= atMs;
-          if (atMs - restoredForgeGraceStart < 3_000) return;
-        }
-        forge = undefined; watchers.clear();watcherArrivals.clear(); nextForgeGatherMs = 0;
-        restoredForgePending = false; restoredForgeGraceStart = undefined;
-        return;
-      }
-      restoredForgePending = false; restoredForgeGraceStart = undefined;
-      forge = { anchor, atMs };
+      if (!Number.isFinite(atMs) || !anchor.every(Number.isFinite) || !active) return;
     },
-    /** Persistent royal fire state; routes only real present people to existing supported public destinations. */
+    /** As with the Forge: only walkers can sit at the royal fire, and they walk there themselves. */
     gatherFire(active: boolean, atMs: number, anchor: Vec3) {
-      if (!Number.isFinite(atMs) || !anchor.every(Number.isFinite)) return;
-      if (!active) { fire = undefined; fireSitters.clear(); nextFireGatherMs = 0; return; }
-      if (fire && fire.anchor.some((value, index) => value !== anchor[index])) fireSitters.clear();
-      fire = { anchor, atMs };
+      if (!Number.isFinite(atMs) || !anchor.every(Number.isFinite) || !active) return;
     },
-    update(atMs: number, time: number, camera?: THREE.Camera, reservedSlots: ReadonlySet<number> = new Set(), walkerFeet: WalkerSlots = new Map(), reaction: ForgeReactionCue | null = null, call: CrowdCall | null = null) {
-      walkers = walkerFeet;
-      if (fire && frame && atMs >= fire.atMs && atMs >= nextFireGatherMs) {
-        nextFireGatherMs = atMs + 1000;
-        const present = new Set(frame.windows.filter(window => window.present).map(window => window.slot));
-        const current = motion.sample(atMs);
-        for (const slot of fireSitters.keys()) if (!present.has(slot) || reservedSlots.has(slot) || walkers.has(slot) || watchers.has(slot)) fireSitters.delete(slot);
-        const occupied = [...fireSitters].flatMap(([slot, nodeId]) => motion.destinationsForSlot(slot).filter(destination => destination.nodeId === nodeId));
-        const candidates = current.filter(sample => sample.homeLit && present.has(sample.slot) && !fireSitters.has(sample.slot)
-          && !watchers.has(sample.slot) && !reservedSlots.has(sample.slot) && !walkers.has(sample.slot))
-          .sort((a, b) => Math.hypot(a.position[0] - fire!.anchor[0], a.position[2] - fire!.anchor[2]) - Math.hypot(b.position[0] - fire!.anchor[0], b.position[2] - fire!.anchor[2]) || a.slot - b.slot);
-        for (const sample of candidates) {
-          if (fireSitters.size >= 8) break;
-          const destination = motion.destinationsForSlot(sample.slot).filter(destination => destination.kind !== 'home'
-            && !(forgeBarrel && destination.nodeId === 'forge:watch:14')
-            && ![...watchers.values()].includes(destination.nodeId) && Math.abs(destination.position[1] - fire!.anchor[1]) < .25
-            && Math.hypot(destination.position[0] - fire!.anchor[0], destination.position[2] - fire!.anchor[2]) >= 2
-            && Math.hypot(destination.position[0] - fire!.anchor[0], destination.position[2] - fire!.anchor[2]) <= 8
-            && occupied.every(other => Math.hypot(other.position[0] - destination.position[0], other.position[2] - destination.position[2]) >= 1.3))
-            .sort((a, b) => Math.hypot(a.position[0] - fire!.anchor[0], a.position[2] - fire!.anchor[2]) - Math.hypot(b.position[0] - fire!.anchor[0], b.position[2] - fire!.anchor[2]) || a.nodeId.localeCompare(b.nodeId))[0];
-          if (destination && motion.requestGoal({ slot: sample.slot, nodeId: destination.nodeId, startAtMs: Math.max(atMs, frame.asOf) }).accepted) {
-            fireSitters.set(sample.slot, destination.nodeId); occupied.push(destination);
-          }
-        }
+    /**
+     * Samples every present person: at their door and unseen for chat-only people, at their own feet for walkers.
+     * Forge reactions and crowd calls have no chat-only bodies to turn; walkers' renderers answer them.
+     */
+    update(atMs: number, _time: number, _camera?: THREE.Camera, _reservedSlots?: ReadonlySet<number>, walkerFeet: WalkerSlots = new Map(), reaction: ForgeReactionCue | null = null, call: CrowdCall | null = null) {
+      void reaction; void call;
+      walkers = walkerFeet; lastAtMs = atMs;
+      if (!Number.isFinite(atMs)) return samples;
+      if (doorBuiltAt === -Infinity || atMs < doorBuiltAt || atMs >= nextArrivalMs) buildDoors(atMs);
+      samples = walkers.size ? doorSamples.map(sample => walkers.has(sample.slot) ? walkerSample(sample) : sample) : doorSamples;
+      carrying = walkers.size ? samples.filter(sample => { const walker = walkers.get(sample.slot); return walker && !walker.posture; }) : [];
+      for (const [slot, spoken] of speech) {
+        if (!presentSlots.has(slot)) { speech.delete(slot); continue; }
+        if (spoken.cue.asOf > atMs) continue;
+        spoken.firstSeenMs ??= atMs;
+        if (atMs >= speechHoldUntil(spoken.cue, spoken.firstSeenMs)) speech.delete(slot);
       }
-      if (forge && frame && atMs >= forge.atMs && atMs >= nextForgeGatherMs) {
-        nextForgeGatherMs = atMs + 1_000;
-        const present = new Set(frame.windows.filter(window => window.present).map(window => window.slot));
-        const current = motion.sample(atMs);
-        for (const slot of watchers.keys()) if (!present.has(slot) || reservedSlots.has(slot) || walkers.has(slot) || !current.some(sample => sample.slot === slot && sample.homeLit)) { watchers.delete(slot); watcherArrivals.delete(slot); }
-        const occupied = new Set(watchers.values());
-        const candidates = current.filter(sample => sample.homeLit && present.has(sample.slot) && !watchers.has(sample.slot) && !reservedSlots.has(sample.slot) && !walkers.has(sample.slot))
-          .sort((a, b) => Math.hypot(a.position[0] - forge!.anchor[0], a.position[2] - forge!.anchor[2]) - Math.hypot(b.position[0] - forge!.anchor[0], b.position[2] - forge!.anchor[2]));
-        for (const sample of candidates) {
-          if (watchers.size >= FORGE_AUDIENCE_CAP) break;
-          const destination = motion.destinationsForSlot(sample.slot).find(item => item.nodeId.startsWith('forge:watch:') && !occupied.has(item.nodeId)
-            && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) >= 3
-            && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) <= 13);
-          if (destination && motion.requestGoal({ slot: sample.slot, nodeId: destination.nodeId, startAtMs: Math.max(atMs, frame.asOf) }).accepted) {
-            watchers.set(sample.slot, destination.nodeId); occupied.add(destination.nodeId);
-          }
-        }
-      }
-      if(frame)for(const stepMs of dueBehaviourSteps(lastStepMs,atMs)){
-        lastStepMs=stepMs;
-        const stepSamples=motion.sample(stepMs),ambientSlots=new Set(stepSamples.filter(sample=>!reservedSlots.has(sample.slot) && !walkers.has(sample.slot) && !watchers.has(sample.slot) && !fireSitters.has(sample.slot)).map(sample=>sample.slot));
-        const step=behaviours.step({kingdomId:frame.kingdomId,epoch:frame.epoch,origin:frame.origin,atMs:stepMs,samples:stepSamples,ambientSlots,destinationsFor:slot=>motion.destinationsForSlot(slot).filter(destination => !destination.nodeId.startsWith('forge:')),answers});
-        answers=step.goals.map(request=>({request,result:motion.requestGoal(request)}));
-      }
-      samples = motion.sample(atMs).map(sample => {
-        if (fire && fireSitters.get(sample.slot) === sample.goalNodeId && sample.goalReached) return { ...sample, posture: 'seated' as const,
-          heading: Math.atan2(fire.anchor[0] - sample.position[0], fire.anchor[2] - sample.position[2]) };
-        if (!forge || watchers.get(sample.slot) !== sample.goalNodeId) return sample;
-        if (sample.goalReached && !watcherArrivals.has(sample.slot)) watcherArrivals.set(sample.slot, atMs);
-        const lift = forgeBarrel && sample.goalNodeId === 'forge:watch:14'
-          ? forgeBarrel.height * smooth(1 - Math.hypot(sample.position[0] - forgeBarrel.position[0], sample.position[2] - forgeBarrel.position[2]) / 1.25) : 0;
-        const position: Vec3 = [sample.position[0], sample.position[1] + lift, sample.position[2]];
-        return { ...sample, position, heading: sample.goalReached ? Math.atan2(forge.anchor[0] - position[0], forge.anchor[2] - position[2]) : sample.heading };
-      });
-      const overlays=behaviours.present(samples,atMs);
-      const bodies = samples.filter(sample => !walkers.has(sample.slot) && (!suppliedLooks.has(sample.slot) || knownLooks.has(suppliedLooks.get(sample.slot)!)));
-      const waveSlots = new Set(reaction?.phase === 'landed' && reaction.socket
-        ? bodies.filter(sample => sample.speed < .05 && !reservedSlots.has(sample.slot)
-            && Math.hypot(sample.position[0] - reaction.socket![0], sample.position[2] - reaction.socket![2]) < 13)
-          .sort((a, b) => Math.hypot(a.position[0] - reaction.socket![0], a.position[2] - reaction.socket![2])
-            - Math.hypot(b.position[0] - reaction.socket![0], b.position[2] - reaction.socket![2]) || a.slot - b.slot)
-          .slice(0, 3).map(sample => sample.slot) : []);
-      const attending = new Set(call && !reaction && call.watchers > 0
-        ? chooseWatchers(call, bodies.filter(sample => sample.opacity > .1 && !reservedSlots.has(sample.slot) && !watchers.has(sample.slot)))
-          .map(sample => sample.slot) : []);
-      renderer?.update(bodies.map(sample => {
-        const overlay = overlays.get(sample.slot);
-        let heading = sample.heading, lookYaw = watchers.has(sample.slot) ? 0 : overlay?.lookYaw ?? 0, lookPitch = 0, waveWeight = 0;
-        if (reaction && !reservedSlots.has(sample.slot) && reaction.position.every(Number.isFinite) && Number.isFinite(reaction.elapsed)) {
-          const dx = reaction.position[0] - sample.position[0], dz = reaction.position[2] - sample.position[2];
-          const distance = Math.hypot(dx, dz), delay = (sample.slot % 7) * .10 + distance * .018;
-          const age = reaction.elapsed - 15.5;
-          const fade = reaction.phase === 'landed' ? 1 - smooth((reaction.elapsed - 19.5) / 3.5) : 1;
-          const weight = smooth((age - delay) / .7) * smooth((26 - distance) / 5) * fade;
-          const angle = Math.atan2(Math.sin(Math.atan2(dx, dz) - sample.heading), Math.cos(Math.atan2(dx, dz) - sample.heading));
-          // Standing figures turn as a whole; moving figures retain their route and turn only their heads.
-          const turn = sample.speed < .05 ? angle * weight : 0;
-          heading += turn;
-          lookYaw = lookYaw * (1 - weight) + Math.max(-1.15, Math.min(1.15, angle - turn)) * weight;
-          lookPitch = -Math.max(0, Math.min(.65, Math.atan2(reaction.position[1] - sample.position[1] - 1.3, Math.max(.1, distance)))) * weight;
-          if (reaction.phase === 'landed' && waveSlots.has(sample.slot)) {
-            const waveAge = reaction.elapsed - 19 - (sample.slot % 3) * .25;
-            waveWeight = smooth(waveAge / .5) * (1 - smooth((waveAge - 2) / .8));
-          }
-        }
-        let crowdGesture: 'none' | 'nod' | 'wave' = 'none', crowdOffset = 0;
-        if (call && attending.has(sample.slot)) {
-          const pose = crowdPose(call, sample, atMs);
-          const dx = call.point[0] - sample.position[0], dz = call.point[2] - sample.position[2];
-          const angle = Math.atan2(Math.sin(Math.atan2(dx, dz) - sample.heading), Math.cos(Math.atan2(dx, dz) - sample.heading));
-          const turn = sample.speed < .05 ? angle * pose.turned : 0;
-          heading += turn;
-          lookYaw = lookYaw * (1 - pose.turned) + Math.max(-1.15, Math.min(1.15, angle - turn)) * pose.turned;
-          lookPitch = -Math.max(0, Math.min(.7, Math.atan2(call.point[1] - sample.position[1] - 1.3, Math.max(.1, Math.hypot(dx, dz))))) * pose.turned;
-          if (sample.speed < .05) {
-            crowdGesture = pose.gesture;
-            crowdOffset = pose.offset;
-            if (pose.gesture === 'wave') waveWeight = call.cheer;
-          }
-        }
-        return ({ id: String(sample.slot), look: suppliedLooks.get(sample.slot) ?? looks[sample.slot % looks.length]!.id,
-        position: sample.position, heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), speed: sample.speed, opacity: sample.opacity, ...(sample.posture ? { posture: sample.posture } : {}), time:(overlays.get(sample.slot)?.time??time) + crowdOffset,
-        tiptoe: sample.goalReached && ['forge:watch:8', 'forge:watch:12', 'forge:watch:15', 'forge:watch:18', 'forge:watch:24', 'forge:watch:27', 'forge:watch:30'].includes(watchers.get(sample.slot) ?? '')
-          ? smooth((atMs - (watcherArrivals.get(sample.slot) ?? atMs) - 500) / 900) * (.82 + .18 * Math.sin(time * 1.3 + sample.slot)) : 0,
-        lookYaw, lookPitch, ...(waveWeight > 0 ? { waveWeight } : {}),
-        gesture: waveWeight > 0 ? 'wave' as const : crowdGesture === 'nod' ? 'nod' as const : reservedSlots.has(sample.slot) || watchers.has(sample.slot)?'none' as const:speech.has(sample.slot) && speech.get(sample.slot)!.expiresAt > atMs ? 'nod' as const : overlay?.gesture??'none' as const }); }), camera);
-      carrying = [...bodies, ...samples.filter(sample => {
-        const walker = walkers.get(sample.slot);
-        return walker && knownLooks.has(walker.look) && !walker.posture;
-      }).map(sample => walkerSubject(sample, walkers))];
-      shadows.count = 0;
-      for (const sample of bodies) {
-        shadowMatrix.makeScale(1, 1, .8); shadowMatrix.setPosition(sample.position[0], sample.position[1] + .018, sample.position[2]);
-        shadows.setMatrixAt(shadows.count++, shadowMatrix);
-      }
-      shadows.instanceMatrix.needsUpdate = true;
-      for (const [slot, cue] of speech) if (cue.expiresAt <= atMs || cue.asOf > atMs || !samples.some(s => s.slot === slot)) speech.delete(slot);
       return samples;
     },
+    /** Every frame, after the final camera transform: walkers' lanterns, and this frame's speech for the label layer. */
     drawLanterns(time: number, night: number, camera?: THREE.Camera, walkerGrips?: ReadonlyMap<string, THREE.Matrix4>) {
       const grips = new Map<number, THREE.Matrix4>();
       for (const sample of carrying) {
-        const walker = walkers.get(sample.slot);
-        const grip = walker ? walkerGrips?.get(walker.id) : renderer?.grips.get(String(sample.slot));
+        const walker = walkers.get(sample.slot), grip = walker && walkerGrips?.get(walker.id);
         if (grip) grips.set(sample.slot, grip);
       }
       lanterns.update(carrying, time, night, camera, grips);
+      if (camera) publish(camera);
     },
     sources: () => lanterns.sources(),
     lightFrame(atMs: number): KingdomPresenceFrame | undefined {
       if (!frame) return;
-      const arrived = new Map(samples.filter(s => s.homeLit).map(s => [s.slot, s.homeLitAtMs!]));
+      const lit = new Map(doorSamples.map(sample => [sample.slot, sample.homeLitAtMs!]));
       return { ...frame, asOf: Math.max(frame.asOf, Math.ceil(atMs)), windows: frame.windows.map(window => ({ ...window,
-        since: arrived.has(window.slot) ? Math.ceil(arrived.get(window.slot)!) : window.since,
-        present: window.present && arrived.has(window.slot), publicName: window.present && arrived.has(window.slot) ? window.publicName : null })) };
+        since: lit.has(window.slot) ? Math.ceil(lit.get(window.slot)!) : window.since,
+        present: window.present && lit.has(window.slot), publicName: window.present && lit.has(window.slot) ? window.publicName : null })) };
     },
-    subject(slot: number) { const sample = samples.find(s => s.slot === slot); return sample ? walkerSubject(sample, walkers) : undefined; },
-    speechLabels(camera: THREE.Camera, width: number, height: number, atMs: number, namedHomes: ReadonlySet<number> = new Set(), walkerHeads?: ReadonlyMap<string, THREE.Vector3>): SpeechLabel[] {
-      const labels: SpeechLabel[] = [];
-      for (const sample of samples) {
-        const cue = speech.get(sample.slot);
-        if (!cue || cue.asOf > atMs || cue.expiresAt <= atMs) continue;
-        const walker = walkers.get(sample.slot);
-        const head = walker ? walkerHeads?.get(walker.id) : renderer?.heads.get(String(sample.slot));
-        if (!head) continue;
-        const point = head.clone(), distance = point.distanceTo(camera.position);
-        if (distance > 28) continue;
-        point.project(camera);
-        if (point.z < 0 || point.z > 1 || Math.abs(point.x) > .85 || Math.abs(point.y) > .8) continue;
-        labels.push({ slot: sample.slot, distance, name: namedHomes.has(sample.slot) ? null : sample.publicName, x: (point.x + 1) * width / 2, y: (1 - point.y) * height / 2, parts: cue.parts });
-        if (labels.length >= 3) break;
-      }
-      return labels;
+    /**
+     * A director's subject. A walker is where their body is. A chat-only person has no body: the honest subject is
+     * their own door, unseen (opacity 0) and already home, so an arrival shot frames their lit window and nothing
+     * aims at a person who is not there.
+     */
+    subject(slot: number) { const index = sampleIndex.get(slot); return index === undefined ? undefined : samples[index]; },
+    /**
+     * The host still calls this every 80 ms. Speech now goes to the label layer every frame from `drawLanterns`,
+     * so this returns nothing; it only learns which homes already show their name plate, so a bubble from that home
+     * does not repeat the name.
+     */
+    speechLabels(_camera: THREE.Camera, _width: number, _height: number, _atMs: number, named: ReadonlySet<number> = new Set(), walkerHeads?: ReadonlyMap<string, THREE.Vector3>): SpeechLabel[] {
+      // Walker bubbles ride on the walker's own per-frame name label, which the host projects from these same heads.
+      void walkerHeads;
+      namedHomes = named;
+      return [];
     },
-    clear() { pendingCheckpoint = undefined; resetBehaviours(); forge = undefined; fire = undefined; fireSitters.clear(); watchers.clear();watcherArrivals.clear(); restoredForgePending = false; restoredForgeGraceStart = undefined; motion.clear(); frame = undefined; samples = []; carrying = []; walkers = new Map(); suppliedLooks.clear(); speech.clear(); renderer?.update([]); lanterns.update([], 0, 0); shadows.count = 0; },
-    dispose() { resetBehaviours(); disposed = true; renderer?.dispose(); lanterns.dispose(); material.dispose(); scene.remove(shadows); shadows.dispose(); shadowGeometry.dispose(); shadowMaterial.dispose(); },
+    clear() {
+      pendingCheckpoint = undefined; motion.clear(); frame = undefined; doorSamples = []; doorBuiltAt = -Infinity; nextArrivalMs = Infinity;
+      namesBySlot = new Map(); presentSlots = new Set(); sampleIndex = new Map();
+      samples = []; carrying = []; walkers = new Map(); suppliedLooks.clear(); speech.clear(); lanterns.update([], 0, 0);
+    },
+    dispose() { lanterns.dispose(); material.dispose(); disposeCanvasProbe(probe); speech.clear(); },
   };
 }
+
+const IDENTITY = new THREE.Matrix4();

@@ -1,8 +1,9 @@
-import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from 'solid-js';
 import '@chatdom/ui/kit.css';
 import { createKingdomAudio } from '@chatdom/audio';
 import { REALM_AUTH_ROUTES, RealmSessionReplySchema, RealmSignoutReplySchema, type RealmSessionReply } from '@chatdom/shared/realm';
 import { bindRecovery, chooseKingdom, clearRecovery, migrateLegacy, readRecovery, sameScope, writeRecovery } from './recovery';
+import { offersRaidGate, raidGrantUrl } from './raid-gate';
 import { DockOutcomeSchema, DockStateSchema, type DockAction, type DockOutcome, type DockState } from '../../api/src/dock/contracts';
 
 type Kind = DockAction['kind'];
@@ -10,8 +11,11 @@ type Ready = DockState & { version: 1; status: 'ready'; mode: 'LIVE' | 'SIMULATE
 type Status = Ready | { version: 1; status: 'anonymous' | 'forbidden' | 'unavailable'; mode: 'LIVE' | 'SIMULATED'; message: string; signInUrl: string };
 type Reply = DockOutcome & { version: 1 };
 
-function Insignia(props: { kind: Kind | 'throne' }) {
-  const path = () => ({ 'throne': 'M5 20V7h3v4h3V5h3v6h3V7h3v13M4 20h17M9 20v-5h6v5', 'gate-open': 'M4 21V9l8-5 8 5v12M8 21v-9l4-2 4 2v9M3 21h18', 'gate-close': 'M4 21V9l8-5 8 5v12M8 21v-9l4-2 4 2v9M12 10v11M3 21h18', 'fire-light': 'M12 3c1 5-4 6-3 10 1-2 2-3 3-4 0 3 4 4 3 7a3 3 0 0 1-6 0M6 20l12 2M18 20L6 22', 'raid-welcome': 'M6 22V4m0 1c5-3 8 3 13 0v9c-5 3-8-3-13 0', 'citizen-crown': 'M4 8l3 3 5-6 5 6 3-3-2 10H6L4 8zm2 13h12', 'citizen-knight': 'M5 20l11-11m-3-3 5 5M17 4l3 3-3 3-3-3 3-3zM4 17l3 3-2 2-3-3z', 'moment-play': 'M12 3l2 6 6 3-6 2-2 6-2-6-6-2 6-3zM19 3v4M17 5h4', 'undo': 'M9 7L4 12l5 5M4 12h9c4 0 6 2 6 6' })[props.kind];
+/** The gate board, the Atlas and their styles load only when the monarch opens the Raid Gate. */
+const GateSheet = lazy(() => import('./GateSheet'));
+
+function Insignia(props: { kind: Kind | 'throne' | 'raid-gate' }) {
+  const path = () => ({ 'throne': 'M5 20V7h3v4h3V5h3v6h3V7h3v13M4 20h17M9 20v-5h6v5', 'gate-open': 'M4 21V9l8-5 8 5v12M8 21v-9l4-2 4 2v9M3 21h18', 'gate-close': 'M4 21V9l8-5 8 5v12M8 21v-9l4-2 4 2v9M12 10v11M3 21h18', 'fire-light': 'M12 3c1 5-4 6-3 10 1-2 2-3 3-4 0 3 4 4 3 7a3 3 0 0 1-6 0M6 20l12 2M18 20L6 22', 'raid-welcome': 'M6 22V4m0 1c5-3 8 3 13 0v9c-5 3-8-3-13 0', 'citizen-crown': 'M4 8l3 3 5-6 5 6 3-3-2 10H6L4 8zm2 13h12', 'citizen-knight': 'M5 20l11-11m-3-3 5 5M17 4l3 3-3 3-3-3 3-3zM4 17l3 3-2 2-3-3z', 'moment-play': 'M12 3l2 6 6 3-6 2-2 6-2-6-6-2 6-3zM19 3v4M17 5h4', 'undo': 'M9 7L4 12l5 5M4 12h9c4 0 6 2 6 6', 'raid-gate': 'M8 20V4m0 1h9l-2.2 3L17 11H8M4 21c3-2.5 6.5-1 9-2.4s5-1.6 7-.8' })[props.kind];
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={path()} /></svg>;
 }
 
@@ -34,6 +38,8 @@ export function App() {
   const [undoPage, setUndoPage] = createSignal(0);
   const [receipt, setReceipt] = createSignal('');
   const [uncertain, setUncertain] = createSignal('');
+  const [gateOpen, setGateOpen] = createSignal(false);
+  let gatePress: HTMLButtonElement | undefined;
   let alive = true;
   let timer: ReturnType<typeof setInterval> | undefined;
   let cadenceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -150,6 +156,29 @@ export function App() {
     if (identity?.status !== 'authenticated' || !state || !writeRecovery(storage, identity.resumeScope, state.kingdom.id, { uncertain: '', receipt: receipt() })) { setStorageReady(false); return; }
     setUncertain('');
   }
+  const grantUrl = raidGrantUrl(import.meta.env.VITE_CHATDOM_RAID_GRANT_URL, location.origin);
+  /** The gate sheet lives while the same monarch's session and kingdom do; it survives a passing connection blip. */
+  const gateHost = createMemo(() => {
+    const identity = session(), state = status();
+    return gateOpen() && identity?.status === 'authenticated' && state?.status === 'ready' && offersRaidGate(state) && !signingOut()
+      ? { scope: identity.resumeScope, kingdomId: state.kingdom.id, kingdomName: state.kingdom.name, origin: state.mode === 'LIVE' ? 'live' as const : 'simulated' as const }
+      : undefined;
+  }, undefined, { equals: (a, b) => a?.scope === b?.scope && a?.kingdomId === b?.kingdomId && a?.kingdomName === b?.kingdomName && a?.origin === b?.origin });
+  function openGate() {
+    if (!offersRaidGate(ready()) || session()?.status !== 'authenticated' || signingOut()) return;
+    void sound.unlock().then(() => sound.cue('wood', { ui: 'brass' }));
+    setGateOpen(true);
+  }
+  function closeGate() {
+    setGateOpen(false);
+    queueMicrotask(() => gatePress?.focus({ preventScroll: true }));
+  }
+  /** As with acts, a gate reply is applied only if the session that asked is still the one signed in. */
+  async function gateSessionCheck(scope: string): Promise<'same' | 'changed'> {
+    const check = await fetch(REALM_AUTH_ROUTES.session, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json' } });
+    if (!check.ok) throw new Error('Session unavailable');
+    return sameScope(RealmSessionReplySchema.parse(await check.json()), scope) && sameScope(session(), scope) ? 'same' : 'changed';
+  }
   const pageStart = (page: number, length: number) => Math.min(page * 3, Math.max(0, Math.ceil(length / 3) - 1) * 3);
   const Action = (props: { kind: Kind; title: string; detail: string; target?: string; unavailable?: boolean }) => {
     const sending = () => pending()?.kind === props.kind && pending()?.target === props.target;
@@ -169,7 +198,6 @@ export function App() {
   };
   return <main class="dock"><div class="frame">
     <header class="masthead"><span class="crest" aria-hidden="true"><Insignia kind="throne" /></span><div><div class="eyebrow">Chatdom · The throne</div><h1>{ready()?.kingdom.name ?? 'Your kingdom'}</h1><div class="statusline"><span classList={{ dot: true, live: connected() && !!ready() }} />{loading() ? 'Finding your kingdom…' : session()?.status === 'anonymous' ? 'Sign in with Twitch' : !connected() ? 'Connection unavailable' : ready() ? `${ready()!.principal.displayName} · ${ready()!.principal.role === 'broadcaster' ? 'Monarch' : 'Moderator'}` : 'The throne'}</div></div></header>
-    <Show when={status()?.mode === 'SIMULATED' || params.get('rehearsal') === '1'}><div class="notice"><strong>SIMULATED</strong> · Rehearsal data, not a live kingdom.</div></Show>
     <Show when={loading()}><div class="paper summary" role="status"><h2>Opening the throne</h2><p>Finding your kingdom and checking your place in it.</p></div></Show>
     <Show when={!loading() && session()?.status !== 'anonymous' && !connected()}><div class="paper summary" role="status"><h2>The kingdom is out of reach</h2><p>{status()?.status === 'unavailable' ? status()?.message : 'We couldn’t connect to the dock. Your controls will return when the connection does.'}</p><button class="retry" type="button" onClick={() => void refresh()}>Try again</button></div></Show>
     <Show when={!loading() && session()?.status === 'anonymous'}><div class="paper summary"><h2>Take your place</h2><p>{expired() ? 'Your sign-in expired. Please try again.' : ({ expired: 'Your sign-in expired. Please try again.', declined: 'Twitch sign-in was declined. You can try again when ready.', refused: 'Sign-in could not be completed. Please try again.', unavailable: 'Sign-in is unavailable right now. Please try again shortly.' } as Record<string, string>)[params.get('signin') ?? ''] ?? 'Sign in with Twitch to open your kingdom’s throne.'}</p><a class="paper-link" href="/api/realm/auth/start?returnTo=%2Fdock">Sign in with Twitch →</a></div></Show>
@@ -188,6 +216,15 @@ export function App() {
         <Action kind={state().town.gate === 'open' ? 'gate-close' : 'gate-open'} title={state().town.gate === 'open' ? 'Close the gate' : 'Open the gate'} detail={state().town.gate === 'open' ? 'Send the kingdom a goodnight' : 'Wake the town and gather everyone'} />
         <Action kind="fire-light" title={state().town.fire === 'lit' ? 'The fire is burning' : 'Light the fire'} detail={state().town.fire === 'lit' ? 'A warm place to gather' : 'Bring everyone together in the square'} />
       </section>
+      <Show when={offersRaidGate(state())}>
+        <section class="section"><h2 class="section-heading section-label">The Raid Gate</h2>
+          <button ref={element => { gatePress = element; }} class="action raid-gate-press" type="button" aria-haspopup="dialog" aria-expanded={gateOpen()} disabled={signingOut()} onClick={openGate}>
+            <span class="action-icon" aria-hidden="true"><Insignia kind="raid-gate" /></span>
+            <span class="action-copy"><span class="action-title">Open the Raid Gate</span><span class="action-detail">Send the kingdom down the road to another channel</span></span>
+            <span class="arrow" aria-hidden="true">›</span>
+          </button>
+        </section>
+      </Show>
       <section class="section"><h2 class="section-heading section-label">At the gate</h2>
         <Show when={state().raids.length} fallback={<p class="empty">No visitors on the road just now.</p>}>
           <For each={state().raids.slice(pageStart(raidPage(), state().raids.length), pageStart(raidPage(), state().raids.length) + 3).map(item => item.id)}>{id =>
@@ -230,6 +267,12 @@ export function App() {
     </>}</Show>
     <Show when={session()?.status === 'authenticated' && !!kingdom}><button class="signout" type="button" disabled={!!pending() || signingOut()} onClick={() => { try { storage.removeItem('chatdom-dock-kingdom'); } catch { /* continue to the default kingdom */ } location.assign('/dock'); }}>Open your own kingdom</button></Show>
     <Show when={session()?.status === 'authenticated'}><button class="signout" type="button" disabled={!!pending() || signingOut()} onClick={() => void signOut()}>{signingOut() ? 'Signing out…' : 'Sign out'}</button></Show>
+    <Show when={gateHost()} keyed>{host =>
+      <Suspense fallback={<div class="gate-loading" role="status"><span>Opening the Raid Gate…</span></div>}>
+        <GateSheet kingdomId={host.kingdomId} kingdomName={host.kingdomName} origin={host.origin} grantUrl={grantUrl}
+          check={() => gateSessionCheck(host.scope)} lost={() => { setGateOpen(false); void refresh(); }} close={closeGate} />
+      </Suspense>
+    }</Show>
     <footer class="foot"><span>The kingdom carries on, even while you’re away.</span><button class="sound-toggle" type="button" aria-pressed={!muted()} onClick={() => { const next = !muted(); setMuted(next); sound.setSettings({ muted: next }); if (!next) void sound.unlock().then(() => sound.cue('wood', { ui: 'brass' })); }}>{muted() ? 'Sound off' : 'Sound on'}</button></footer>
   </div></main>;
 }

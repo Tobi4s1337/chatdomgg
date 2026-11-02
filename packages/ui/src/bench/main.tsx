@@ -4,16 +4,19 @@ import { CrestChoice, ParchmentField, ProvenanceSeal, type CrestOption, type Pro
 import '../kit.css';
 import './bench.css';
 
-/** Every state the seal can press, with typed facts. Nothing here is a real feed: the whole bench is SIMULATED. */
-const CASES: readonly { title: string; state: Provenance; simulated?: boolean; detail?: string }[] = [
-  { title: 'A practice night', state: 'simulated' },
-  { title: 'Practice night, owner note', state: 'simulated', detail: 'practice night' },
-  { title: 'Finding the feed', state: 'connecting' },
-  { title: 'Chat is here', state: 'live' },
-  { title: 'Stream resting', state: 'resting' },
-  { title: 'Feed lost', state: 'lost' },
-  { title: 'Live chat, practice Forge', state: 'live', simulated: true, detail: 'practice Forge' },
-  { title: 'Feed lost, practice home', state: 'lost', simulated: true, detail: 'practice home' },
+/**
+ * Every state the seal can press, with typed facts. Nothing here is a real feed. A staged night without the owner's
+ * words presses nothing, so its tile shows only the caption; the seal is still in the DOM, hidden.
+ */
+const CASES: readonly { key: string; title: string; state: Provenance; simulated?: boolean; detail?: string }[] = [
+  { key: 'staged-bare', title: 'Staged night: nothing shows', state: 'simulated' },
+  { key: 'staged-words', title: 'Staged night, owner words', state: 'simulated', detail: 'A preview citizen' },
+  { key: 'connecting', title: 'Finding the feed', state: 'connecting' },
+  { key: 'live', title: 'Chat is here', state: 'live' },
+  { key: 'resting', title: 'Stream resting', state: 'resting' },
+  { key: 'lost', title: 'Feed lost', state: 'lost' },
+  { key: 'live-practice', title: 'Live chat, practice Forge', state: 'live', simulated: true, detail: 'practice Forge' },
+  { key: 'lost-practice', title: 'Feed lost, practice home', state: 'lost', simulated: true, detail: 'practice home' },
 ];
 
 function Bench() {
@@ -21,10 +24,10 @@ function Bench() {
     <header class="kb-head cd-plate">
       <p class="cd-label kb-eyebrow">Carved kit · isolated bench</p>
       <h1>Provenance seal</h1>
-      <p class="kb-sim"><b>SIMULATED</b> typed states, no real feed, Forge or save behind any of them.</p>
+      <p class="kb-lede">Typed states, with no real feed, Forge or save behind any of them.</p>
     </header>
     <section class="kb-grid" aria-label="Seal states">
-      <For each={CASES}>{entry => <figure class="kb-sky">
+      <For each={CASES}>{entry => <figure class="kb-sky" data-case={entry.key}>
         <ProvenanceSeal state={entry.state} {...(entry.simulated ? { simulated: true } : {})} {...(entry.detail ? { detail: entry.detail } : {})} />
         <figcaption>{entry.title}</figcaption>
       </figure>}</For>
@@ -67,5 +70,5 @@ function ForgeKit() {
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing bench root');
-render(() => new URLSearchParams(location.search).get('kit') === 'forge' ? <main class="kb"><header class="kb-head cd-plate"><p class="cd-label kb-eyebrow">Carved kit · isolated bench</p><h1>Forge fittings</h1><p class="kb-sim"><b>SIMULATED</b> typed states; no realm travel, request or Forge behind any of them.</p></header><ForgeKit /></main> : <Bench />, root);
+render(() => new URLSearchParams(location.search).get('kit') === 'forge' ? <main class="kb"><header class="kb-head cd-plate"><p class="cd-label kb-eyebrow">Carved kit · isolated bench</p><h1>Forge fittings</h1><p class="kb-lede">Typed states, with no realm travel, request or Forge behind any of them.</p></header><ForgeKit /></main> : <Bench />, root);
 void document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(() => { (window as Window & { __chatdomReady?: boolean }).__chatdomReady = true; })));

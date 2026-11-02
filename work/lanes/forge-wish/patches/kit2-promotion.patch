@@ -1,0 +1,164 @@
+--- a/apps/realm/src/founded/scene.ts
++++ b/apps/realm/src/founded/scene.ts
+@@ -84,8 +84,8 @@
+   const attach = (home: RealmOwnedForgeHost, origin: Vec3, rotation: CardinalTurn, plotId?: string): string[] => {
+     const profile = 'moduleId' in home ? 'castle-keep' : 'street-home';
+     const blueprint = home.blueprint;
+-    const sockets = Object.keys(home.attachments).length ? findForgeSockets(blueprint, profile) : [];
+-    const fingerprint = sockets.length ? homeFingerprint(blueprint) : '';
++    // Each part reconstructs with the kit revision it was forged and approved with (SEAMS.md §9).
++    const fingerprint = Object.keys(home.attachments).length ? homeFingerprint(blueprint) : '';
+     const parts: string[] = [];
+     for (const socketId of Object.keys(home.attachments).sort()) {
+       const id = home.attachments[socketId]!, item = Object.hasOwn(state.attachments, id) ? state.attachments[id] : undefined;
+@@ -93,10 +93,12 @@
+       const part = item!.attachment;
+       if (part.socketId !== socketId || part.hostId !== blueprint.id || part.slot !== home.slot || part.kingdomId !== kingdomId
+         || part.hostFingerprint !== fingerprint || (part.hostProfile ?? 'street-home') !== profile) fail(`part ${id} does not fit the committed home ${home.id}`);
++      let kit: ReturnType<typeof forgeStyleKit>;
++      try { kit = forgeStyleKit(part.family, part.kitRevision); } catch { return fail(`part ${id} names an unregistered kit`); }
++      if (kit.id !== part.kitId) fail(`part ${id} names an unregistered kit`);
++      const sockets = findForgeSockets(blueprint, profile, kit.revision);
+       const socket = sockets.find(s => s.id === socketId) ?? fail(`home ${home.id} no longer has socket ${socketId}`);
+       if (socket.origin.some((n, axis) => n !== part.origin[axis])) fail(`part ${id} sits away from its socket`);
+-      const kit = forgeStyleKit(part.family);
+-      if (kit.id !== part.kitId || kit.revision !== part.kitRevision) fail(`part ${id} names an unregistered kit`);
+       let piece: VoxelBlueprint;
+       try { const assembled = assembleForge(part.draft.plan, kit, socket); checkForge(assembled, blueprint, profile); piece = assembled.blueprint; }
+       catch { return fail(`part ${id} no longer assembles on home ${home.id}`); }
+--- a/apps/realm/src/growth/native.ts
++++ b/apps/realm/src/growth/native.ts
+@@ -67,16 +67,18 @@
+     const target = native(placement, tier.data, targetRevision(placement)), attachments: NativeGrowth['attachments'][number][] = [];
+     const fitted: Record<string, string> = {}, existing = Object.values(home.attachments);
+     if (new Set(existing).size !== existing.length) return { kind: 'held', reason: 'unsafe-part' };
+-    const sockets = existing.length ? findForgeSockets(target.blueprint) : [], kit = forgeStyleKit(home.family);
+     for (const id of existing) {
+       const part = Object.hasOwn(state.attachments, id) ? state.attachments[id] : undefined;
+       if (!part?.attached || part.homeId !== home.id || part.ownerId !== home.ownerId
+         || part.attachment.id !== id || part.attachment.family !== home.family
+         || part.attachment.slot !== home.slot || part.attachment.kingdomId !== state.kingdomId
+-        || part.attachment.kitId !== kit.id || part.attachment.kitRevision !== kit.revision
+         || (part.attachment.hostProfile ?? 'street-home') !== 'street-home') {
+         return { kind: 'held', reason: 'unsafe-part' };
+       }
++      // Refit each part with the kit revision it was forged with; an unknown revision throws into the hold below.
++      const kit = forgeStyleKit(home.family, part.attachment.kitRevision);
++      if (part.attachment.kitId !== kit.id) return { kind: 'held', reason: 'unsafe-part' };
++      const sockets = findForgeSockets(target.blueprint, 'street-home', kit.revision);
+       const socket = sockets.find(candidate => candidate.kind === part.attachment.draft.plan.kind && !Object.hasOwn(fitted, candidate.id));
+       if (!socket) return { kind: 'held', reason: 'unsafe-part' };
+       checkForge(assembleForge(part.attachment.draft.plan, kit, socket), target.blueprint);
+--- a/packages/forge/src/plan.ts
++++ b/packages/forge/src/plan.ts
+@@ -1,7 +1,7 @@
+ import { HousePartPlanSchema, ForgeStyleKitSchema, type HousePartPlan } from '@chatdom/shared';
+ import { STYLES, type StyleKey } from '@chatdom/content/materials';
+-/** New work remains on one until every persisted scene/growth path resolves the saved revision. */
+-export const CURRENT_FORGE_STYLE_KIT_REVISION = 1;
++/** New work uses revision two; every persisted scene and growth path resolves each part's saved revision. */
++export const CURRENT_FORGE_STYLE_KIT_REVISION = 2;
+ export function forgeStyleKit(family:StyleKey,revision:number=CURRENT_FORGE_STYLE_KIT_REVISION){
+   if(revision!==1&&revision!==2)throw new Error('Unregistered Forge style kit revision.');
+   return ForgeStyleKitSchema.parse({version:1,id:`${family}-native`,styleId:STYLES[family].id,family,revision});
+--- a/apps/realm/src/founded/scene.test.ts
++++ b/apps/realm/src/founded/scene.test.ts
+@@ -152,7 +152,7 @@
+     await bad({ ...state, homes: { [plot.id]: { ...home, slot: home.slot + 1 } } });
+     await bad({ ...state, homes: { 'plot:elsewhere': { ...home, id: 'plot:elsewhere', attachments: {} } }, attachments: {} });
+     await bad({ ...state, attachments: { ...state.attachments, 'run-b': { ...state.attachments['run-b']!, attachment: { ...state.attachments['run-b']!.attachment, origin: [0, 0, 0] } } } });
+-    await bad({ ...state, attachments: { ...state.attachments, 'run-b': { ...state.attachments['run-b']!, attachment: { ...state.attachments['run-b']!.attachment, kitRevision: 2 } } } });
++    await bad({ ...state, attachments: { ...state.attachments, 'run-b': { ...state.attachments['run-b']!, attachment: { ...state.attachments['run-b']!.attachment, kitRevision: 9 } } } });
+     await bad({ ...state, kingdomId: KingdomIdSchema.parse('900000003') });
+     await expect(assemble(empty, { collisionRevision: 2 ** 32 })).rejects.toBeInstanceOf(FoundedSceneError);
+     await expect(assembleFoundedScene({ kingdomId, plan: { ...plan, revision: 'settlement:other' }, state: empty, native, collisionRevision: 1 })).rejects.toBeInstanceOf(FoundedSceneError);
+--- /dev/null
++++ b/apps/realm/src/growth/kit-revisions.test.ts
+@@ -0,0 +1,87 @@
++import { describe, expect, it } from 'vitest';
++import { assembleForge, createNativeForgeHost, findForgeSockets, forgeStyleKit, homeFingerprint, CURRENT_FORGE_STYLE_KIT_REVISION } from '@chatdom/forge';
++import { KingdomIdSchema, PersonIdSchema, type HousePartPlan } from '@chatdom/shared';
++import type { CommittedForgeAttachment, RealmOwnedAttachment, RealmOwnedHome, RealmPrivateState } from '@chatdom/shared/realm';
++import { generateSettlementPlan } from '@chatdom/world';
++import { createRealmState, decideRealm } from '@chatdom/world/realm';
++import { assetHashOf } from '../founded/codec';
++import { createNativeTown } from '../founded/native';
++import { assembleFoundedScene } from '../founded/scene';
++import { forgeHomeDigest } from '../wiring/forge';
++import { planNativeHomeGrowth } from './native';
++
++/** One home carrying a piece forged on kit revision one and another forged on revision two (SEAMS.md §9 of forge-wish). */
++const kingdomId = KingdomIdSchema.parse('900030001'), ownerId = PersonIdSchema.parse('900030002');
++const layout = generateSettlementPlan({ seed: 'SIMULATED-kit-revisions', tier: 'hamlet', firstYear: 2026, year: 2026 });
++const plot = { ...layout.homes[0]!, tier: 'hut' as const, style: 'hearth' as const, variant: 0 };
++const blueprint = createNativeForgeHost(plot).blueprint;
++const attribution = { makerName: 'SIMULATED Juniper', kingdomName: 'SIMULATED test', approvalId: 'names:approved' };
++
++function part(id: string, revision: 1 | 2, plan: Extract<HousePartPlan, { version: 2 }>): RealmOwnedAttachment {
++  const kit = forgeStyleKit(plot.style, revision), socket = findForgeSockets(blueprint, 'street-home', revision).find(s => s.kind === plan.kind)!;
++  const attachment: CommittedForgeAttachment = { version: 1, id, runId: id, kingdomId, slot: plot.slot, hostId: blueprint.id,
++    hostFingerprint: homeFingerprint(blueprint), socketId: socket.id, origin: [...socket.origin], kitId: kit.id, kitRevision: kit.revision,
++    family: plot.style, committedAt: 0, draft: { title: `SIMULATED ${id}`, plaque: 'SIMULATED creation', plan },
++    provenance: { source: 'simulated', makerName: attribution.makerName, kingdomName: attribution.kingdomName, designId: `design-${id}`, firstForgedAt: 0 } };
++  return { forgeKey: `wish:${id}`, ownerId, homeId: plot.id, attached: true, creation: { words: 'SIMULATED words' }, approvalReceipt: `judges:${id}`, attachment };
++}
++
++function mixed() {
++  const old = part('rev-one-dragon', 1, { version: 2, kind: 'chimney', motif: 'sleeping-dragon', finish: 'native', accent: 'none' });
++  const fresh = part('rev-two-moon', 2, { version: 2, kind: 'lantern', motif: 'crescent-moon', finish: 'native', accent: 'none' });
++  const home: RealmOwnedHome = { id: plot.id, ownerId, slot: plot.slot, allocationReceipt: `deed:${'a'.repeat(64)}`, layoutRevision: layout.revision,
++    revision: 'native:original', digest: forgeHomeDigest(blueprint), family: plot.style, blueprint, attribution,
++    attachments: { [old.attachment.socketId]: old.attachment.id, [fresh.attachment.socketId]: fresh.attachment.id } };
++  const initial = createRealmState(kingdomId, 'simulated');
++  const state: RealmPrivateState = { ...initial, homes: { [home.id]: home }, attachments: { [old.attachment.id]: old, [fresh.attachment.id]: fresh },
++    growth: { ...initial.growth!, citizens: { [ownerId]: { qualifiedDays: 7, lastQualifiedOrdinal: 7, streak: 7, bestStreak: 7, home: { plotId: home.id, stage: 'cottage' } } } } };
++  return { state, home, old, fresh };
++}
++
++describe('mixed Forge kit revisions', () => {
++  it('new work uses revision two', () => {
++    expect(CURRENT_FORGE_STYLE_KIT_REVISION).toBe(2);
++    expect(forgeStyleKit('hearth').revision).toBe(2);
++  });
++
++  it('the founded scene rebuilds each piece with the kit it was forged with', async () => {
++    const { state, old, fresh } = mixed();
++    const build = await assembleFoundedScene({ kingdomId, plan: { ...layout, homes: [plot, ...layout.homes.slice(1)] }, state,
++      native: createNativeTown({ ...layout, homes: [plot, ...layout.homes.slice(1)] }), collisionRevision: 3 });
++    for (const item of [old, fresh]) {
++      const revision = item.attachment.kitRevision;
++      const socket = findForgeSockets(blueprint, 'street-home', revision).find(s => s.id === item.attachment.socketId)!;
++      const expected = assembleForge(item.attachment.draft.plan, forgeStyleKit(plot.style, revision), socket).blueprint;
++      const placed = build.scene.placements.find(p => p.id === `forge:${item.attachment.id}`);
++      expect(placed, item.attachment.id).toBeDefined();
++      expect(placed!.assetHash).toBe(await assetHashOf(expected));
++    }
++    expect(build.counts).toMatchObject({ attachments: 2 });
++  }, 30_000);
++
++  it('native growth refits both pieces, each on its own revision, without relabelling them', () => {
++    const { state, old, fresh } = mixed();
++    const planned = planNativeHomeGrowth(state, plot.id, plot);
++    expect(planned.kind).toBe('ready');
++    if (planned.kind !== 'ready') throw new Error(planned.reason);
++    const decision = decideRealm(state, planned.command, { now: 1, capability: 'allocation', writerEpoch: 'growth:writer', commandId: 'growth:kit-revisions', current: true, anvilCapacity: 2 });
++    expect(decision.kind).toBe('accepted');
++    if (decision.kind !== 'accepted') throw new Error(decision.reason);
++    for (const item of [old, fresh]) {
++      const moved = decision.state.attachments[item.attachment.id]!.attachment;
++      expect([moved.kitId, moved.kitRevision, moved.draft]).toEqual([item.attachment.kitId, item.attachment.kitRevision, item.attachment.draft]);
++      const target = planned.command.home.blueprint;
++      const socket = findForgeSockets(target, 'street-home', moved.kitRevision).find(s => s.id === moved.socketId)!;
++      expect(socket.origin).toEqual(moved.origin);
++    }
++  }, 30_000);
++
++  it('an unknown revision holds growth and fails the scene closed', async () => {
++    const { state, fresh } = mixed();
++    const broken: RealmPrivateState = { ...state, attachments: { ...state.attachments,
++      [fresh.attachment.id]: { ...fresh, attachment: { ...fresh.attachment, kitRevision: 9 } } } };
++    expect(planNativeHomeGrowth(broken, plot.id, plot)).toEqual({ kind: 'held', reason: 'unsafe-part' });
++    await expect(assembleFoundedScene({ kingdomId, plan: { ...layout, homes: [plot, ...layout.homes.slice(1)] }, state: broken,
++      native: createNativeTown({ ...layout, homes: [plot, ...layout.homes.slice(1)] }), collisionRevision: 3 })).rejects.toThrow(/unregistered kit/);
++  }, 30_000);
++});

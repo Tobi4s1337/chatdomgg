@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import {
   ATLAS_LIVE_STALE_AFTER_MS, ATLAS_SPECTACLE, AtlasManifestSchema, createAtlasAlignment, encodeDabsV1, encodeLiveV2,
@@ -564,6 +565,30 @@ describe('LiveFeed', () => {
         this.listeners.get('live')!({ data } as MessageEvent<string>);
       }
     }
+
+    it('hands each well-formed raid event to the caravan, drops a malformed one, and stops on dispose', async () => {
+      const land = await Land.create();
+      const streams: FakeStream[] = [];
+      const raids: string[] = [];
+      const feed = new LiveFeed(land.service.source, land.world, land.worldSha256, () => undefined, {
+        now: () => land.clock,
+        openStream: (url) => { const stream = new FakeStream(url); streams.push(stream); return stream; },
+        setTimer: () => 0,
+        clearTimer: () => undefined,
+        onRaid: (raid) => raids.push(raid.id),
+      });
+      feed.start();
+      const face = (id: string) => ({ id, login: `c${id}`, name: `C${id}`, freshUntil: T + 86_400_000, place: 'waiting', ordinal: null, tier: null, region: 1, realm: 2 });
+      const raid = { version: 1, id: 'raid-9', from: '100', to: '200', viewers: 14, at: T, a: face('100'), b: face('200'), pa: { x: 1, y: 2 }, pb: { x: 3, y: 4 }, ra: 1, rb: 1 };
+      const send = (data: string) => streams[0]!.listeners.get('raid')!({ data } as MessageEvent<string>);
+      send(JSON.stringify(raid));
+      send('{not json');
+      send(JSON.stringify({ ...raid, id: 'raid-10', to: '100' }));
+      expect(raids).toEqual(['raid-9']);
+      feed.dispose();
+      send(JSON.stringify({ ...raid, id: 'raid-11' }));
+      expect(raids).toEqual(['raid-9']);
+    });
 
     it('subscribes once, applies streamed pointers, reconciles on a timer and closes on dispose', async () => {
       const land = await Land.create();

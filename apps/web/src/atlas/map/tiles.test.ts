@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import type { BakeMessage, BakeReply, InitMessage } from './bake.worker';
 import type { PaintScene } from './paint';

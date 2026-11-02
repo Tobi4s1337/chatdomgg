@@ -4,6 +4,7 @@ import { createKingdomRoom } from './kingdom-room';
 import { RealmDiagnostics } from './diagnostics';
 import { REALM_TRANSPORT_LIMITS } from './limits';
 import type { RealmRoomServices } from './ports';
+import { createTavernRoom } from './games/room';
 
 /** The uWS transport with its open sockets readable for backpressure sampling (`getBufferedAmount` only). */
 export class RealmTransport extends uWebSocketsTransport {
@@ -37,7 +38,7 @@ export function createRealmServer(services: RealmRoomServices, diagnostics: Real
       diagnostics.dropped(buffered);
     },
   });
-  const server = defineServer({ greet: false, transport, rooms: { kingdom: defineRoom(createKingdomRoom(services, diagnostics)).filterBy(['kingdomId']) } });
+  const server = defineServer({ greet: false, transport, rooms: { kingdom: defineRoom(createKingdomRoom(services, diagnostics)).filterBy(['kingdomId']), tavern: defineRoom(createTavernRoom(services)).filterBy(['kingdomId']) } });
   // Sampling timers are unref'd; Colyseus keeps one onShutdown callback, which belongs to the composition (main.ts).
   diagnostics.watch({ sockets: () => transport.sockets });
   return { server, transport, diagnostics };

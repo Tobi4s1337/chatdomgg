@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { CollisionGrid, overlaps, type Rect } from './collide';
 import { comparePlacement, FADE_MS, fadeIn, HoldingLabels, MEMORY_LIMIT, onScreen, plan, Placer, SHIELD_LIMIT, type PlacementItem, type Placed } from './placement';
@@ -59,11 +60,27 @@ function shuffle<T>(list: readonly T[], random: () => number): T[] {
   return out;
 }
 
+describe('plan with hamlets', () => {
+  it('gives a contested place to the village before any hamlet, and a hamlet still takes free paper', () => {
+    const box: Rect = { x: 100, y: 100, w: 20, h: 20 };
+    const items: PlacementItem[] = [
+      { key: 'hamlet-loud', tierRank: 4, average: 4_000, id: '1', candidates: [box] },
+      { key: 'village', tierRank: 3, average: 25, id: '99', candidates: [box] },
+      { key: 'hamlet-free', tierRank: 4, average: 3, id: '2', candidates: [{ x: 300, y: 100, w: 12, h: 12 }] },
+    ];
+    const placed = plan(items, new CollisionGrid(800, 600), new Placer());
+    expect([...placed.keys()].sort()).toEqual(['hamlet-free', 'village']);
+  });
+});
+
 describe('plan', () => {
   it('places greedily without overlaps, the stronger holding first', () => {
     const placed = frame(new Placer(), itemsAt(scene(1, 600), identity));
     const rects = [...placed.values()].map((p) => p.rect);
-    for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) expect(overlaps(rects[i]!, rects[j]!)).toBe(false);
+    // Collect the offending pairs and assert once: one expectation per pair costs seconds on a busy host.
+    const clashes: [number, number][] = [];
+    for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) if (overlaps(rects[i]!, rects[j]!)) clashes.push([i, j]);
+    expect(clashes).toEqual([]);
     expect(placed.size).toBeGreaterThan(100);
     expect(placed.size).toBeLessThan(600);
   });
@@ -289,6 +306,28 @@ describe('HoldingLabels', () => {
     expect(placed.shield).toEqual({ x: 159, y: 201 });
     expect(placed.label).toEqual({ x: 178, y: 202 });
     expect(placed.standard).toEqual({ x: 168, y: 204.5 });
+  });
+
+  it('keeps the shield beside the stamp when the block sits left of it, the name out to the left', () => {
+    const placer = new Placer();
+    const names = new HoldingLabels(placer);
+    placer.begin(0, true);
+    names.begin();
+    const grid = new CollisionGrid(VIEW.width, VIEW.height);
+    const anchor = { x: 200, y: 200, w: 40, h: 30 };
+    const [below, right] = HoldingLabels.candidates(anchor, 76, 18);
+    grid.claim(below!);
+    grid.claim(right!);
+    const placed = names.place(grid, 'n:1', anchor, { w: 60, h: 18 }, { w: 12, h: 14 })!;
+    expect(placed.index).toBe(2);
+    expect(placed.rect.x).toBeCloseTo(107.2, 9);
+    expect(placed.rect).toMatchObject({ y: 176, w: 76, h: 18 });
+    // Name first, then the gap, then the shield at the end nearest the stamp.
+    expect(placed.label).toEqual({ x: 107, y: 176 });
+    expect(placed.shield).toEqual({ x: Math.round(107.2 + 64 - 3), y: 175 });
+    expect(placed.standard!.x).toBeCloseTo(177.2, 9);
+    expect(placed.standard!.y).toBe(178.5);
+    expect(placed.shield!.x).toBeGreaterThan(placed.label!.x + 60);
   });
 
   it('keeps a selected holding’s name readable when everything around it is taken', () => {

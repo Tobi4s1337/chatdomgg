@@ -46,9 +46,10 @@ export interface RitualWorld {
 export async function createRitualWorld(host: HTMLElement, part: BenchPart, family: StyleKey, hour: number, alive: () => boolean): Promise<RitualWorld | null> {
   const home = createHome('house', family, 0);
   const plan = planLocalForge(BENCH_WISHES[part]);
-  const socket = findForgeSockets(home).find(s => s.kind === plan.kind);
+  const kit = forgeStyleKit(family);
+  const socket = findForgeSockets(home, 'street-home', kit.revision).find(s => s.kind === plan.kind);
   if (!socket) throw new Error(`This home has no clear ${plan.kind} socket.`);
-  const result = assembleForge(plan, forgeStyleKit(family), socket);
+  const result = assembleForge(plan, kit, socket);
   checkForge(result, home);
 
   const grade = getEnvironment(hour);

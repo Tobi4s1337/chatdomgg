@@ -84,7 +84,7 @@ export function parseStreamParams(search: string, pathname = '/stream'): StreamP
     hour: Number.isFinite(rawHour) ? ((rawHour % 24) + 24) % 24 : 19.5,
     time: query.has('time') && Number.isFinite(rawTime) ? Math.max(0, Math.min(3600, rawTime)) : null,
     // The small formats are close views of a window and its street; the stage may hold any supported shot.
-    camera: layout !== 'stage' ? 'window' : pick(query.get('camera'), ['hero', 'window', 'citizen', 'island', 'vista'] as const, 'hero'),
+    camera: layout !== 'stage' ? 'window' : pick(query.get('camera'), ['hero', 'window', 'citizen', 'pier', 'island', 'vista'] as const, 'hero'),
     // A grand land opens on its island and descends to the town; `opening=0` starts on the town (captures, reloads).
     opening: layout === 'stage' && query.get('opening') !== '0',
     source,

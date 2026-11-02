@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import type { Box, Viewport } from './camera';
 import { childrenOf, MAX_LEVEL, parentOf, pyramidFor, TILE_PX, tileBox, tileKey, tilesFor, type TileKey } from './pyramid';
@@ -217,7 +218,8 @@ describe('planTiles: no empty paper', () => {
         }
       }
     }
-  });
+    // 400 plans over full caches of up to 16k tiles: seconds of pure CPU on a busy shared host.
+  }, 30_000);
 
   it('agrees with the oracle over random caches, partial fades and failures', () => {
     const random = seeded(99);

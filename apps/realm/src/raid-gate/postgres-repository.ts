@@ -1,6 +1,6 @@
 /**
  * The durable `TravelRepository` over the realm schema (the travel tables in
- * `apps/api/src/raid-gate/realm-migration.sql`). It keeps the exact rules of `memory-repository.ts`, which the
+ * `apps/realm/src/persistence/migrations/0011_realm_raid_gate.sql`). It keeps the exact rules of `memory-repository.ts`, which the
  * coordinator suite runs against, through the gate adapter's own serializable compare-and-set helpers: one
  * serializable transaction per call, every `put` a compare-and-set on `revision`, every row decoded by its strict
  * reader in both directions, and a serialization failure retried as a whole.

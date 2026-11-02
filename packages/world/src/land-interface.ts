@@ -8,6 +8,7 @@ import { planPlaceSites, type KingdomPlaceSites, type PlaceSiteDiagnostic, type 
 import { findTavernDoor } from './grand-adoption/place-sites-tavern';
 import { planPierSites, type LandWaterSource, type PierAnchor, type PierSiteDiagnostic, type PierSitePlanningOptions } from './grand-adoption/pier-sites';
 import { validateAuthoredPier, type AuthoredPierCertificate, type AuthoredPierProposal, type AuthoredPierResult } from './grand-adoption/pier-authored';
+import { GROUND_SURFACES, type LandSurfaceAt, type LandSurfaceSample } from './grand-adoption/surface';
 
 export { planPlaceSites, validatePlaceSite, placeSiteBounds, PLACE_SITE_BUDGET, CAMPFIRE_SITE_FOOTPRINT } from './grand-adoption/place-sites';
 export { findTavernDoor, type TavernDoorAnchor, type TavernDoorSite, type TavernDoorResult } from './grand-adoption/place-sites-tavern';
@@ -15,6 +16,8 @@ export type { KingdomPlaceSites, PlaceKind, PlaceSiteContext, PlaceSiteFailure, 
 export { planPierSites, validatePierSite, pierSiteBounds, PIER_SITE_BUDGET } from './grand-adoption/pier-sites';
 export { createFishingPierProposal, type FishingPierGeometry } from './grand-adoption/pier-fishing-proposal';
 export { fishingPierCandidates, FISHING_PIER_CANDIDATE_BUDGET } from './grand-adoption/pier-fishing-candidates';
+export { pinnedCampfireSite } from './grand-adoption/pinned-places';
+export { grandFloorSurface, GROUND_SURFACES, type GroundSurface, type LandSurfaceSample, type LandSurfaceAt, type GrandFloorSurfaceOptions } from './grand-adoption/surface';
 export { validateAuthoredPier, type AuthoredPierCertificate, type AuthoredPierProposal, type AuthoredPierResult } from './grand-adoption/pier-authored';
 export type { LandWaterSource, LandWaterAt, LandWaterSample, LandWaterCoverage, PierAnchor, PierSiteCandidate,
   PierPlanningDimensions, PierSiteContext, PierSitePlanningOptions, PierSiteValidation, PierSiteFailure,
@@ -69,6 +72,10 @@ export interface KingdomLandInterface {
   readonly pierSiteDiagnostics?: readonly PierSiteDiagnostic[];
   /** Exact authored-piece support/water/route evidence, when that producer requested validation. */
   readonly authoredPier?: AuthoredPierResult;
+  /** The DRAWN ground under a point (height of the face a person sees, its material, water over it), from the land
+   * actually on screen. Null where unknown. Presentation and audio only: never walking, camera or prediction input.
+   * Cheap enough for every visible walker's footfall each frame. Absent when the producer cannot say. */
+  readonly surfaceAt?: LandSurfaceAt;
 }
 
 /** Preserve public identity; larger landscape support is supplied by its producer, never
@@ -81,6 +88,8 @@ export function createKingdomLandInterface(input: {
   readonly water?: LandWaterSource;
   readonly pierSites?: PierSitePlanningOptions;
   readonly authoredPier?: { readonly proposal: AuthoredPierProposal; readonly pinned?: AuthoredPierCertificate };
+  /** The drawn surface of the land on screen (`grandFloorSurface` on the grand floor, the rendered terrain on today's). */
+  readonly surface?: LandSurfaceAt;
 }): KingdomLandInterface {
   const { scene, ground, collision } = input, plan = scene.plan;
   if (input.pierSites && input.authoredPier) throw new Error('Choose one pier geometry producer per land facade');
@@ -119,6 +128,18 @@ export function createKingdomLandInterface(input: {
     places: Object.freeze({ ...placePlan?.places, ...(tavern.anchor ? { tavern: tavern.anchor } : {}) }),
     placeSiteDiagnostics: Object.freeze([...(tavern.diagnostic ? [tavern.diagnostic] : []), ...placePlan?.diagnostics ?? []]),
     ...(pierPlan ? { piers: pierPlan.piers, pierSiteDiagnostics: pierPlan.diagnostics } : {}),
+    ...(input.surface ? { surfaceAt: checkedSurface(input.surface) } : {}),
     ...(authoredPier ? { authoredPier, piers: Object.freeze(authoredPier.ok ? [authoredPier.certificate.anchor] : []) } : {}),
   });
+}
+
+const SURFACE_NAMES = new Set<string>(GROUND_SURFACES);
+/** A producer's sample passes only when it is a finite height, a known ground and a non-negative depth. */
+function checkedSurface(source: LandSurfaceAt): LandSurfaceAt {
+  return (x, z) => {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+    const sample: LandSurfaceSample | null = source(x, z);
+    return sample && Number.isFinite(sample.drawnY) && SURFACE_NAMES.has(sample.surface)
+      && Number.isFinite(sample.waterDepth) && sample.waterDepth >= 0 ? sample : null;
+  };
 }

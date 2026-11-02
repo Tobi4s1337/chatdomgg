@@ -1,0 +1,9 @@
+{
+  "extends": "../../../tsconfig.json",
+  "include": [
+    "../../../apps/web/src/passport/**/*.ts",
+    "../../../apps/web/src/passport/**/*.tsx",
+    "../../../apps/dock/src/**/*.ts",
+    "../../../apps/dock/src/**/*.tsx"
+  ]
+}
