@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LIVE_INTERVAL_MS, RESTING_INTERVAL_MS, paintingDue, paintingRevision, readPainterConfig } from './policy.mjs';
+import { LIVE_INTERVAL_MS, RESTING_INTERVAL_MS, paintingDue, paintingRevision, readPainterConfig, windowsHeader } from './policy.mjs';
 
 const snapshot = () => ({ status: 'kingdom', kingdomId: '123', stream: 'live', manifest: { kingdomId: '123', origin: 'live', sceneHash: 'a'.repeat(64) },
   presence: { kingdomId: '123', origin: 'live', sequence: 1, asOf: 1, connection: 'fresh', windows: [{ slot: 0, present: true, publicName: 'A real public name', since: 1 }] } });
@@ -42,4 +42,12 @@ test('configuration requires separate secrets, bounded channel IDs and credentia
   assert.throws(() => readPainterConfig({ ...env, PANEL_PAINTER_SECRET: env.REALM_INGRESS_PANEL_SECRET }));
   assert.throws(() => readPainterConfig({ ...env, PANEL_PAINTER_WEB_ORIGIN: 'http://secret@localhost:5170' }));
   assert.throws(() => readPainterConfig({ ...env, PANEL_PAINTER_KINGDOM_IDS: '123?secret=abc' }));
+});
+
+test('lit windows travel as one strict header, or the painting is not sent', () => {
+  assert.equal(windowsHeader([[7, 4120, 6330], [65534, 5000, 3000]]), '7:4120:6330,65534:5000:3000');
+  assert.equal(windowsHeader([]), '');
+  for (const bad of [null, [[7, 1]], [[7, 1.5, 1]], [[7, 10_001, 1]], [[65536, 1, 1]], [[7, 1, 1], [7, 2, 2]], Array.from({ length: 401 }, (_, slot) => [slot, 1, 1])]) {
+    assert.throws(() => windowsHeader(bad));
+  }
 });

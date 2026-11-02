@@ -112,6 +112,36 @@ adds tables and never alters existing ones.
 - The panel's `@font-face` rules move from `apps/web/src/atlas/assets/fonts` (atlas-map's folder) to the kit's fonts.
   If front-door changes the faces or tokens tonight, the panel follows on its next session.
 
+**The live Passport entry (applied by this lane, 2 Nov 2026).** front-door finished its round without taking the
+Passport patch, so this lane applied it here under the round's rule for finished owners. It is additive and
+backward-compatible: the general `@chatdom/ui/passport`, the shared Passport schema and `apps/api/src/passport/contracts`
+keep every export, and the bench protocol still reads.
+- Owner change (`PW13-PASSPORT-NEEDS.patch`, its own commit): `@chatdom/ui/passport/live` (Book, Reading, session,
+  `CrestArms`, view types; no fixtures), `packages/shared` `passport-core`/`passport-live` (live books accept only
+  `origin: 'live'`), `apps/api/src/passport` `contracts-core`/`live-contracts`, and the three provenance-seal branches
+  removed from Book and Reading (decision 25).
+- Panel change (`PW13-PASSPORT-PANEL.patch`, its own commit): the panel's three Passport imports and its transport move
+  to the live entry and `readLivePassportReply`.
+- Merging with `lane/front-door`: FD11 touched the same three seal lines and `packages/ui/package.json`. Resolve to
+  the result of `PW13-PASSPORT-NEEDS-FRONT-DOOR.patch` on front-door: front-door's four exports plus `./passport/live`,
+  and no seal lines. The files come out byte-identical either way (`PW13-PASSPORT-PATCH.md`).
+  `apps/api/src/passport/share.test.ts:242` expecting `<b>SIMULATED</b>` fails on front-door with or without this
+  change. That test is front-door's own FD11 leftover.
+- Who owns these files, checked 2 Nov 2026 at 12:30. front-door has ticked FD10 to FD13 and has no open goal. No
+  round lane (grand-world, play, forge-wish, atlas-map, raid-show, integrator) has changed `packages/ui/package.json`,
+  `packages/ui/src/passport/**`, `packages/shared/src/passport.ts`, `packages/shared/package.json` or
+  `apps/api/src/passport/**` against main. raid-show's stamps work plugs into `apps/api/src/passport/read.ts`, which
+  this change leaves alone. The PRD scope records the addition.
+- Proof that it is backward-compatible: strict tsc is clean over every consumer of these exports, including raid-show's
+  `apps/web/src/passport` and `apps/api/src/raid-gate`, the citizen card, the dock and front-door's `public/panel`.
+  The shared, API and UI Passport suites pass unchanged, together with every panel suite (211 tests).
+- Commit split. The owner change goes in first, as its own commit: `packages/ui/package.json`,
+  `packages/ui/src/passport/{live.ts,Book.tsx,Reading.tsx}`, `packages/shared/package.json`,
+  `packages/shared/src/{passport.ts,passport-core.ts,passport-live.ts}`,
+  `apps/api/src/passport/{contracts.ts,contracts-core.ts,live-contracts.ts}` and this `SEAMS.md`. The panel change
+  follows: `apps/panel/src/{Panel.tsx,card/CardSheet.tsx,passport/PanelPassport.tsx,passport/transport.ts,passport/transport.test.ts}`,
+  together with `PRD.md`, `PW10-NOTES.md`, `progress.txt` and `work/evidence/panel-window/PW10/passport-live/`.
+
 **The gateway.**
 - `apps/api/src/public/routes.ts` already sends `/api/panel/*` to the panel handler, so it needs no change.
 - `apps/api/src/public/main.ts` builds that handler with `createPanelHttp(...)`. This lane needs one line there to

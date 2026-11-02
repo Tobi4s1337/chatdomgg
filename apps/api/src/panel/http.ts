@@ -5,7 +5,7 @@ import { createPanelHttp as createReader, type PanelHttpOptions } from '../publi
 import { extensionKey } from '../public/panel/token';
 import { createTwitchUsers, type TwitchUsers } from '../public/panel/twitch-users';
 import { verifyViewerToken } from './token';
-import { PanelPictures, validWebp } from './pictures';
+import { PanelPictures, parsePaintedWindows, validWebp } from './pictures';
 import { createPanelGifts, type PanelGiftRoute } from './gifts';
 import { createPanelConfiguration } from './configuration';
 import { createPanelConfigurationPublisher } from './configuration-publisher';
@@ -94,13 +94,15 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
       if (request.method !== 'POST' || origin || !matches(request.headers.authorization, services.painterSecret)) { send(401, { status: 'refused' }); return; }
       const channel = request.headers['x-chatdom-kingdom-id'], revision = request.headers['x-chatdom-revision'], at = Number(request.headers['x-chatdom-captured-at']);
       const kind = request.headers['x-chatdom-picture-kind'] === 'sketch' ? 'sketch' : 'realm';
+      const windows = parsePaintedWindows(request.headers['x-chatdom-windows']);
+      if (!windows || (kind === 'sketch' && windows.length)) { send(400, { status: 'refused' }); return; }
       if (typeof channel !== 'string' || !ID.test(channel) || typeof revision !== 'string' || !/^[\w:.-]{1,200}$/.test(revision)
         || !Number.isSafeInteger(at) || at < Date.now() - 3_600_000 || at > Date.now() + 5_000 || request.headers['content-type'] !== 'image/webp') { send(400, { status: 'refused' }); return; }
       const chunks: Buffer[] = []; let size = 0;
       for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 60 * 1024) { send(413, { status: 'refused' }); return; } chunks.push(chunk); }
       const bytes = Buffer.concat(chunks);
       if (!validWebp(bytes)) { send(400, { status: 'refused' }); return; }
-      try { const stored = await services.pictures.put(channel, bytes, { capturedAt: at, revision, kind }); send(stored ? 201 : 409, { version: 1, status: stored ? 'stored' : 'superseded' }); }
+      try { const stored = await services.pictures.put(channel, bytes, { capturedAt: at, revision, kind, windows }); send(stored ? 201 : 409, { version: 1, status: stored ? 'stored' : 'superseded' }); }
       catch { send(503, { version: 1, status: 'unavailable' }); }
       return;
     }
@@ -146,7 +148,9 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
     if (pathname === `${PREFIX}picture`) {
       const painting = await services.pictures.read(viewer.channelId);
       if (!painting) { send(404, { status: 'unavailable' }); return; }
-      response.writeHead(200, { ...cors, 'content-type': 'image/webp', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }).end(painting.bytes); return;
+      // The revision lets the panel pair these bytes with the lit windows listed in the kingdom reply.
+      response.writeHead(200, { ...cors, 'content-type': 'image/webp', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+        'x-chatdom-revision': painting.revision, 'access-control-expose-headers': 'x-chatdom-revision' }).end(painting.bytes); return;
     }
     const chunks: Buffer[] = []; let size = 0;
     for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 2048) { send(413, { status: 'refused' }); return; } chunks.push(chunk); }
@@ -170,15 +174,18 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
         const state = await realm('/internal/realm/panel/kingdom', { kingdomId: viewer.channelId });
         broadcast.touch(viewer.channelId, state);
         const stored = await services.pictures.read(viewer.channelId);
-        const picture = stored ? { capturedAt: stored.capturedAt, revision: stored.revision, kind: stored.kind } : null;
+        const picture = stored ? { capturedAt: stored.capturedAt, revision: stored.revision, kind: stored.kind, windows: stored.windows ?? [] } : null;
         // Only a committed public fact is projected; no interpretation of private observations or rejected words.
         const fact = state.moment as { body?: { kind?: string }; occurredAt?: number } | null;
-        const words: Record<string, string> = { raid: 'Guests are arriving at the gate', fireworks: 'Fireworks over the kingdom', feast: 'The kingdom gathers for a feast', battle: 'The kingdom stands together', bell: 'The bell rings over the square', parade: 'A parade crosses the square', train: 'The Hype Train is arriving' };
+        const words: Record<string, string> = { raid: 'Raiders at the gate', fireworks: 'Fireworks overhead', feast: 'A feast in the hall', battle: 'The kingdom stands together', bell: 'The bell rings', parade: 'A parade crosses the square', train: 'The Hype Train arrives' };
         const event = state.publicEvent as { type?: string; at?: number } | null;
         const gift = state.giftMoment as { line?: string; committedAt?: number } | null;
         const moment = gift && typeof gift.line === 'string' && typeof gift.committedAt === 'number' && gift.committedAt >= (event?.at ?? 0)
-          ? gift.line : event?.type === 'home' ? 'A home is raised' : event?.type === 'forge' ? 'A new piece leaves the Forge' : fact?.body?.kind ? words[fact.body.kind] ?? null : null;
+          ? gift.line : event?.type === 'home' ? 'A home is raised' : event?.type === 'forge' ? 'New work leaves the Forge' : fact?.body?.kind ? words[fact.body.kind] ?? null : null;
+        // Unclaimed land is named for its streamer, from Twitch's public profile of the channel in the token.
+        const streamer = state.status === 'unfounded' ? (await services.users.person(viewer.channelId).catch(() => null))?.displayName ?? null : null;
         send(200, { version: 1, status: state.status, stream: state.stream ?? 'resting', lights: state.lights ?? null, moment, picture, pledges: state.pledges ?? null,
+          ...(streamer ? { streamer } : {}),
           ...(state.settings ? { settings: state.settings, settingsRevision: state.settingsRevision } : {}) }); return;
       }
       if (viewer.kind !== 'shared') { send(403, { version: 1, status: 'refused' }); return; }
@@ -212,7 +219,8 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
       let presence: Record<string, unknown> = {};
       const deadline = Date.now() + 3500;
       do { presence = await realm('/internal/realm/panel/presence', { kingdomId: viewer.channelId, personId: viewer.personId }); if (presence.lit === true || presence.held === true) break; await delay(50); } while (Date.now() < deadline && !response.destroyed);
-      send(200, { ...claim, ...(pathname.endsWith('/presence') ? { status: 'accepted' } : {}), lit: presence.lit === true, stream: presence.stream ?? 'live' });
+      send(200, { ...claim, ...(pathname.endsWith('/presence') ? { status: 'accepted' } : {}), lit: presence.lit === true, stream: presence.stream ?? 'live',
+        ...(presence.lit === true && Number.isSafeInteger(presence.slot) ? { slot: presence.slot } : {}) });
     } catch { send(503, { version: 1, status: 'unavailable', message: 'The kingdom is out of reach. Try again shortly.' }); }
   };
   return Object.assign(handler, { dispose: () => { stopGifts(); broadcast.dispose(); configurationPublisher.dispose(); } });

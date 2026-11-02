@@ -33,6 +33,24 @@ test('Helper signs identities and refreshes authorization on sharing', async () 
   assert.equal(verify(auths.at(-1).token).user_id, undefined);
 });
 
+test('Helper can hold the identity prompt open until the operator answers it', async () => {
+  const window = {};
+  runInNewContext(helperSource(randomBytes(32).toString('base64'), { share: 'hold' }), { window, queueMicrotask: globalThis.queueMicrotask });
+  const auths = [];
+  window.Twitch.ext.onAuthorized(auth => auths.push(auth));
+  await new Promise(resolve => setImmediate(resolve));
+  window.Twitch.ext.actions.requestIdShare();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(window.__panelHarness.sharePrompt, true);
+  assert.equal(window.Twitch.ext.viewer.isLinked, false);
+  assert.equal(auths.length, 1);
+  assert.equal(window.__panelHarness.grantShare(), true);
+  assert.equal(window.Twitch.ext.viewer.isLinked, true);
+  assert.equal(auths.length, 2);
+  assert.equal(window.__panelHarness.grantShare(), false);
+  assert.throws(() => helperSource(randomBytes(32).toString('base64'), { share: 'maybe' }));
+});
+
 test('Helper drives context, visibility and subscribed PubSub listeners', async () => {
   const window = {};
   runInNewContext(helperSource(randomBytes(32).toString('base64')), { window, queueMicrotask: globalThis.queueMicrotask });

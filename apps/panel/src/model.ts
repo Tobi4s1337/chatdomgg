@@ -45,10 +45,13 @@ export interface PictureProvenance {
 
 export type Picture =
   | {
+    /** `url` stays readable until a second newer still replaces it, so the view can dissolve from one to the next. */
     readonly kind: 'still'; readonly url: string; readonly alt: string; readonly width: number; readonly height: number;
     /** The same moment framed for a phone held upright, when the source made one. */
     readonly portrait: { readonly url: string; readonly width: number; readonly height: number } | null;
     readonly provenance: PictureProvenance;
+    /** Where the viewer's own window glows in this painting, 0..1 across and down; only while it is lit in it. */
+    readonly mark?: { readonly x: number; readonly y: number };
   }
   | { readonly kind: 'unavailable'; readonly reason: string };
 
@@ -348,6 +351,8 @@ export interface PanelSnapshot {
   readonly connection: Connection;
   /** Null when no service has told us which kingdom this channel holds. */
   readonly kingdom: Kingdom | null;
+  /** The streamer's Twitch display name, told only while their channel has no kingdom yet. */
+  readonly streamer?: string | null;
   readonly stream: 'live' | 'resting' | 'unknown';
   readonly kingdomLights?: number | null;
   readonly moment?: string | null;

@@ -1,10 +1,12 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, Switch, Match } from 'solid-js';
-import { createPassportReading } from '@chatdom/ui/passport';
+import { createPassportReading } from '@chatdom/ui/passport/live';
 import { selectAdapter } from './adapters/select';
 import { CardSheet, PassportCorner } from './card/CardSheet';
 import { PanelPassport } from './passport/PanelPassport';
 import { createPanelSound } from './sound';
 import { GiftShelf } from './gifts/GiftShelf';
+import { windowViewCrop, type WindowViewCrop } from './window-view';
+import { createDissolve } from './dissolve';
 import type { Home, PanelAdapter, PanelSnapshot, PassportSource, Privacy } from './model';
 import './panel.css';
 import './places.css';
@@ -62,6 +64,7 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   const [snap, setSnap] = createSignal<Reading>(adapter.get());
   const [tab, setTab] = createSignal<Tab>('kingdom');
   const [page, setPage] = createSignal<'card' | 'passport' | 'privacy' | null>(null);
+  const [walking, setWalking] = createSignal(false);
   const [failed, setFailed] = createSignal(false);
   const unsubscribe = adapter.subscribe(next => {
     if (next.privacy?.kind === 'forgotten' && page() !== 'privacy') setPage(null);
@@ -80,13 +83,32 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   const card = () => cardOf(snap().home);
   const source = createMemo<Extract<PassportSource, { kind: 'readable' }> | null>(() => { const value = card()?.passport; return value?.kind === 'readable' ? value : null; });
   const picture = () => { const value = snap().picture; return value.kind === 'still' && !failed() ? value : null; };
+  // A new painting dissolves in over the one it replaces, so a turn of the camera or a street coming alight never
+  // reads as a cut.
+  const placeOf = (value: { mark?: { x: number; y: number } }) => value.mark ? `${value.mark.x * 100}% ${value.mark.y * 100}%` : '50% 50%';
+  const shot = createMemo(() => { const value = picture(); return value ? { url: value.url, position: placeOf(value) } : null; });
+  const kingdomFade = createDissolve(shot, () => tab() === 'kingdom');
   const gate = () => { const value = snap().entry; return value.kind === 'gate' ? value : null; };
+  // The arch on the You tab looks into the painting only while that painting shows the viewer's own window lit.
+  const windowView = createMemo(() => {
+    const value = picture();
+    if (snap().light.kind !== 'lit' || !value?.mark) return null;
+    const crop = windowViewCrop(value.mark, value);
+    return crop ? { url: value.url, crop, time: value.provenance.caption } : null;
+  });
+  // The arch dissolves too: from the drawn lit glass into the first painting that shows the window, then from each
+  // painting's crop into the next, wherever the window has moved to in it.
+  const windowFade = createDissolve(windowView, () => tab() === 'you', { fromNothing: true });
+  const cropStyle = (crop: WindowViewCrop) => ({ width: `${crop.zoom * 100}%`, transform: `translate(${-crop.centre.x * 100}%, ${-crop.centre.y * 100}%)` });
+  const [portraitFailed, setPortraitFailed] = createSignal(false);
+  const portrait = () => { const value = card()?.card.portrait; return value && !portraitFailed() ? value : null; };
+  createEffect(() => { void card()?.card.portrait?.url; setPortraitFailed(false); });
   const reading = createMemo(() => {
     const value = source();
     return value && value.kind === 'readable' ? createPassportReading(value.transport, value.disclosure ? { disclosure: () => value.disclosure ?? undefined } : {}) : null;
   });
   let cardButton: HTMLButtonElement | undefined;
-  const openTab = (next: Tab) => { sound.gesture(); sound.play('tap'); setPage(null); setTab(next); };
+  const openTab = (next: Tab) => { sound.gesture(); sound.play('tap'); setPage(null); setWalking(false); setTab(next); };
   const place = () => { sound.gesture(); sound.play('tap'); adapter.requestLight('named'); };
   const closeCard = () => { sound.play('page'); setPage(null); queueMicrotask(() => cardButton?.focus()); };
   const lightWords = () => {
@@ -95,14 +117,25 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
       case 'lit': return 'Your window is lit';
       case 'resting': return 'Your window is resting';
       case 'held': return 'Your window is quiet';
-      case 'unfounded': return light.pledged ? 'Your place is waiting' : null;
+      case 'unfounded': return light.pledged ? 'Your tent waits' : null;
       case 'pending': return light.step === 'sharing' ? 'Waiting for Twitch…' : 'Lighting your window…';
       case 'logged-out': return 'Log in to Twitch to take your place';
       case 'outside-twitch': return 'Open this panel on Twitch';
-      case 'out-of-reach': return 'Your window is out of reach';
+      case 'out-of-reach': return 'Out of reach for now';
       case 'unavailable': return 'Your window is unavailable just now';
       default: return null;
     }
+  };
+  // One line under the picture. A kingdom out of reach tells nothing stale; a resting one counts no lights.
+  const unreached = () => {
+    const connection = snap().connection;
+    return connection.kind === 'lost' ? `Out of reach since ${connection.asOf}` : connection.kind === 'kingdom-unavailable' ? 'Out of reach' : null;
+  };
+  const footCount = () => {
+    // Unfounded land has no kingdom to rest or light yet.
+    if (snap().light.kind === 'unfounded') return null;
+    const lights = snap().kingdomLights;
+    return snap().stream === 'resting' ? 'Resting' : lights != null ? `${lights} ${lights === 1 ? 'light' : 'lights'}` : null;
   };
   const canPlace = () => ['ready', 'unshared', 'refused'].includes(snap().light.kind) || (snap().light.kind === 'unfounded' && !(snap().light as Extract<PanelSnapshot['light'], { kind: 'unfounded' }>).pledged);
   const homeLine = () => {
@@ -125,7 +158,7 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   });
   onCleanup(() => { unsubscribe(); unlistenSound(); sound.dispose(); adapter.dispose(); if (!props.embedded) document.documentElement.classList.remove('cp-document'); });
   return <div class="cp-frame" classList={{ embedded: props.embedded }} ref={element => { frame = element; }}><div class="cp cw" data-chatdom-panel data-light={snap().light.kind} data-connection={snap().connection.kind} data-view={tab()} data-ready="true">
-    <header class="cw-head"><span class="cw-mark" aria-hidden="true">✦</span><h1>{snap().kingdom?.name ?? 'The kingdom'}</h1><button class="cw-sound" type="button" aria-label={muted() ? 'Turn panel sound on' : 'Mute panel sound'} aria-pressed={!muted()} onClick={() => { sound.setMuted(!muted()); if (!muted()) { sound.gesture(); sound.play('tap'); } }}>{muted() ? '♪̸' : '♪'}</button></header>
+    <header class="cw-head"><span class="cw-mark" aria-hidden="true">✦</span><h1>{snap().kingdom?.name ?? (snap().streamer ? `${snap().streamer}’s land` : 'The kingdom')}</h1><button class="cw-sound" type="button" aria-label={muted() ? 'Turn panel sound on' : 'Mute panel sound'} aria-pressed={!muted()} onClick={() => { sound.setMuted(!muted()); if (!muted()) { sound.gesture(); sound.play('tap'); } }}>{muted() ? '♪̸' : '♪'}</button></header>
     <main class="cw-main">
       <Show when={!page()} fallback={<section class="cw-deep" aria-label={page() === 'card' ? 'Your citizen card' : page() === 'privacy' ? 'Your privacy' : 'Your passport'}>
         <Show when={page() !== 'privacy'} fallback={<PrivacySettings privacy={snap().privacy} onClose={closeCard} onRetry={() => adapter.requestPrivacy?.()} onQuiet={quiet => adapter.requestQuiet?.(quiet)} onForget={() => adapter.requestForget?.()} />}>
@@ -139,25 +172,59 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
       </section>}>
         <Switch>
           <Match when={tab() === 'kingdom'}>
-            <figure class="cw-picture">
-              <Show when={picture()} fallback={<div class="cw-absence"><span class="cw-absence-arch" aria-hidden="true"><span>✦</span></span><p>{snap().connection.kind === 'outside-twitch' ? 'Open on Twitch to see the kingdom' : 'The kingdom is out of view'}</p></div>}>{picture =>
-                <><img class="cw-picture-image" src={picture().url} alt={picture().alt} onError={() => setFailed(true)} /><figcaption>{picture().provenance.caption}</figcaption></>}
+            <figure class="cw-picture" classList={{ settling: kingdomFade.settling() }}>
+              <Show when={picture()} fallback={<div class="cw-absence"><span class="cw-absence-arch" aria-hidden="true"><span>✦</span></span><p>{snap().connection.kind === 'outside-twitch' ? 'Open on Twitch to see the kingdom' : snap().light.kind === 'unfounded' ? 'No kingdom here yet' : 'The kingdom is out of view'}</p></div>}>{picture =>
+                <><Show when={kingdomFade.under()}>{old => <img class="cw-picture-under" src={old().url} alt="" aria-hidden="true" style={{ 'object-position': old().position }} />}</Show>
+                <img class="cw-picture-image" src={picture().url} alt={picture().mark ? `${picture().alt} Your lit window is marked.` : picture().alt} onError={() => setFailed(true)}
+                  onLoad={kingdomFade.reveal} onTransitionEnd={kingdomFade.settled}
+                  style={{ 'object-position': placeOf(picture()) }} />
+                <Show when={picture().mark}>{mark => <span class="cw-yours" aria-hidden="true"
+                  classList={{ low: mark().y < .2, west: mark().x < .2, east: mark().x > .8 }} style={{ left: `${mark().x * 100}%`, top: `${mark().y * 100}%` }}>
+                  <span class="cw-yours-ring" /><span class="cw-yours-tag">Yours</span></span>}</Show><figcaption aria-label={picture().provenance.origin === 'realm' ? `Painted at ${picture().provenance.caption}` : picture().provenance.caption}><Show when={picture().provenance.origin === 'realm'}><span class="cw-brush" aria-hidden="true">✎</span></Show>{picture().provenance.caption}</figcaption></>}
               </Show>
             </figure>
+            <Show when={unreached() || footCount() || snap().moment || gate()}>
             <div class="cw-kingdom-foot">
-              <p class="cw-moment"><Show when={snap().kingdomLights != null}><span class="cw-light-dot" aria-hidden="true" />{snap().kingdomLights} {snap().kingdomLights === 1 ? 'light' : 'lights'}<Show when={snap().moment}> · </Show></Show>{snap().moment ?? ''}</p>
-              <Show when={gate()}>{gate => <div class="cw-links"><a href={new URL(gate().path, 'https://chatdom.gg').href} target="_blank" rel="noopener noreferrer">Tavern ↗</a><a href={new URL(gate().path, 'https://chatdom.gg').href} target="_blank" rel="noopener noreferrer">Forge ↗</a><small>Leave Twitch</small></div>}</Show>
+              <Show when={!walking()} fallback={<Show when={gate()}>{gate => <div class="cw-walk-open">
+                <p class="cw-walk-note">Leaves Twitch for chatdom.gg</p>
+                <div class="cw-links">
+                  <For each={[['Kingdom', 'the kingdom'], ['Tavern', 'the kingdom, then its tavern'], ['Forge', 'the kingdom, then its Forge']] as const}>{([label, where]) =>
+                    <a href={new URL(gate().path, 'https://chatdom.gg').href} target="_blank" rel="noopener noreferrer" aria-label={`Walk into ${where} on chatdom.gg (leaves Twitch)`}>{label} ↗</a>}</For>
+                  <button type="button" class="cw-walk-close" aria-label="Close the walk-in links" onClick={() => setWalking(false)}>×</button>
+                </div>
+              </div>}</Show>}>
+                <div class="cw-foot-row">
+                  <p class="cw-moment"><Show when={!unreached()} fallback={unreached()}><Show when={footCount()}><span class="cw-light-dot" classList={{ resting: snap().stream === 'resting' }} aria-hidden="true" />{footCount()}<Show when={snap().moment}> · </Show></Show>{snap().moment ?? ''}</Show></p>
+                  <Show when={gate()}><button type="button" class="cw-walk" aria-expanded="false" onClick={() => { sound.gesture(); sound.play('tap'); setWalking(true); }}>Walk in ↗</button></Show>
+                </div>
+              </Show>
             </div>
+            </Show>
           </Match>
           <Match when={tab() === 'you'}>
             <section class="cw-you">
-              <div class="cw-window" classList={{ lit: snap().light.kind === 'lit' }} aria-hidden="true"><span /><span /><span /><span /></div>
+              <div class="cw-you-view" classList={{ lit: snap().light.kind === 'lit' }}>
+              {/* One frame for every state. Once a painting shows the viewer's window lit, the drawn window opens into
+                  the arch: the frame grows, its panes give way to lit glass and the painting clears out of the glass. */}
+              <div class="cw-window" classList={{ lit: snap().light.kind === 'lit', open: windowView() !== null }}>
+                <span class="cw-window-panes" aria-hidden="true"><span /><span /><span /><span /></span>
+                <Show when={windowView()}>{view =>
+                  <button type="button" class="cw-window-view" classList={{ settling: windowFade.settling(), first: windowFade.under() === null }} aria-label={`Your lit window in the painting from ${view().time}. Show the kingdom`} onClick={() => openTab('kingdom')}>
+                    <Show when={windowFade.under()}>{old => <img class="cw-window-view-under" src={old().url} alt="" aria-hidden="true" draggable={false} style={cropStyle(old().crop)} />}</Show>
+                    <img class="cw-window-view-image" src={view().url} alt="" draggable={false} style={cropStyle(view().crop)} onError={() => setFailed(true)}
+                      onLoad={windowFade.reveal} onTransitionEnd={windowFade.settled} />
+                    <span class="cw-window-view-ring" style={{ left: `${view().crop.ring.x * 100}%`, top: `${view().crop.ring.y * 100}%` }} />
+                  </button>}</Show>
+              </div>
+              </div>
+              <div class="cw-you-act">
               <Show when={canPlace()} fallback={<p class="cw-status" role="status">{lightWords() ?? 'Your place is waiting'}</p>}><button class="cw-primary" onClick={place}>Take your place</button></Show>
-              <Show when={homeLine()}><p class="cw-home">{homeLine()}</p></Show>
-              <Show when={snap().light.kind === 'unfounded'}><p class="cw-home">Tell {snap().kingdom?.name ?? 'the streamer'} their kingdom is waiting</p></Show>
+              <Show when={homeLine()}><p class="cw-home"><span class="cw-portrait-slot" aria-hidden="true"><Show when={portrait()}>{found => <img src={found().url} alt="" onError={() => setPortraitFailed(true)} />}</Show></span><span>{homeLine()}</span></p></Show>
+              <Show when={snap().light.kind === 'unfounded'}><p class="cw-home">Tell {snap().streamer ?? 'the streamer'} their kingdom is waiting</p></Show>
               <div class="cw-personal-links">
-              <Show when={snap().privacy && snap().privacy?.kind !== 'forgotten'}><button class="cw-card-link cw-settings-link" onClick={() => setPage('privacy')}>Your privacy <span>›</span></button></Show>
-              <Show when={card()}><button ref={element => { cardButton = element; }} class="cw-card-link" onClick={() => { sound.gesture(); sound.play('page'); setPage('card'); }}>Your citizen card <span>›</span></button></Show>
+              <Show when={snap().privacy && snap().privacy?.kind !== 'forgotten'}><button class="cw-card-link cw-settings-link" onClick={() => setPage('privacy')} aria-label="Your privacy">Privacy <span>›</span></button></Show>
+              <Show when={card()}><button ref={element => { cardButton = element; }} class="cw-card-link" onClick={() => { sound.gesture(); sound.play('page'); setPage('card'); }} aria-label="Your citizen card">Your card <span>›</span></button></Show>
+              </div>
               </div>
             </section>
           </Match>

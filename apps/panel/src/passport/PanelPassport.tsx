@@ -6,7 +6,7 @@ import { createEffect, For, Show, type JSX } from 'solid-js';
 import {
   PassportReading, createPassportReading,
   type PassportBookProps, type PassportDisclosureView, type PassportReadState, type PassportSession, type PassportTransport,
-} from '@chatdom/ui/passport';
+} from '@chatdom/ui/passport/live';
 import { PANEL_DENSITY } from './model';
 import './panel-passport.css';
 

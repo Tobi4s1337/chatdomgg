@@ -28,3 +28,17 @@ The full GPU batch used `--wait 30 --max 10` and returned exit 3, Chrome disconn
 ## Limits and owner verification
 
 The actual lane panel still imports the general Passport entry and therefore correctly fails the strict simulation guard in its viewer/window chunks. Its build, scoped types, changed-file lint and 40 focused adapter/card/transport checks pass. No actual worktree zip is accepted. After the owners apply both patches, rerun the normal packager and the complete leased screenshot matrix, and inspect the images. The full GPU matrix and Hosted Test remain unrun; registration owner identity, the real Tier 1 founding entry and production gift effects remain separate open seams in `PW13-NEEDS.md`.
+
+## Front-door variant (2026-11-02)
+
+`lane/front-door` FD11 (`39120ae3`, not yet in main) also changed this area. It dropped the `detail="an illustrative passport"` attribute on the same three seal lines this patch removes, and it added four `packages/ui` exports next to the new one. So `PW13-PASSPORT-NEEDS.patch` fails three hunks on that branch (`packages/ui/package.json`, `Book.tsx` ×2, `Reading.tsx` ×1).
+
+`PW13-PASSPORT-NEEDS-FRONT-DOOR.patch` is the same change rebased onto `lane/front-door`. Use whichever matches the tree it lands on: the original for main and this worktree, the variant once FD11 is in. Checked on a read-only `git archive` copy of `lane/front-door`:
+
+- The variant passes `patch --dry-run -p1` cleanly.
+- All ten touched or added files come out byte-identical to main plus the original patch.
+- The live entry's import graph (Book, Reading, Arms, Stamp, format, ink, pages, session, types) reaches neither `ProvenanceSeal`, `craft` nor fixtures. Front-door's edits to those files stay outside the panel bundle.
+- A scoped strict TypeScript run over UI passport, shared passport and API passport, with workspace packages mapped to the patched copy, is clean.
+- The Passport suites (11 files) pass 101 of 102 tests. The one failure, `apps/api/src/passport/share.test.ts:242` expecting `<b>SIMULATED</b>` in the share image, fails the same way on unpatched `lane/front-door`. It is front-door's leftover from FD11 removing that chip, not this patch.
+
+`PW13-PASSPORT-PANEL.patch` (the panel companion) is unchanged. It applies to this lane's panel files after either owner variant.

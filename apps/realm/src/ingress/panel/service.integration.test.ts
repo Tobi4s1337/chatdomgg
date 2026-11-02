@@ -154,10 +154,17 @@ describe.runIf(enabled)('panel realm door against isolated development Postgres'
       expect(await allocation.deedIn(kingdomId, personId)).toBeNull();
       await observe(kingdomId, 'herald', { kind: 'restore', personId });
       expect(await panel.claim(authorization, request)).toMatchObject({ body: { status: 'deed' } });
-      expect(await panel.presence(authorization, { kingdomId, personId })).toMatchObject({ body: { status: 'presence', lit: false, stream: 'resting', held: false } });
+      const resting = await panel.presence(authorization, { kingdomId, personId });
+      expect(resting).toMatchObject({ body: { status: 'presence', lit: false, stream: 'resting', held: false } });
+      expect(resting.body).not.toHaveProperty('slot');
       await observe(kingdomId, 'herald', { kind: 'stream', live: true, sessionId: 'SIMULATED-panel-night' });
       await observe(kingdomId, 'panel', { kind: 'observe', source: 'panel', coverage: 'activity', people: [{ personId, disclosure: 'named', displayName: 'SIMULATED Light' }] });
-      expect(await panel.presence(authorization, { kingdomId, personId })).toMatchObject({ body: { status: 'presence', lit: true, stream: 'live', held: false } });
+      const lit = await panel.presence(authorization, { kingdomId, personId });
+      expect(lit).toMatchObject({ body: { status: 'presence', lit: true, stream: 'live', held: false } });
+      // Only the person's own lit window is named back to them, so the panel can find it in the painting.
+      const ownSlot = Object.values(hold.kingdom.privateState.homes).find(home => home.ownerId === personId)?.slot;
+      expect(ownSlot).toEqual(expect.any(Number));
+      expect((lit.body as { slot?: number }).slot).toBe(ownSlot);
       const reading = await panel.kingdom(authorization, { kingdomId });
       expect(reading).toMatchObject({ body: { status: 'kingdom', lights: 1, stream: 'live', presence: { windows: [{ present: true, publicName: 'SIMULATED Light' }] } } });
       expect(JSON.stringify(reading)).not.toMatch(/personId|rights|leases|receipt|qualification/);

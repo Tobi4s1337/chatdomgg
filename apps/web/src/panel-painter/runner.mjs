@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
-import { MAX_STILL_BYTES, paintingDue, paintingRevision, readPainterConfig } from './policy.mjs';
+import { MAX_STILL_BYTES, paintingDue, paintingRevision, readPainterConfig, windowsHeader } from './policy.mjs';
 
 async function boundedBody(response, limit) {
   if (!response.ok) throw new Error(`The painter source answered HTTP ${response.status}.`);
@@ -47,8 +47,24 @@ export async function encodeScreenshot(page, png) {
   return { ...encoded, bytes: Buffer.from(encoded.bytes) };
 }
 
+/** A short, credential-free reason for the log: the first line of the message, with any bearer value removed. */
+export function reason(error) {
+  const text = error instanceof Error ? `${error.name}: ${error.message}` : 'unknown failure';
+  return text.split('\n')[0].replace(/Bearer\s+\S+/gi, 'Bearer …').slice(0, 400);
+}
+
+/** The page's clock answer moved forward to the next time the shared clock reads `hour`; the runner's own time stays real. */
+export function clockAtHour(bytes, hour) {
+  const body = JSON.parse(bytes.toString()), day = 86_400_000;
+  const now = ((body.serverTime % day) + day) % day;
+  return Buffer.from(JSON.stringify({ ...body, serverTime: body.serverTime + ((((hour * 3_600_000 - now) % day) + day) % day) }));
+}
+
+// `hour` is for evidence runs only (the lane capture judging the window glow at night): the scene is lit for that
+// shared-clock hour, while the revision, the capture time and every check keep the realm's real clock.
 export async function runPainter(config, { once = false, signal, report = console.info, evidenceDirectory,
-  launch = options => chromium.launch(options), fetcher = fetch, acquireLock = acquireCaptureLock } = {}) {
+  launch = options => chromium.launch(options), fetcher = fetch, acquireLock = acquireCaptureLock, hour } = {}) {
+  if (hour !== undefined && !(Number.isFinite(hour) && hour >= 0 && hour < 24)) throw new Error('The evidence hour must lie in [0, 24).');
   let browser, context;
   const startupRelease = await acquireLock();
   try {
@@ -102,7 +118,13 @@ export async function runPainter(config, { once = false, signal, report = consol
           const input = { snapshot, ...(sceneBytes ? { sceneBytes: [...sceneBytes] } : {}) };
           if (!entry) {
             const page = await context.newPage();
-            entry = { page, sceneHash: null }; warm.set(kingdomId, entry);
+            entry = { page, sceneHash: null, errors: [] }; warm.set(kingdomId, entry);
+            const noted = entry.errors;
+            // The dev server's own error forwarding (lane stack only) would crowd out the error that matters.
+            const note = text => { if (/Vite server|WebSocket closed without opened/.test(text)) return; noted.push(text); noted.splice(0, noted.length - 3); };
+            page.on('pageerror', error => note(reason(error)));
+            page.on('crash', () => note('The painter page crashed.'));
+            page.on('console', message => { if (message.type() === 'error') note(message.text().split('\n')[0].replace(/Bearer\s+\S+/gi, 'Bearer …').slice(0, 200)); });
             if (config.cdpOrigin) {
               await page.bringToFront();
               const cdp = await context.newCDPSession(page);
@@ -113,15 +135,18 @@ export async function runPainter(config, { once = false, signal, report = consol
               finally { await cdp.detach(); }
             }
             await page.route('**/api/realm/clock', async route => {
-              try { const current = await clock(); await route.fulfill({ contentType: 'application/json', body: current.bytes, headers: { 'Cache-Control': 'no-store' } }); }
+              try { const current = await clock(); await route.fulfill({ contentType: 'application/json', body: hour === undefined ? current.bytes : clockAtHour(current.bytes, hour), headers: { 'Cache-Control': 'no-store' } }); }
               catch { await route.fulfill({ status: 503, body: '' }); }
             });
             await page.exposeBinding('__chatdomPainterRead', () => input);
             await page.goto(`${config.webOrigin}/-/panel-painter`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
           } else await entry.page.evaluate(input => window.__chatdomPainter.prepare(input), input);
           await entry.page.waitForFunction(() => window.__chatdomPainter?.ready() || window.__chatdomPainter?.error(), null, { timeout: 180_000 });
-          if (await entry.page.evaluate(() => window.__chatdomPainter.error())) throw new Error('The renderer refused the painting.');
+          const refusal = await entry.page.evaluate(() => window.__chatdomPainter.error());
+          if (refusal) throw new Error(`The renderer refused the painting. ${String(refusal).slice(0, 200)}${entry.errors?.length ? ` Page: ${entry.errors.join(' | ')}` : ''}`);
           await entry.page.evaluate(() => window.__chatdomPainter.freeze());
+          // Lit windows are read from the frozen frame's camera, so they belong to exactly this picture.
+          const windows = windowsHeader(await entry.page.evaluate(() => window.__chatdomPainter.windows()));
           const png = await entry.page.screenshot({ type: 'png', timeout: 30_000 });
           const image = await encodeScreenshot(entry.page, png);
           entry.sceneHash = snapshot.manifest.sceneHash;
@@ -129,20 +154,23 @@ export async function runPainter(config, { once = false, signal, report = consol
           const upload = await fetcher(`${config.apiOrigin}/api/panel/v1/stills`, { method: 'POST',
             signal: signal ? globalThis.AbortSignal.any([signal, globalThis.AbortSignal.timeout(30_000)]) : globalThis.AbortSignal.timeout(30_000),
             headers: { Authorization: `Bearer ${config.uploadSecret}`, 'Content-Type': 'image/webp',
-              'X-Chatdom-Kingdom-Id': kingdomId, 'X-Chatdom-Captured-At': String(Math.floor(capturedAt)), 'X-Chatdom-Revision': revision }, body: image.bytes });
+              'X-Chatdom-Kingdom-Id': kingdomId, 'X-Chatdom-Captured-At': String(Math.floor(capturedAt)), 'X-Chatdom-Revision': revision,
+              ...(windows ? { 'X-Chatdom-Windows': windows } : {}) }, body: image.bytes });
           if (!upload.ok) throw new Error(`The painting upload answered HTTP ${upload.status}.`);
           painted.set(kingdomId, { revision, capturedAt });
           if (evidenceDirectory) {
             await mkdir(evidenceDirectory, { recursive: true });
             await writeFile(join(evidenceDirectory, `kingdom-${kingdomId}@636x400.png`), png);
             await writeFile(join(evidenceDirectory, `kingdom-${kingdomId}.webp`), image.bytes);
+            await writeFile(join(evidenceDirectory, `kingdom-${kingdomId}.windows.txt`), `${windows}\n`);
           }
           result.painted++;
-          report(`Kingdom ${kingdomId}: painted ${image.width}x${image.height}, ${image.bytes.length} bytes.`);
-        } catch {
+          report(`Kingdom ${kingdomId}: painted ${image.width}x${image.height}, ${image.bytes.length} bytes, ${windows ? windows.split(',').length : 0} lit ${windows && !windows.includes(',') ? 'window' : 'windows'} in frame.`);
+        } catch (error) {
           result.unavailable++;
-          const entry = warm.get(kingdomId); if (entry) { await entry.page.close().catch(() => {}); warm.delete(kingdomId); }
-          report(`Kingdom ${kingdomId}: painting unavailable; retrying on the next pass.`);
+          const entry = warm.get(kingdomId), notes = entry?.errors?.length ? ` Page: ${entry.errors.join(' | ')}` : '';
+          if (entry) { await entry.page.close().catch(() => {}); warm.delete(kingdomId); }
+          report(`Kingdom ${kingdomId}: painting unavailable (${reason(error)}${error instanceof Error && error.message.includes(' Page: ') ? '' : notes}); retrying on the next pass.`);
         } finally { await release?.(); }
       }
       if (!once && !signal?.aborted) await new Promise(resolve => {

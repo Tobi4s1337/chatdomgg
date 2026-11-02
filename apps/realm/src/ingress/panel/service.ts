@@ -59,7 +59,8 @@ export type PanelDoorBody = PanelClaimResult | PanelKingdomResult | PanelGiftRep
   | { readonly version: 1; readonly status: 'pending'; readonly operationId: string }
   | { readonly version: 1; readonly status: 'unfounded'; readonly pledges: PanelPledgeBand; readonly settings: PanelSettings; readonly settingsRevision: string }
   | { readonly version: 1; readonly status: 'pledged'; readonly band: PanelPledgeBand }
-  | { readonly version: 1; readonly status: 'presence'; readonly lit: boolean; readonly stream: 'live' | 'resting'; readonly held: boolean }
+  | { readonly version: 1; readonly status: 'presence'; readonly lit: boolean; readonly stream: 'live' | 'resting'; readonly held: boolean;
+    /** The person's own public window, only while it is lit: the panel finds it in the painting. */ readonly slot?: number }
   | { readonly version: 1; readonly status: 'refused' | 'unavailable'; readonly message: string };
 export interface PanelDoorReply { readonly http: 200 | 400 | 401 | 503; readonly body: PanelDoorBody }
 export interface RealmPanelOptions {
@@ -243,7 +244,7 @@ export class RealmPanelService {
         this.assertCurrent(kingdom);
         const lit = !held && stream === 'live' && slot !== undefined && !!projected?.windows[0]?.present
           && !!frame?.windows.some(window => window.slot === slot && window.present);
-        return ok({ version: 1, status: 'presence', lit, stream, held });
+        return ok({ version: 1, status: 'presence', lit, stream, held, ...(lit && slot !== undefined ? { slot } : {}) });
       } finally { await hold.release(); }
     } catch { return unavailable(); }
   }

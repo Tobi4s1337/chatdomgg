@@ -11,7 +11,8 @@
     "./site": "./src/site/index.ts",
     "./site.css": "./src/site/site.css",
     "./fonts.css": "./src/fonts.css",
-    "./names": "./src/names.ts"
+    "./names": "./src/names.ts",
+    "./passport/live": "./src/passport/live.ts"
   },
   "dependencies": {
     "solid-js": "1.9.18"
