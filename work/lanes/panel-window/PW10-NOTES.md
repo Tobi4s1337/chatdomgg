@@ -1,3 +1,27 @@
+# PW10 checkpoint — 2 November 2026, the arch's brass line
+
+PW10 stays unticked. This checkpoint closes the last doubt from the opening checkpoint: "in the first frame, the pane layer's inner brass line shows a hair inside the frame's own".
+
+## What was wrong
+
+Every layer inside the frame (the panes, the inner vignette `::after` and the painting button) used `border-radius: inherit`. That gave each one the frame's outer radius (38 px, opening to 56 px; on the phone 50 px to 75 px). But those layers sit inside the frame's 3 px border, where the true curve is 3 px tighter. So the panes' brass line fell away from the frame's own line at the shoulders and showed as a second, inner hairline. The vignette and the painting crop had the same mismatch once open.
+
+## Implemented
+
+- The arch's outer radius is now one registered, animatable length, `--cw-arch` (`@property`, `<length>`, inherited). The frame draws `var(--cw-arch) var(--cw-arch) 3px 3px`, and every inner layer draws `calc(var(--cw-arch) - 3px)` on top and 0 at the bottom. The transition animates `--cw-arch` instead of `border-radius`, so the inner curves follow the frame on every frame of the 0.9 s opening. The four states set only the length: 38/56 px on the panel, 50/75 px on the phone. Reduced motion still turns every transition off.
+- A browser without `@property` support still gets the right curves, closed and open. Only the radius snaps at the start of the opening while the size grows.
+
+## Verified
+
+- 108 panel vitest pass, and the panel build keeps the `@property` rule.
+- A CSS-only probe under the shared capture lock (headless Chrome at 4× device scale, no WebGL involved): the frame closed, then paused at 0, 120, 300 and 900 ms into the opening, old CSS against new, at 318×496 and 390×844 (`arch-hairline/sheet-318.png`, `sheet-390.png`, `zoom-318-120ms.png`). Old: the brass line pulls inward under the arch and doubles at the shoulders. New: one line that follows the frame's curve at every step. Open, the vignette's inner ring now sits concentric with the frame. I looked at all three images. The open arch at 390 is cut off on the right only by the probe's 162 px crop.
+- `node scripts/public/extension.mjs` still fails only on the two shared simulation strings (viewer and window chunks, through the Passport).
+
+## Doubts
+
+- The panes still stretch with the frame for the 0.6 s they take to fade out. Seen at 120 and 300 ms, it reads as the window opening, and I kept it.
+- The real-GPU tunnel was not connected this session either (`chatdom-pc status`: nothing on 9333), so the pane glow, the turn and both dissolves are still unjudged on a real GPU.
+
 # PW10 checkpoint — 2 November 2026, the window opens into the arch
 
 PW10 stays unticked. This checkpoint answers the follow-up "smooth the first transition from the smaller drawn window to the larger arch, and capture a crop-to-crop transition".

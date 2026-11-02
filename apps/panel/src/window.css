@@ -48,8 +48,11 @@
 .cw-nav button { min-height: 44px; border: 1px solid #150d08; border-radius: 2px; background: #3d2a1c; color: #d0b894; box-shadow: inset 0 1px #896544; font: 700 14px Alegreya, Georgia, serif; cursor: pointer; }
 .cw-nav button[aria-current] { color: #3e291c; background: #e4d0aa url('./assets/parchment.svg') center / 250px; box-shadow: inset 0 1px #fff2d0, 0 1px 2px #0008; }
 .cw-you, .cw-gifts { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; background: #ead9b8 url('./assets/parchment.svg') center / 350px; color: #493324; }
-.cw-window { position: relative; flex: none; width: 72px; height: 100px; margin-bottom: 24px; border: 3px solid #775334; border-radius: 38px 38px 3px 3px; background: #62452e; box-shadow: 0 1px #f9edcf, inset 0 0 0 1px #dfbc84; overflow: hidden; }
-.cw-window-panes { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 4px; padding: 8px; border-radius: inherit; background: #62452e; box-shadow: inset 0 0 0 1px #dfbc84; }
+/* The arch's outer radius is one animatable length; everything inside the frame follows its inner curve (3 px less), so
+   no inner layer draws its brass line or edge inside the frame's own while the arch opens. */
+@property --cw-arch { syntax: '<length>'; inherits: true; initial-value: 38px; }
+.cw-window { --cw-arch: 38px; position: relative; flex: none; width: 72px; height: 100px; margin-bottom: 24px; border: 3px solid #775334; border-radius: var(--cw-arch) var(--cw-arch) 3px 3px; background: #62452e; box-shadow: 0 1px #f9edcf, inset 0 0 0 1px #dfbc84; overflow: hidden; }
+.cw-window-panes { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 4px; padding: 8px; border-radius: calc(var(--cw-arch) - 3px) calc(var(--cw-arch) - 3px) 0 0; background: #62452e; box-shadow: inset 0 0 0 1px #dfbc84; }
 .cw-window-panes span { background: #42372c; } .cw-window.lit .cw-window-panes span { background: #edb65e; box-shadow: inset 0 0 12px #fff1bd; }
 .cw-primary { min-height: 48px; padding: 0 27px; border: 1px solid #4e2419; border-radius: 3px; background: #8e3f2c; color: #fff1d2; box-shadow: inset 0 1px #c97e5c, 0 2px 3px #63402366; font: 700 16px Alegreya, Georgia, serif; cursor: pointer; }
 .cw-status { margin: 0; font-size: 16px; font-weight: 700; }
@@ -87,18 +90,18 @@
 /* Once the painting shows the viewer's window lit, the same frame opens into the arch and looks into that painting at
    it. The frame grows, the panes give way to lit glass, and the painting clears out of the glass. Mounted already open
    (the You tab opened later, or a reload), nothing moves. */
-.cw-window { transition: width .9s cubic-bezier(.3, .7, .2, 1), height .9s cubic-bezier(.3, .7, .2, 1), border-radius .9s cubic-bezier(.3, .7, .2, 1); }
-.cw-window::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .9s ease .3s;
+.cw-window { transition: width .9s cubic-bezier(.3, .7, .2, 1), height .9s cubic-bezier(.3, .7, .2, 1), --cw-arch .9s cubic-bezier(.3, .7, .2, 1); }
+.cw-window::after { content: ''; position: absolute; inset: 0; border-radius: calc(var(--cw-arch) - 3px) calc(var(--cw-arch) - 3px) 0 0; pointer-events: none; opacity: 0; transition: opacity .9s ease .3s;
   box-shadow: inset 0 0 0 4px #62452e, inset 0 0 0 5px #dfbc8488, inset 0 0 18px 6px #1a110d99; }
 .cw-window-panes { transition: opacity .6s ease .25s; }
-.cw-window.open { width: 112px; height: 148px; border-radius: 56px 56px 3px 3px; background: radial-gradient(ellipse at 50% 62%, #fff1bd, #edb65e 52%, #a8743a 100%);
+.cw-window.open { --cw-arch: 56px; width: 112px; height: 148px; background: radial-gradient(ellipse at 50% 62%, #fff1bd, #edb65e 52%, #a8743a 100%);
   box-shadow: 0 1px #f9edcf, 0 0 0 1px #4a3220, inset 0 0 0 1px #dfbc84; }
 .cw-window.open::after { opacity: 1; }
 .cw-window.open .cw-window-panes { opacity: 0; }
 .cw-window:has(.cw-window-view:focus-visible) { outline: 2px solid #803f2b; outline-offset: 3px; }
 /* While lit, the view keeps the open arch's height, so the words under it stay put when the window opens. */
 .cw-you-view.lit { height: 148px; }
-.cw-window-view { position: absolute; inset: 0; width: 100%; padding: 0; border: 0; border-radius: inherit; overflow: hidden; background: transparent; cursor: pointer; }
+.cw-window-view { position: absolute; inset: 0; width: 100%; padding: 0; border: 0; border-radius: calc(var(--cw-arch) - 3px) calc(var(--cw-arch) - 3px) 0 0; overflow: hidden; background: transparent; cursor: pointer; }
 .cw-window .cw-window-view:focus-visible { outline: none; }
 .cw-window-view img { position: absolute; left: 50%; top: 50%; max-width: none; height: auto; display: block; pointer-events: none; user-select: none; }
 /* Each later painting rises out of the last; the first waits for the glass before it clears out of it. */
@@ -121,8 +124,8 @@
   .cw-you { justify-content: stretch; padding-bottom: 44px; }
   .cw-you-view { flex: 1; min-height: 0; margin-bottom: 18px; }
   .cw-you-view.lit { height: auto; }
-  .cw-you-view .cw-window { width: 96px; height: 134px; border-radius: 50px 50px 3px 3px; }
-  .cw-you-view .cw-window.open { width: 150px; height: 198px; border-radius: 75px 75px 3px 3px; }
+  .cw-you-view .cw-window { --cw-arch: 50px; width: 96px; height: 134px; }
+  .cw-you-view .cw-window.open { --cw-arch: 75px; width: 150px; height: 198px; }
   .cw-window-view-ring { width: 26px; height: 26px; }
   .cw-you .cw-primary { min-height: 52px; min-width: 220px; }
 }
