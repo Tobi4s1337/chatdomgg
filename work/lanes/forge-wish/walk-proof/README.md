@@ -116,6 +116,22 @@ REALM_DATABASE_SCHEMA=realm_forge_wish nice -n 10 node --env-file=/srv/chatdom/c
   work/lanes/forge-wish/walk-proof/run.mjs --real --gpu fw10-01 fw10-08 fw10-15
 ```
 
+## The line at the anvil (`--queue`, FW11)
+
+`--queue` runs the realm with its durable wish line (`forgeQueue`, the queue route, `evening.start()`), as
+`apps/realm/src/main.ts` composes it, on controlled providers only. It holds the smith (drafting waits) so a line can
+form, inside the real-GPU lease (or capture-lock hold) only, so no wish is held for minutes: the second citizen walks to
+the anvil and presses E, the first citizen's wish arrives through the Herald playback, the second citizen sends theirs
+from the box, and a third wish arrives behind it. The box then shows its maker **Yours is next.**,
+read from `GET /api/realm/forge/queue`; the proof takes that still (1440x900 and 390x844), lets the smith work again
+and, if the maker's turn comes inside the hold, takes one more (**Yours is at the anvil now.**). Outside the hold it
+waits for all three outcomes: each delivered, one attachment and one coal each, in the order they arrived.
+
+```sh
+REALM_DATABASE_SCHEMA=realm_forge_wish nice -n 10 node --env-file=/srv/chatdom/chatdomgg/.env \
+  work/lanes/forge-wish/walk-proof/run.mjs --controlled --queue --gpu
+```
+
 ## Flow and the capture lock
 
 1. **Without the lock or any TCP port:**

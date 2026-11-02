@@ -4,23 +4,28 @@ What this lane offers other lanes and what it needs from them. A seam is frozen 
 the same thing. To change a frozen seam, write the change in both files and add a `needs:` line to progress.
 Shapes below are this lane's proposal until the other lane confirms them; names may change, the meaning should not.
 
-## FW11 recovery core checkpoint (2026-11-02)
+## FW11 the wish line is live in the realm (2026-11-02)
 
-`apps/codex/src/wish-queue` now exports the private `FileForgeWishQueue` core. It preserves canonical source
-bindings, attempt IDs, arrival order, spent-call debits and immutable stage snapshots under one filesystem owner.
-Its `get` and `list` projections contain private identities and outcomes; neither is a public queue API.
+The durable line is now mounted. `RealmEveningBridge` takes `forgeQueue: { directory }` (realm main uses
+`<REALM_FOUNDED_DIRECTORY>/forge-queue`), `await evening.start()` after `boot.readiness.start()`, and Herald's private
+route answers 202 only after the wish or its withdrawal is synced. The old in-memory path remains only for callers
+that do not configure a line. How it works: `apps/realm/src/forge-queue/README.md`. Additive registrations made:
 
-This module is not mounted by realm boot or the Herald handoff. No new route, configuration or shared contract
-has been activated. The lane owns the remaining adapter in the Forge-only evening path: durable admission before
-202, stable reservation/run recovery, persisted actual provider responses and budgets, uncertain-commit recovery,
-durable moderation revocation, owner-only outcome delivery and ordered single rituals. See [RECOVERY.md](RECOVERY.md).
-Calling the current coordinator on a saved command unchanged would reset its budget and release interrupted
-attempts terminally. Keep that integration closed until the complete recovery path is verified together.
+- `packages/shared/src/forge-queue.ts` (+ one export line): `FORGE_QUEUE_ROUTE`, `ForgeQueueViewSchema`, limits.
+- `apps/realm/src/main.ts`: the `forgeQueue` option, `evening.start()`, `mountForgeQueueRoutes(...)`.
+- `apps/api/src/public/routes.ts` (front-door's allowlist): one line, `/api/realm/forge/queue` → realm.
+- `apps/web/vite.config.ts`: one proxy line for the same route.
 
-The queue core's process-kill evidence is [fw11-queue-process.json](../../evidence/forge-wish/fw11-queue-process.json).
-It proves private file recovery only; it does not establish served Forge/realm recovery, coal, outbox behavior,
-warm-worker latency or the anvil queue view. Named broadcaster and private maker-position views still need their
-own authorized projections through the existing play host from section 1.
+**Offered to play / grand-world (the anvil card):** `AnvilVisit` accepts an optional `kingdomId` (falls back to
+`forgeHost.kingdomId`) and polls the line only while open. `createAnvilPlace` in `apps/web/src/interactions/places/index.tsx`
+does not pass one yet; whoever owns that file adds `kingdomId` there. The live walk opens the Forge panel at the
+anvil, which already shows the line.
+
+**Offered to panel-window and raid-show:** the same public route serves the panel (counts) and a streamer's dock
+(names, when the broadcaster's session reads it). Nothing else is needed from them.
+
+**Still open with raid-show (section 11):** Herald's own handoff is still post-and-forget. The realm side is now
+durable from its 202 onward; a wish lost between Twitch and that 202 is Herald's to retry.
 
 ## 1. The HUD slot (play offers, forge-wish fills)
 

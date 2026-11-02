@@ -17,6 +17,7 @@ import { mountEveningRoutes } from './evening';
 import { RaidChatBridge } from './raid-gate/raid-chat-bridge';
 import { RaidChatPresentation } from './raid-gate/raid-chat-presentation';
 import { mountRaidChatRead } from './raid-gate/raid-chat-http';
+import { mountForgeQueueRoutes } from './forge-queue/http';
 import { createRealmCitizens } from './evening/citizens';
 import { createRealmCastle } from './evening/castle';
 import { attachEveningInteractions } from './evening/interactions';
@@ -135,6 +136,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const evening = new RaidChatBridge({ origin, ingress: boot.ingress, gate, approvals, raidChat,
     forgeChatObserver: forgeChat.observe,
     current: kingdomId => boot.services.kingdoms.get(kingdomId)?.current === true,
+    forgeQueue: { directory: join(foundedDirectory, 'forge-queue') },
     beforeObservation: input => forgetGuard.run(input, kept => raidGuests.observe(kept)) });
   evening.use(boot.services);
   const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
@@ -154,6 +156,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const raidChatRead = mountRaidChatRead(transport.app, { origin, presentation: raidChat, current: kingdomId => boot.services.kingdoms.get(kingdomId)?.current === true });
   forgeChat.mount(transport.app);
   if (process.env.REALM_LAND_DIRECTORY) (await import('./land/mount')).mountLandRoutes(transport.app, process.env.REALM_LAND_DIRECTORY);
+  mountForgeQueueRoutes(transport.app, evening.line, { pool, origin, secureCookies: new URL(process.env.REALM_PUBLIC_ORIGIN ?? 'http://localhost:5190').protocol === 'https:' });
   ownRealmShutdown(server, transport, async () => {
     itemFoundation.dispose();
     dock.stop();
@@ -166,6 +169,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   });
   try {
     await boot.readiness.start();
+    await evening.start();
     await forgeChat.start();
     await releasePort();
     await server.listen(port, host);

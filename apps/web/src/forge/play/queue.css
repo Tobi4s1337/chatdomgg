@@ -1,0 +1,50 @@
+/* The anvil's line: one sentence in the Forge's voice, and the broadcaster's names in order. Wood, brass, parchment. */
+.forge-queue:empty { display: none; }
+.forge-queue { margin: 0 0 4px; }
+.forge-queue-line { display: flex; gap: 10px; align-items: baseline; padding: 9px 12px; border-radius: 4px; color: #f6e4c0;
+  background: #1a0d0838; box-shadow: inset 0 0 0 1px #d7b77733; font: italic 16px/1.35 var(--cd-face-story); text-wrap: pretty; }
+.forge-queue-line[data-yours] { color: #fff0d0; box-shadow: inset 0 0 0 1px #e9c27f66; }
+.forge-queue-ember { flex: none; width: 8px; height: 8px; border-radius: 50%; translate: 0 -1px;
+  background: radial-gradient(circle at 40% 35%, #fff2c0, #f0a040 55%, #a8461c); box-shadow: 0 0 9px #f3a24bcc; }
+.forge-queue-line[data-tone='resting'] .forge-queue-ember { opacity: .5; box-shadow: none; }
+.forge-queue-line:is([data-tone='working'], [data-tone='slow']) .forge-queue-ember { animation: forge-wish-ember 1.6s ease-in-out infinite; }
+
+/* The broadcaster's list: a parchment slip pinned under the line. Names and places only. */
+.forge-queue-makers { margin: 12px 0 0; padding: 13px 15px 11px; color: #38261a; border-radius: 3px;
+  background: radial-gradient(ellipse at 25% 5%, #fbf1d8, transparent 75%), linear-gradient(165deg, #f3e6c6, #e3cfa3);
+  box-shadow: inset 0 0 0 1px #fff8, 0 3px 8px #1a0b0870; }
+.forge-queue-makers .forge-wish-kicker { margin-bottom: 4px; color: #81572b; }
+.forge-queue-rows { margin: 0; padding: 0; list-style: none; max-height: 252px; overflow-y: auto; overscroll-behavior: contain; }
+.forge-queue-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 34px; padding: 3px 0;
+  border-top: 1px solid #aa8c5a55; }
+.forge-queue-row:first-child { border-top: 0; }
+.forge-queue-place { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: #3a2614; font: 600 12.5px/1 var(--cd-face-body); font-variant-numeric: lining-nums tabular-nums;
+  background: radial-gradient(circle at 35% 30%, #f6dfa2, #c99f5b 60%, #7c5a2a); box-shadow: 0 1px 0 #1d120a66; }
+.forge-queue-row[data-state='forging'] .forge-queue-place { width: 11px; height: 11px; justify-self: center;
+  background: radial-gradient(circle at 40% 35%, #fff2c0, #f0a040 55%, #a8461c); box-shadow: 0 0 9px #f3a24bcc; }
+.forge-queue-name { overflow: hidden; font: 17px/1.25 var(--cd-face-body); white-space: nowrap; text-overflow: ellipsis; }
+.forge-queue-state { color: #6e5339; font: italic 14px/1.2 var(--cd-face-story); white-space: nowrap; }
+.forge-queue-row[data-state='forging'] .forge-queue-state { color: #8a3f17; }
+.forge-wish-panel .forge-queue-more, .forge-wish-panel .forge-queue-private { margin: 7px 0 0; color: #6e5339; font: italic 14px/1.3 var(--cd-face-story); }
+.forge-wish-panel .forge-queue-private { padding-top: 7px; border-top: 1px solid #aa8c5a55; }
+
+/* On the wish's own card the line is ink on parchment, and a list sits on the same sheet. */
+.forge-wish-veil--watching .forge-queue-makers .forge-wish-kicker::before { display: none; }
+.forge-wish-result .forge-queue { margin: 10px 0 12px; }
+.forge-wish-result .forge-queue-line { color: #4a2f1c; background: #3b23120d; box-shadow: inset 0 0 0 1px #6e533924; }
+.forge-wish-result .forge-queue-line[data-yours] { box-shadow: inset 0 0 0 1px #81572b55; }
+.forge-wish-result .forge-queue-makers { margin-top: 10px; padding: 8px 0 0; background: none; box-shadow: none; border-top: 1px solid #aa8c5a80; border-radius: 0; }
+
+/* At the anvil's visit card: a quiet second line under the fire, aligned with the fire's words. */
+.ix-anvil .forge-queue-anvil { margin: 6px 0 0; padding: 0 12px 0 31px; color: var(--ix-ink-soft); font: italic 15px/1.3 'IM Fell English', Georgia, serif; text-wrap: pretty; }
+.ix-anvil .forge-queue-anvil[data-yours] { color: var(--ix-ink); }
+
+@media (prefers-reduced-motion: reduce) { .forge-queue-line .forge-queue-ember { animation: none !important; } }
+[data-motion='reduce'] .forge-queue-ember { animation: none !important; }
+@media (max-width: 480px) {
+  .forge-queue-line { padding: 8px 10px; font-size: 15px; }
+  .forge-queue-name { font-size: 16px; }
+  .forge-queue-rows { max-height: 180px; }
+  .forge-wish-veil--watching .forge-queue-rows { max-height: 110px; }
+  .ix-anvil .forge-queue-anvil { padding-left: 29px; font-size: 14px; }
+}

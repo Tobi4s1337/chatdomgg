@@ -16,6 +16,7 @@ export * from './citizen-look';
 export * from './forge';
 export * from './forge-chat';
 export * from './forge-words';
+export * from './forge-queue';
 export * from './growth';
 export * from './items';
 export * from './fishing';

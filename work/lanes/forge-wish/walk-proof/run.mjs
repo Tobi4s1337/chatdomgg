@@ -3,7 +3,7 @@
 // SIMULATED: sign-in (the realm-auth SIMULATED provider) and Twitch chat (the Forge chat service's fetch). See README.md.
 //
 // REALM_DATABASE_SCHEMA=realm_forge_wish nice -n 10 node --env-file=/srv/chatdom/chatdomgg/.env \
-//   work/lanes/forge-wish/walk-proof/run.mjs [--controlled | --real] [--gpu] [fw10-01 fw10-08 fw10-15]
+//   work/lanes/forge-wish/walk-proof/run.mjs [--controlled | --real] [--gpu] [--queue] [fw10-01 fw10-08 fw10-15]
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -38,10 +38,13 @@ const DEFAULT_WISHES = ['fw10-01', 'fw10-08', 'fw10-15'];
 const GPU_CDP = 'http://127.0.0.1:9333', GPU_PORT = 5192, GPU_HOLD_MS = 9 * 60_000, GPU_HOURS = [19.5, 13, 19.5];
 
 const args = process.argv.slice(2);
-const unknown = args.filter(arg => arg.startsWith('--') && !['--controlled', '--real', '--landed-still', '--gpu'].includes(arg));
+const unknown = args.filter(arg => arg.startsWith('--') && !['--controlled', '--real', '--landed-still', '--gpu', '--queue'].includes(arg));
 if (unknown.length || (args.includes('--controlled') && args.includes('--real'))) throw new Error('Use --controlled (default) or --real, then optional fw10 wish ids.');
 const mode = args.includes('--real') ? 'real' : 'controlled';
 const gpu = args.includes('--gpu');
+// FW11: three wishes in one line at the anvil; the second maker sends theirs from the box and sees their place.
+const queueMode = args.includes('--queue');
+if (queueMode && mode !== 'controlled') throw new Error('--queue runs on controlled providers: it holds the smith to let a line form.');
 const landedStills = args.includes('--landed-still') || gpu;
 const wishIds = args.filter(arg => !arg.startsWith('--'));
 if (!process.env.DATABASE_URL || process.env.REALM_DATABASE_SCHEMA !== SCHEMA) {
@@ -553,6 +556,66 @@ async function landedStill(row, person) {
   });
 }
 
+const until = async (test, ms, message) => {
+  for (const end = Date.now() + ms; !test();) {
+    if (Date.now() > end) throw new Error(`Walk proof: ${message}`);
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+};
+/** --queue: the second citizen walks up to the anvil; the first citizen's wish arrives and waits there (the smith is held);
+ * the second citizen sends theirs
+ * from the box, a third wish arrives behind it, and the box shows its maker's place: "Yours is next." Then the smith
+ * works again and the line forges in order, one ritual at a time. */
+async function queueStill(wishes) {
+  if (wishes.length !== 3) throw new Error('Walk proof: --queue takes exactly three wishes.');
+  const [first, maker, last] = realm.people, row = summary.queue = { shots: [] };
+  await cycle('queue', async ({ origin }) => {
+    const page = await openPage(origin, maker, gpu ? 19.5 : null);
+    await toAnvil(page);
+    // The smith is held only inside the hold, once the maker stands at the anvil: a wish held for minutes would meet
+    // its own run limits, which is not what this still is about.
+    realm.holdForge(true);
+    stage('queue: the first wish goes to the anvil (Herald playback)');
+    await realm.replayChatWish(first.personId, wishes[0].words);
+    await until(() => realm.line().length === 1, 60_000, 'the first wish did not join the line.');
+    const field = page.getByLabel('What would you like to make?');
+    await field.waitFor({ timeout: 90_000 });
+    await field.click();
+    await page.keyboard.type(wishes[1].words, { delay: 25 });
+    await page.getByRole('button', { name: 'Send wish to chat' }).click();
+    stage('queue: the maker sent theirs from the box');
+    await until(() => realm.line().length === 2 && realm.line()[1] === maker.personId, 60_000, 'the maker\'s wish did not take second place.');
+    await realm.replayChatWish(last.personId, wishes[2].words);
+    await until(() => realm.line().length === 3, 60_000, 'the third wish did not join the line.');
+    const next = page.locator('.forge-queue-line[data-yours]').filter({ hasText: 'Yours is next' });
+    await next.waitFor({ timeout: 30_000 });
+    row.line = (await page.locator('.forge-wish-panel .forge-queue-line').innerText()).trim();
+    row.card = await page.locator('.forge-wish-result h3').textContent().catch(() => null);
+    stage(`queue: the box says "${row.line}"`);
+    row.shots.push(await shot(page, `queue-next@${sizeName(WALK_VIEWPORT)}.png`));
+    row.shots.push(await shot(page, `queue-next@${sizeName(NARROW)}.png`, NARROW));
+    realm.holdForge(false);
+    stage('queue: the smith works again');
+    const turn = page.locator('.forge-queue-line[data-yours]').filter({ hasText: 'Yours is at the anvil' });
+    if (await turn.waitFor({ timeout: 120_000 }).then(() => true, () => false)) {
+      row.turnSeconds = Math.round((Date.now() - heldSince) / 1000);
+      row.shots.push(await shot(page, `queue-turn@${sizeName(WALK_VIEWPORT)}.png`));
+    }
+  });
+  realm.holdForge(false);
+  stage('queue: waiting for all three outcomes without the lock');
+  await until(() => [first, maker, last].every(person => realm.outcome(person.personId)), SERVER_WAIT_MS, 'a queued wish had no outcome.');
+  row.wishes = [];
+  for (const person of [first, maker, last]) {
+    const outcome = realm.outcome(person.personId);
+    row.wishes.push({ status: outcome.status, at: outcome.at, landed: await realm.landed(person.personId) });
+  }
+  row.inOrder = row.wishes.every((item, index) => index === 0 || item.at >= row.wishes[index - 1].at);
+  summary.ok = row.inOrder && row.shots.length >= 2 && row.wishes.every(item => item.status === 'delivered' && item.landed.attachments === 1
+    && item.landed.spent === 1) && !realm.facts.publicLeak;
+  stage(summary.ok ? 'queue: complete' : 'queue: finished with a failed wish');
+}
+
 let plugin, outDir, cacheDir;
 const webState = { config: null, socketPath: null, auth: null };
 try {
@@ -571,7 +634,7 @@ try {
   if (new Set(wishes.map(wish => wish.id)).size !== wishes.length) throw new Error('Walk proof: repeat wish ids.');
   summary.wishes = wishes.map(wish => ({ id: wish.id, category: wish.category, shots: [] }));
   stage(`prepare the durable SIMULATED realm (${mode} providers)`);
-  realm = await startWalkRealm({ loader, repo, directory, mode, wishes, log: line => say(line) });
+  realm = await startWalkRealm({ loader, repo, directory, mode, wishes, log: line => say(line), queue: queueMode });
   summary.kingdom = 'SIMULATED Birchlight';
   webState.config = { kingdomId: realm.kingdomId, kingdomName: realm.kingdomName, notice: realm.notice };
   webState.socketPath = realm.socketPath;
@@ -581,7 +644,8 @@ try {
   await buildWeb(repo, plugin, outDir, cacheDir);
   summary.buildSeconds = Math.round((Date.now() - built) / 1000);
 
-  for (const [index, wish] of wishes.entries()) {
+  if (queueMode) await queueStill(wishes);
+  else for (const [index, wish] of wishes.entries()) {
     const row = summary.wishes[index], person = realm.people[index];
     try {
       await typeWish(row, person, wish, index === 0, index);
@@ -614,7 +678,7 @@ try {
     delete row.sentAt;
     await writePrivate('summary.json', { ...summary, facts: { ...realm.facts, observations: realm.facts.observations.length, heralds: realm.facts.heralds.length } });
   }
-  summary.ok = summary.wishes.every(row => row.typed && row.box?.status === 'delivered' && row.realm?.status === 'delivered'
+  if (!queueMode) summary.ok = summary.wishes.every(row => row.typed && row.box?.status === 'delivered' && row.realm?.status === 'delivered'
     && row.landed.attachments === 1 && row.landed.spent === 1) && !realm.facts.publicLeak;
   stage(summary.ok ? 'complete' : 'finished with a failed wish');
 } catch (error) {
@@ -628,6 +692,9 @@ try {
     wishes: summary.wishes.map(row => ({ id: row.id, typed: !!row.typed, box: row.box?.title ?? null, boxSeconds: row.box?.seconds ?? null,
       realm: row.realm?.status ?? null, realmSeconds: row.realm?.seconds ?? null, attachments: row.landed?.attachments ?? null,
       coalSpent: row.landed?.spent ?? null, shots: row.shots, error: row.error ?? null })),
+    ...(summary.queue ? { queue: { line: summary.queue.line ?? null, card: summary.queue.card ?? null, turnSeconds: summary.queue.turnSeconds ?? null,
+      inOrder: summary.queue.inOrder ?? null, shots: summary.queue.shots,
+      wishes: summary.queue.wishes?.map(item => ({ status: item.status, attachments: item.landed.attachments, coalSpent: item.landed.spent })) ?? null } } : {}),
     cycles: summary.cycles, pageErrors: summary.pageErrors, directory };
   console.log(JSON.stringify(report, null, 2));
 }

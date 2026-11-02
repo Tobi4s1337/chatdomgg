@@ -7,7 +7,8 @@ import { build, preview } from 'vite';
 
 // The realm routes that apps/web/vite.config.ts proxies to CHATDOM_REALM_TARGET; everything else under /api is answered
 // here (sign-in) or refused, so the stock '/api' proxy never forwards anywhere.
-const REALM_PREFIXES = ['/api/realm/founded', '/api/realm/entry', '/api/realm/watch', '/api/realm/chronicle', '/api/realm/clock', '/api/realm/forge/chat'];
+const REALM_PREFIXES = ['/api/realm/founded', '/api/realm/entry', '/api/realm/watch', '/api/realm/chronicle', '/api/realm/clock', '/api/realm/forge/chat',
+  '/api/realm/forge/queue'];
 // Stock proxies to other host services (ports 5187, 5193-5195). Never contacted from this proof.
 const FOREIGN = /^\/(?:realm-data|forge-data|map-data|presence-data)(?:\/|$)/;
 

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Forge queue review</title>
+  <style>
+    html, body { width: 100%; min-height: 100%; margin: 0; }
+    body { background: #25291f; font-family: Georgia, serif; }
+    .stage { position: fixed; inset: 0; overflow: hidden; background: radial-gradient(ellipse at 52% 54%, #777151 0%, #515844 36%, #29332b 100%); }
+    .stage::before { content: ''; position: absolute; inset: 58% 0 0; background: linear-gradient(#545441, #30392d); }
+    #panel { position: fixed; inset: 0; }
+    #anvil { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div class="stage" aria-hidden="true"></div>
+  <div id="anvil"></div>
+  <div id="panel"></div>
+  <script type="module" src="./index.tsx"></script>
+</body>
+</html>
