@@ -308,6 +308,28 @@ describe('HoldingLabels', () => {
     expect(placed.standard).toEqual({ x: 168, y: 204.5 });
   });
 
+  it('keeps the shield beside the stamp when the block sits left of it, the name out to the left', () => {
+    const placer = new Placer();
+    const names = new HoldingLabels(placer);
+    placer.begin(0, true);
+    names.begin();
+    const grid = new CollisionGrid(VIEW.width, VIEW.height);
+    const anchor = { x: 200, y: 200, w: 40, h: 30 };
+    const [below, right] = HoldingLabels.candidates(anchor, 76, 18);
+    grid.claim(below!);
+    grid.claim(right!);
+    const placed = names.place(grid, 'n:1', anchor, { w: 60, h: 18 }, { w: 12, h: 14 })!;
+    expect(placed.index).toBe(2);
+    expect(placed.rect.x).toBeCloseTo(107.2, 9);
+    expect(placed.rect).toMatchObject({ y: 176, w: 76, h: 18 });
+    // Name first, then the gap, then the shield at the end nearest the stamp.
+    expect(placed.label).toEqual({ x: 107, y: 176 });
+    expect(placed.shield).toEqual({ x: Math.round(107.2 + 64 - 3), y: 175 });
+    expect(placed.standard!.x).toBeCloseTo(177.2, 9);
+    expect(placed.standard!.y).toBe(178.5);
+    expect(placed.shield!.x).toBeGreaterThan(placed.label!.x + 60);
+  });
+
   it('keeps a selected holding’s name readable when everything around it is taken', () => {
     const placer = new Placer();
     const names = new HoldingLabels(placer);

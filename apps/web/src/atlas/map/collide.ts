@@ -82,6 +82,23 @@ export function underLettering(x: number, y: number, tierRank: number, lettering
   return false;
 }
 
+/** A holding's name block tries below, right, left, then above its stamp; this is the left candidate's index. */
+export const LEFT_OF_MARK = 2;
+/** Space between a holding's shield and its name, in CSS px. */
+export const SHIELD_GAP = 4;
+
+/**
+ * Where a holding's shield and name stand inside its block. The shield keeps to the end of the block nearest the
+ * holding: first on every side but the left, last when the block sits left of the stamp ("metashir2 ⛨ ♜"), so a
+ * name set out over the sea never leaves its shield floating alone off the coast. `shieldW` is null without a shield;
+ * `shieldX` is the left edge of the shield itself (its paper halo not included).
+ */
+export function blockPieces(rect: Rect, side: number, hasName: boolean, shieldW: number | null): { nameX: number; shieldX: number | null } {
+  if (shieldW === null) return { nameX: rect.x, shieldX: null };
+  if (side === LEFT_OF_MARK) return { nameX: rect.x, shieldX: rect.x + rect.w - shieldW };
+  return { nameX: rect.x + shieldW + (hasName ? SHIELD_GAP : 0), shieldX: rect.x };
+}
+
 /**
  * Stable priority: bigger tier first, then the larger observed average, then the smaller channel ID. The tier rank
  * decides first, so a hamlet never outranks a village, whatever its audience.

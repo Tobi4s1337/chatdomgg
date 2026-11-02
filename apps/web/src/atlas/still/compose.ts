@@ -2,7 +2,7 @@ import type { Geography, GeoRealm, Settler, SettlerStore } from '../data/model';
 import { holdingRadii, TIER_CODES, type PreviewWorld } from '../data/preview';
 import { SHIELD_ASPECT } from '../heraldry/geometry';
 import { Camera, DISTANCE_SCALE, distanceFor, NO_INSETS, type Box, type Distance, type Insets, type Viewport } from '../map/camera';
-import { CollisionGrid, comparePriority, MARK_PX, underLettering, type Rect } from '../map/collide';
+import { blockPieces, CollisionGrid, comparePriority, MARK_PX, SHIELD_GAP, underLettering, type Rect } from '../map/collide';
 import type { Stamp } from '../map/paint';
 import { decorBand, levelFor, parentOf, pyramidFor, tileBox, tilesFor, type Pyramid, type TileKey } from '../map/pyramid';
 import { stillTitle, type EditionFacts } from '../ui/edition';
@@ -366,7 +366,7 @@ export function layoutStill(input: LayoutInput): StillLayout {
     const labelH = text === null ? 0 : Math.ceil(size * LINE + 3.2);
     const withShield = shields < SHIELD_LIMIT;
     if (text === null && !withShield) return { shield: null, name: null };
-    const gap = withShield ? shieldW + (text === null ? 0 : 4) : 0;
+    const gap = withShield ? shieldW + (text === null ? 0 : SHIELD_GAP) : 0;
     const totalW = labelW + gap;
     const height = Math.max(labelH, withShield ? shieldW * SHIELD_ASPECT : 0);
     const mid = sy - h / 2;
@@ -376,15 +376,18 @@ export function layoutStill(input: LayoutInput): StillLayout {
       { x: sx - w * 0.42 - totalW, y: mid - height / 2, w: totalW, h: height },
       { x: sx - totalW / 2, y: sy - h - height - 1, w: totalW, h: height },
     ];
-    const rect = candidates.find((candidate) => grid.free(candidate)) ?? (forced ? candidates[0]! : null);
-    if (!rect) return { shield: null, name: null };
+    const free = candidates.findIndex((candidate) => grid.free(candidate));
+    const side = free >= 0 ? free : forced ? 0 : -1;
+    if (side < 0) return { shield: null, name: null };
+    const rect = candidates[side]!;
     claim(rect);
-    const name = text === null ? null : { text, x: Math.round(rect.x + gap), y: Math.round(rect.y + (rect.h - labelH) / 2), w: labelW, h: labelH, size, spacing };
+    const { nameX, shieldX } = blockPieces(rect, side, text !== null, withShield ? shieldW : null);
+    const name = text === null ? null : { text, x: Math.round(nameX), y: Math.round(rect.y + (rect.h - labelH) / 2), w: labelW, h: labelH, size, spacing };
     if (name) names++;
-    if (!withShield) return { shield: null, name };
+    if (shieldX === null) return { shield: null, name };
     shields++;
     const shieldTop = Math.round(rect.y + (rect.h - shieldW * SHIELD_ASPECT) / 2 - 3);
-    return { shield: { x: Math.round(rect.x - 3), y: shieldTop, width: shieldW }, name };
+    return { shield: { x: Math.round(shieldX - 3), y: shieldTop, width: shieldW }, name };
   };
 
   for (const settler of visible) {

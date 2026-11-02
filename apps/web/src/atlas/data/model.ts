@@ -1,4 +1,5 @@
 import { languageName, languageMapLabel, type LanguageNameTable, LANGUAGE_NAMES } from '../../../../surveyor/src/cartography/language-labels';
+import { familyLabel, landLabel, realmDisplayName, REALM_NAMES, type RealmNameTable } from '../../../../surveyor/src/cartography/realm-labels';
 import { DECOR_KINDS, TIER_CODES, type DecorKind, type PreviewChunk, type PreviewWorld, type RealmKind, type RegionKind, type ServedNames, type SettlerColumns, type Tier } from './preview';
 
 /**
@@ -58,40 +59,55 @@ export interface Geography {
   outer: Circle;
 }
 
-export function geographyOf(world: PreviewWorld, table: LanguageNameTable = LANGUAGE_NAMES): Geography {
+export function geographyOf(world: PreviewWorld, table: LanguageNameTable = LANGUAGE_NAMES, realms: RealmNameTable = REALM_NAMES): Geography {
   const s = world.coordScale;
   return {
     bounds: { minX: world.bounds.minX / s, minY: world.bounds.minY / s, maxX: world.bounds.maxX / s, maxY: world.bounds.maxY / s },
     regions: world.regions.map((region) => ({
-      index: region.index, name: region.language ? languageMapLabel(region.language, table) : region.name, englishName: region.language ? languageMapLabel(region.language, table) : region.englishName, kind: region.kind,
+      index: region.index, name: region.language ? languageMapLabel(region.language, table) : landLabel('outer', realms), englishName: region.language ? languageMapLabel(region.language, table) : landLabel('outer', realms), kind: region.kind,
       x: region.x / s, y: region.y / s, r: region.r / s, members: region.members,
     })),
     realms: world.realms.map((realm) => ({
-      index: realm.index, region: realm.region, kind: realm.kind, family: realm.family, name: realm.kind === 'isle' && world.regions[realm.region]?.language ? languageName(world.regions[realm.region]!.language!, table).label : realm.name,
+      index: realm.index, region: realm.region, kind: realm.kind, family: realm.family, name: realmWord(world, realm.index, table, realms),
       x: realm.x / s, y: realm.y / s, r: realm.r / s, members: realm.members,
     })),
     clusters: world.clusters.map((cluster) => ({
       region: cluster.region, realm: cluster.realm, name: cluster.game >= 0 ? world.games[cluster.game]?.name ?? null : null,
       x: cluster.x / s, y: cluster.y / s, r: cluster.r / s, members: cluster.members,
     })),
-    isles: world.isles ? { name: world.isles.name, x: world.isles.x / s, y: world.isles.y / s, r: world.isles.r / s } : null,
-    outer: { name: world.outer.name, x: world.outer.x / s, y: world.outer.y / s, r: world.outer.r / s },
+    isles: world.isles ? { name: landLabel('isles', realms), x: world.isles.x / s, y: world.isles.y / s, r: world.isles.r / s } : null,
+    outer: { name: landLabel('outer', realms), x: world.outer.x / s, y: world.outer.y / s, r: world.outer.r / s },
   };
 }
 
-/** Project old and current immutable artifacts alike, ignoring their historical display strings. */
-export function labelWorld(world: PreviewWorld, table: LanguageNameTable = LANGUAGE_NAMES): PreviewWorld {
+/**
+ * Project old and current immutable artifacts alike, ignoring their historical display strings: languages by code,
+ * family realms by family id (in the taxonomies the realm table names) and the fixed lands by kind. Geometry, chunks
+ * and the head are shared, never copied or changed.
+ */
+export function labelWorld(world: PreviewWorld, table: LanguageNameTable = LANGUAGE_NAMES, realms: RealmNameTable = REALM_NAMES): PreviewWorld {
   return {
     ...world,
-    regions: world.regions.map(region => region.language ? { ...region, name: languageName(region.language, table).label, englishName: languageName(region.language, table).label } : region),
-    realms: world.realms.map(realm => realm.kind === 'isle' && world.regions[realm.region]?.language ? { ...realm, name: languageName(world.regions[realm.region]!.language!, table).label } : realm),
+    regions: world.regions.map(region => region.language
+      ? { ...region, name: languageName(region.language, table).label, englishName: languageName(region.language, table).label }
+      : { ...region, name: landLabel('outer', realms), englishName: landLabel('outer', realms) }),
+    isles: world.isles ? { ...world.isles, name: landLabel('isles', realms) } : null,
+    outer: { ...world.outer, name: landLabel('outer', realms) },
+    families: world.families.map(family => ({ ...family, name: (world.taxonomy && familyLabel(world.taxonomy.id, family.id, realms)) ?? family.name })),
+    realms: world.realms.map(realm => ({ ...realm, name: realmWord(world, realm.index, table, realms) })),
   };
+}
+
+/** One realm's words: an isle by its language, every other realm by the realm table, else what the world recorded. */
+export function realmWord(world: PreviewWorld, index: number, table: LanguageNameTable = LANGUAGE_NAMES, realms: RealmNameTable = REALM_NAMES): string {
+  const realm = world.realms[index];
+  if (!realm) return '';
+  const code = world.regions[realm.region]?.language;
+  return realm.kind === 'isle' && code ? languageName(code, table).label : realmDisplayName(realm, world, realms);
 }
 
 function realmLabel(world: PreviewWorld, index: number): string {
-  const realm = world.realms[index];
-  const code = realm && world.regions[realm.region]?.language;
-  return realm?.kind === 'isle' && code ? languageName(code).label : realm?.name ?? '';
+  return realmWord(world, index);
 }
 
 export function decodeRings(world: PreviewWorld): Ring[] {

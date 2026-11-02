@@ -78,11 +78,17 @@ published night was drawn from, because search and cards read its register.
   not a size. The browser gives hamlets the village zoom band and a quiet 3 px dot.
 - **Tombstoned land is drawn bare, never reassigned.** That covers hidden (withheld), gone and abandoned holdings.
   Moderation tombstones at the next settle run, without waiting for a survey.
-- **Continent labels stay outside the frozen geometry.** Language land is named by its code in `world.json`, and the
-  reviewed name table labels it at reading time (test: the world carries codes only). Family realm names are a
-  different matter: they *are* inside the frozen taxonomy bytes. `families-1-review.md` question 6 asks Tobias
-  whether a family display table should exist before founding. I recommend yes, so a later rename never needs a new
-  edition.
+- **Every label stays outside the frozen geometry.** Language land is named by its code in `world.json`, and the
+  reviewed name table labels it at reading time (test: the world carries codes only). Realms work the same way since
+  2 Nov: `apps/surveyor/src/cartography/realm-names-1.json` names family realms by family id and the fixed lands
+  (Crossroads, Wilds, Isles of Many Tongues, Outer Isles) by kind, and the browser applies it in `labelWorld`,
+  `geographyOf` and the door holding (`realmWord` in `data/model.ts`). The names a world recorded when it was drawn,
+  and the `name`/`realmName` in the frozen taxonomy, are only the record and the fallback: a world drawn with a
+  taxonomy the table does not list keeps its own words. The table applies only to the taxonomies it lists, so a later
+  `families-2` reusing an id never borrows the wrong word. Today it repeats the current labels exactly (test), so the
+  map is unchanged. It is not a founding gate: unlike the land, words can be corrected after founding, so Tobias can
+  approve or rename them whenever he likes (answers `families-1-review.md` question 6 before founding, when it
+  mattered).
 - **Settling follows every import automatically.** Once an edition is founded, `atlas:import` settles and publishes
   the new night in the same run, so the map never waits on a separate job. If settling fails, the import still
   stands, the map keeps its last night, and the command exits 1. Settling founds nothing.
@@ -286,10 +292,12 @@ and the pair `am12-phone-pair.png`. Script: `apps/web/src/atlas/checks/edition-s
   its founding night.
 - The seal reads "Survey 2 Nov 2026" before and "Edition I *Rehearsal*" after, with a crown glyph on the survey wax.
   A real founding shows "Edition I 5 Nov 2026" on the deeper edition wax.
-- Not liked yet:
-  - A Japanese name ("布団ちゃんと申します") runs right up to the JAPANESE lettering at 1440.
-  - At 390 two shields stand in open sea beside the Isles of Many Tongues. That is the same label placement as before
-    the edition ("Donkaaklijn" in the before shot), so it is not new, but it is still not good.
+- Not liked, then fixed (2 Nov): a name set left of its holding carried its shield at the far end, so the shield
+  stood alone in open sea (metashir2, EWROON, enzzai, two beside the Isles of Many Tongues at 390) and the Japanese
+  name ran up to the JAPANESE lettering. A name block left of its stamp is now mirrored: the name, the gap, then the
+  shield beside the holding ("metashir2 ⛨ ♜"). One rule, `blockPieces` in `map/collide.ts`, places both the moving
+  map's names (`HoldingLabels`) and the still's, so the two stay identical; the block's size and the order of sides
+  are unchanged, so nothing else moves. Stills after the fix: `am12-shield-after-{1440,390,de-1440}.png`.
 
 ## Tests
 
