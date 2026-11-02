@@ -224,6 +224,9 @@ it('never answers a wish with a bare cold: a failure before the run names its ca
   expect(await f.bridge.run(f.command)).toMatchObject({ kind: 'cold', privateMessage: expect.stringContaining('could not reach the kingdom') });
   expect(observed.at(-1)).toMatchObject({ status: 'cold', message: expect.stringContaining('Nothing was spent') });
   expect(JSON.stringify(observed)).not.toContain('cold tonight');
+  // The owner hears it directly too, once, not only through the chat observer.
+  expect(f.privateReply).toHaveBeenCalledExactlyOnceWith(personId, expect.objectContaining({ receipt: expect.objectContaining({ status: 'unavailable',
+    message: expect.stringContaining('could not reach the kingdom') }) }));
   expect(f.state().coals[personId]).toBe(1);
 });
 

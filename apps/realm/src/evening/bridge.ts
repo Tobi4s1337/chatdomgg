@@ -134,15 +134,19 @@ export class RealmEveningBridge {
     const abort = new AbortController();
     const signal = incoming ? AbortSignal.any([abort.signal, incoming.signal]) : abort.signal;
     // Reserve the bounded handoff slot BEFORE awaiting the registry, including a cold/slow opening.
+    // Keep the opened kingdom so a later failure still answers its owner privately.
+    let opened: DurableKingdom | undefined;
     const promise = Promise.resolve().then(async (): Promise<KingdomForgeOutcome> => {
       const hold = await this.services!.retain(command.kingdomId);
       const kingdom = hold.kingdom;
+      opened = kingdom;
       try {
         if (!this.contexts.has(command.kingdomId)) this.attach(kingdom);
         const context = this.contexts.get(command.kingdomId);
         if (!context || context.kingdom !== kingdom) {
           this.fault(command.kingdomId, 'dependency');
           const unreachable: KingdomForgeResult = { kind: 'cold', privateMessage: UNREACHABLE };
+          this.privateOutcome(kingdom, command, unreachable);
           return unreachable;
         }
         const started = kingdom.databaseNow();
@@ -189,6 +193,8 @@ export class RealmEveningBridge {
       // A failure before or around the run (opening the kingdom, its records): the maker hears the cause, never a bare cold.
       this.fault(command.kingdomId, 'dependency');
       const unreachable: KingdomForgeResult = { kind: 'cold', privateMessage: UNREACHABLE };
+      // Before the kingdom opened there is no owner channel; the chat observer below still carries the cause.
+      if (opened) try { this.privateOutcome(opened, command, unreachable); } catch { /* the owner left; the observer still answers */ }
       return unreachable;
     })
       .then(async outcome => { await this.observeOutcome(command, outcome); return outcome; })
