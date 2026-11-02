@@ -787,6 +787,8 @@ export function createTwitchMomentView(host: MomentViewHost) {
     receiveRaidChat(frame: RaidChatFrame): void { if (!disposed) raid.chat(frame.cues, frame.lights); },
     /** The feature host supplies its adopted surface; no sampler means no stationary fixtures. */
     setRaidChatGround(sample: RaidChatGround | undefined): void { if (!disposed) raid.ground(sample); },
+    /** The open land in front of the gate, from the adopted plan and terrain, that an incoming column may come down. */
+    setRaidApproachGround(sample: RaidChatGround | undefined): void { if (!disposed) raid.approachGround(sample); },
     /** The adopted world's standing check for the gate shot: houses, the castle and the ground the eye may not enter. */
     setRaidShotClear(check: RaidShotClear | undefined): void { if (!disposed) raid.setShotClear(check); },
     raidPennantSites: () => pennantWall.sites(),

@@ -221,23 +221,53 @@ export function gatePose(t: number, sleep: number): GatePose {
   return { presence, flame, hoist, unfurl, swing, swingPhase: Math.sin(since / 1000 * Math.PI * 2 * 0.8) * swing };
 }
 
-/** One wagon's clock: ms since it entered the gate, or null before it enters or once it has gone. */
-export function wagonElapsed(frame: Pick<RaidFrame, 't'> & { readonly timing?: RaidScaleProfile }, index: number): number | null {
+/**
+ * The road outside the gate, in metres. Where the land in front of the gate is open, the column is seen coming down
+ * it: each unit rises out of the dusk `reach` metres out (at most) over `emerge` metres and rolls in, so a long
+ * column reads by its length on the road and a single wagon comes alone. The approach is walked out from the gate in
+ * `step` strides over ground the host clears (no lot, square, castle or water) and stops at the first refused stride
+ * or a rise steeper than `maxRise` per stride. It leaves the gate straight and then `bend`s gently aside, so from the
+ * town the column is seen as a line across the land rather than stacked behind its own standard; a road blocked on
+ * one side bends the other way or runs straight. Shorter than `min`, there is no approach and each unit gathers out of
+ * the gate's own light instead. Gate times are unchanged either way: a unit enters the gate when its clock reaches 0.
+ */
+export const RAID_APPROACH = { reach: 48, min: 16, emerge: 9, step: 2, maxRise: 0.6, bend: { from: 8, to: 28, angle: 0.55 } } as const;
+
+/** The gate line sits this far along a wagon's road: a wagon enters a little outside it. */
+const ENTRY = -3;
+
+/**
+ * One wagon's clock: ms since it entered the gate (negative while it is still coming down the approach), or null
+ * before it is on the road or once it has gone. `lead` is how long a unit is on the approach before the gate.
+ */
+export function wagonElapsed(frame: Pick<RaidFrame, 't'> & { readonly timing?: RaidScaleProfile }, index: number, lead = 0): number | null {
   const timing = frame.timing ?? RAID_BEAT;
   const elapsed = frame.t - RAID_BEAT.arrive - index * timing.pitch;
-  return elapsed < 0 || elapsed >= timing.travel ? null : elapsed;
+  return elapsed < -Math.max(0, lead) || elapsed >= timing.travel ? null : elapsed;
+}
+
+/** The whole road fades up with the beat, so units already out on the approach when the gate wakes never pop in. */
+export const raidRoadFade = (t: number): number => smooth(0, RAID_BEAT.emerge, t);
+
+/** Ms a unit spends on an approach of `approach` metres before it enters the gate, at the column's pace. */
+export function approachLead(approach: number, speed: number): number {
+  return approach >= RAID_APPROACH.min && speed > 0 ? (approach + ENTRY) / speed * 1000 : 0;
 }
 
 /**
  * A wagon's place on its road and its presence. `length` is the road's length in metres; the column's pace is
  * chosen so a wagon covers the whole road in its travel time (within a walking-to-trotting range), entering a
  * little outside the gate line and thinning away over its last stretch, whichever of road or time ends first.
+ * With an open `approach` (metres outside the gate) a negative clock places it out on that road, coming in.
  */
-export function wagonPose(elapsed: number, length: number, timing: Pick<RaidScaleProfile, 'travel'> = RAID_BEAT): { distance: number; speed: number; presence: number } {
-  const b = RAID_BEAT, start = -3;
+export function wagonPose(elapsed: number, length: number, timing: Pick<RaidScaleProfile, 'travel'> = RAID_BEAT, approach = 0): { distance: number; speed: number; presence: number } {
+  const b = RAID_BEAT, start = ENTRY, open = approach >= RAID_APPROACH.min;
   const speed = Math.min(3, Math.max(1.6, (length - start) / ((timing.travel - b.vanish * 0.5) / 1000)));
-  const distance = Math.min(Math.max(start, length - 0.5), start + speed * Math.max(0, elapsed) / 1000);
-  const presence = smooth(0, b.emerge, elapsed) * (1 - smooth(timing.travel - b.vanish, timing.travel, elapsed)) * (1 - smooth(length - 4.5, length - 0.5, distance));
+  // On an open approach a unit is still on the road before the gate; otherwise it waits, unseen, at the gate.
+  const distance = Math.min(Math.max(start, length - 0.5), start + speed * (open ? Math.max(elapsed, -approachLead(approach, speed)) : Math.max(0, elapsed)) / 1000);
+  // It rises out of the dusk at the far end of the approach, or gathers out of the gate's light without one.
+  const arrive = open ? smooth(-approach, -approach + RAID_APPROACH.emerge, distance) : smooth(0, b.emerge, elapsed);
+  const presence = arrive * (1 - smooth(timing.travel - b.vanish, timing.travel, elapsed)) * (1 - smooth(length - 4.5, length - 0.5, distance));
   return { distance, speed, presence };
 }
 
