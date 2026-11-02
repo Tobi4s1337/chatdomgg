@@ -23,17 +23,23 @@ for (const name of readdirSync(TAKES).sort()) {
   const exact = take.frames.every((f, i) => Math.abs(f.clock - (first + i * step)) < 1e-6) && take.frames.every((f, i) => f.frame === i);
   const files = readdirSync(join(TAKES, name)).filter(f => /^\d{6}\.(png|jpg)$/.test(f)).length;
   const kind = take.gpu ? 'GPU' : 'studio (DOM)';
-  rows.push(`| \`${name}\` | ${kind} | \`${take.url}\` | ${take.width}×${take.height}@${take.scale ?? 1}x ${take.format}${take.alpha ? ' alpha' : ''} | ${take.frames.length}/${expected} (${files} files) | ${exact ? 'exact' : 'GAPS'} | ${take.complete ? 'complete' : 'partial'} | ${take.framesPerMinute ?? ''} | ${String(take.renderer ?? '').replace(/\|/g, '/')} | ${take.started?.slice(0, 16) ?? ''} |`);
+  const capture = take.capture === 'webcodecs' ? `webcodecs ${take.encoder?.codec ?? ''} ${take.encoder?.hardwareAcceleration ?? ''} ${take.encoder?.bitrateMode ?? ''}`.trim() : `screenshot ${take.format}${take.alpha ? ' alpha' : ''}`;
+  const verified = take.verify ? (take.verify.ok ? `${take.verify.masterFrames} frames, ${take.verify.masterSize}` : `FAILED: ${take.verify.problems.join('; ')}`) : '';
+  const master = take.verify?.ok ? `\`${take.verify.master.replace('/srv/chatdom/media/teaser/', '')}\`` : files ? `${files} frame files` : '';
+  const fpm = (take.runs ?? []).length > 1 ? take.runs.map(r => r.framesPerMinute).join(' / ') : take.framesPerMinute ?? '';
+  rows.push(`| \`${name}\` | ${kind} | ${take.build ?? '(before TS11)'} | \`${take.url}\` | ${take.width * (take.scale ?? 1)}×${take.height * (take.scale ?? 1)} | ${capture} | ${take.frames.length}/${expected} | ${exact ? 'exact' : 'GAPS'} | ${take.complete ? 'complete' : 'partial'} | ${verified} | ${master} | ${fpm} | ${String(take.renderer ?? '').replace(/\|/g, '/')} | ${take.started?.slice(0, 16) ?? ''} |`);
 }
 const body = `# Takes
 
 Every take in \`${TAKES}\` (outside git), from its sidecar. Written by \`node apps/studio/edit/takes-md.mjs\` at build
 \`${commit}\` of this worktree. "exact" means every frame's virtual clock value is n/fps with no gap or repeat; frame
-counts are recorded against (to − from) × fps. GPU takes ran on Tobias's RTX 5080 through \`chatdom-pc-lease\`; studio
-takes are DOM-only frames rendered here.
+counts are recorded against (to − from) × fps, and "Verified master" is the frame count ffprobe reads back from the
+encoded master (\`apps/studio/rig/verify.mjs\`). GPU takes ran on Tobias's RTX 5080 through \`chatdom-pc-lease\`; studio
+takes are DOM-only frames rendered here. "Build" is the worktree commit the take was rendered from ("+" when the studio
+or the web app had uncommitted changes). Frames/min lists each lease's rate for takes shot in chunks.
 
-| Take | Where | Route | Size | Frames | Clock | State | Frames/min | Renderer | Started |
-|---|---|---|---|---|---|---|---|---|---|
+| Take | Where | Build | Route | Pixels | Capture | Frames | Clock | State | Verified master | Media | Frames/min | Renderer | Started |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 ${rows.join('\n')}
 `;
 writeFileSync(OUT, body);

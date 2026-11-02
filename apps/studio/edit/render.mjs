@@ -20,6 +20,12 @@ function ffmpeg(args, label) {
   const run = spawnSync('nice', ['-n', '19', 'ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-threads', '4', ...args], { stdio: ['ignore', 'inherit', 'pipe'], maxBuffer: 1 << 26 });
   if (run.status !== 0) throw new Error(`ffmpeg failed (${label}): ${run.stderr.toString().slice(-2000)}`);
 }
+/** ffmpeg's loudnorm analysis of a file (integrated, true peak, range, threshold, offset). */
+function loudnormMeasure(file) {
+  const run = spawnSync('nice', ['-n', '19', 'ffmpeg', '-hide_banner', '-nostats', '-threads', '4', '-i', file, '-af', 'loudnorm=I=-14:TP=-1.2:LRA=11:print_format=json', '-f', 'null', '-'], { encoding: 'utf8', maxBuffer: 1 << 26 });
+  const text = run.stderr;
+  return JSON.parse(text.slice(text.lastIndexOf('{'), text.lastIndexOf('}') + 1));
+}
 function probeDuration(file) {
   const run = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]);
   return Number(run.stdout.toString().trim());
@@ -56,18 +62,40 @@ export function captions(edit) {
 
 function frameCount(dir, ext) { return existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith(`.${ext}`)).length : 0; }
 
+/** The final narration as the edit reads it: the picked take of every line (voice/final.json). */
+function finalNarration() {
+  const final = JSON.parse(readFileSync(join(STUDIO, 'voice/final.json'), 'utf8'));
+  return { lines: final.lines.map(line => { const take = line.takes.find(t => t.take === line.picked); return { shot: line.shot, text: line.text, audio: take.audio, duration: take.duration, words: take.words }; }) };
+}
+
+/** Every film take whose master has been verified, by take name. */
+async function filmMasters() {
+  const { FILM, TAKES_DIR } = await import('../rig/film.mjs');
+  const out = {};
+  for (const take of FILM) {
+    const file = join(TAKES_DIR, take.take, 'take.json');
+    if (!existsSync(file)) continue;
+    const verify = JSON.parse(readFileSync(file, 'utf8')).verify;
+    if (verify?.ok && verify.master && existsSync(verify.master)) out[take.take] = verify.master;
+  }
+  return out;
+}
+
 export async function render({ cut = 'rough', out, width = 1280, height = 720, fps = 60, kbps = 760, reuse = false }) {
+  const work = join(MEDIA, 'cuts', `${cut}-work`);
+  mkdirSync(work, { recursive: true });
+  const report = [];
   const { buildEdit } = await loadEdl();
-  const scratch = JSON.parse(readFileSync(join(STUDIO, 'voice/scratch.json'), 'utf8'));
+  // The rough cut speaks the scratch narration; every later cut the final takes, the one picked per line.
+  const scratch = cut === 'rough' ? JSON.parse(readFileSync(join(STUDIO, 'voice/scratch.json'), 'utf8')) : finalNarration();
+  const masters = cut === 'rough' ? null : await filmMasters();
   const bed = `${MEDIA}/audio/music/temp-bed-18lufs.wav`;
   const musicFile = existsSync(bed) ? bed : existsSync(`${MEDIA}/audio/music/temp-bed.wav`) ? `${MEDIA}/audio/music/temp-bed.wav` : null;
   let extend = {};
   const snapFile = join(STUDIO, 'edit/snap.json');
   if (existsSync(snapFile)) extend = JSON.parse(readFileSync(snapFile, 'utf8')).shots ?? {};
-  const edit = buildEdit({ name: cut, width, height, fps, scratch, music: musicFile ? { file: musicFile, gain: 0.8, duckDb: 9 } : null, kbps, extend });
-  const work = join(MEDIA, 'cuts', `${cut}-work`);
-  mkdirSync(work, { recursive: true });
-  const report = [];
+  const edit = buildEdit({ name: cut, width, height, fps, scratch, music: musicFile ? { file: musicFile, gain: 0.8, duckDb: 9 } : null, kbps, extend, masters });
+  for (const [shot, source] of Object.entries(edit.sources)) report.push(`${shot}: ${source}`);
 
   // 1. One intermediate per clip, exactly dur·fps frames; a short source holds its last frame.
   const parts = [];
@@ -149,13 +177,19 @@ export async function render({ cut = 'rough', out, width = 1280, height = 720, f
   if (edit.music) {
     audioInputs.push('-i', edit.music.file);
     audioGraph += `;[${a}:a]aresample=48000,volume=${edit.music.gain},afade=t=out:st=${(edit.duration - 2).toFixed(2)}:d=2[bed];[bed][key]sidechaincompress=threshold=0.03:ratio=6:attack=40:release=420:makeup=1[ducked]`;
-    audioGraph += `;[voice][ducked]${sfxLabels}amix=inputs=${2 + edit.sounds.length}:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[aout]`;
+    audioGraph += `;[voice][ducked]${sfxLabels}amix=inputs=${2 + edit.sounds.length}:normalize=0[aout]`;
   } else {
-    audioGraph += `;[voice]${sfxLabels}amix=inputs=${1 + edit.sounds.length}:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[aout]`;
+    audioGraph += `;[voice]${sfxLabels}amix=inputs=${1 + edit.sounds.length}:normalize=0[aout]`;
   }
-  const sound = join(work, 'sound.wav');
+  const mix = join(work, 'mix.wav'), sound = join(work, 'sound.wav');
   writeFileSync(join(work, 'sound.graph.txt'), audioGraph);
-  ffmpeg([...audioInputs, '-filter_complex_script', join(work, 'sound.graph.txt'), '-map', '[aout]', '-t', String(edit.duration), '-ar', '48000', sound], 'sound');
+  ffmpeg([...audioInputs, '-filter_complex_script', join(work, 'sound.graph.txt'), '-map', '[aout]', '-t', String(edit.duration), '-ar', '48000', '-c:a', 'pcm_f32le', mix], 'sound');
+  // Two-pass loudness: measure the mix, then one linear gain (with true-peak limiting only if it needs it) to land at
+  // -14 LUFS integrated and under -1 dBTP, the YouTube target.
+  const measured = loudnormMeasure(mix);
+  ffmpeg(['-i', mix, '-af', `loudnorm=I=-14:TP=-1.2:LRA=11:measured_I=${measured.input_i}:measured_TP=${measured.input_tp}:measured_LRA=${measured.input_lra}:measured_thresh=${measured.input_thresh}:offset=${measured.target_offset}:linear=true`, '-ar', '48000', sound], 'loudness');
+  const after = loudnormMeasure(sound);
+  report.push(`mix: ${after.input_i} LUFS integrated, ${after.input_tp} dBTP true peak, LRA ${after.input_lra} (before: ${measured.input_i} LUFS)`);
 
   // 6. The review encode: two passes to land under the size cap.
   mkdirSync(dirname(out), { recursive: true });

@@ -5,8 +5,8 @@
 //   node apps/studio/rig/hooks-check.mjs --runtime  also opens the light routes headless and reads their hooks
 //
 // Exit code 1 when anything is missing.
-import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
@@ -41,8 +41,53 @@ const RUNTIME = [
   { path: '/panel?source=simulated&state=unshared', ready: 'window.__chatdomReady === true', wait: 30 },
 ];
 
+/**
+ * Every product module a set piece imports (src/set/**), and every name it takes from it: the set pieces reach into
+ * other lanes' code by read-only import, so a renamed export or a moved file must show up here, not mid-shoot.
+ */
+function setPieceImports() {
+  const out = [];
+  const root = join(REPO, 'apps/studio/src/set');
+  const walk = dir => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(dir, e.name)) : /\.tsx?$/.test(e.name) ? [join(dir, e.name)] : []);
+  for (const file of existsSync(root) ? walk(root) : []) {
+    const text = readFileSync(file, 'utf8');
+    for (const m of text.matchAll(/import\s+(?:type\s+)?(?:\{([^}]*)\}|\*\s+as\s+\w+|\w+)?\s*(?:,\s*\{([^}]*)\})?\s*from\s+'(\.[^']+)'/g)) {
+      const spec = m[3];
+      const target = resolve(dirname(file), spec.replace(/\?.*$/, ''));
+      if (!target.includes('/apps/web/') && !target.includes('/packages/')) continue;
+      const candidates = [target, `${target}.ts`, `${target}.tsx`, `${target}.js`, `${target}.mjs`, join(target, 'index.ts'), join(target, 'index.tsx')];
+      const found = candidates.find(c => existsSync(c) && statSync(c).isFile());
+      const names = `${m[1] ?? ''},${m[2] ?? ''}`.split(',').map(n => n.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0]).filter(Boolean);
+      out.push({ from: file.slice(REPO.length + 1), spec, found, names });
+    }
+  }
+  return out;
+}
+
+/** Whether `file` exports `name`, directly or through `export * from` re-exports. */
+function exports(file, name, seen = new Set()) {
+  if (seen.has(file) || !/\.[cm]?[jt]sx?$/.test(file)) return seen.size > 0 ? false : true;
+  seen.add(file);
+  const text = readFileSync(file, 'utf8');
+  if (new RegExp(`export\\s+(?:declare\\s+)?(?:abstract\\s+)?(?:async\\s+)?(?:function\\*?|const|let|class|interface|type|enum)\\s+${name}\\b|export\\s*(?:type\\s*)?\\{[^}]*\\b${name}\\b[^}]*\\}`).test(text)) return true;
+  for (const m of text.matchAll(/export\s*\*\s*from\s*'([^']+)'/g)) {
+    const base = resolve(dirname(file), m[1]);
+    const next = [base, `${base}.ts`, `${base}.tsx`, base.replace(/\.js$/, '.ts'), join(base, 'index.ts')].find(c => existsSync(c) && statSync(c).isFile());
+    if (next && exports(next, name, seen)) return true;
+  }
+  return false;
+}
+
 let missing = 0;
 const rows = [];
+for (const use of setPieceImports()) {
+  if (!use.found) { missing++; rows.push(`MISSING  module ${use.spec}  (imported by ${use.from})`); continue; }
+  for (const name of use.names) {
+    const exported = exports(use.found, name);
+    if (!exported) missing++;
+    rows.push(`${exported ? 'present' : 'MISSING'}  ${name} from ${use.found.slice(REPO.length + 1)}  (set piece ${use.from.replace('apps/studio/src/set/', '')})`);
+  }
+}
 for (const [what, file, pattern, used] of SOURCE) {
   const text = read(file);
   const ok = !!text && pattern.test(text);

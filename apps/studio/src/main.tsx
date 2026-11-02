@@ -16,7 +16,7 @@ async function boot(): Promise<void> {
     const { samplePage } = await import('./page/sample');
     state = samplePage; shot = 'fixture'; duration = 10;
   } else {
-    const { findShot, evaluate, shotActions } = await import('./shots');
+    const { findShot, evaluate, shotActions } = await import('./shot-list');
     const script = findShot(query.get('shot') ?? 'S01');
     // The layout is fixed, so the rectangles of a first frame hold for the whole shot.
     await view.render(evaluate(script, 0));

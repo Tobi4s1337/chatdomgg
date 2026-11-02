@@ -12,6 +12,7 @@ The lane's cap is 40,000 credits, summed over the Used column. Nothing secret is
 | 2026-11-01 22:08 | J01 voice comparison, five lines | David (Trailer) | eleven_multilingual_v2 | 5/0 | 404 | 11755 | 11833 | 422 |
 | 2026-11-01 22:08 | J01 voice comparison, five lines | Rowan | eleven_multilingual_v2 | 5/0 | 404 | 12175 | 12249 | 177 |
 | 2026-11-01 22:10 | Scratch narration for the rough cut | Rowan | eleven_multilingual_v2 | 17/0 | 443 | 12352 | 12497 | 196 |
+| 2026-11-02 00:35 | Final narration, three takes per line | Rowan | eleven_multilingual_v2 | 36/15 | 940 | 12548 | 12905 | 417 |
 
 ## Notes
 

@@ -5,7 +5,7 @@
 import '../../../../packages/ui/src/kit.css';
 import './frame.css';
 import { CARDS } from './cards';
-import { findShot } from '../shots';
+import { findShot } from '../shot-list';
 
 
 const query = new URLSearchParams(location.search);
@@ -57,7 +57,10 @@ async function card(id: string) {
     el.textContent = line.text;
     block.append(el);
   }
-  root.append(scrim, block);
+  const note = document.createElement('div');
+  note.className = 'card-note';
+  note.textContent = c.note?.text ?? '';
+  root.append(scrim, block, note);
   await document.fonts.load('400 120px "IM Fell English SC"');
   await document.fonts.load('italic 400 64px "IM Fell English"');
   await document.fonts.load('500 30px Alegreya');
@@ -71,6 +74,7 @@ async function card(id: string) {
       // A slow rise and a breath of letter-spacing, like ink settling.
       block.style.transform = `translateY(${((1 - enter) * 14).toFixed(3)}px)`;
       block.style.letterSpacing = `${(0.02 + (1 - enter) * 0.04).toFixed(4)}em`;
+      note.style.opacity = c.note ? (Math.min(smooth((t - c.note.in) / 0.8), leave) * 0.78).toFixed(4) : '0';
     },
   };
 }

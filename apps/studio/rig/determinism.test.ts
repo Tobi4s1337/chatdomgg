@@ -32,5 +32,6 @@ describe('frame-stepped recording', () => {
       for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
       await release();
     }
-  }, 300_000);
+  // Most of this is the wait for the shared capture lock, which other lanes may hold for minutes.
+  }, 1_800_000);
 });

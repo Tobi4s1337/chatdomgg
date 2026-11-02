@@ -11,12 +11,18 @@ export interface Card {
   lines: readonly { text: string; role: 'wordmark' | 'line' | 'url' }[];
   /** Darken behind the type so it reads on any plate (0..1). */
   scrim: number;
+  /** Small print at the foot of the frame, fading in at `in` (s) and out with the card. */
+  note?: { text: string; in: number };
 }
 
 export const CARDS: Record<string, Card> = {
   title: { id: 'title', duration: 6, in: 2.2, out: 5.9, fade: 0.9, scrim: 0.22, lines: [{ text: 'Chatdom', role: 'wordmark' }] },
   close: {
-    id: 'close', duration: 7, in: 1.6, out: 7, fade: 1.1, scrim: 0.35,
+    // The line comes up as the narrator says it (3.4 s into the card), after the caption before it has left.
+    id: 'close', duration: 7, in: 3.3, out: 7, fade: 1.0, scrim: 0.35,
     lines: [{ text: 'Every chat deserves a kingdom.', role: 'line' }, { text: 'chatdom.gg', role: 'url' }],
+    // The film shows a recreated Twitch page and an invented chat. Nothing inside the film is labelled (it must read
+    // as a real recording), so the close says it plainly, once, where it cannot break a shot.
+    note: { text: 'The Twitch page and chat in this film are staged. The kingdoms are Chatdom, rendered as they run.', in: 4.4 },
   },
 };

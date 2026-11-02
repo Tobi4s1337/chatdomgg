@@ -1,7 +1,7 @@
 // The edit is data. One list of clips, cards, narration and sound renders every cut (rough, first, final);
 // `render.mjs` turns it into ffmpeg. Times are seconds in the cut. Sources resolve to the media folder.
-import { SHOTS } from '../src/shots/list';
-import type { ShotScript } from '../src/shots/types';
+import { SHOTS } from '../src/shot-list/list';
+import type { FilmUse, ShotScript } from '../src/shot-list/types';
 
 export interface EditClip {
   shot: string;
@@ -60,24 +60,64 @@ const LINE_DELAY: Record<string, number> = { S01: 0.7, S02: 0.5, S04: 1.2, S05: 
 
 export interface Scratch { lines: { shot: string; text: string; audio: string; duration: number; words: { text: string; start: number; end: number }[] }[] }
 
-export function buildEdit({ name, width, height, fps, scratch, music, kbps, extend = {} }: {
+/** A verified film take's master (rig/verify.mjs), by take name; the first cut uses a shot's film takes only when
+ * every one of them is in here. */
+export type Masters = Record<string, string>;
+
+/** The film takes of a shot as video sources over [a, b), split by their shares. */
+function filmClips(shot: ShotScript, uses: readonly FilmUse[], masters: Masters, a: number, b: number, enter: EditClip['enter']): EditClip[] {
+  const total = uses.reduce((n, u) => n + (u.share ?? 1 / uses.length), 0);
+  const out: EditClip[] = [];
+  let at = a;
+  for (const [i, use] of uses.entries()) {
+    const len = (b - a) * (use.share ?? 1 / uses.length) / total;
+    const into = i === 0 ? enter : use.enter ?? { kind: 'cut' as const };
+    const overlap = into.kind === 'cut' ? 0 : into.dur;
+    // A moment cut out of a longer take enters a little early so a dissolve has picture under it.
+    out.push({ shot: uses.length > 1 ? `${shot.id}${'abcd'[i]}` : shot.id, source: { kind: 'video', file: masters[use.take]!, in: Math.max(0, use.in - overlap), speed: 1 }, at: at - overlap, dur: len + overlap, enter: into });
+    at += len;
+  }
+  return out;
+}
+
+export function buildEdit({ name, width, height, fps, scratch, music, kbps, extend = {}, masters = null }: {
   name: string; width: number; height: number; fps: number; scratch: Scratch; music: Edit['music']; kbps: number | null;
   /** Override a shot's cut range, e.g. snapped to the music. */
   extend?: Record<string, readonly [number, number]>;
-}): Edit {
+  /** The first cut: verified film masters by take (null for the rough cut, which uses TS10's sources). */
+  masters?: Masters | null;
+}): Edit & { sources: Record<string, string> } {
   const clips: EditClip[] = [];
+  /** Where each shot's kingdom picture came from in this cut, for the report. */
+  const sources: Record<string, string> = {};
   for (const shot of SHOTS) {
     const [a, b] = extend[shot.id] ?? shot.cut;
     const enter = ENTER[shot.id] ?? { kind: 'cut' as const };
     const overlap = enter.kind === 'cut' ? 0 : enter.dur;
+    const film = masters && shot.film?.every(u => masters[u.take]) ? shot.film : null;
+    const paged = shot.source === 'page then kingdom';
+    if (film && !paged) {
+      clips.push(...filmClips(shot, film, masters!, a, b, enter));
+      sources[shot.id] = film.map(u => u.take).join(' + ');
+      continue;
+    }
     clips.push({ shot: shot.id, source: clipSource(shot), at: a - overlap, dur: b - a + overlap, enter });
+    sources[shot.id] = shot.page ? 'studio page' : shot.kingdom?.kind === 'take' ? `TS10 take ${shot.kingdom.take}` : `stand-in ${shot.kingdom?.kind ?? ''}`;
     // A page shot that pushes into the player continues as the full-frame kingdom take.
-    if (shot.source === 'page then kingdom' && shot.kingdom?.kind === 'take') {
+    if (paged && (film || shot.kingdom?.kind === 'take')) {
       const split = shot.id === 'S03' ? 3.2 : 1.4;
       const page = clips[clips.length - 1]!;
       page.dur = split + overlap;
-      clips.push({ shot: `${shot.id}k`, source: { kind: 'frames', dir: `${TAKES}/${shot.kingdom.take}`, ext: 'jpg', in: shot.kingdom.in / 60, fps: 60 },
-        at: a + split - (shot.id === 'S03' ? 0.25 : 0.3), dur: b - a - split + (shot.id === 'S03' ? 0.25 : 0.3), enter: { kind: 'dissolve', dur: shot.id === 'S03' ? 0.25 : 0.3 } });
+      const blend = shot.id === 'S03' ? 0.25 : 0.3;
+      const into = { kind: 'dissolve' as const, dur: blend };
+      if (film) {
+        clips.push(...filmClips(shot, film, masters!, a + split, b, into).map(c => ({ ...c, shot: `${shot.id}k` })));
+        sources[shot.id] = `studio page + ${film.map(u => u.take).join(' + ')}`;
+      } else if (shot.kingdom?.kind === 'take') {
+        clips.push({ shot: `${shot.id}k`, source: { kind: 'frames', dir: `${TAKES}/${shot.kingdom.take}`, ext: 'jpg', in: shot.kingdom.in / 60, fps: 60 },
+          at: a + split - blend, dur: b - a - split + blend, enter: into });
+        sources[shot.id] = `studio page + TS10 take ${shot.kingdom.take}`;
+      }
     }
   }
   const end = Math.max(...SHOTS.map(s => (extend[s.id] ?? s.cut)[1]));
@@ -114,5 +154,5 @@ export function buildEdit({ name, width, height, fps, scratch, music, kbps, exte
     { file: `${AMB}/hero-horn.wav`, at: start('S18'), gain: 0.7 },
     { file: `${AMB}/bed-night-town.wav`, at: start('S20'), gain: 0.3, dur: end - start('S20') + 1, fadeOut: 2 },
   ];
-  return { name, width, height, fps, duration: end + 1.2, clips, cards, lines, music, sounds, kbps };
+  return { name, width, height, fps, duration: end + 1.2, clips, cards, lines, music, sounds, kbps, sources };
 }

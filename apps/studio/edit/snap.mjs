@@ -9,7 +9,7 @@ const STUDIO = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 const music = JSON.parse(readFileSync(process.argv[2] ?? join(STUDIO, 'sound/temp-bed.json'), 'utf8'));
 const { createServer } = await import('vite');
 const vite = await createServer({ root: STUDIO, configFile: false, logLevel: 'error', server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
-const { SHOTS } = await vite.ssrLoadModule('/src/shots/list.ts');
+const { SHOTS } = await vite.ssrLoadModule('/src/shot-list/list.ts');
 await vite.close();
 
 const beats = music.beats.map(b => typeof b === 'number' ? b : b.time);

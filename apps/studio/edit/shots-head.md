@@ -1,7 +1,7 @@
 # The teaser: shot list
 
 For Tobias's approval (K02). This file is written by `node apps/studio/edit/shots-md.mjs` from the shot scripts in
-`apps/studio/src/shots/`; edit the scripts (or `apps/studio/edit/shots-head.md` for this preamble), never this file.
+`apps/studio/src/shot-list/`; edit the scripts (or `apps/studio/edit/shots-head.md` for this preamble), never this file.
 
 ## The idea in one watch
 
@@ -18,26 +18,30 @@ carry the rest.
    lights too.
 4. **The Forge (0:37–0:47).** A `!forge` line in chat becomes a dragon chimney on a house.
 5. **Growth (0:47–0:52).** The hamlet becomes a town.
-6. **Raids (0:52–1:16).** Twitch's own raid notice; the caravan under PinkKittyRose's colours; a huge column; the
-   gate at the end of the night; riding out; rising to the map; arriving at MashaD4's gate. No signs, cards or
-   captions in the world: the picture says "they came to us" and "we rode out to them".
+6. **Raids (0:52–1:16).** Twitch's own raid notice; the caravan under PinkKittyRose's colours; a huge raid's long
+   line of wagons; the gate waking at the end of the night; the camera rising out over the road; the road inking
+   across the map; tobi4s_'s own wagons arriving at MashaD4's gate as her windows light. No signs, cards or captions
+   in the world: the picture says "they came to us" (her colours coming in) and "we rode out to them" (his colours
+   arriving at her gate).
 7. **The map and the close (1:16–1:27).** Thousands of kingdoms; the night town with the lurker's window still lit.
    "Every chat deserves a kingdom." chatdom.gg
 
 ## Rules the shots keep
 
 - **Staged, never labelled.** The page is our replica of twitch.tv/tobi4s_ and the chat is a seeded crowd of invented
-  names, each checked absent on Twitch (`apps/studio/src/chat/names-checked.json`). Nothing on screen says SIMULATED;
-  the studio hides leftover chips in its own frames. The YouTube description says plainly that the page and chat are
-  staged.
+  names, each checked absent on Twitch (`apps/studio/src/chat/names-checked.json`). Nothing inside the film says
+  SIMULATED; the kingdom plates are canvas captures, so no product chip can reach them. The film says it once, where
+  it cannot break a shot: a line of small print on the close card ("The Twitch page and chat in this film are
+  staged. The kingdoms are Chatdom, rendered as they run."), and the YouTube description says the same.
 - **Honest scale.** tobi4s_ shows tens of viewers; PinkKittyRose raids with 48 (Decision 4). The huge column (S16)
   has no name and no number.
 - **Real names only with consent.** tobi4s_, The_AGGman, PinkKittyRose and MashaD4. On the Atlas no other channel
   may be legible.
 - **Every frame is a function of (shot, t).** Page shots render in the studio, kingdom shots on Tobias's GPU through
   the frame-stepped recorder; the same script renders the same frame every time.
-- **Narration** is the Voice of the Realm (scratch in the leading candidate, Rowan; see `VOICES.md`): at most eight
-  words a line, present tense, never explaining a mechanic. Captions are burned in from the voice's own timings.
+- **Narration** is the Voice of the Realm, Rowan (final takes and the pick per line in `VOICE.md`; the comparison in
+  `VOICES.md`): at most eight words a line, present tense, never explaining a mechanic. Captions are burned in from
+  the voice's own timings.
 
 ## The cast
 
@@ -52,4 +56,8 @@ carry the rest.
 
 - **staged:** a real render of today's build (studio page or GPU take).
 - **stand-in:** the closest real still or clip, moved in the edit, until the product (or a set piece) can stage the
-  moment. Each stand-in says what it waits for; TS11 replaces them with film takes.
+  moment. Each stand-in says what it waits for.
+- **Film take:** the TS11 plate that replaces the rough cut's source in the first cut: a frame-stepped GPU render of
+  a set piece (`apps/studio/src/set/`) or a product route, listed in `apps/studio/rig/film.mjs` and logged in
+  `TAKES.md`. The first cut uses a shot's film take once its master is verified, and the rough cut's source until
+  then.

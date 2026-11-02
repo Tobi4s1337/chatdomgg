@@ -86,7 +86,13 @@ export async function startStudio({ port, host = '127.0.0.1', web = WEB_DIST, qu
     root: STUDIO_ROOT, base: '/studio/', configFile: false, appType: 'custom', logLevel: quiet ? 'error' : 'info',
     plugins: [solid()], server: { middlewareMode: true, hmr: { server }, ...(watch ? {} : { watch: null }), fs: { allow: [REPO_ROOT, MEDIA_ROOT] } },
   });
-  await new Promise((resolveListen, reject) => { server.once('error', reject); server.listen(port ?? 0, host, resolveListen); });
+  try {
+    await new Promise((resolveListen, reject) => { server.once('error', reject); server.listen(port ?? 0, host, resolveListen); });
+  } catch (error) {
+    // A taken port: free Vite's watchers before the caller tries another.
+    await vite.close();
+    throw error;
+  }
   const address = server.address();
   const base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : port}`;
   return { base, close: async () => { await vite.close(); await new Promise(done => server.close(() => done())); } };

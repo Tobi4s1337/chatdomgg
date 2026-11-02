@@ -55,6 +55,43 @@ as a stand-in.
 - `needs: tobias enable sound effects on the teaser's ElevenLabs key` (the key has no `sound_generation` permission and
   can't read the subscription endpoint, so the spend is tracked from the character counts in `voice-ledger.md`).
 
+## What TS11 reads (Mon 2 Nov, main `0e92df4`)
+
+The film takes are set pieces in `apps/studio/src/set/<scene>/`, one folder per scene, each staging product modules
+by read-only import (`node apps/studio/rig/hooks-check.mjs` lists every module and name they import, and reports any
+that a merge moves or renames). The plates are canvas captures (WebCodecs, `apps/studio/rig/canvas-capture.js`), so
+no DOM chip, caption or nameplate can reach them.
+
+- **grand-world, the kingdom scene.** `createKingdomScene` with the studio's own presence feed (which windows light,
+  and when), `pose` every frame, `debug.ready` / `debug.fieldSettled`, `layout` and the settlement content for the
+  gate, streets, homes and windows (scene `kingdom`: S05–S07, S09, S12, S17, S18, S22). The post stack caps the
+  scene near 2.1 million pixels (`packages/render/src/post-stack.ts`), so kingdom plates are 1920×1080 and the 2160p
+  master scales them up.
+- **grand-world, the grand land.** `GrandEngine` as in TS10 (scene `grand`: S04, the S19 climb), at 3840×2160.
+- **raid-show and twitch-moments.** The incoming raid caravan through `SceneOptions.momentFeed` with the realm-free
+  `createRoadArrivalFeed`, `roadLand` for MashaD4's land (scene `raid`: S15, S16, S20). No moment captions are
+  rendered, so the credit plate never appears.
+- **forge-wish.** The ritual's bench path (`createRitualWorld`, `createForgeStage`, `benchFrame`) for S11, and the
+  kingdom forge fixture (`forgeFixture=1`, `forge.submit`, `forge.seek`) for the landing in S12. The studio fixes the
+  ritual id (it is random in `forge/scene.ts`) and hides the seal ribbon's in-canvas text.
+- **growth.** `planGrowthTown`, the recorded growth feed, `composeScore` / `sampleScore` and `createGrowthStage` with
+  a locked preset camera (scene `growth`: S13).
+- **atlas-map.** `MapView` / the road layer with an exported preview of the survey (copied, outside git, to
+  `media/teaser/atlas-data/`), names filtered to the four consenting channels before they reach the store (scene
+  `atlas`: S19's map, S21).
+
+## Open asks from TS11
+
+- `needs: grand-world a film pixel budget for the kingdom scene` (the post stack's 2.1-million-pixel cap, so kingdom
+  plates can render at 2560×1440 or 3840×2160 instead of being scaled up).
+- `needs: forge-wish a fixed ritual id or seed for fixtures, and no SIMULATED words in the seal ribbon` (decision 25;
+  the studio works around both from outside).
+- `needs: raid-show the departure in the world` (walkers gathering at the gate with torches and banners and leaving
+  along the road, today only an SVG tableau), and a raid larger than 12 wagons. Until then S17 and S18 show the gate
+  waking and the camera riding out over the road, and S16 is the largest caravan the product draws.
+- The TS10 asks to atlas-map (a labels option) and play (a scripted walker) still stand; the studio filters the
+  Atlas names itself and stages the Way Home with the presence feed's own walk to the door.
+
 ## What the teaser provides
 
 Nothing that other lanes depend on. The studio, its rig and its media are private to this lane.
