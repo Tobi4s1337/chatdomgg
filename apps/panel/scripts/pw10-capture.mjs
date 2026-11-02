@@ -22,7 +22,8 @@ import { startPanelStack } from './pw10-stack.mjs';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const gpu = process.argv.includes('--gpu');
 const only = (() => { const i = process.argv.indexOf('--only'); return i >= 0 ? new Set(process.argv[i + 1].split(',')) : null; })();
-const evidence = join(root, 'work/evidence/panel-window/PW10');
+// Real-GPU stills keep their own folder and record beside the headless ones.
+const evidence = join(root, 'work/evidence/panel-window/PW10', ...(gpu ? ['gpu'] : []));
 const env = process.env;
 for (const key of ['REALM_ENTRY_KINGDOM_ID', 'TWITCH_EXTENSION_SECRET', 'REALM_INGRESS_PANEL_SECRET', 'REALM_INGRESS_HERALD_SECRET',
   'PANEL_PAINTER_SECRET', 'DATABASE_URL', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET']) if (!env[key]) throw new Error(`Missing ${key}; load the private lane and Twitch environment files.`);
@@ -147,9 +148,28 @@ async function rememberNow(entry) {
   await writeFile(path, JSON.stringify({ record: [...merged.values()] }, null, 2) + '\n');
 }
 let browser, origin;
+// On the real-GPU Chrome every context is a window on Tobias's screen, and a window covered by another is occluded:
+// Chrome stops drawing it, so its panel never runs a fade. Each open panel gets its own column, side by side.
+const columns = [];
+async function place(page, width, height) {
+  let column = columns.indexOf(null); if (column < 0) column = columns.length;
+  columns[column] = page;
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const { windowId } = await cdp.send('Browser.getWindowForTarget');
+    await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+    await cdp.send('Browser.setWindowBounds', { windowId, bounds: { left: 10 + column * 430, top: 10, width: width + 24, height: Math.min(height + 140, 1000) } });
+  } catch { /* A Chrome without windows still renders the page. */ }
+  finally { await cdp.detach().catch(() => {}); }
+  await page.bringToFront();
+  page.once('close', () => { columns[columns.indexOf(page)] = null; });
+}
+/** Brings the open panels forward again, over the painter's own window. */
+const forward = async () => { for (const page of columns) if (page && !page.isClosed()) await page.bringToFront().catch(() => {}); };
 async function openPanel(view, width, height, params) {
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
   const page = await context.newPage();
+  if (gpu) await place(page, width, height);
   await page.route('**/*', route => ['localhost', '127.0.0.1'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
   await page.goto(`${origin}/panel/${view}.html?${new URLSearchParams(params)}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
@@ -185,6 +205,9 @@ async function shot(page, name, note = '') {
   console.info(`${file}: ${facts.light}/${facts.view}, ${facts.words.head + facts.words.main} words${facts.scrolls ? ', SCROLLS' : ''}${facts.clipped.length ? ', CLIPPED' : ''}`);
 }
 const wanted = name => !only || only.has(name);
+// With --gpu the stills come from the leased real-GPU Chrome: the pc-lease is the hold, and the host's capture lock
+// (which guards headless renders on this machine) would only spend the lease's minutes queueing.
+const holdCapture = () => gpu ? Promise.resolve(async () => {}) : acquireCaptureLock();
 
 // The You tab's window while a new painting reaches an open panel: the drawn window opening into the arch, and later a
 // crop of one painting rising out of the crop of the last. The watching pages run their animations at a twentieth of
@@ -192,11 +215,26 @@ const wanted = name => !only || only.has(name);
 // the ring) is measured from the page and kept in the record beside the still.
 const ARCH = join(evidence, 'arch-live');
 const WATCH_RATE = 0.05;
+// The page's own stylesheets are slowed rather than the DevTools animation clock: the real-GPU Chrome, reached over its
+// tunnel, ignored Animation.setPlaybackRate, while scaled transition times hold in every browser.
 async function slowWatch(page) {
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Animation.enable');
-  await cdp.send('Animation.setPlaybackRate', { playbackRate: WATCH_RATE });
-  return async () => { await cdp.send('Animation.setPlaybackRate', { playbackRate: 1 }).catch(() => {}); await cdp.detach().catch(() => {}); };
+  const scale = rate => page.evaluate(factor => {
+    const times = value => value.split(',').map(time => {
+      const seconds = time.trim().endsWith('ms') ? parseFloat(time) / 1000 : parseFloat(time);
+      return `${Number.isFinite(seconds) ? seconds * factor : 0}s`;
+    }).join(', ');
+    const walk = rules => { for (const rule of rules) {
+      if (rule.cssRules) walk(rule.cssRules);
+      const style = rule.style; if (!style) continue;
+      for (const property of ['transition-duration', 'transition-delay', 'animation-duration', 'animation-delay']) {
+        const value = style.getPropertyValue(property); if (value) style.setProperty(property, times(value), style.getPropertyPriority(property));
+      }
+    } };
+    for (const sheet of document.styleSheets) { try { walk(sheet.cssRules); } catch { /* another origin's sheet */ } }
+  }, rate);
+  await scale(1 / WATCH_RATE);
+  // Transitions already running keep the slow times they began with, so the restore also finishes them.
+  return async () => { await scale(WATCH_RATE).catch(() => {}); await page.evaluate(() => { for (const animation of document.getAnimations()) animation.finish(); }).catch(() => {}); };
 }
 const archState = page => page.evaluate(() => {
   const frame = document.querySelector('.cw-you-view .cw-window');
@@ -206,7 +244,7 @@ const archState = page => page.evaluate(() => {
   return { frame: frame ? `${Math.round(frame.getBoundingClientRect().width)}x${Math.round(frame.getBoundingClientRect().height)}` : null,
     open: frame?.classList.contains('open') ?? false, panes: round(style(frame?.querySelector('.cw-window-panes'))?.opacity ?? 0),
     painting: image ? round(style(image).opacity) : null, paintingCrop: image?.style.transform ?? null,
-    under: under ? under.style.transform : null, ring: round(style(document.querySelector('.cw-window-view-ring'))?.opacity ?? 0) };
+    under: under ? under.style.transform : null, visible: document.visibilityState, ring: round(style(document.querySelector('.cw-window-view-ring'))?.opacity ?? 0) };
 });
 async function archFrame(page, name, note) {
   const { width, height } = page.viewportSize();
@@ -220,7 +258,8 @@ async function archFrame(page, name, note) {
  * time after the change began), then the settled window at full speed. Start it before the painting is made: the page
  * picks the painting up on its own poll, and a watch begun later would miss the start. */
 async function watchChange(watch, began, label, moments) {
-  await watch.page.waitForFunction(began, null, { timeout: 150_000, polling: 'raf' });
+  // Long enough for a painting the painter retries once (a stuck page waits 180 s before its retry).
+  await watch.page.waitForFunction(began, null, { timeout: 420_000, polling: 'raf' });
   const start = Date.now();
   for (const [index, [seconds, note]] of moments.entries()) {
     const wait = start + seconds * 1_000 / WATCH_RATE - Date.now();
@@ -288,9 +327,10 @@ try {
     if (result.painted !== 1) throw new Error(`The ${stage} painting was not captured and uploaded.`);
     await remember({ at: new Date().toISOString(), painting: stage, lights: (await realmKingdom()).lights, ms: Date.now() - started });
     console.info(`Painting ${stage} stored (${(await realmKingdom()).lights} lights).`);
+    if (gpu) await forward();
   };
   // Hold one: the painting before the tap, the first states, the tap, and the painting while the window is lit.
-  lock = await acquireCaptureLock();
+  lock = await holdCapture();
   if (wanted('tap')) await painting('01-before');
   browser = await launch();
 
@@ -388,7 +428,7 @@ try {
   await browser.close(); browser = undefined; await lock(); lock = null;
 
   // Hold two: the remaining states.
-  lock = await acquireCaptureLock();
+  lock = await holdCapture();
   browser = await launch();
   for (const [view, width, height] of SIZES) {
     if (wanted('held')) {

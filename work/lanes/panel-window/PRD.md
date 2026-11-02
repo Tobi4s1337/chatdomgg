@@ -422,6 +422,7 @@ without a code change.
 - C06 recording on a real phone in the Twitch app (needs Tobias's phone).
 - Day-long gifts wait for Twitch's written answer (open question). Submit the end-of-stream gifts first.
 - Stills published from the stream view on the streamer's GPU, once grand-world adds the `still()` hook.
+- A portrait painting for the phone's tall plate, so the window pan keeps the keep in frame and the picture stays sharp.
 - A walkable unclaimed sketch (A05), when someone owns it. The panel shows only its painting.
 - Panel crowd acts (strike, vote, haul) with the same limits as chat, once their realm commands exist.
 

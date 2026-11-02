@@ -1,3 +1,39 @@
+# PW10 checkpoint — 2 November 2026, the real-GPU stills
+
+PW10 stays unticked. Every real-GPU still the goal asks for now exists and I have looked at it. The only open done-when item is the zip, which still fails on the two shared simulation strings that reach the panel through front-door's Passport. Main is still at `0e92df4`, and neither front-door nor the integrator has applied the Passport patch.
+
+## Real-GPU runs
+
+Four leased runs went through `chatdom-pc-lease --wait 30 --max 10` on Tobias's RTX 5080 (Chrome 149, ANGLE on NVIDIA). The lane realm was on 5198, and the stack (panel, gateway and painter) was on the lease port 5192. Output is in `work/evidence/panel-window/PW10/gpu/` with its own `capture.json`. The SwiftShader record beside it is unchanged.
+
+1. `tap,arch` (10:23–10:28): exit 0. Tap to lit took 1876 ms at 318×496 and 326 ms at 390×844, both confirmed by the realm. Paintings 01, 02 and 03 hold 0, 1 and 2 lights, at 32, 38 and 39 KB WebP. The watchers caught only settled frames (see the fixes below).
+2. `states,held,unfounded,resting,reach` (10:33): exit 0, 32 stills.
+3. `tap,arch` (10:42–10:50): tap lit in 1053 ms. Painting 03 hit one stuck painter page and needed the runner's retry, so the move watch timed out (exit 1). Nothing from it was kept as proof.
+4. `tap,arch` (10:58–11:03): exit 0. Taps lit in 1118 ms and 364 ms, realm-confirmed. The opening was caught at both sizes: frame 99→110→112 px (131→147→150 on the phone), panes 1→0.23→0, painting 0.07→0.62→1, then the ring. Crop to crop went 0.17→0.61→1 over the last crop, then the ring.
+
+## Capture fixes (only `apps/panel/scripts/pw10-capture.mjs`)
+
+- Under `--gpu`, the host's shared capture lock is not taken. The pc-lease is the hold, and the pixels come from Tobias's PC.
+- Under `--gpu`, each open panel gets its own column of windows. In headed Chrome a covered window is occluded and stops drawing, and the panels are brought forward again after each painting.
+- The watchers are slowed by scaling their own stylesheets' transition times (×20, then running transitions are finished on restore). The tunnelled Chrome ignored `Animation.setPlaybackRate`: run 1's frames were full size with the panes gone, seconds into a change that should have taken 18 s.
+- A watch waits up to 420 s, which leaves room for one painter retry.
+- Each arch record notes `visible` (document visibility).
+
+## Looked at
+
+- `sheets/tap-sequence.png`: painting 01 (hero, 0 lights), the open panel before, mid-dissolve, painting 02 (turned +25° to frame the newcomer's home), and the settled plate with "Yours" on the window. The ghosted keep mid-dissolve on a turn is an ordinary 1.8 s crossfade, and I keep it.
+- `sheets/arch-318x496.png` and `sheets/arch-390x844.png`: drawn warm panes, the mullions giving way, lit glass, the painting clearing out of the glass, the ring, then the crop-to-crop. On a real GPU it reads as one window coming alight and opening. The pace is right.
+- `sheets/states-318x496.png` and `sheets/states-390x844.png`: outside, logged out, unshared, gifts closed, held (quiet), unfounded, pledged, resting and out of reach. Each has one plate, one picture and one line. Nothing clips or scrolls, and nothing is under 12 px.
+- `lit-kingdom`, `lit-you-painted`, `lit-card`, `lit-gifts`, `lit-walk-in` and `sharing-you` at both sizes.
+- Word counts match the SwiftShader record: outside 9/7, logged out 11/9, unshared 11/4, gifts 10, held 11/9, unfounded 6/12, pledged 12, resting 10/11, out of reach 11/12, sharing 4, lit Kingdom 12, lit You 11, walk-in 11, card 46 (one tap deeper).
+
+## Doubts
+
+- The shared clock was mid-morning, so on a real GPU the lit pane shows no visible glow in daylight. The "Yours" ring and tag carry the window by day. The glow is the renderer's hour look; judge it at a dusk or night hour when one comes round.
+- On the phone, the portrait plate shows about a third of the 636×400 landscape painting at about 1.65×. Panning to a window at the left edge pushes the keep out of frame, and the picture is visibly soft. Backlog: a portrait painting for the phone.
+- Through the tunnel the painter page takes 28–88 s per painting because the dev server serves its modules over SSH, and one page stuck once (run 3). The production runner has no tunnel.
+- The web dev server proxies `/map-data` to 5193, which the lane stack does not run. The painter does not need it. The proxy errors are noise in the logs.
+
 # PW10 checkpoint — 2 November 2026, the arch's brass line
 
 PW10 stays unticked. This checkpoint closes the last doubt from the opening checkpoint: "in the first frame, the pane layer's inner brass line shows a hair inside the frame's own".
