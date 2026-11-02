@@ -74,6 +74,7 @@ export function classify(pathname: string, search: string): PublicRoute {
   if (/^\/api\/raid-gate\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/realm\/forge\/chat\/(?:status|authorize|callback|wish|revoke)$/.test(pathname)) return { kind: 'realm' };
   if (pathname === '/api/realm/forge/queue') return { kind: 'realm' };
+  if (pathname === '/api/realm/forge/ledger') return { kind: 'realm' };
   if (/^\/api\/dock\/(?:status|actions|presentations|witness)$/.test(pathname)) return { kind: 'dock' };
   if (REALM_READ.test(pathname)) return { kind: 'realm' };
   if (/^\/(?:live-realm-data\/)?realm\/(?:raid-roads|raid-pennants\/[1-9][0-9]{0,31})$/.test(pathname)) return { kind: 'realm' };
