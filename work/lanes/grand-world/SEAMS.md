@@ -403,3 +403,55 @@ is ready. `still=1` hides chrome only after readiness, never hides a loading or 
 needs: gather provide a public tavern spectator transport before source-scene switching is composed. The current
 `mountTavern(...).games(GatherFrame)` accepts public snapshots, but `connectTavern` is the authenticated walker
 adapter; no public observer connection was found. The exterior door and campfire seam remain unchanged.
+
+## GW10 offline artifact foundation (GW11 pulled forward)
+
+`packages/world/src/grand/baked/` now separates the existing installed compiler from browser-safe artifact
+readers. `prepare.ts`, `mesher.ts`, `metadata.ts` are offline producer entries; `codec.ts`, `surface.ts`, `types.ts`
+contain no generator or tree-builder dependency. The old native worker delegates to the same compiler with
+unchanged quads, paving and water-face rules. Reader bundle tests and original-worker byte parity pass.
+
+`apps/realm/src/land/bake.ts` exports `bakeFoundedLand({sceneBytes, receipt, recipe, store, signal?, onProgress?})`.
+It verifies the live founded receipt, checks compiler/dimension identity, writes surface and legal region LODs,
+reopens every artifact, then pins the recipe and publishes a complete binding. `LandArtifactStore` is immutable:
+content addresses, recipe pins and receipt bindings never overwrite different bytes. No request runs a generator.
+The [format](../../../packages/world/src/grand/baked/README.md) and [runner](../../../apps/realm/src/land/README.md)
+document exact types, byte order, limits, directory layout and commands.
+
+The implemented transport adapter is `readLandRoute(store, pathname, method?, ifNoneMatch?)` in realm land/routes:
+
+```text
+# GET or HEAD; the same source receipt is required by the eventual browser consumer.
+/api/realm/land/<kingdomId>/<sceneHash>
+/api/realm/land/<kingdomId>/<sceneHash>/<rawBlobHash>
+```
+
+The first route returns `StoredLandBinding {version:1, kingdomId, sceneHash, layoutRevision, collisionRevision,
+sourcePlanHash, recipeHash, manifest:{hash,rawBytes,gzipHash,gzipBytes}}`. The second serves only referenced complete
+artifacts as `application/gzip`, with no Content-Encoding, immutable caching and ETags. A missing binding is 404;
+a corrupt/missing published blob is 503. The adapter is **not mounted or deployed**. Grand-world still owns its
+route registration and bounded native client composition in the next checkpoint; no other lane should build a
+second loader. Do not import the offline producer entry into the client, or regenerate when a download fails.
+
+Two isolated full bakes for receipt `af5df4956fcd821ea2010c7b01f02772f8a6b2a34644559bad91ce8204992ceb` produce
+metadata `9059935f8d9c04d715ff8059566cd2732b41907ed172d8e16250eeb0eff295d6`, identical 354 compressed blobs,
+100 regions / 352 meshes and 772096 exact physical columns. Full evidence: `work/evidence/grand-world/GW10-bake.md`.
+The stores remain ignored lane data, not live realm data. This is not browser cold-load or wider collision adoption.
+
+needs: integrator/founded owner, when adopting this source into the root receipt, add an optional land identity
+to both the hashed public scene and matching manifest, then validate equality during decode:
+
+```ts
+land: z.strictObject({ version: z.literal(1), kind: z.literal('grand'),
+  recipeHash: Sha256Schema, artifactHash: Sha256Schema }).optional()
+```
+
+`artifactHash` is the canonical metadata raw hash (metadata already binds source plan hash, compiler identities,
+seat, palette and all artifacts); it excludes the scene hash, avoiding a hash cycle. This optional field must join
+the scene validator's explicit allowlist and receipt equality checks, and be persisted through founding, growth,
+checkpoint and replay. Existing old-land receipts omit it. Never invent this field at the renderer boundary.
+The external binding implemented here records the existing validated receipt without changing that authority.
+
+needs: integrator deployment only after client/route composition is accepted: an ignored durable land directory,
+the bounded offline bake command and the two GET paths above. Do not point the lane bake at live data. The native
+water raster's 75 MiB combined decoded working set and large-world manifest capacity remain explicit open limits.

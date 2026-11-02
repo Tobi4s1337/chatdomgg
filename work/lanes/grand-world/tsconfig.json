@@ -13,6 +13,7 @@
     "../../../packages/world/src/grand-adoption/pier-fishing-proposal*.ts",
     "../../../packages/world/src/grand-adoption/pier-fishing-candidates*.ts",
     "../../../packages/voxel/src/collision/**/*.ts",
-    "../../../packages/world/src/grand/**/*.ts"
+    "../../../packages/world/src/grand/**/*.ts",
+    "../../../apps/realm/src/land/**/*.ts"
   ]
 }

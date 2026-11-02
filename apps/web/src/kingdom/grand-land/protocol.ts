@@ -16,4 +16,4 @@ export type HostedReply =
   | { type: 'error'; message: string };
 
 /** Two concurrent workers reserve this much result memory each; the host never exceeds 16 MiB. */
-export const HOSTED_RESULT_BYTES = 8 * 1024 * 1024;
+export { BAKED_REGION_QUAD_BYTES as HOSTED_RESULT_BYTES } from '../../../../../packages/world/src/grand/baked/types';
