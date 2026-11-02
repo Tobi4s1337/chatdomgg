@@ -6,7 +6,7 @@ import { TokenSchema } from '@chatdom/shared';
 import type { KingdomForgeAudit } from '../../../codex/src/kingdom-forge/ports';
 import { ForgeCandidateBindingSchema, type ForgeCandidateBinding } from '../../../codex/src/kingdom-forge/candidate';
 import { FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, forgeJudgeQuestions, decideForgeSafety,
-  primaryForgeSafetyPass, scoreForgeQuality } from '../../../codex/src/providers/policy';
+  primaryForgeSafetyPass, scoreForgeQuality, FORGE_DETAIL_MATCHES, combineForgeDetailMatch } from '../../../codex/src/providers/policy';
 import { canonicalJson } from '../persistence/codec';
 import type { RealmForgeApprovals } from './types';
 
@@ -14,13 +14,15 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 const qualityRead = { recognisability: z.number().finite().min(0).max(1), completeness: z.number().finite().min(0).max(1), cleanMarks: z.number().finite().min(0).max(1) };
 const QualityReadSchema = z.strictObject(qualityRead);
 const QualityScoreSchema = z.strictObject({ ...qualityRead, score: z.number().finite().min(0).max(1), policy: z.literal(FORGE_JUDGE_POLICY_VERSION) });
+const DetailMatchSchema = z.enum(FORGE_DETAIL_MATCHES);
 const SelectionSchema = z.strictObject({ verdict: z.number().int().min(1).max(2), attempt: z.number().int().min(1).max(2),
   delivery: z.enum(['delivered', 'retried', 'softened']), shared: z.enum(['subject', 'family', 'slot', 'mood', 'colour']),
   reason: z.enum(['vocabulary', 'quality', 'fit']).optional() });
 const AuditSchema = z.strictObject({
   key: z.string().regex(/^forge-chat-[a-f0-9]{64}$/), runId: TokenSchema,
   at: z.number().int().nonnegative().safe(), judgment: z.enum(['approved', 'hold', 'refuse', 'cold']),
-  verdicts: z.array(z.strictObject({ outcome: z.enum(['pass', 'hold', 'refuse']), records: z.array(z.unknown()).max(4), quality: QualityScoreSchema.optional() })).max(3),
+  verdicts: z.array(z.strictObject({ outcome: z.enum(['pass', 'hold', 'refuse']), records: z.array(z.unknown()).max(4),
+    quality: QualityScoreSchema.optional(), detailMatch: DetailMatchSchema.optional() })).max(3),
   selection: SelectionSchema.optional(), attempts: z.number().int().min(0).max(2).optional(), modelCalls: z.number().int().min(0).max(7).optional(),
   candidate: ForgeCandidateBindingSchema.optional(),
 });
@@ -28,6 +30,7 @@ const base = {
   backend: z.literal('codex-cli'), policy: z.literal(FORGE_JUDGE_POLICY_VERSION),
   evidenceHash: z.string().regex(/^[a-f0-9]{64}$/), status: z.literal('complete'),
   quality: QualityReadSchema.optional(), qualityStatus: z.enum(['complete', 'invalid']).optional(),
+  detailMatch: DetailMatchSchema.optional(), detailMatchStatus: z.enum(['complete', 'invalid']).optional(),
 };
 const PrimarySchema = z.strictObject({ ...base, judge: z.literal('gpt-6-luna'), model: z.literal('gpt-6-luna'),
   probabilitySource: z.literal('model-self-estimate'),
@@ -49,12 +52,20 @@ function approvedGate(verdict: z.infer<typeof AuditSchema>['verdicts'][number], 
     if (Object.keys(answers).length !== questions.length || !questions.every(({ name }) => Object.hasOwn(answers, name))) return false;
     if (second ? decideForgeSafety(answers, { outcome: second.outcome }) !== 'pass' : !primaryForgeSafetyPass(answers)) return false;
     if (!image) return !verdict.quality && !primary.data.quality && !second?.quality
-      && !primary.data.qualityStatus && !second?.qualityStatus;
+      && !primary.data.qualityStatus && !second?.qualityStatus
+      && [verdict, primary.data, ...(second ? [second] : [])].every(read =>
+        !Object.hasOwn(read, 'detailMatch') && !Object.hasOwn(read, 'detailMatchStatus'));
     if (!primary.data.quality || !primary.data.qualityStatus || !verdict.quality || (second && (!second.quality || !second.qualityStatus))) return false;
+    if (!primary.data.detailMatch || !primary.data.detailMatchStatus || !verdict.detailMatch
+      || (second && (!second.detailMatch || !second.detailMatchStatus))) return false;
     // Invalid quality reads score zero conservatively; quality can never veto a safety approval.
     for (const read of [primary.data, ...(second ? [second] : [])]) if (read.qualityStatus === 'invalid'
       && Object.values(read.quality!).some(value => value !== 0)) return false;
-    return canonicalJson(verdict.quality) === canonicalJson(scoreForgeQuality(primary.data.quality, second?.quality));
+    // Invalid detail reads retain uncertainty without vetoing an otherwise safe result.
+    for (const read of [primary.data, ...(second ? [second] : [])]) if (read.detailMatchStatus === 'invalid'
+      && read.detailMatch !== 'unclear') return false;
+    return canonicalJson(verdict.quality) === canonicalJson(scoreForgeQuality(primary.data.quality, second?.quality))
+      && verdict.detailMatch === combineForgeDetailMatch(primary.data.detailMatch, second?.detailMatch);
 }
 
 /** Only the selected result can approve the piece; previous draft outcomes remain private summaries. */
@@ -88,7 +99,8 @@ export class FileForgeApprovals implements RealmForgeApprovals {
     // Refusals/holds carry no approval receipt. Keep only bounded outcome codes, never arbitrary provider records.
     // Approved records require complete evidence at both independent gates; malformed approval cannot mint.
     if (parsed.judgment === 'approved' && !approvedAudit(parsed)) throw new Error('The Forge approval lacks both independent judge gates');
-    const audit = parsed.judgment === 'approved' ? parsed : { ...parsed, verdicts: parsed.verdicts.map(verdict => ({ outcome: verdict.outcome, records: [], ...(verdict.quality ? { quality: verdict.quality } : {}) })) };
+    const audit = parsed.judgment === 'approved' ? parsed : { ...parsed, verdicts: parsed.verdicts.map(verdict => ({ outcome: verdict.outcome, records: [],
+      ...(verdict.quality ? { quality: verdict.quality } : {}), ...(verdict.detailMatch ? { detailMatch: verdict.detailMatch } : {}) })) };
     const bytes = canonicalJson(audit), path = this.path(audit.key, audit.runId);
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const temporary = join(this.directory, `.pending-${randomUUID()}`);

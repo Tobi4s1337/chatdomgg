@@ -19,13 +19,14 @@ export function forgeDeliveryMessage(draft: ForgeDraft, selection?: ForgeRunSele
   const piece = `a ${draft.plan.kind} with ${motifs[draft.plan.motif]}`;
   if (selection?.delivery !== 'softened') return `Your home now carries ${piece}. One coal warmed it.`;
   const why = selection.reason === 'fit' ? 'I adapted the setting to fit your home.'
-    : selection.reason === 'quality' ? 'I could not bring every small detail into focus.'
+    : selection.reason === 'quality' ? 'I could not make an exact match for your wish.'
       : 'That exact shape is beyond my kit.';
-  const connection = selection.shared === 'family' ? 'It keeps the same family of shapes.'
+  const connection = selection.reason === 'quality' ? ''
+    : selection.shared === 'family' ? 'It keeps the same family of shapes.'
     : selection.shared === 'slot' ? 'It keeps the place you wished to fill.'
       : selection.shared === 'mood' ? 'It keeps the feeling of your wish.'
         : selection.shared === 'colour' ? 'It keeps the colours of your wish.' : 'It keeps your chosen subject.';
-  return `The closest I can make is ${piece}. ${why} ${connection}`;
+  return `The closest I can make is ${piece}. ${why}${connection ? ` ${connection}` : ''}`;
 }
 
 export const FORGE_WAIT_MESSAGES = {

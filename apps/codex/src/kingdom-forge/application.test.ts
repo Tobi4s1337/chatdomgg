@@ -36,7 +36,7 @@ function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (
   let coals = 1, current = true;
   let durable: ForgeAttachment | null = null;
   const providers: ForgeProviders = {
-    judgeWords: vi.fn(async () => pass), draft: vi.fn(async () => draft), judgeResult: vi.fn(async () => ({ ...pass, quality: goodQuality })),
+    judgeWords: vi.fn(async () => pass), draft: vi.fn(async () => draft), judgeResult: vi.fn(async () => ({ ...pass, quality: goodQuality, detailMatch: 'met' as const })),
   };
   const authority: KingdomForgeAuthority = {
     origin,
@@ -87,13 +87,44 @@ describe('the kingdom Forge application', () => {
 
   it('keeps quality scores in the private audit and charges once for a safe delivered piece', async () => {
     const f = fixture(), quality = { policy: FORGE_JUDGE_POLICY_VERSION, score: 0.1, recognisability: 0, completeness: 0.4, cleanMarks: 0 };
-    vi.mocked(f.providers.judgeResult).mockResolvedValue({ ...pass, quality });
+    vi.mocked(f.providers.judgeResult).mockResolvedValue({ ...pass, quality, detailMatch: 'met' });
     expect(await f.run(command, f.lease)).toMatchObject({ kind: 'committed' });
     expect(f.audits[0]?.verdicts[1]?.quality).toEqual(quality);
     expect(JSON.stringify(f.publicEvents)).not.toContain('recognisability');
     expect(f.publicEvents.filter(event => event.type === 'committed')).toHaveLength(1);
     expect(f.coals).toBe(0);
     expect(await f.run(command, f.lease)).toEqual({ kind: 'already-committed' });
+    expect(f.authority.commit).toHaveBeenCalledTimes(1);
+    expect(f.coals).toBe(0);
+  });
+
+  it('keeps both retry detail summaries privately while retaining only selected result evidence', async () => {
+    const f = fixture();
+    vi.mocked(f.providers.judgeResult)
+      .mockResolvedValueOnce({ ...pass, quality: goodQuality, detailMatch: 'adapted' })
+      .mockResolvedValueOnce({ ...pass, quality: goodQuality, detailMatch: 'met' });
+    expect(await f.run(command, f.lease)).toMatchObject({ kind: 'committed' });
+    expect(f.providers.judgeResult).toHaveBeenCalledTimes(2);
+    expect(f.audits[0]).toMatchObject({ attempts: 2, selection: { verdict: 2, delivery: 'retried' }, verdicts: [
+      { outcome: 'pass' }, { detailMatch: 'adapted', records: [] }, { detailMatch: 'met', records: pass.records },
+    ] });
+    expect(f.audits[0]?.verdicts[0]).not.toHaveProperty('detailMatch');
+    expect(JSON.stringify(f.publicEvents)).not.toContain('detailMatch');
+    expect(JSON.stringify(f.durable)).not.toContain('detailMatch');
+    expect(f.coals).toBe(0);
+  });
+
+  it('softens safe high-scoring pieces with unverifiable details without exposing private scores or a refusal beat', async () => {
+    const f = fixture();
+    vi.mocked(f.providers.judgeResult).mockResolvedValue({ ...pass, quality: goodQuality, detailMatch: 'unclear' });
+    expect(await f.run(command, f.lease)).toMatchObject({ kind: 'committed', privateMessage: expect.stringContaining('closest') });
+    expect(f.providers.judgeResult).toHaveBeenCalledTimes(2);
+    expect(f.audits[0]).toMatchObject({ judgment: 'approved', selection: { delivery: 'softened', reason: 'quality' }, verdicts: [
+      { outcome: 'pass' }, { detailMatch: 'unclear' }, { detailMatch: 'unclear' },
+    ] });
+    expect(f.publicEvents.map(event => event.type)).not.toContain('ended');
+    expect(JSON.stringify(f.publicEvents)).not.toContain('detailMatch');
+    expect(JSON.stringify(f.durable)).not.toContain('detailMatch');
     expect(f.authority.commit).toHaveBeenCalledTimes(1);
     expect(f.coals).toBe(0);
   });

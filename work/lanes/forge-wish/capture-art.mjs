@@ -6,10 +6,13 @@ import { acquireCaptureLock } from '../../../packages/testing/capture-lock.mjs';
 // Run the GPU branch only inside chatdom-pc-lease. The CPU fallback takes one still, no timings.
 const gpu = process.argv[2] === 'gpu', port = gpu ? 5192 : Number(process.env.FORGE_WISH_CAPTURE_PORT ?? 5172);
 const kitRevision = Number(process.env.FORGE_WISH_KIT_REVISION ?? '1');
+const fox = process.env.FORGE_WISH_CAPTURE_SUBJECT === 'fox';
+if (process.env.FORGE_WISH_CAPTURE_SUBJECT && !fox) throw new Error('Choose the default review or fox.');
 if (![1, 2].includes(kitRevision)) throw new Error('Choose a registered kit revision.');
 if (!gpu && (!Number.isInteger(port) || port < 5170 || port > 5189 || port === 5187)) throw new Error('Choose an unreserved lane preview port.');
-const output = kitRevision === 2 ? 'work/evidence/forge-wish/lantern-kit2' : 'work/evidence/forge-wish/contact-sheets';
-const release = gpu ? async () => {} : await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(120_000) });
+const output = fox ? 'work/evidence/forge-wish/quality-v6' : kitRevision === 2 ? 'work/evidence/forge-wish/lantern-kit2' : 'work/evidence/forge-wish/contact-sheets';
+// Queueing uses no browser or preview. Allow busy lanes to finish; the capture itself remains one short still.
+const release = gpu ? async () => {} : await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(300_000) });
 let server, browser;
 let cleanup;
 function closeOwned() {
@@ -40,7 +43,13 @@ try {
   }
   if (gpu) {
     const reports = [];
-    for (const [name, query, size] of [
+    for (const [name, query, size] of fox ? [
+      ['fox-piece-grove', 'view=piece&style=grove&motif=sleeping-fox&hour=19&angles=three', '1440x900'],
+      ['fox-piece-hearth', 'view=piece&style=hearth&motif=sleeping-fox&hour=19&angles=three', '1440x900'],
+      ['fox-piece-tide', 'view=piece&style=tide&motif=sleeping-fox&hour=19&angles=three', '1440x900'],
+      ['fox-home-grove', 'view=home&style=grove&motif=sleeping-fox&hour=19', '1440x900'],
+      ['fox-home-hearth', 'view=home&style=hearth&motif=sleeping-fox&hour=14', '390x844'],
+    ] : [
       ['moon-piece-hearth', 'view=piece&style=hearth&motif=crescent-moon&hour=14', '1440x900'],
       ['moon-home-hearth', 'view=home&style=hearth&motif=crescent-moon&hour=14', '1440x900'],
       ['moon-home-tide', 'view=home&style=tide&motif=crescent-moon&hour=19', '390x844'],
@@ -61,11 +70,13 @@ try {
     browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
-    await page.goto(`http://127.0.0.1:${port}/src/forge-wish-bench/index.html?view=piece&style=hearth&motif=crescent-moon&hour=14&kit=${kitRevision}`);
+    const query = fox ? 'view=piece&style=grove&motif=sleeping-fox&hour=19&angles=three'
+      : 'view=piece&style=hearth&motif=crescent-moon&hour=14';
+    await page.goto(`http://127.0.0.1:${port}/src/forge-wish-bench/index.html?${query}&kit=${kitRevision}`);
     await page.waitForFunction(() => window.__chatdomReady === true || window.__chatdomForgeWishError, undefined, { timeout: 60_000 });
     const error = await page.evaluate(() => window.__chatdomForgeWishError);
     if (error || errors.length) throw new Error(error ?? errors.join('; '));
-    await page.screenshot({ path: `${output}/swiftshader-moon-piece@1440x900.png` });
+    await page.screenshot({ path: `${output}/swiftshader-${fox ? 'fox-dusk-angles' : 'moon-piece'}@1440x900.png` });
   }
 } finally {
   await closeOwned();

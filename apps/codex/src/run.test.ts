@@ -9,7 +9,9 @@ const request = { words: 'A chimney for a little dragon who fell asleep guarding
 const draft: ForgeDraft = { plan: { version: 2, kind: 'chimney', motif: 'sleeping-dragon', finish: 'native', accent: 'none' }, title: 'The sleepy keeper', plaque: 'A quiet watch over a warm hearth.' };
 const second: ForgeDraft = { ...draft, title: 'The hearth keeper', plan: { ...draft.plan, finish: 'copper' } };
 const words: JudgeVerdict = { outcome: 'pass', reason: 'passed', records: [] };
-const result = (score: number): JudgeVerdict => ({ ...words, quality: { policy: 'test', score, recognisability: score, completeness: score, cleanMarks: score } });
+const result = (score: number): JudgeVerdict => ({ ...words, detailMatch: 'met', quality: { policy: 'test', score, recognisability: score, completeness: score, cleanMarks: score } });
+const assessed = (recognisability: number, completeness: number, cleanMarks: number, score: number): JudgeVerdict =>
+ ({ ...words, detailMatch: 'met', quality: { policy: 'test', recognisability, completeness, cleanMarks, score } });
 function setup() {
  const events: ForgeRunEvent[] = [], records: ForgeRunRecord[] = [];
  const providers: ForgeProviders = { judgeWords: vi.fn(async () => words), draft: vi.fn(async () => draft), judgeResult: vi.fn(async () => result(0.9)) };
@@ -38,6 +40,53 @@ describe('Forge run', () => {
   expect(JSON.stringify(s.events)).not.toContain(attempt === 1 ? second.title : draft.title);
   expect(s.events.some(e => e.type === 'stopped')).toBe(false);
  });
+ it.each([assessed(0.54, 1, 1, 0.724), assessed(0.7, 1, 1, 0.82)])('retries weak recognition and selects a qualifying retry even over a higher aggregate', async first => {
+  const s = setup();
+  const retry = assessed(0.8, 0.7, 0.7, 0.76);
+  vi.mocked(s.providers.draft).mockResolvedValueOnce(draft).mockResolvedValueOnce(second);
+  vi.mocked(s.providers.judgeResult).mockResolvedValueOnce(first).mockResolvedValueOnce(retry);
+  const selection = await runForge(request, s.providers, s.emit, s.record);
+  expect(s.providers.judgeResult).toHaveBeenCalledTimes(2);
+  expect(selection).toMatchObject({ attempt: 2, verdict: 2, delivery: 'retried' });
+  expect(s.records[0]?.verdicts).toEqual([words, first, retry]);
+  expect(s.events.at(-1)).toMatchObject({ type: 'approved', draft: second });
+ });
+ it('softens two safe but weakly recognised candidates within the normal call budget', async () => {
+  const s = setup();
+  const first = assessed(0.54, 1, 1, 0.724), retry = assessed(0.7, 1, 1, 0.82);
+  s.providers.judgeWords = vi.fn(async ({ budget }) => { budget!.take(); return words; });
+  s.providers.draft = vi.fn().mockImplementationOnce(async ({ budget }: ForgeDraftInput) => { budget!.take(); return draft; })
+   .mockImplementationOnce(async ({ budget }: ForgeDraftInput) => { budget!.take(); return second; });
+  s.providers.judgeResult = vi.fn().mockImplementationOnce(async ({ budget }: ForgeResultInput) => { budget!.take(); return first; })
+   .mockImplementationOnce(async ({ budget }: ForgeResultInput) => { budget!.take(); return retry; });
+  const selection = await runForge(request, s.providers, s.emit, s.record);
+  expect(selection).toMatchObject({ attempt: 2, verdict: 2, delivery: 'softened', reason: 'quality' });
+  expect(s.records[0]).toMatchObject({ outcome: 'approved', modelCalls: 5, verdicts: [words, first, retry] });
+  expect(s.events.at(-1)).toMatchObject({ type: 'approved', draft: second });
+  expect(s.events.some(e => e.type === 'stopped')).toBe(false);
+ });
+ it.each(['adapted', 'unclear'] as const)('retries a recognisable piece with %s detail and selects a met retry over a higher score', async detailMatch => {
+  const s = setup();
+  const first = { ...assessed(0.95, 1, 1, 0.97), detailMatch }, retry = assessed(0.8, 0.7, 0.7, 0.76);
+  vi.mocked(s.providers.draft).mockResolvedValueOnce(draft).mockResolvedValueOnce(second);
+  vi.mocked(s.providers.judgeResult).mockResolvedValueOnce(first).mockResolvedValueOnce(retry);
+  const selection = await runForge(request, s.providers, s.emit, s.record);
+  expect(selection).toMatchObject({ attempt: 2, verdict: 2, delivery: 'retried' });
+  expect(s.records[0]?.verdicts).toEqual([words, first, retry]);
+  expect(s.events.at(-1)).toMatchObject({ type: 'approved', draft: second });
+ });
+ it.each(['adapted', 'unclear'] as const)('softens unresolved %s detail without a safety refusal', async detailMatch => {
+  const s = setup();
+  const first = { ...result(0.95), detailMatch }, retry = { ...result(0.9), detailMatch };
+  vi.mocked(s.providers.draft).mockResolvedValueOnce(draft).mockResolvedValueOnce(second);
+  vi.mocked(s.providers.judgeResult).mockResolvedValueOnce(first).mockResolvedValueOnce(retry);
+  const selection = await runForge(request, s.providers, s.emit, s.record);
+  expect(s.providers.judgeResult).toHaveBeenCalledTimes(2);
+  expect(selection).toMatchObject({ attempt: 1, verdict: 1, delivery: 'softened', reason: 'quality' });
+  expect(s.records[0]).toMatchObject({ outcome: 'approved', verdicts: [words, first, retry] });
+  expect(s.events.at(-1)).toMatchObject({ type: 'approved', draft });
+  expect(s.events.some(e => e.type === 'stopped')).toBe(false);
+ });
  it('softens an explicitly closest candidate', async () => {
   const s = setup(); s.providers.draftCandidate = vi.fn(async () => ({ draft, interpretation: 'closest' as const, shared: 'family' as const }));
   expect(await runForge(request, s.providers, s.emit, s.record)).toMatchObject({ delivery: 'softened', reason: 'vocabulary', shared: 'family' });
@@ -60,10 +109,11 @@ describe('Forge run', () => {
  });
  it('falls back to the first safe draft and its own evidence if retry fails', async () => {
   const s = setup(); vi.mocked(s.providers.draft).mockResolvedValueOnce(draft).mockRejectedValueOnce(new Error('raw retry error'));
-  vi.mocked(s.providers.judgeResult).mockResolvedValueOnce(result(0.3));
+  const weak = assessed(0.54, 1, 1, 0.724);
+  vi.mocked(s.providers.judgeResult).mockResolvedValueOnce(weak);
   const selection = await runForge(request, s.providers, s.emit, s.record);
   expect(selection).toMatchObject({ verdict: 1, attempt: 1, delivery: 'softened', reason: 'quality' });
-  expect(s.records[0]).toMatchObject({ draft, verdicts: [words, result(0.3)], selection });
+  expect(s.records[0]).toMatchObject({ draft, verdicts: [words, weak], selection });
   expect(s.events.at(-1)).toMatchObject({ type: 'approved', draft });
   expect(JSON.stringify([s.events, s.records])).not.toContain('raw retry error');
  });

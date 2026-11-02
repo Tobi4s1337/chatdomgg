@@ -4,6 +4,7 @@ Run serially under `nice -n 10`:
 
 ```sh
 node work/lanes/forge-wish/repeatability.mjs prepare
+node work/lanes/forge-wish/repeatability.mjs contrast /tmp/chatdom-forge-wish/repeatability-<id>
 node work/lanes/forge-wish/repeatability.mjs check /tmp/chatdom-forge-wish/repeatability-<id>
 ```
 
@@ -39,3 +40,16 @@ Focused guard tests need the lane config because the root configuration includes
 ```sh
 pnpm exec vitest run --config work/lanes/forge-wish/vitest.checkpoint.config.ts
 ```
+
+The `contrast` mode reads two deliberately unrelated stored images. Every text field and the entire draft plan
+claims the subject requested by the fixed wish; only the PNG contradicts it. Expectations are frozen before
+model calls: both must pass safety, have complete bounded quality/detail evidence, recognition no higher than
+.25, and detailMatch adapted. They write a separate private contrast directory, never mint an approval, and
+never enter product routes. A pass is limited discrimination evidence, not calibration. Stop if they fail.
+
+Policy v6 preserves raw numeric scores and the original weights. It adds anchored identity guidance and a
+finite explicit-detail read from the same model invocation. Repeatability now also requires identical combined
+detailMatch across a fixture's three rounds: a met/adapted flip changes delivery and cannot count as the same
+answer. The verifier recomputes detail aggregates and rejects malformed/defaulted evidence for proof purposes.
+A stable adapted result may pass consistency while remaining insufficient for exact delivery or recognition.
+Old v5 evaluations remain separate evidence; no old manifest, score or image is rewritten into v6 proof.

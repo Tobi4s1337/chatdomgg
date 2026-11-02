@@ -55,3 +55,8 @@ safety holds and authority prerequisite failures return their private causes wit
 The focused test uses controlled providers/authority and real assembly/contact-sheet rendering. It establishes
 ordering, idempotency, privacy projection and no commit for failed/stale runs. It does not establish durable realm
 transactions, live Twitch/model operation or production publication. No service is started by this module.
+
+Image verdict summaries include finite detail-match evidence privately. A missing or adapted detail prevents
+exact delivery and may trigger the existing quiet retry; it never changes a safety verdict. Both the selected
+raw evidence and discarded finite summaries retain this distinction. Quality-softened messages describe the
+actual piece and approximation without repeating an unverified claim that the chosen subject survived.

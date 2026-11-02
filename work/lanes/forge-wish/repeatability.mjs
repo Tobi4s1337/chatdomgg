@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { clearTimeout } from 'node:timers';
 
 const mode = process.argv[2];
-if (mode !== 'prepare' && !(mode === 'check' && process.argv[3])) throw new Error('Use prepare or check <private-fixture-directory>.');
+if (mode !== 'prepare' && !(['check', 'contrast'].includes(mode) && process.argv[3])) throw new Error('Use prepare, check or contrast <private-fixture-directory>.');
 const outDir = resolve('apps/codex/src/forge-repeatability/dist');
 await build({ root: resolve('apps/codex'), configFile: false, logLevel: 'warn',
   build: { ssr: resolve('work/lanes/forge-wish/runtime/repeatability-entry.ts'), outDir, emptyOutDir: true, target: 'node22',

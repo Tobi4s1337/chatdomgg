@@ -14,12 +14,14 @@ const view = params.get('view') ?? 'home';
 const motif = params.get('motif') ?? 'crescent-moon';
 const hour = Number(params.get('hour') ?? '19');
 const kitRevision = Number(params.get('kit') ?? '1');
+const threeAngles = params.get('angles') === 'three';
 const kinds = { 'sleeping-dragon': 'chimney', 'crescent-moon': 'lantern', 'watchful-owl': 'weathervane', 'sleeping-fox': 'chimney', sunflower: 'lantern', 'scallop-shell': 'weathervane', 'shooting-star': 'lantern' } as const;
 const host = document.querySelector<HTMLElement>('#scene')!;
 const cell = VOXEL_METRES.build;
 
 async function main() {
-  if (!['hearth', 'tide', 'grove'].includes(style) || !['home', 'piece'].includes(view) || !Object.hasOwn(kinds, motif) || !Number.isFinite(hour) || hour < 0 || hour > 23 || ![1, 2].includes(kitRevision)) throw new Error('Invalid forge review parameters.');
+  if (!['hearth', 'tide', 'grove'].includes(style) || !['home', 'piece'].includes(view) || !Object.hasOwn(kinds, motif) || !Number.isFinite(hour) || hour < 0 || hour > 23 || ![1, 2].includes(kitRevision)
+    || params.has('angles') && (!threeAngles || view !== 'piece')) throw new Error('Invalid forge review parameters.');
   const family = style as StyleKey, selected = motif as keyof typeof kinds, kind = kinds[selected];
   const home = params.get('host') === 'core' ? createHome('house', family, 0)
     : createNativeForgeHost({ slot: 0, position: [0, 0, 0], rotation: 0, tier: 'house', style: family, variant: 0 }).blueprint;
@@ -69,9 +71,11 @@ async function main() {
   else { partMesh.position.set(-pieceBox.min.x, -pieceBox.min.y, -pieceBox.min.z); }
   scene.add(partMesh);
   const target = view === 'home' ? houseBox.getCenter(new THREE.Vector3()) : pieceBox.getCenter(new THREE.Vector3()).add(partMesh.position);
-  function aim() {
-    const width = host.clientWidth, height = host.clientHeight, aspect = width / height;
-    renderer.setSize(width, height, false); camera.aspect = aspect;
+  const directions = threeAngles ? [new THREE.Vector3(-1, .7, 1), new THREE.Vector3(1, .6, 1), new THREE.Vector3(-1, .65, -1)]
+    : [new THREE.Vector3(-.35, .25, 1)];
+  function aim(direction = directions[0]!) {
+    const aspect = host.clientWidth / directions.length / host.clientHeight;
+    camera.aspect = aspect;
     if (view === 'home') {
       // Twelve horizontal metres from the real front facade, looking toward its centre.
       camera.position.set(target.x, Math.max(3, target.y), houseBox.max.z + 12);
@@ -84,18 +88,28 @@ async function main() {
       camera.fov = 35;
       const vfov = THREE.MathUtils.degToRad(camera.fov), hfov = 2 * Math.atan(Math.tan(vfov / 2) * aspect);
       const distance = Math.max(half / Math.tan(vfov / 2), half / Math.tan(hfov / 2));
-      camera.position.copy(target).addScaledVector(new THREE.Vector3(-.35, .25, 1).normalize(), distance);
+      camera.position.copy(target).addScaledVector(direction.clone().normalize(), distance);
     }
     camera.lookAt(target); camera.updateProjectionMatrix();
   }
+  function render() {
+    const width = host.clientWidth, height = host.clientHeight;
+    renderer.setSize(width, height, false); renderer.setScissorTest(threeAngles);
+    directions.forEach((direction, index) => {
+      const left = Math.floor(index * width / directions.length), right = Math.floor((index + 1) * width / directions.length);
+      aim(direction); renderer.setViewport(left, 0, right - left, height); renderer.setScissor(left, 0, right - left, height);
+      renderer.render(scene, camera);
+    });
+    renderer.setScissorTest(false); renderer.setViewport(0, 0, width, height);
+  }
   aim();
   await renderer.compileAsync(scene, camera);
-  renderer.render(scene, camera);
-  await new Promise<void>(resolve => requestAnimationFrame(() => { renderer.render(scene, camera); renderer.getContext().finish(); resolve(); }));
-  state.__chatdomForgeWish = { style, view, motif, kind, hour, kitRevision, home: home.id, piece: part.blueprint.id, socket: socket.id, origin: socket.origin,
+  render();
+  await new Promise<void>(resolve => requestAnimationFrame(() => { render(); renderer.getContext().finish(); resolve(); }));
+  state.__chatdomForgeWish = { style, view, motif, kind, hour, kitRevision, threeAngles, home: home.id, piece: part.blueprint.id, socket: socket.id, origin: socket.origin,
     homeBounds: { min: houseBox.min.toArray(), max: houseBox.max.toArray() }, pieceBounds: { min: pieceBox.min.toArray(), max: pieceBox.max.toArray() },
     horizontalFromFacade: view === 'home' ? 12 : null, width: host.clientWidth, height: host.clientHeight };
   state.__chatdomReady = true;
-  window.addEventListener('resize', () => { aim(); renderer.render(scene, camera); });
+  window.addEventListener('resize', render);
 }
 void main().catch((error: unknown) => { state.__chatdomForgeWishError = error instanceof Error ? error.message : String(error); console.error(error); });

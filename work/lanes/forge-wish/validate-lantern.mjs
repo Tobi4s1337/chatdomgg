@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer } from 'vite';
 
+const qualityReview = process.env.FORGE_WISH_VALIDATION_SET === 'quality-v6';
+if (process.env.FORGE_WISH_VALIDATION_SET && !qualityReview) throw new Error('Choose the default validation or quality-v6.');
 const server = await createServer({ configFile: false, optimizeDeps: { noDiscovery: true, include: [] },
   server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
 try {
@@ -53,7 +55,7 @@ try {
       }
     }
   }
-  const output = 'work/evidence/forge-wish/lantern-kit2';
+  const output = qualityReview ? 'work/evidence/forge-wish/quality-v6' : 'work/evidence/forge-wish/lantern-kit2';
   await mkdir(output, { recursive: true });
   await writeFile(`${output}/validation.json`, JSON.stringify({ kitRevision: 2, results, meshes, unavailable }, null, 2) + '\n');
   console.info(JSON.stringify({ kitRevision: 2, nativeFits: results.length, productionMeshes: meshes.length,

@@ -10,10 +10,17 @@ confident objection, different objections or uncertainty holds privately; neithe
 Subject recognition, completeness and incidental stray marks produce bounded quality scores, never safety
 holds or refusals. Every actual image read records those dimensions. A single read, or the mean of two actual reads, is combined as 60% recognition,
 25% completeness and 15% clean marks, rounded deterministically to four decimal places. This is a versioned
-selection score, not a calibrated safety probability or a visual acceptance claim. Missing/malformed quality
+selection score, not a calibrated safety probability or a visual acceptance claim. The rubric gives generic
+visual anchors and reads all views as projections of one object; a thin relief is not a failed identity merely
+because its side view is edge-on. Identity comes from pixels, never the title or plan enum. Missing/malformed quality
 scores become zero without changing safety. Explicit harmful text, symbols and shapes still meet the floor.
 The private realm audit retains scores and policy even when a wish is held or refused; no score enters a
-public event. The receipt verifier recomputes the same safety rule and quality aggregate before authorizing.
+public event. Each image read also reports finite `detailMatch: met | adapted | unclear`. Missing or
+malformed output becomes `unclear`, with invalid status, without changing safety. Actual reads combine
+conservatively: any adapted read means adapted, otherwise every actual read must say met to produce met.
+A normal exact rendition requires met details, recognition at least .75, aggregate at least .72, and completeness
+and clean marks at least .7. A qualifying whole subject wins over a higher-scoring ambiguous/adapted candidate.
+Otherwise the existing bounded retry or private quality softening applies; no extra judge call is made. The receipt verifier recomputes the same safety rule and quality aggregate before authorizing.
 
 FW10 providers expose optional `draftCandidate(input)` alongside the compatible `draft(input)` method.
 Its strict result is `{draft, interpretation: 'as-wished' | 'closest', shared: 'subject' | 'family' | 'slot' | 'mood' | 'colour'}`.
@@ -33,7 +40,7 @@ fallback is used. Each gate starts one fresh, ephemeral Luna run, independent of
 strictly below the pass threshold pass immediately. Otherwise it escalates to a fresh Terra run, without giving
 Terra the primary answer. A malformed or unavailable primary cannot pass even if Terra passes. A refusal
 requires the same floor concern from both reads. The deterministic `primaryForgeSafetyPass` and
-`decideForgeSafety` exports let the receipt verifier replay policy v5. Records contain exactly the actual calls:
+`decideForgeSafety` exports let the receipt verifier replay policy v6. Records contain exactly the actual calls:
 one Luna record on a confident pass or primary transport failure, otherwise Luna and Terra attempt records. Each retains backend, model,
 policy and evidence hash; complete Luna records add thresholds, self-estimated answers and probability source;
 Terra records add outcome and concerns. Image records add raw bounded quality and its validity status.
@@ -74,3 +81,7 @@ A real model run on that bench must not claim a real Twitch citizen or durable r
 This transport implements Tobias’s explicit no-local-API-key instruction, superseding the direct-HTTP
 transport in the older Safety §4.2 prose. Independent safety contexts and all content/publication rules remain.
 See `work/DECISIONS.md` and `policy.ts` for the current boundary and policy version.
+
+Policy v6 identifies this rubric and finite detail contract. Historical evidence keeps its original policy;
+it is never relabelled. Current approval verification rejects stale pending audits. Committed request recovery
+uses the durable realm command binding rather than treating a stale audit as new approval.

@@ -133,8 +133,9 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
             key: attempt.key, runId: entry.id, at: entry.at, judgment: entry.outcome,
             // Only the chosen candidate's full gate evidence can authorize the attachment. Other attempts
             // retain bounded quality/outcome summaries, never failed-draft text or arbitrary provider records.
-            verdicts: entry.verdicts.map(({ outcome, records, quality }, index) => ({ outcome,
-              records: index === 0 || index === entry.selection?.verdict ? records : [], ...(quality ? { quality } : {}) })),
+            verdicts: entry.verdicts.map(({ outcome, records, quality, detailMatch }, index) => ({ outcome,
+              records: index === 0 || index === entry.selection?.verdict ? records : [], ...(quality ? { quality } : {}),
+              ...(detailMatch ? { detailMatch } : {}) })),
             ...(entry.selection ? { selection: entry.selection } : {}), attempts: entry.attempts, modelCalls: entry.modelCalls,
             ...(entry.outcome === 'approved' && entry.draft ? { candidate: bindForgeCandidate(entry.draft, request.home, styleKit) } : {}),
           }), AUDIT_WAIT_MS, () => abort.abort(), signal);

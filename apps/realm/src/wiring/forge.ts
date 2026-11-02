@@ -191,6 +191,9 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
       // A missing receipt after a failed write is not proof of rollback. In particular COMMIT may still be
       // finishing after its reply was lost. Keep uncertainty explicit so cleanup cannot invent a refund.
       if (!known) { note(step, 'uncertain'); throw new Error('The kingdom could not confirm this Forge step', { cause: error }); }
+      // A lookup proves the attempt's outcome, not that the submitted candidate matched its command digest.
+      // Only execute can establish that match; status remains available to recover the durable outcome.
+      if (step === 'commit' && known.status === 'committed') return { status: 'rejected', reason: 'unconfirmed-candidate' };
       return known;
     }
   }
@@ -284,19 +287,56 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
 
     async commit(input, lease) {
       if (!options || !gate || !live(lease)) { note('commit', 'cold', !options ? 'unconfigured' : !gate ? 'ungated' : 'closed'); return { kind: 'cold' }; }
-      // The judges' own audited approval of this run, read before the writer: placement needs both that evidence and
-      // the kingdom's commit. A model-approved event or an API key alone never attaches anything.
       const draft = ForgeDraftSchema.safeParse(input.attachment.draft);
       if (!draft.success) return { kind: 'held' };
-      const approval = await options.approvals.approved(input.key, input.attachment.runId,
-        { draftDigest: forgeDraftDigest(draft.data), homeDigest: input.expectedHomeDigest,
-          kitId: input.attachment.kitId, kitRevision: input.attachment.kitRevision }).catch(() => null);
-      if (!approval || !TokenSchema.safeParse(approval).success) { note('commit', 'held', 'gates'); return { kind: 'held' }; }
       return holding<Committed>(async kingdom => {
-        const state = kingdom.privateState, now = kingdom.databaseNow(), prior = attemptStatus(state, input);
-        if (prior.kind === 'committed') return { kind: 'committed', committedAt: prior.committedAt } as const;
-        if (made(state, input.key)) { note('commit', 'already-committed'); return { kind: 'already-committed' } as const; }
         if (!live(lease)) { note('commit', 'cold', 'canceled'); return { kind: 'cold' } as const; }
+        // Reporting this attempt's durable commit is not a new approval. A newer policy may no longer read its
+        // historical audit. Its own receipt proves the outcome, but only the repository's command digest can
+        // prove the full retry payload, including the original home revision/digest and reservation.
+        const known = await kingdom.lookup(commandId('commit', input)).catch(() => {
+          // An unavailable lookup is no evidence of success or rollback. A pending candidate still has to
+          // pass current approval and the exact transactional command check; status can recover uncertainty.
+          note('commit', 'uncertain');
+          return null;
+        });
+        if (!live(lease)) { note('commit', 'cold', 'canceled'); return { kind: 'cold' } as const; }
+        const prior = attemptStatus(kingdom.privateState, input);
+        if (known?.status === 'committed' || prior.kind === 'committed') {
+          const item = made(kingdom.privateState, input.key);
+          // A lost reply can leave privateState behind its receipt. Without the stored approval receipt we
+          // cannot reconstruct the original command: status can report recovery, commit cannot invent a match.
+          if (!item || prior.kind !== 'committed') { note('commit', 'held', 'unconfirmed-candidate'); return { kind: 'held' } as const; }
+          const command: RealmDomainCommand = {
+            type: 'forge.commitApproved', attempt: { key: input.key, attemptId: input.attemptId }, reservationId: input.reservationId,
+            expectedRevision: input.expectedRevision, expectedHomeDigest: input.expectedHomeDigest, attachment: structuredClone(input.attachment),
+            creation: { words: input.creation.words.trim() }, approvalReceipt: item.approvalReceipt,
+          };
+          try {
+            // Unlike a new write's recovery, a failed payload check cannot fall back to lookup: the receipt
+            // names this attempt, not the submitted payload. Only an exact repository replay proves both.
+            const replay = await gate.run(command, () => live(lease), () => kingdom.execute(commandId('commit', input), command, 'forge',
+              { anvilCapacity: anvils, actor: item.ownerId, cause: { kind: 'external', source: 'forge', id: input.key }, current: () => live(lease) }));
+            if (!live(lease) || replay.canceled) { note('commit', 'cold', 'canceled'); return { kind: 'cold' } as const; }
+            if (replay.result.status === 'committed') return { kind: 'committed', committedAt: replay.result.at } as const;
+            const kind = replay.result.reason === 'cold' ? 'cold' : 'held';
+            note('commit', kind, replay.result.reason);
+            return { kind } as const;
+          } catch {
+            const kind = live(lease) ? 'held' : 'cold';
+            note('commit', kind, 'unconfirmed-candidate');
+            return { kind } as const;
+          }
+        }
+        if (made(kingdom.privateState, input.key)) { note('commit', 'already-committed'); return { kind: 'already-committed' } as const; }
+        // Every new publication still needs the judges' own current audited approval of this exact candidate.
+        // A model-approved event, a historical policy receipt or an API key alone never attaches anything.
+        const approval = await options.approvals.approved(input.key, input.attachment.runId,
+          { draftDigest: forgeDraftDigest(draft.data), homeDigest: input.expectedHomeDigest,
+            kitId: input.attachment.kitId, kitRevision: input.attachment.kitRevision }).catch(() => null);
+        if (!approval || !TokenSchema.safeParse(approval).success) { note('commit', 'held', 'gates'); return { kind: 'held' } as const; }
+        if (!live(lease)) { note('commit', 'cold', 'canceled'); return { kind: 'cold' } as const; }
+        const state = kingdom.privateState, now = kingdom.databaseNow();
         const r = own(state.reservations, input.key);
         if (!r || r.attempt.attemptId !== input.attemptId || r.reservation.reservationId !== input.reservationId || r.reservation.expiresAt <= now) {
           note('commit', 'cold', 'reservation'); return { kind: 'cold' } as const;
@@ -318,9 +358,12 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
         }, { actor: home.ownerId, cause: { kind: 'external', source: 'forge', id: input.key } }, () => live(lease));
         if (result === CANCELED) { note('commit', 'cold', 'canceled'); return { kind: 'cold' } as const; }
         if (result.status === 'committed') { note('commit', 'committed'); return { kind: 'committed', committedAt: result.at } as const; }
-        // A stored earlier outcome of this very command (a retry after a lost reply) or another attempt's part.
-        const after = attemptStatus(kingdom.privateState, input);
-        if (after.kind === 'committed') return { kind: 'committed', committedAt: after.committedAt } as const;
+        // A rejected digest/conflict must never become success merely because this attempt made another payload.
+        if (result.status === 'rejected') {
+          const kind = result.reason === 'cold' ? 'cold' : 'held';
+          note('commit', kind, result.reason);
+          return { kind } as const;
+        }
         if (made(kingdom.privateState, input.key)) return { kind: 'already-committed' } as const;
         const kind = result.reason === 'cold' ? 'cold' : 'held';
         note('commit', kind, result.reason);

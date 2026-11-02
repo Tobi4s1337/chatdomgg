@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { FORGE_JUDGE_POLICY_VERSION, scoreForgeQuality, type ForgeQualityRead } from '../../../../apps/codex/src/providers/policy';
-import { repeatabilityPass, type RepeatabilityRead } from './repeatability-policy';
+import { contrastPass, repeatabilityPass, type RepeatabilityRead } from './repeatability-policy';
 
 const ids = ['dragon', 'moon', 'owl', 'fox', 'sunflower'];
 const hash = 'a'.repeat(64);
 const quality = (value: number): ForgeQualityRead => ({ recognisability: value, completeness: value, cleanMarks: value });
 const record = (value = 0.7) => ({ status: 'complete', qualityStatus: 'complete', policy: FORGE_JUDGE_POLICY_VERSION,
-  evidenceHash: hash, quality: quality(value) });
+  evidenceHash: hash, quality: quality(value), detailMatch: 'met' as const, detailMatchStatus: 'complete' });
 const reads = (): RepeatabilityRead[] => ids.flatMap(fixture => [1, 2, 3].map(repeat => ({
-  fixture, repeat, outcome: 'pass' as const, quality: scoreForgeQuality(quality(0.7)), records: [record()], calls: 1,
+  fixture, repeat, outcome: 'pass' as const, quality: scoreForgeQuality(quality(0.7)), detailMatch: 'met' as const, records: [record()], calls: 1,
 })));
 
 function replaceQuality(read: RepeatabilityRead, value: number) {
@@ -84,10 +84,44 @@ describe('repeatability evidence', () => {
   });
 
   it('requires complete, versioned records with a valid evidence hash', () => {
-    for (const change of [{ status: 'pending' }, { qualityStatus: 'pending' }, { policy: 'old' }, { evidenceHash: 'invalid' }]) {
+    for (const change of [{ status: 'pending' }, { qualityStatus: 'pending' }, { policy: 'old' }, { evidenceHash: 'invalid' },
+      { detailMatch: undefined }, { detailMatch: 'unknown' }, { detailMatchStatus: 'invalid' }]) {
       const sample = reads();
       sample[0]!.records = [{ ...record(), ...change }];
       expect(repeatabilityPass(sample)).toBe(false);
     }
+  });
+
+  it('does not report a met-detail aggregate over an adapted or uncertain actual read', () => {
+    for (const detailMatch of ['adapted', 'unclear'] as const) {
+      const sample = reads();
+      sample[0]!.records = [{ ...record(), detailMatch }];
+      expect(repeatabilityPass(sample)).toBe(false);
+      sample[0]!.detailMatch = detailMatch;
+      expect(repeatabilityPass(sample)).toBe(false); // Changed exact/softened decisions are not repeatable.
+      for (const read of sample.filter(read => read.fixture === sample[0]!.fixture)) {
+        read.records = [{ ...record(), detailMatch }]; read.detailMatch = detailMatch;
+      }
+      expect(repeatabilityPass(sample)).toBe(true); // Stable adaptation is not a claim of exact delivery.
+    }
+  });
+});
+
+describe('unrelated-image controls', () => {
+  const controls = (): RepeatabilityRead[] => ['owl-for-fox', 'fox-for-owl'].map(fixture => ({
+    fixture, repeat: 1, outcome: 'pass', quality: scoreForgeQuality(quality(0.2)), detailMatch: 'adapted',
+    records: [{ ...record(0.2), detailMatch: 'adapted' }], calls: 1,
+  }));
+  it('requires two safe complete low-identity reads that acknowledge the adaptation', () => {
+    expect(contrastPass(controls())).toBe(true);
+  });
+  it.each(['identity', 'details', 'malformed', 'safety', 'duplicate'] as const)('rejects a control with invalid %s evidence', failure => {
+    const sample = controls();
+    if (failure === 'identity') { sample[0]!.quality = scoreForgeQuality(quality(0.5)); sample[0]!.records = [{ ...record(0.5), detailMatch: 'adapted' }]; }
+    if (failure === 'details') { sample[0]!.detailMatch = 'met'; sample[0]!.records = [record(0.2)]; }
+    if (failure === 'malformed') sample[0]!.records = [{ ...record(0.2), detailMatch: 'adapted', qualityStatus: 'invalid' }];
+    if (failure === 'safety') sample[0]!.outcome = 'refuse';
+    if (failure === 'duplicate') sample[1]!.fixture = sample[0]!.fixture;
+    expect(contrastPass(sample)).toBe(false);
   });
 });

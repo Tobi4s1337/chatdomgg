@@ -15,7 +15,10 @@ describe('private Forge messages', () => {
  it('explains delivered and different softened causes in finite words', () => {
   expect(forgeDeliveryMessage(draft)).toContain('One coal');
   expect(forgeDeliveryMessage(draft, { ...selection, reason: 'fit', shared: 'slot' })).toContain('fit your home');
-  expect(forgeDeliveryMessage(draft, { ...selection, reason: 'quality', shared: 'mood' })).toContain('small detail');
+  const unclear = forgeDeliveryMessage(draft, { ...selection, reason: 'quality', shared: 'subject' });
+  expect(unclear).toContain('could not make an exact match');
+  expect(unclear).not.toContain('keeps your chosen subject');
+  expect(unclear).not.toContain('small detail');
   expect(FORGE_WAIT_MESSAGES.noSlot).toContain('no clear place');
   expect(FORGE_WAIT_MESSAGES.service).toContain('helpers');
   expect(FORGE_WAIT_MESSAGES.budget).toContain('more time');

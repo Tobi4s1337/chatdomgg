@@ -4,6 +4,7 @@ import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, homeFingerp
 import { renderForgeContactSheet } from './contact-sheet';
 import { createForgeCallBudget, ForgeCallBudgetError, type ForgeCallBudget, type ForgeProviders, type JudgeVerdict, type ForgeDraftCandidate } from './providers';
 import { FORGE_WAIT_MESSAGES, type ForgeRunSelection } from './wish-decision';
+import { FORGE_CLEAR_SUBJECT_MINIMUM } from './providers/policy';
 
 /** Audit metadata deliberately omits the original wish and the whole home. */
 export interface ForgeRunRecord {
@@ -21,6 +22,8 @@ export interface ForgeRunContext { readonly safetyIdentifier: string; readonly s
 interface Candidate { draft: ForgeDraft; interpretation: ForgeDraftCandidate['interpretation']; shared: ForgeDraftCandidate['shared']; verdict: number; attempt: number }
 const quality = (verdict: JudgeVerdict) => verdict.quality?.score ?? 0;
 const goodQuality = (verdict: JudgeVerdict) => quality(verdict) >= 0.72
+  && verdict.detailMatch === 'met'
+  && (verdict.quality?.recognisability ?? 0) >= FORGE_CLEAR_SUBJECT_MINIMUM
   && (verdict.quality?.completeness ?? 0) >= 0.7 && (verdict.quality?.cleanMarks ?? 0) >= 0.7;
 
 /** Both gates surround each candidate. Only a safe, assembled candidate can reach the approval sink. */
@@ -109,7 +112,10 @@ export async function runForge(input: unknown, providers: ForgeProviders, emit: 
         await stop(judged.outcome, judged.reason); return;
       }
       const current: Candidate = { draft, interpretation: candidate.interpretation, shared: candidate.shared, verdict: verdicts.length - 1, attempt };
-      if (!best || quality(judged) > quality(verdicts[best.verdict]!)) best = current;
+      // A clearly readable whole subject wins over a tidier but ambiguous shape.
+      const previous = best && verdicts[best.verdict]!;
+      if (!previous || (goodQuality(judged) && !goodQuality(previous))
+        || goodQuality(judged) === goodQuality(previous) && quality(judged) > quality(previous)) best = current;
       if (goodQuality(judged)) break;
       feedback = 'The result is safe, but its subject or small details were hard to read. Strengthen the original subject using the authored kit, try a simpler finish and fewer accents, or explicitly choose the closest related shape. Do not claim an absent subject in the title or plaque.';
     }

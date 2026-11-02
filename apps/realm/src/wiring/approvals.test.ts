@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, it } from 'vitest';
 import type { KingdomForgeAudit } from '../../../codex/src/kingdom-forge/ports';
-import { FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, forgeJudgeQuestions, scoreForgeQuality } from '../../../codex/src/providers/policy';
+import { FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, forgeJudgeQuestions, scoreForgeQuality,
+  combineForgeDetailMatch } from '../../../codex/src/providers/policy';
 import { FileForgeApprovals } from './approvals';
 import { createForgeProviders } from '../../../codex/src/providers';
 
@@ -19,8 +20,8 @@ function audit(): KingdomForgeAudit {
     verdicts: [false, true].map(image => {
       const quality = { recognisability: 0.9, completeness: 1, cleanMarks: 1 };
       const base = { backend: 'codex-cli', status: 'complete', policy: FORGE_JUDGE_POLICY_VERSION, evidenceHash: (image ? 'b' : 'a').repeat(64),
-        ...(image ? { quality, qualityStatus: 'complete' } : {}) };
-      return { outcome: 'pass' as const, ...(image ? { quality: scoreForgeQuality(quality, quality) } : {}), records: [
+        ...(image ? { quality, qualityStatus: 'complete', detailMatch: 'met', detailMatchStatus: 'complete' } : {}) };
+      return { outcome: 'pass' as const, ...(image ? { quality: scoreForgeQuality(quality, quality), detailMatch: 'met' as const } : {}), records: [
         { ...base, judge: 'gpt-6-luna', model: 'gpt-6-luna', probabilitySource: 'model-self-estimate', thresholds: FORGE_JUDGE_THRESHOLDS,
           answers: Object.fromEntries(forgeJudgeQuestions(image).map(({ name }) => [name, 0.01])) },
         { ...base, judge: 'gpt-6.1-terra', model: 'gpt-6.1-terra', outcome: 'pass' },
@@ -166,11 +167,92 @@ it('persists low quality without vetoing a safe piece, and checks the recorded s
   expect(await approvals.approved(input.key, input.runId)).not.toBeNull();
 });
 
-it('accepts actual provider records at both gates without weakening the private receipt boundary', async () => {
-  const { approvals } = await fixture(), input = audit(), quality = { recognisability: 0.1, completeness: 0.5, cleanMarks: 0.2 };
-  const providers = createForgeProviders({ runCodex: async ({ model, image }) => JSON.stringify(model === 'gpt-6-luna'
-    ? { answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })), ...(image ? { quality } : {}) }
-    : { outcome: 'pass', ...(image ? { quality } : {}) }) });
+const detailCases = (['met', 'adapted', 'unclear'] as const).flatMap(primary =>
+  ([undefined, 'met', 'adapted', 'unclear'] as const).map(secondary => [primary, secondary] as const));
+it.each(detailCases)('binds the aggregate detail match to the actual %s / %s reads', async (primary, secondary) => {
+  const { approvals } = await fixture(), input = audit(), result = input.verdicts[1]!;
+  (result.records[0] as Record<string, unknown>).detailMatch = primary;
+  if (secondary === undefined) result.records.pop();
+  else (result.records[1] as Record<string, unknown>).detailMatch = secondary;
+  result.detailMatch = combineForgeDetailMatch(primary, secondary);
+  const changed = structuredClone(input);
+  changed.verdicts[1]!.detailMatch = result.detailMatch === 'met' ? 'adapted' : 'met';
+  await expect(approvals.record(changed)).rejects.toThrow('both independent');
+  await approvals.record(input);
+  expect(await approvals.approved(input.key, input.runId)).not.toBeNull();
+});
+
+it.each([1, 2])('accepts coerced invalid detail reads without inventing a match or vetoing safety (%i reads)', async count => {
+  const { approvals } = await fixture(), input = audit(), result = input.verdicts[1]!;
+  if (count === 1) result.records.pop();
+  for (const record of result.records) Object.assign(record as object, { detailMatch: 'unclear', detailMatchStatus: 'invalid' });
+  result.detailMatch = 'unclear';
+  for (const match of ['met', 'adapted'] as const) {
+    const invented = structuredClone(input);
+    (invented.verdicts[1]!.records[0] as Record<string, unknown>).detailMatch = match;
+    invented.verdicts[1]!.detailMatch = match;
+    await expect(approvals.record(invented)).rejects.toThrow('both independent');
+  }
+  for (const field of ['detailMatch', 'detailMatchStatus']) {
+    const missing = structuredClone(input);
+    delete (missing.verdicts[1]!.records[0] as Record<string, unknown>)[field];
+    await expect(approvals.record(missing)).rejects.toThrow('both independent');
+  }
+  await approvals.record(input);
+  expect(await approvals.approved(input.key, input.runId)).not.toBeNull();
+});
+
+it('rejects detail fields at the words gate in either a summary or an actual read', async () => {
+  const { approvals } = await fixture();
+  for (const target of ['summary', 'primary', 'secondary'] as const) for (const field of ['detailMatch', 'detailMatchStatus']) {
+    const input = audit(), words = input.verdicts[0]!;
+    const read = target === 'summary' ? words : words.records[target === 'primary' ? 0 : 1];
+    for (const value of [field === 'detailMatch' ? 'met' : 'complete', undefined]) {
+      Object.assign(read as object, { [field]: value });
+      await expect(approvals.record(input)).rejects.toThrow();
+    }
+  }
+});
+
+it('checks details on the selected retry instead of borrowing the previous candidate match', async () => {
+  const { approvals } = await fixture(), input = audit();
+  const selected = structuredClone(input.verdicts[1]!);
+  for (const record of selected.records) (record as Record<string, unknown>).detailMatch = 'adapted';
+  const retried: KingdomForgeAudit = { ...input, verdicts: [input.verdicts[0]!, { ...input.verdicts[1]!, records: [] }, selected],
+    attempts: 2, modelCalls: 5, selection: { verdict: 2, attempt: 2, delivery: 'softened', reason: 'quality', shared: 'subject' } };
+  await expect(approvals.record(retried)).rejects.toThrow('both independent');
+  selected.detailMatch = 'adapted';
+  await approvals.record(retried);
+  expect(await approvals.approved(input.key, input.runId)).not.toBeNull();
+});
+
+it('rejects stale v5 verification evidence without relabelling or rewriting the immutable file', async () => {
+  const { directory, approvals } = await fixture(), input = audit();
+  await approvals.record(input);
+  const [file] = await readdir(directory), path = join(directory, file!);
+  const stale = structuredClone(input), version = 'house-part-safety-quality-2026-11-01-v5';
+  for (const verdict of stale.verdicts) {
+    if (verdict.quality) verdict.quality.policy = version;
+    delete verdict.detailMatch;
+    for (const raw of verdict.records) {
+      const record = raw as Record<string, unknown>;
+      record.policy = version; delete record.detailMatch; delete record.detailMatchStatus;
+    }
+  }
+  const bytes = JSON.stringify(stale);
+  await writeFile(path, bytes);
+  expect(await approvals.approved(input.key, input.runId)).toBeNull();
+  await expect(approvals.record(stale)).rejects.toThrow();
+  await expect(approvals.record(input)).rejects.toThrow('immutable');
+  expect(await readFile(path, 'utf8')).toBe(bytes);
+});
+
+it.each([undefined, { unexpected: 'met' }])('accepts actual provider coercion of missing or malformed image details (%j)', async detailMatch => {
+  const { approvals } = await fixture(), input = audit(), quality = { recognisability: 0.95, completeness: 1, cleanMarks: 1 };
+  const providers = createForgeProviders({ runCodex: async ({ image }) => JSON.stringify({
+    answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })),
+    ...(image ? { quality, detailMatch } : {}),
+  }) });
   const safetyIdentifier = 'trusted-test-citizen-hash-0001';
   const words = await providers.judgeWords({ words: 'A sleepy fox on my chimney', safetyIdentifier });
   const piece = await providers.judgeResult({ wish: 'A sleepy fox on my chimney', safetyIdentifier,
@@ -178,17 +260,41 @@ it('accepts actual provider records at both gates without weakening the private 
       title: 'The hearth companion', plaque: 'A fox curls up above the warm hearth.',
       plan: { version: 2, kind: 'chimney', motif: 'sleeping-fox', finish: 'native', accent: 'none' },
     } });
-  await approvals.record({ ...input, verdicts: [words, piece].map(({ outcome, records, quality }) => ({ outcome, records, ...(quality ? { quality } : {}) })) });
+  expect(piece).toMatchObject({ outcome: 'pass', detailMatch: 'unclear', quality: { score: expect.any(Number) },
+    records: [{ status: 'complete', detailMatch: 'unclear', detailMatchStatus: 'invalid' }] });
+  await approvals.record({ ...input, verdicts: [words, piece].map(({ outcome, records, quality: score, detailMatch: match }) => ({
+    outcome, records, ...(score ? { quality: score } : {}), ...(match ? { detailMatch: match } : {}),
+  })) });
+  expect(await approvals.approved(input.key, input.runId)).not.toBeNull();
+});
+
+it('accepts actual provider records at both gates without weakening the private receipt boundary', async () => {
+  const { approvals } = await fixture(), input = audit(), quality = { recognisability: 0.1, completeness: 0.5, cleanMarks: 0.2 };
+  const providers = createForgeProviders({ runCodex: async ({ model, image }) => JSON.stringify(model === 'gpt-6-luna'
+    ? { answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })), ...(image ? { quality, detailMatch: 'met' } : {}) }
+    : { outcome: 'pass', ...(image ? { quality, detailMatch: 'met' } : {}) }) });
+  const safetyIdentifier = 'trusted-test-citizen-hash-0001';
+  const words = await providers.judgeWords({ words: 'A sleepy fox on my chimney', safetyIdentifier });
+  const piece = await providers.judgeResult({ wish: 'A sleepy fox on my chimney', safetyIdentifier,
+    contactSheet: 'data:image/png;base64,iVBORw0KGgo=', draft: {
+      title: 'The hearth companion', plaque: 'A fox curls up above the warm hearth.',
+      plan: { version: 2, kind: 'chimney', motif: 'sleeping-fox', finish: 'native', accent: 'none' },
+    } });
+  await approvals.record({ ...input, verdicts: [words, piece].map(({ outcome, records, quality, detailMatch }) => ({ outcome, records,
+    ...(quality ? { quality } : {}), ...(detailMatch ? { detailMatch } : {}) })) });
   expect(await approvals.approved(input.key, input.runId)).not.toBeNull();
 });
 
 it('keeps non-approved audit outcomes private and strips arbitrary provider records', async () => {
   const quality = scoreForgeQuality({ recognisability: 0.1, completeness: 1, cleanMarks: 1 }, { recognisability: 0.1, completeness: 1, cleanMarks: 1 });
-  const { directory, approvals } = await fixture(), input = { ...audit(), judgment: 'refuse', verdicts: [{ outcome: 'refuse' as const, quality, records: [{ secret: 'PRIVATE SENTINEL' }] }] };
+  const { directory, approvals } = await fixture(), input = { ...audit(), judgment: 'refuse', verdicts: [
+    { outcome: 'refuse' as const, quality, detailMatch: 'unclear' as const, records: [{ secret: 'PRIVATE SENTINEL' }] },
+  ] };
   await approvals.record(input);
   const [file] = await readdir(directory), bytes = await readFile(join(directory, file!), 'utf8');
   expect(bytes).not.toContain('PRIVATE SENTINEL'); expect(bytes).toContain('refuse');
   expect(JSON.parse(bytes).verdicts[0].quality).toEqual(quality);
+  expect(JSON.parse(bytes).verdicts[0].detailMatch).toBe('unclear');
   expect(await approvals.approved(input.key, input.runId)).toBeNull();
   await expect(approvals.record({ ...audit(), judgment: 'PRIVATE SENTINEL' })).rejects.toThrow();
 });

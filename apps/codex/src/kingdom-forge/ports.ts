@@ -11,7 +11,7 @@ export interface KingdomForgeAudit {
   readonly at: number;
   /** This records the model gates, not a claim that the realm committed anything. */
   readonly judgment: string;
-  readonly verdicts: readonly Pick<JudgeVerdict, 'outcome' | 'records' | 'quality'>[];
+  readonly verdicts: readonly Pick<JudgeVerdict, 'outcome' | 'records' | 'quality' | 'detailMatch'>[];
   readonly selection?: ForgeRunSelection;
   readonly attempts?: number;
   readonly modelCalls?: number;

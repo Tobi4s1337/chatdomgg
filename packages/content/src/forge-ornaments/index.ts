@@ -19,21 +19,25 @@ export function createForgeOrnament(id: ForgeOrnament, family: StyleKey, revisio
   add(10,0,7,15,1,12,p.shade);
   let emitter: Cell;
   if (id === 'sleeping-fox' && revision === 2) {
-    // Low haunches rise behind a long, tapered muzzle. Both ears step to a
-    // single-cell point; the dark lines on the cheeks are closed eyes.
+    // A low, tucked head faces left; broad, short ears step to small tips.
+    // The light cheek sits below the closed eye, separate from the dark nose.
     add(9,1,5,19,3,13,p.shade); add(9,3,5,19,6,13,p.body);
     add(10,6,6,18,7,12,p.body); add(12,7,7,17,8,11,p.body);
     add(5,2,6,11,5,12,p.body); add(4,2,7,7,4,11,p.body);
     add(2,1,7,6,3,11,p.light); add(1,2,8,3,3,10,p.dark);
-    add(5,5,6,7,7,8,p.body); add(5,7,6,6,9,7,p.shade);
-    add(8,5,10,10,7,12,p.body); add(9,7,11,10,9,12,p.shade);
+    add(5,5,5,8,6,8,p.body); add(5,6,6,7,8,8,p.body);
+    add(5,8,7,6,9,8,p.body);
+    add(5,5,10,8,6,13,p.body); add(5,6,10,7,8,12,p.body);
+    add(5,8,10,6,9,11,p.body);
+    add(6,6,6,7,7,7,p.shade); add(6,6,11,7,7,12,p.shade);
+    add(4,2,12,8,4,13,p.light); add(4,2,5,8,4,6,p.light);
     add(5,4,12,8,5,13,p.dark); add(5,4,5,8,5,6,p.dark);
-    add(5,1,11,10,2,14,p.light); add(7,1,4,11,2,6,p.light);
-    // A full brush sweeps around the rump and curls back toward the face;
-    // the pale tapered end stays visible in the street-facing silhouette.
+    add(5,1,11,10,2,13,p.light); add(7,1,4,11,2,6,p.light);
+    // The brush grows out of the rump, rounds its outer corner and folds
+    // forward into a wide pale tip held beside the sleeping cheek.
     add(17,1,10,21,4,15,p.body); add(17,1,14,21,3,16,p.body);
-    add(12,1,14,18,4,17,p.body); add(10,1,14,14,3,17,p.light);
-    add(8,1,14,11,2,16,p.light);
+    add(13,1,13,19,4,17,p.body); add(11,1,14,15,4,17,p.light);
+    add(8,1,13,12,3,16,p.light); add(7,1,13,9,2,15,p.light);
     emitter = [1,2,9];
   } else if (id === 'sleeping-fox') {
     // Compact curled body, head laid low on its paws, and a broad white-tipped tail.

@@ -10,7 +10,7 @@ import type { ForgeAttachment, ForgeAttempt, ForgeReservation, KingdomForgeLease
   RealmStoredOutcome } from '@chatdom/shared/realm';
 import { applyRealmFact, createRealmState } from '@chatdom/world/realm';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
-import { createDurableRealmServices, RealmCommitUncertainError, type DurableRepository, type RealmCommitGuard } from '../persistence';
+import { createDurableRealmServices, digestOf, RealmCommitUncertainError, type DurableRepository, type RealmCommitGuard } from '../persistence';
 import type { RealmOutboxStore } from '../outbox';
 import { createForgeAuthority, forgeHomeDigest, forgeMessageKey } from './forge';
 import { ForgeWriteGate } from './gate';
@@ -44,26 +44,28 @@ async function fixture(options: { coal?: number; installed?: boolean; anvils?: n
     rights: { [ownerId]: { revision: 1, forge: true, build: true, blocked: false, safetyIdentifier: 'simulated-safe-citizen-identifier' } } };
   const initial = structuredClone(state);
   const gate = new ForgeWriteGate(), guards = options.installed === false ? [] : gate.install({ origin: 'simulated' as const }).guards;
-  const facts: RealmFact[] = [], receipts = new Map<string, RealmStoredOutcome>();
+  const facts: RealmFact[] = [], receipts = new Map<string, RealmStoredOutcome>(), payloads = new Map<string, string>();
   let beforeGuard: (() => void | Promise<void>) | undefined;
   let loseReply = false, unavailable = false;
   const repository: DurableRepository = {
     leaseMs: 15_000, acquire: vi.fn(async () => ({ kingdomId, epoch: 'simulated-writer', expiresAt: Date.now() + 15_000 })),
     renew: async lease => ({ ...lease, expiresAt: Date.now() + 15_000 }), load: async () => state, committedState: () => state,
-    execute: async (_lease, id, _command, decide, current) => {
+    execute: async (_lease, id, command, decide, current) => {
       if (!current()) throw new Error('SIMULATED fenced');
       const prior = receipts.get(id);
+      // Match the real repository's exact command binding before returning a retained receipt.
+      if (prior && payloads.get(id) !== digestOf(command)) return { status: 'rejected', reason: 'conflict' };
       if (prior?.status === 'committed' || prior?.status === 'unchanged') return prior;
       const decision = decide(state, now);
       if (decision.kind !== 'accepted') {
         const result: RealmStoredOutcome = { status: decision.kind, reason: decision.reason };
-        receipts.set(id, result); return result;
+        payloads.set(id, digestOf(command)); receipts.set(id, result); return result;
       }
       await beforeGuard?.();
       for (const guard of guards) await guard({} as Parameters<RealmCommitGuard>[0], decision.fact, state);
       state = decision.state; facts.push(decision.fact);
       const result: RealmStoredOutcome = { status: 'committed', sequence: state.sequence, at: now };
-      receipts.set(id, result);
+      payloads.set(id, digestOf(command)); receipts.set(id, result);
       if (loseReply) { loseReply = false; throw new RealmCommitUncertainError(kingdomId, id); }
       return result;
     },
@@ -129,6 +131,91 @@ it('shares one retained writer; ignores slot hints, reserves without spending, a
   expect(item.attachment.committedAt).toBe(item.attachment.provenance.firstForgedAt);
 });
 
+it('replays only the exact committed payload when its historical approval no longer authorizes new work', async () => {
+  const f = await fixture(), attempt = f.wish(), lease = caller().lease, reservation = await f.reserve(attempt, lease);
+  const input = commitInput(attempt, reservation), result = await f.authority.commit(input, lease);
+  expect(result).toMatchObject({ kind: 'committed' });
+  const committed = structuredClone(f.state()), facts = structuredClone(f.facts);
+  // SIMULATED policy rollover: the current reader no longer accepts the historical audit.
+  f.approvals.approved.mockResolvedValue(null);
+  f.advance(1_000);
+  expect(await f.authority.commit(input, lease)).toEqual(result);
+  expect(f.approvals.approved).toHaveBeenCalledTimes(1);
+  for (const changed of [
+    { ...input, expectedRevision: 'another-revision' },
+    { ...input, expectedHomeDigest: 'a'.repeat(64) },
+    { ...input, reservationId: 'another-reservation' },
+    { ...input, attachment: { ...input.attachment, id: 'another-run', runId: 'another-run' } },
+    { ...input, attachment: { ...input.attachment, draft: { ...input.attachment.draft, title: 'An unjudged title' } } },
+    { ...input, attachment: { ...input.attachment, provenance: { ...input.attachment.provenance, source: 'live' as const } } },
+    { ...input, creation: { words: 'PRIVATE SIMULATED changed wish' } },
+  ]) expect(await f.authority.commit(changed, lease)).toEqual({ kind: 'held' });
+  expect(await f.authority.commit({ ...input, attemptId: 'competing-attempt' }, lease)).toEqual({ kind: 'already-committed' });
+  expect(await f.authority.commit({ ...input, key: `${input.key}-changed` }, lease)).toEqual({ kind: 'held' });
+  expect(await f.authority.commit(input, lease)).toEqual(result);
+  expect(f.state()).toEqual(committed); expect(f.facts).toEqual(facts);
+  expect(f.state().coals[personId]).toBe(1);
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(1);
+
+  const pending = f.wish(), next = await f.reserve(pending, lease), before = structuredClone(f.state()), beforeFacts = structuredClone(f.facts);
+  expect(await f.authority.commit(commitInput(pending, next, 'simulated-pending-run'), lease)).toEqual({ kind: 'held' });
+  expect(f.state()).toEqual(before); expect(f.facts).toEqual(beforeFacts);
+  expect(f.state().coals[personId]).toBe(1);
+});
+
+it('holds unconfirmed replay payloads while status can recover the exact durable attempt independently', async () => {
+  const f = await fixture(), attempt = f.wish(), lease = caller().lease, reservation = await f.reserve(attempt, lease);
+  const input = commitInput(attempt, reservation), lagged = f.kingdom.privateState;
+  const result = await f.authority.commit(input, lease), committed = structuredClone(f.state()), facts = structuredClone(f.facts);
+  expect(result).toMatchObject({ kind: 'committed' });
+  f.approvals.approved.mockResolvedValue(null);
+  const view = vi.spyOn(f.kingdom, 'privateState', 'get').mockReturnValue(lagged);
+  expect(await f.authority.commit(input, lease)).toEqual({ kind: 'held' });
+  expect(await f.authority.status(attempt)).toEqual(result);
+  view.mockRestore();
+
+  const execute = vi.spyOn(f.kingdom, 'execute').mockRejectedValueOnce(new Error('SIMULATED payload check unavailable'));
+  expect(await f.authority.commit({ ...input, creation: { words: 'PRIVATE SIMULATED changed wish' } }, lease)).toEqual({ kind: 'held' });
+  expect(await f.authority.status(attempt)).toEqual(result);
+  execute.mockRestore();
+  const canceled = caller(); canceled.cancel();
+  expect(await f.authority.commit(input, canceled.lease)).toEqual({ kind: 'cold' });
+  const delayed = caller(), lookup = f.kingdom.lookup.bind(f.kingdom);
+  const cancelOnLookup = vi.spyOn(f.kingdom, 'lookup').mockImplementationOnce(async id => {
+    const answer = await lookup(id); delayed.cancel(); return answer;
+  });
+  expect(await f.authority.commit(input, delayed.lease)).toEqual({ kind: 'cold' });
+  cancelOnLookup.mockRestore();
+  const otherOrigin = createForgeAuthority({ kingdomId, origin: 'live', retain: () => f.services.retain(kingdomId) }, { approvals: f.approvals, gate: f.gate });
+  expect(await otherOrigin.commit(input, lease)).toEqual({ kind: 'cold' });
+  expect(await f.authority.commit(input, lease)).toEqual(result);
+  expect(f.approvals.approved).toHaveBeenCalledTimes(1);
+  expect(f.state()).toEqual(committed); expect(f.facts).toEqual(facts);
+});
+
+it.each(['rejected', 'thrown'] as const)('does not turn a %s concurrent payload conflict into exact commit success', async mode => {
+  const f = await fixture(), attempt = f.wish(), lease = caller().lease, reservation = await f.reserve(attempt, lease);
+  const input = commitInput(attempt, reservation), otherWords = 'PRIVATE SIMULATED competing payload';
+  const execute = f.kingdom.execute.bind(f.kingdom);
+  const competing = vi.spyOn(f.kingdom, 'execute').mockImplementationOnce(async (id, command, capability, meta) => {
+    if (command.type !== 'forge.commitApproved') throw new Error('Expected SIMULATED Forge commit');
+    // SIMULATED interleaving: another caller committed this attempt with different creation before the check.
+    expect(await execute(id, { ...command, creation: { words: otherWords } }, capability, meta)).toMatchObject({ status: 'committed' });
+    if (mode === 'thrown') throw new Error('SIMULATED payload check failed');
+    return { status: 'rejected', reason: 'conflict' };
+  });
+  expect(await f.authority.commit(input, lease)).toEqual({ kind: 'held' });
+  competing.mockRestore();
+  const known = await f.authority.status(attempt);
+  expect(known).toMatchObject({ kind: 'committed' });
+  f.approvals.approved.mockResolvedValue(null);
+  expect(await f.authority.commit(input, lease)).toEqual({ kind: 'held' });
+  expect(await f.authority.commit({ ...input, creation: { words: otherWords } }, lease)).toEqual(known);
+  expect(f.state().coals[personId]).toBe(1);
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(1);
+  expect(f.state().attachments[input.attachment.id]?.creation.words).toBe(otherWords);
+});
+
 it('fails closed for missing gate, room origin, coal, real ownership, rights, moderation and offline stream', async () => {
   const ungated = await fixture({ installed: false }); expect(await ungated.authority.reserve(ungated.wish(), caller().lease)).toEqual({ kind: 'cold' });
   const empty = await fixture({ coal: 0 }); expect(await empty.authority.reserve(empty.wish(), caller().lease)).toMatchObject({ kind: 'held', privateMessage: expect.stringContaining('scuttle is empty') });
@@ -183,7 +270,7 @@ it('binds the real private approval to the selected draft, host and exact kit be
   cleanup.push(() => rm(directory, { recursive: true, force: true }));
   const approvals = new FileForgeApprovals(directory), quality = { recognisability: 0.9, completeness: 0.9, cleanMarks: 0.9 };
   const providers = createForgeProviders({ runCodex: async ({ image }) => JSON.stringify({
-    answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })), ...(image ? { quality } : {}),
+    answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })), ...(image ? { quality, detailMatch: 'met' } : {}),
   }) });
   const socket = findForgeSockets(reservation.home).find(socket => socket.kind === input.attachment.draft.plan.kind)!;
   const piece = assembleForge(input.attachment.draft.plan, forgeStyleKit(reservation.family), socket);
@@ -191,7 +278,8 @@ it('binds the real private approval to the selected draft, host and exact kit be
   const result = await providers.judgeResult({ wish: input.creation.words, draft: input.attachment.draft, safetyIdentifier: reservation.safetyIdentifier,
     contactSheet: renderForgeContactSheet(piece.blueprint, { home: reservation.home, origin: socket.origin }) });
   await approvals.record({ key: attempt.key, runId: input.attachment.runId, at: Date.now(), judgment: 'approved',
-    verdicts: [words, result].map(({ outcome, records, quality }) => ({ outcome, records, ...(quality ? { quality } : {}) })),
+    verdicts: [words, result].map(({ outcome, records, quality, detailMatch }) => ({ outcome, records,
+      ...(quality ? { quality } : {}), ...(detailMatch ? { detailMatch } : {}) })),
     candidate: bindForgeCandidate(input.attachment.draft, reservation.home, piece.kit) });
   f.approvals.approved.mockImplementation((key, id, expected) => approvals.approved(key, id, expected));
   for (const attachment of [

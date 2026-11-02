@@ -73,3 +73,11 @@ replies. They do not claim a real Postgres coordinator run or a real model-appro
 or servers are needed for this private adapter. Main owns full verification and host capture.
 The focused Postgres regression `cancellation after the final fence` additionally exercises the real SQL rollback
 after fact/ledger/design/outbox writes and finalFence await, then retries the same command successfully.
+
+Policy v6 image evidence also retains finite detail-match values and their validity status. The verifier
+reproduces their conservative aggregate; a malformed value is explicitly unclear, never invented as met.
+This remains private quality evidence and cannot veto safety. Words carry no image detail fields.
+Stale pending approvals fail closed. Exact committed retries reconstruct the command with its stored approval
+receipt and ask the repository to verify the whole original command digest; they do not read stale evidence
+as new approval. A lookup alone cannot match a changed candidate. Missing retained parts, payload conflicts,
+and uncertain replay responses remain held, while status can independently recover the attempt outcome.

@@ -11,7 +11,7 @@ const socket: ForgeHouseSocket = { id: 'stack', kind: 'chimney', profile: 'stack
 const sheet = 'data:image/png;base64,iVBORw0KGgo=';
 const quality = { recognisability: 0.9, completeness: 1, cleanMarks: 1 };
 function luna(image = false, overrides: Record<string, number> = {}) {
-  return { answers: forgeJudgeQuestions(image).map(({ name }) => ({ type: 'predicate', name, probability: overrides[name] ?? 0.01 })), ...(image ? { quality } : {}) };
+  return { answers: forgeJudgeQuestions(image).map(({ name }) => ({ type: 'predicate', name, probability: overrides[name] ?? 0.01 })), ...(image ? { quality, detailMatch: 'met' } : {}) };
 }
 function cliMock(primary: unknown = luna(), secondary: unknown = { outcome: 'pass' }) {
   return vi.fn<CodexDraftRunner>(async ({ model }) => JSON.stringify(model === 'gpt-6-luna' ? primary : secondary));
@@ -157,18 +157,18 @@ describe('independent Forge CLI judges', () => {
   });
 
   it('requires agreement on the same floor concern, not two unrelated objections', async () => {
-    const providers = createForgeProviders({ runCodex: cliMock(luna(true, { hate: 0.99 }), { outcome: 'refuse', concerns: ['privacy'], quality }) });
+    const providers = createForgeProviders({ runCodex: cliMock(luna(true, { hate: 0.99 }), { outcome: 'refuse', concerns: ['privacy'], quality, detailMatch: 'met' }) });
     expect((await providers.judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier })).outcome).toBe('hold');
   });
 
   it('refuses an image only for an agreed safety breach, regardless of quality', async () => {
-    const providers = createForgeProviders({ runCodex: cliMock(luna(true, { hate: 0.99 }), { outcome: 'refuse', concerns: ['hate'], quality }) });
+    const providers = createForgeProviders({ runCodex: cliMock(luna(true, { hate: 0.99 }), { outcome: 'refuse', concerns: ['hate'], quality, detailMatch: 'met' }) });
     expect((await providers.judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier })).outcome).toBe('refuse');
   });
 
   it('records poor likeness, broken geometry and stray marks without giving quality a veto', async () => {
     const low = { recognisability: 0, completeness: 0.2, cleanMarks: 0.1 };
-    const runCodex = cliMock({ ...luna(true), quality: low }, { outcome: 'pass', quality: low });
+    const runCodex = cliMock({ ...luna(true), quality: low }, { outcome: 'pass', quality: low, detailMatch: 'met' });
     const verdict = await createForgeProviders({ runCodex }).judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier });
     expect(verdict.outcome).toBe('pass');
     expect(verdict.quality).toEqual({ ...low, policy: FORGE_JUDGE_POLICY_VERSION, score: 0.065 });
@@ -177,7 +177,7 @@ describe('independent Forge CLI judges', () => {
   });
 
   it.each([undefined, {}, { ...quality, cleanMarks: 2 }, { ...quality, recognisability: 'private words' }])('does not turn malformed quality into a safety veto', async invalid => {
-    const providers = createForgeProviders({ runCodex: cliMock({ ...luna(true), quality: invalid }, { outcome: 'pass', quality: invalid }) });
+    const providers = createForgeProviders({ runCodex: cliMock({ ...luna(true), quality: invalid }, { outcome: 'pass', quality: invalid, detailMatch: 'met' }) });
     const verdict = await providers.judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier });
     expect(verdict.outcome).toBe('pass');
     expect(verdict.quality).toMatchObject({ score: 0 });
@@ -185,13 +185,70 @@ describe('independent Forge CLI judges', () => {
   });
 
   it('makes the same recorded quality decision for identical reads and evidence', async () => {
-    const providers = createForgeProviders({ runCodex: cliMock(luna(true), { outcome: 'pass', quality }) });
+    const providers = createForgeProviders({ runCodex: cliMock(luna(true), { outcome: 'pass', quality, detailMatch: 'met' }) });
     const results = await Promise.all(Array.from({ length: 3 }, () => providers.judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier })));
     expect(results[1]).toEqual(results[0]); expect(results[2]).toEqual(results[0]);
   });
 
+  it.each(['adapted', 'unclear'] as const)('records %s detail without a quality-only second read or safety veto', async detailMatch => {
+    const runCodex = cliMock({ ...luna(true), detailMatch });
+    const verdict = await createForgeProviders({ runCodex }).judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier });
+    expect(verdict).toMatchObject({ outcome: 'pass', detailMatch });
+    expect(verdict.records).toEqual([expect.objectContaining({ detailMatch, detailMatchStatus: 'complete' })]);
+    expect(runCodex).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['met', 'adapted', 'adapted'], ['adapted', 'met', 'adapted'],
+    ['met', 'unclear', 'unclear'], ['unclear', 'met', 'unclear'],
+    ['adapted', 'unclear', 'adapted'], ['met', 'met', 'met'],
+  ] as const)('combines independent detail reads %s and %s as %s after safety escalation', async (primary, secondary, combined) => {
+    const runCodex = cliMock({ ...luna(true, { hate: 0.4 }), detailMatch: primary }, { outcome: 'pass', quality, detailMatch: secondary });
+    const verdict = await createForgeProviders({ runCodex }).judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier });
+    expect(verdict).toMatchObject({ outcome: 'hold', detailMatch: combined });
+    expect(verdict.records).toEqual([
+      expect.objectContaining({ detailMatch: primary, detailMatchStatus: 'complete' }),
+      expect.objectContaining({ detailMatch: secondary, detailMatchStatus: 'complete' }),
+    ]);
+    expect(runCodex).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([undefined, 'private explanation of the piece', { detail: 'private explanation of the piece' }])('treats malformed detail as unclear without affecting safety', async invalid => {
+    const runCodex = cliMock({ ...luna(true), detailMatch: invalid });
+    const verdict = await createForgeProviders({ runCodex }).judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier });
+    expect(verdict).toMatchObject({ outcome: 'pass', detailMatch: 'unclear' });
+    expect(verdict.records).toEqual([expect.objectContaining({ detailMatch: 'unclear', detailMatchStatus: 'invalid' })]);
+    expect(JSON.stringify(verdict)).not.toContain('private explanation of the piece');
+    expect(runCodex).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats malformed secondary detail as unclear while retaining the safety decision', async () => {
+    const runCodex = cliMock(luna(true, { hate: 0.4 }), { outcome: 'pass', quality, detailMatch: 'private prose' });
+    const verdict = await createForgeProviders({ runCodex }).judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier });
+    expect(verdict).toMatchObject({ outcome: 'hold', detailMatch: 'unclear' });
+    expect(verdict.records[1]).toMatchObject({ detailMatch: 'unclear', detailMatchStatus: 'invalid' });
+    expect(JSON.stringify(verdict)).not.toContain('private prose');
+    expect(runCodex).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves non-anchor quality values and binds evidence hashes to the displayed claim', async () => {
+    const raw = { recognisability: 0.53, completeness: 0.83, cleanMarks: 0.91 };
+    const providers = createForgeProviders({ runCodex: cliMock({ ...luna(true), quality: raw }) });
+    const judge = (claim: ForgeDraft) => providers.judgeResult({ wish, draft: claim, contactSheet: sheet, safetyIdentifier });
+    const first = await judge(draft), repeated = await judge(draft);
+    const changed = await judge({ ...draft, plaque: 'A different claim about the same piece.' });
+    expect(first.outcome).toBe('pass');
+    expect(first.quality).toMatchObject({ ...raw, policy: FORGE_JUDGE_POLICY_VERSION });
+    expect(first.quality!.score).toBeCloseTo(0.6 * raw.recognisability + 0.25 * raw.completeness + 0.15 * raw.cleanMarks, 10);
+    expect(first.records).toEqual([expect.objectContaining({ quality: raw, qualityStatus: 'complete' })]);
+    const hash = (verdict: typeof first) => (verdict.records[0] as { evidenceHash: string }).evidenceHash;
+    expect(hash(first)).toBeTruthy();
+    expect(hash(repeated)).toBe(hash(first));
+    expect(hash(changed)).not.toBe(hash(first));
+  });
+
   it.each([[], ['broken_part'], ['hate', 'hate'], ['unfaithful_subject']].map(concerns => ({ concerns })))('holds invalid or quality-only secondary refusal concerns $concerns', async ({ concerns }) => {
-    const providers = createForgeProviders({ runCodex: cliMock(luna(true, { hate: 0.4 }), { outcome: 'refuse', concerns, quality }) });
+    const providers = createForgeProviders({ runCodex: cliMock(luna(true, { hate: 0.4 }), { outcome: 'refuse', concerns, quality, detailMatch: 'met' }) });
     expect((await providers.judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier })).outcome).toBe('hold');
   });
 
