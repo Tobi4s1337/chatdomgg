@@ -62,7 +62,7 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
   const practice=()=>!!forgeStatus()?.open||buildSession()?.controller.snapshot().mode==='SIMULATED'||!!housewarming();
   async function attachWalk(binding:KingdomWalkBinding){
     if(!engine||unmounted)return;
-    await engine.attachWalk({...binding,hud:host,interactionPlaces:binding.interactionPlaces??{
+    await engine.attachWalk({...binding,hud:host,play:{live:()=>source()==='LIVE CHAT',...binding.play},interactionPlaces:binding.interactionPlaces??{
       open(accepted,closed){
         if(accepted.action!=='forge')return null;
         setAnvilVisit({leave:closed});
@@ -149,7 +149,7 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
       <p class="forge-footnote">The anvil listens to chat. Escape returns you to the street.</p>
       <button class="forge-submit" onClick={()=>visit().leave()}>Back to the street</button>
     </section>}</Show>
-    <Show when={!stream&&buildSession()}>{session=><BuildTools controller={session().controller} ownerName="Juniper" imports={session().imports}/>}</Show>
+    <Show when={!stream&&buildSession()}>{session=><BuildTools controller={session().controller} {...(props.walk?.client.room.state.walkers.get(props.walk.client.selfId)?.name?{ownerName:props.walk.client.room.state.walkers.get(props.walk.client.selfId)!.name}:{})} imports={session().imports}/>}</Show>
     <Show when={housewarming()}>{name=><div class="housewarming-name">{name()}’s home<small>Welcome to the street</small></div>}</Show>
     <Show when={ready()&&walking()&&!error()&&!stream}><button class="walk-overlook" onClick={()=>chooseView('hero')}>Above the streets</button></Show>
     <Show when={ready()&&props.founded&&!error()&&!stream}><button class="kingdom-chronicle-button" onClick={openChronicle}>The Chronicle</button></Show>

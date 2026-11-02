@@ -1,0 +1,75 @@
+/* The in-world HUD: five quiet regions for pieces from other lanes, the calm "click to walk" slip, and the carved
+   book button on touch screens. It draws nothing while the mouse is captured (Quality rule 14). */
+
+.pl-root { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
+.pl-hud { position: absolute; inset: 0; pointer-events: none; color: var(--cd-cream); font: var(--cd-type-body)/1.35 var(--cd-face-body); font-synthesis: none;
+  -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+.pl-hud *, .pl-hud *::before, .pl-hud *::after { box-sizing: border-box; }
+
+.pl-region { position: absolute; display: flex; flex-direction: column; gap: 8px; pointer-events: none; max-width: calc(50% - 24px); }
+.pl-region > * { pointer-events: auto; }
+.pl-region:empty { display: none; }
+.pl-region[data-region='top-left'] { top: calc(16px + env(safe-area-inset-top)); left: calc(16px + env(safe-area-inset-left)); align-items: flex-start; }
+.pl-region[data-region='top-centre'] { top: calc(16px + env(safe-area-inset-top)); left: 50%; translate: -50% 0; align-items: center; max-width: min(560px, calc(100% - 32px)); }
+.pl-region[data-region='top-right'] { top: calc(16px + env(safe-area-inset-top)); right: calc(16px + env(safe-area-inset-right)); align-items: flex-end; }
+.pl-region[data-region='bottom-left'] { bottom: calc(16px + env(safe-area-inset-bottom)); left: calc(16px + env(safe-area-inset-left)); flex-direction: column-reverse; align-items: flex-start; }
+.pl-region[data-region='bottom-right'] { bottom: calc(18px + env(safe-area-inset-bottom)); right: calc(18px + env(safe-area-inset-right)); flex-direction: column-reverse; align-items: flex-end; }
+.pl-hud[data-ledger='open'] .pl-region { visibility: hidden; }
+
+/* Click to walk: a parchment slip pinned low and centred, breathing slowly. Never red, never an error. */
+.pl-walk-slip { position: absolute; left: 50%; bottom: calc(16% + env(safe-area-inset-bottom)); translate: -50% 0; display: flex; align-items: center; gap: 9px;
+  margin: 0; padding: 9px 18px 8px 13px; color: var(--cd-ink); font: 19px/1 var(--cd-face-story); white-space: nowrap; pointer-events: none;
+  border-radius: 3px; animation: pl-slip-in .5s ease-out both, pl-breathe 3.8s 1s ease-in-out infinite; transition: opacity .2s ease; }
+.pl-walk-slip::before { content: ''; position: absolute; top: -4px; left: 50%; width: 9px; height: 9px; translate: -50% 0; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, var(--cd-brass-hi), var(--cd-brass) 55%, var(--cd-brass-lo)); border: 1px solid #4a3214; box-shadow: 0 1px 1px #0000006b; }
+.pl-walk-slip .pl-mark { width: 21px; height: 21px; color: var(--cd-ink-soft); }
+.pl-walk-slip[data-state='requesting'] { opacity: .55; animation: none; }
+@keyframes pl-slip-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pl-breathe { 0%, 100% { opacity: .86; transform: none; } 50% { opacity: 1; transform: translateY(-2px); } }
+
+.pl-quiet-line { position: absolute; left: 50%; bottom: calc(16% + env(safe-area-inset-bottom)); translate: -50% 0; width: max-content; max-width: min(440px, calc(100% - 40px));
+  margin: 0; text-align: center; font: italic var(--cd-type-body)/1.4 var(--cd-face-body); color: var(--cd-cream);
+  text-shadow: 0 1px 2px #0b0716, 0 0 12px #0b0716cc; animation: pl-quiet 9s ease both; pointer-events: none; }
+@keyframes pl-quiet { 0% { opacity: 0; } 6%, 88% { opacity: 1; } 100% { opacity: 0; } }
+
+/* The book button on touch screens: carved walnut, a brass ring, an inked ledger. */
+.pl-ledger-button { position: relative; display: grid; place-items: center; width: 60px; height: 60px; margin: 0; padding: 0; border-radius: 50%; cursor: pointer;
+  appearance: none; -webkit-appearance: none; touch-action: manipulation; color: var(--cd-cream); border: 1px solid var(--cd-wood-edge);
+  background: radial-gradient(circle at 50% 38%, var(--cd-wood-hi), var(--cd-wood) 62%, var(--cd-wood-lo));
+  box-shadow: 0 0 0 3px var(--cd-brass), 0 0 0 4px #4a3214, inset 0 1px 0 #ffe1b44d, inset 0 -3px 4px #0000004d, 0 4px 0 4px #1d1109, 0 9px 18px 3px #0b0a1659;
+  transition: transform .08s ease, box-shadow .08s ease; }
+.pl-ledger-button-face .pl-mark { width: 30px; height: 30px; stroke-width: 1.6; }
+.pl-ledger-button-word { position: absolute; top: 72px; left: -16px; right: -16px; text-align: center; font: var(--cd-type-min)/1 var(--cd-face-label); letter-spacing: .1em;
+  color: var(--cd-cream); text-shadow: 0 1px 3px #0b0716, 0 0 8px #0b0716b0; }
+.pl-region[data-region='bottom-right'] .pl-ledger-button { margin-bottom: 18px; }
+.pl-ledger-button:active { transform: translateY(3px); box-shadow: 0 0 0 3px var(--cd-brass), 0 0 0 4px #4a3214, inset 0 1px 0 #ffe1b42e, inset 0 -1px 3px #0000004d, 0 1px 0 4px #1d1109, 0 4px 10px 3px #0b0a1659; }
+.pl-ledger-button:focus { outline: none; }
+.pl-ledger-button:focus-visible { outline: 2px solid var(--cd-brass-hi); outline-offset: 7px; }
+
+.pl-hud[data-reduced='true'] .pl-walk-slip { animation: pl-fade-in .16s ease-out both; }
+.pl-hud[data-reduced='true'] .pl-quiet-line { animation: pl-quiet 9s steps(1, end) both; }
+.pl-hud[data-reduced='true'] .pl-ledger-button { transition: none; }
+@media (forced-colors: active) { .pl-walk-slip, .pl-ledger-button { border: 1px solid CanvasText; } }
+
+/* The hotbar's region. On touch it rises above the thumb band (the stick lives in the left 46% below a third of
+   the height; jump and the action disc sit on the right edge), so nothing here is ever under a thumb. */
+.pl-region[data-region='bottom-centre'] { bottom: calc(16px + env(safe-area-inset-bottom)); left: 50%; translate: -50% 0; flex-direction: column-reverse; align-items: center;
+  max-width: min(720px, calc(100% - 32px)); }
+.pl-hud[data-cursor='touch'] .pl-region[data-region='bottom-centre'] { bottom: calc(66% + 10px); max-width: calc(100% - 32px); }
+
+/* The world prompt: a small parchment slip with the use key's cap; on touch, a carved plate to tap. */
+.pl-prompt { display: flex; align-items: center; gap: 9px; margin: 0; padding: 7px 14px 6px 8px; color: var(--cd-ink); white-space: nowrap;
+  font: 17px/1 var(--cd-face-story); border-radius: 3px;
+  background: radial-gradient(ellipse at 28% 18%, var(--cd-parch-hi), transparent 72%), linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #ffffff4d, inset 0 -5px 12px #a0784022, 0 2px 0 #0000004d, 0 4px 10px #0b07163d; animation: pl-slip-in .22s ease-out both; }
+.pl-prompt .pl-keycap { min-width: 26px; height: 24px; padding: 0 7px; font: 12px/1 var(--cd-face-label); letter-spacing: .05em; color: var(--cd-ink); border-radius: 4px;
+  border: 1px solid #6b4a22; background: linear-gradient(180deg, #fbf3df, #ecdfc0 68%, #d9c59a);
+  box-shadow: inset 0 1px 0 #fff, inset 0 -2px 0 #c9b083, 0 0 0 1px var(--cd-brass), 0 1.5px 0 1px var(--cd-brass-lo); display: inline-grid; place-items: center; }
+.pl-prompt-touch { min-height: 48px; padding: 0 20px; cursor: pointer; appearance: none; -webkit-appearance: none; touch-action: manipulation; color: var(--cd-cream);
+  border: 1px solid var(--cd-wood-edge); border-radius: 9px; text-shadow: 0 1px 0 #1d1109;
+  background: linear-gradient(176deg, var(--cd-wood-hi), var(--cd-wood) 46%, var(--cd-wood-lo));
+  box-shadow: 0 0 0 2px var(--cd-brass), 0 0 0 3px #4a3214, inset 0 1px 0 #ffe1b44d, 0 4px 0 2px #1d1109, 0 8px 14px #0b0a1659; }
+.pl-prompt-touch:active { transform: translateY(2px); }
+.pl-prompt-touch:focus { outline: none; }
+.pl-prompt-touch:focus-visible { outline: 2px solid var(--cd-brass-hi); outline-offset: 5px; }
+.pl-hud[data-reduced='true'] .pl-prompt { animation: none; }

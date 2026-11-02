@@ -1,6 +1,6 @@
 // The realm client's movement boundary against the real Colyseus kingdom room, uWS transport and SDK Predict:
 // fixed-step staging on slow frames, one jump per press, every PLAYER_FIELDS field agreeing with the room,
-// a published collision revision and a room placement. The court and its walkers are the SIMULATED reference.
+// a published collision revision and a room placement. The court and its walkers are the dev reference.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer as createNetServer } from 'node:net';
 import * as THREE from 'three';

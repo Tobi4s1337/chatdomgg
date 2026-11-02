@@ -1,16 +1,14 @@
 /**
- * The little the walker needs to see: whether mouse look is on (and how to get the cursor back), and on a phone
- * where the thumbs go. It is drawn over the world in the integrator's container, takes pointer events on
- * the mouse-look control and jump button, and is hidden whenever another owner has the camera.
+ * The little the walker needs on a phone: where the thumbs go. The captured mouse needs no plaque (decision 2):
+ * the play HUD draws the calm click-to-walk state and the ledger. Drawn over the world in the kingdom's container,
+ * it takes pointer events only on the jump button and is hidden whenever another owner has the camera.
  */
-import type { LookMode } from './look';
 import { TOUCH, type TouchStick } from './touch';
 import './hud.css';
 
 export interface WalkHudState {
   /** Hidden entirely while a menu, build, Forge or the director owns the camera. */
   readonly visible: boolean;
-  readonly look: LookMode;
   /** Show the phone controls: the device's primary pointer is coarse, or the surface has been touched. */
   readonly touch: boolean;
   readonly stick: TouchStick | null;
@@ -23,13 +21,6 @@ export interface WalkHud {
   update(state: WalkHudState): void;
   dispose(): void;
 }
-
-const LOOK_TEXT: Record<LookMode, { key: string; title: string; note: string }> = {
-  free: { key: 'Click', title: 'Mouse look', note: 'Or drag to look' },
-  requesting: { key: '…', title: 'Mouse look', note: 'Taking the cursor…' },
-  locked: { key: 'Esc', title: 'Free the cursor', note: '' },
-  fallback: { key: 'Drag', title: 'Drag to look', note: '' },
-};
 
 /** Where the stick rests before a thumb lands: lower left, clear of the edges and of a short landscape screen. */
 export function restingStick(width: number, height: number): { x: number; y: number } {
@@ -64,17 +55,12 @@ export function thumbSlots(width: number, height: number): { readonly stick: Thu
   return { stick: { ...rest, radius: TOUCH.radius }, jump, action };
 }
 
-export function createWalkHud(container: HTMLElement, onJump: () => void, onLook?: (event: MouseEvent) => void): WalkHud {
+export function createWalkHud(container: HTMLElement, onJump: () => void): WalkHud {
   const doc = container.ownerDocument;
   const root = doc.createElement('div');
   root.className = 'walk-hud';
   root.hidden = true;
   root.innerHTML = `
-    <button class="walk-look" type="button" aria-label="Mouse look" aria-pressed="false">
-      <span class="walk-look-pip" aria-hidden="true"></span>
-      <kbd class="walk-look-key"></kbd>
-      <span class="walk-look-text"><b></b><small></small></span>
-    </button>
     <div class="walk-stick is-idle" aria-hidden="true">
       <div class="walk-stick-ring"></div>
       <svg class="walk-stick-glyph" viewBox="-52 -52 104 104"><path d="M-6 -33l6-6 6 6M-6 33l6 6 6-6M-33 -6l-6 6 6 6M33 -6l6 6-6 6"/></svg>
@@ -86,14 +72,10 @@ export function createWalkHud(container: HTMLElement, onJump: () => void, onLook
       <span aria-hidden="true">Jump</span>
     </button>`;
   container.append(root);
-  const look = root.querySelector<HTMLButtonElement>('.walk-look')!;
-  const key = root.querySelector<HTMLElement>('.walk-look-key')!;
-  const title = root.querySelector<HTMLElement>('.walk-look-text b')!;
-  const note = root.querySelector<HTMLElement>('.walk-look-text small')!;
   const stick = root.querySelector<HTMLElement>('.walk-stick')!;
   const knob = root.querySelector<HTMLElement>('.walk-stick-knob')!;
   const jump = root.querySelector<HTMLButtonElement>('.walk-jump')!;
-  let shownLook: LookMode | null = null, fresh: ReturnType<typeof setTimeout> | undefined, pressed: ReturnType<typeof setTimeout> | undefined;
+  let pressed: ReturnType<typeof setTimeout> | undefined;
   let taught = false;
 
   const learn = () => { if (!taught) { taught = true; root.classList.add('is-taught'); } };
@@ -108,11 +90,6 @@ export function createWalkHud(container: HTMLElement, onJump: () => void, onLook
   const pointerdown = (event: PointerEvent) => { event.preventDefault(); event.stopPropagation(); press(); };
   // Keyboard activation (Enter/Space on a focused button) reports detail 0; a tap's own click is ignored.
   const click = (event: MouseEvent) => { event.stopPropagation(); if (event.detail === 0) press(); };
-  const lookClick = (event: MouseEvent) => { event.stopPropagation(); onLook?.(event); look.blur(); };
-  // Keep keyboard focus on the world after a pointer click; acquisition still occurs only in click.
-  const lookDown = (event: PointerEvent) => { event.preventDefault(); event.stopPropagation(); };
-  look.addEventListener('click', lookClick);
-  look.addEventListener('pointerdown', lookDown);
   jump.addEventListener('pointerdown', pointerdown);
   jump.addEventListener('click', click);
   jump.addEventListener('contextmenu', event => event.preventDefault());
@@ -121,21 +98,6 @@ export function createWalkHud(container: HTMLElement, onJump: () => void, onLook
     update(state) {
       root.hidden = !state.visible;
       root.classList.toggle('is-touch', state.touch);
-      if (state.look !== shownLook) {
-        const text = LOOK_TEXT[state.look];
-        key.textContent = text.key; title.textContent = text.title; note.textContent = text.note;
-        look.classList.toggle('is-locked', state.look === 'locked');
-        look.setAttribute('aria-pressed', String(state.look === 'locked'));
-        look.setAttribute('aria-label', state.look === 'locked' ? 'Free the cursor' : 'Mouse look');
-        look.disabled = state.look === 'requesting';
-        look.classList.toggle('is-fallback', state.look === 'fallback');
-        if (shownLook !== null) {
-          look.classList.add('is-fresh');
-          clearTimeout(fresh);
-          fresh = setTimeout(() => look.classList.remove('is-fresh'), 2400);
-        }
-        shownLook = state.look;
-      }
       jump.style.top = `${thumbSlots(state.width, state.height).jump.y.toFixed(1)}px`;
       const active = state.stick;
       if (active) learn();
@@ -147,9 +109,7 @@ export function createWalkHud(container: HTMLElement, onJump: () => void, onLook
       stick.classList.toggle('is-sprint', !!active?.sprint);
     },
     dispose() {
-      clearTimeout(fresh); clearTimeout(pressed);
-      look.removeEventListener('click', lookClick);
-      look.removeEventListener('pointerdown', lookDown);
+      clearTimeout(pressed);
       jump.removeEventListener('pointerdown', pointerdown);
       jump.removeEventListener('click', click);
       root.remove();

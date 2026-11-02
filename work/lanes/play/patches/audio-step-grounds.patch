@@ -1,0 +1,47 @@
+diff --git a/packages/audio/src/families.ts b/packages/audio/src/families.ts
+index 7e4334d8..838592b3 100644
+--- a/packages/audio/src/families.ts
++++ b/packages/audio/src/families.ts
+@@ -2,6 +2,7 @@ import { CASTLE_BEACON } from './cues/beacon';
+ import { BRASS_CONTROL, PARCHMENT_CONTROL, WOOD_CONTROL } from './cues/control';
+ import { WINDOW_LIGHT } from './cues/light';
+ import { SURFACES, type MaterialCue } from './cues/materials';
++import { GROUND_STEPS, STEP_GROUNDS } from './cues/steps';
+ import { STREET_WAVE } from './cues/wave';
+ import type { SampleId } from './samples';
+ import { AUDIO_CONTROL_SURFACES, AUDIO_CUES, AUDIO_MATERIALS, type AudioCue, type AudioCueOptions } from './types';
+@@ -38,6 +39,7 @@ const FAMILIES: Partial<Record<string, Omit<CueFamily, 'key'>>> = {
+   beacon: { tier: 'beacon', ...CASTLE_BEACON },
+   ...Object.fromEntries(Object.entries(MATERIAL_TIERS).flatMap(([cue, tier]) => AUDIO_MATERIALS.map(material =>
+     [`${cue}:${material}`, { tier, ...SURFACES[material][cue as MaterialCue] }]))),
++  ...Object.fromEntries(STEP_GROUNDS.map(ground => [`step:${ground}`, { tier: 'step', ...GROUND_STEPS[ground] }])),
+ };
+ 
+ /** Cue families that are finished and audible in this build, as `cue` or `cue:surface`. */
+@@ -48,7 +50,8 @@ const MATERIAL_CUES = new Set<AudioCue>(Object.keys(MATERIAL_TIERS) as MaterialC
+ /** Resolves a call to its family. Unknown values and families that are not finished yet throw, never fake success. */
+ export function resolveFamily(kind: AudioCue, options: AudioCueOptions): CueFamily {
+   if (!AUDIO_CUES.includes(kind)) throw new TypeError(`kingdom audio: unknown cue ${String(kind)}`);
+-  if (options.material !== undefined && !AUDIO_MATERIALS.includes(options.material)) {
++  if (options.material !== undefined && !(AUDIO_MATERIALS as readonly string[]).includes(options.material)
++    && (kind !== 'step' || !STEP_GROUNDS.includes(options.material as never))) {
+     throw new TypeError(`kingdom audio: unknown material ${String(options.material)}`);
+   }
+   if (options.ui !== undefined && !AUDIO_CONTROL_SURFACES.includes(options.ui)) {
+diff --git a/packages/audio/src/types.ts b/packages/audio/src/types.ts
+index 0294dc6a..0a67f965 100644
+--- a/packages/audio/src/types.ts
++++ b/packages/audio/src/types.ts
+@@ -1,10 +1,11 @@
++import type { StepGround } from './cues/steps';
+ export type AudioCue = 'wood' | 'light' | 'wave' | 'beacon'
+   | 'step' | 'place' | 'remove' | 'material';
+ export type AudioMaterial = 'wood' | 'stone' | 'earth' | 'metal' | 'glass' | 'fabric';
+ export type AudioControlSurface = 'wood' | 'brass' | 'parchment';
+ export interface AudioSettings { muted: boolean; volume: number }
+ export interface AudioCueOptions {
+-  material?: AudioMaterial;
++  material?: AudioMaterial | StepGround; // a ground (grass, sand…) only for `step`
+   ui?: AudioControlSurface; // used only by the legacy wood/control family
+   pan?: number; // listener-relative [-1, 1]
+   distance?: number; // listener-relative metres

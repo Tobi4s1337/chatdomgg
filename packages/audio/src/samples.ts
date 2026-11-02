@@ -42,6 +42,23 @@ import fabricStepC from './assets/kenney/footstep-carpet-003.wav?url';
 import clothA from './assets/kenney/cloth-1.wav?url';
 import clothB from './assets/kenney/cloth-2.wav?url';
 import clothC from './assets/kenney/cloth-3.wav?url';
+import grassStepA from './assets/kenney/footstep-grass-000.wav?url';
+import grassStepB from './assets/kenney/footstep-grass-001.wav?url';
+import grassStepC from './assets/kenney/footstep-grass-002.wav?url';
+import grassStepD from './assets/kenney/footstep-grass-003.wav?url';
+import grassStepE from './assets/kenney/footstep-grass-004.wav?url';
+import snowStepA from './assets/kenney/footstep-snow-000.wav?url';
+import snowStepB from './assets/kenney/footstep-snow-001.wav?url';
+import snowStepC from './assets/kenney/footstep-snow-004.wav?url';
+import plankStepA from './assets/kenney/footstep-wood-001.wav?url';
+import plankStepB from './assets/kenney/footstep-wood-003.wav?url';
+import settStepA from './assets/kenney/footstep-concrete-001.wav?url';
+import settStepB from './assets/kenney/footstep-concrete-004.wav?url';
+import soilStepA from './assets/kenney/footstep-earth-01.wav?url';
+import soilStepB from './assets/kenney/footstep-earth-04.wav?url';
+import soilStepC from './assets/kenney/footstep-earth-05.wav?url';
+import soilStepD from './assets/kenney/footstep-earth-06.wav?url';
+import soilStepE from './assets/kenney/footstep-earth-09.wav?url';
 
 /**
  * Selected foley, decoded once per instance. Sources and edits are recorded in packages/audio/THIRD_PARTY.md.
@@ -92,6 +109,23 @@ export const SAMPLES = {
   'cloth-a': { url: clothA, peakHz: 0 },
   'cloth-b': { url: clothB, peakHz: 0 },
   'cloth-c': { url: clothC, peakHz: 0 },
+  'step-grass-a': { url: grassStepA, peakHz: 0 },
+  'step-grass-b': { url: grassStepB, peakHz: 0 },
+  'step-grass-c': { url: grassStepC, peakHz: 0 },
+  'step-grass-d': { url: grassStepD, peakHz: 0 },
+  'step-grass-e': { url: grassStepE, peakHz: 0 },
+  'step-snow-a': { url: snowStepA, peakHz: 0 },
+  'step-snow-b': { url: snowStepB, peakHz: 0 },
+  'step-snow-c': { url: snowStepC, peakHz: 0 },
+  'step-plank-a': { url: plankStepA, peakHz: 0 },
+  'step-plank-b': { url: plankStepB, peakHz: 0 },
+  'step-sett-a': { url: settStepA, peakHz: 0 },
+  'step-sett-b': { url: settStepB, peakHz: 0 },
+  'step-soil-a': { url: soilStepA, peakHz: 0 },
+  'step-soil-b': { url: soilStepB, peakHz: 0 },
+  'step-soil-c': { url: soilStepC, peakHz: 0 },
+  'step-soil-d': { url: soilStepD, peakHz: 0 },
+  'step-soil-e': { url: soilStepE, peakHz: 0 },
 } as const;
 
 export type SampleId = keyof typeof SAMPLES;
