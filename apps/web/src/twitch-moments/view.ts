@@ -8,7 +8,7 @@ import { CameraPoseSchema, type CameraPose } from './contracts';
 import type { FocusFrame, HomeDressFrame, MomentCue, MomentFrame, MomentPlace, MomentSubject, Tint } from './controller';
 import { createDragonLayer } from './dragon-view';
 import { createGiftLayer, type DoorAnchor, type GiftRoute, type PlaceAnchor } from './gift-view';
-import { createRaidLayer } from './raid-view';
+import { createRaidLayer, type RaidChatGround } from './raid-view';
 import { createSkyFlightLayer } from './sky-flight-view';
 import { createSkyLightLayer } from './sky-light-view';
 import type { CrowdCall } from './stage-beat';
@@ -781,6 +781,8 @@ export function createTwitchMomentView(host: MomentViewHost) {
     prepare,
     /** Caller has checked the frame's origin and destination against this kingdom. */
     receiveRaidChat(frame: RaidChatFrame): void { if (!disposed) raid.chat(frame.cues, frame.lights); },
+    /** The feature host supplies its adopted surface; no sampler means no stationary fixtures. */
+    setRaidChatGround(sample: RaidChatGround | undefined): void { if (!disposed) raid.ground(sample); },
     onDispose(listener: () => void): () => void {
       if (disposed) { listener(); return () => {}; }
       disposeListeners.add(listener);

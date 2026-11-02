@@ -3,6 +3,8 @@ import { parseRaidChatFrame, parseRaidGuestVisualMark, type KingdomId, type Raid
 import type { TwitchMomentFeed } from '../../twitch-moments/contracts';
 import type { createTwitchMomentView } from '../../twitch-moments/view';
 import { createGuestCrest } from '../../raid-gate/guest-insignia';
+import type { SettlementPlan } from '@chatdom/world';
+import { raidChatGroundOf, type RaidChatSupport } from './raid-chat-ground';
 import '../../raid-gate/raid-chat.css';
 
 /** A short-lived public current-state reader. It never retains a chat history. */
@@ -66,11 +68,15 @@ export interface KingdomRaidChatOptions {
   kingdomId: KingdomId;
   signal: AbortSignal;
   clock: () => number;
+  plan?: SettlementPlan;
+  ground?: (x: number, z: number) => number;
+  support?: RaidChatSupport;
 }
 
-/** Projects only the moment view's currently visible caravan lanterns. */
-export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock }: KingdomRaidChatOptions): () => void {
+/** Projects only the moment view's currently visible verified lanterns, moving or beside the gate. */
+export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock, plan, ground, support }: KingdomRaidChatOptions): () => void {
   if (signal.aborted) return () => {};
+  view.setRaidChatGround(plan && ground ? raidChatGroundOf(plan, ground, support) : undefined);
   const layer = document.createElement('div');
   layer.className = 'raid-chat-layer';
   layer.setAttribute('aria-live', 'off');
@@ -141,7 +147,7 @@ export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, si
   let unsubscribeView = () => {};
   const dispose = () => {
     if (stopped) return; stopped = true; signal.removeEventListener('abort', dispose);
-    unsubscribeView(); cancelAnimationFrame(animation); disconnect(); clear(); layer.remove();
+    unsubscribeView(); cancelAnimationFrame(animation); disconnect(); clear(); view.setRaidChatGround(undefined); layer.remove();
   };
   unsubscribeView = view.onDispose(dispose);
   if (stopped) unsubscribeView();

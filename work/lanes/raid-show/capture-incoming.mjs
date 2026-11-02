@@ -31,10 +31,12 @@ if (!process.argv.includes('--worker')) {
     if (!/^(1920x1080|1280x720|1440x900|390x844)$/.test(size)) throw new Error('Use a standard stream, web or phone size.');
     const [width, height] = size.split('x').map(Number);
     const viewers = Number(argument('--viewers', '140')), at = Number(argument('--at', '12000'));
-    if (![3, 140, 10000, 70000].includes(viewers) || !Number.isFinite(at) || at < 0 || at > 119000) throw new Error('Choose a specified raid scale and a valid beat time.');
+    if (![3, 140, 10000, 70000].includes(viewers) || !Number.isFinite(at) || at < 0 || at > 600000) throw new Error('Choose a specified raid scale and a time within the ten-minute arrival window.');
+    const chatAge = Number(argument('--chat-age', '2000'));
+    if (!Number.isFinite(chatAge) || chatAge < 500 || chatAge > 89500) throw new Error('Chat age must retain some of its original light lease.');
     const scene = argument('--scene', 'incoming');
     if (!['incoming', 'insignia'].includes(scene)) throw new Error('Choose incoming or insignia.');
-    const route = scene === 'insignia' ? '/-/raid-gate?guestInsignia=1' : `/-/raid-gate?incoming=1&viewers=${viewers}&at=${at}${process.argv.includes('--chat') ? '&chat=1' : ''}`;
+    const route = scene === 'insignia' ? '/-/raid-gate?guestInsignia=1' : `/-/raid-gate?incoming=1&viewers=${viewers}&at=${at}${process.argv.includes('--chat') ? `&chat=1&chatAge=${chatAge}` : ''}`;
     const page = await browser.newPage({ viewport: { width, height } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));

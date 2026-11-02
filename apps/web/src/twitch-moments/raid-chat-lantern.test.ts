@@ -121,3 +121,41 @@ it('uses free wagon fixtures for colliding authors and retains their slots until
   expect(layer.stats().chatLanterns).toBe(0);
   layer.dispose(); source.dispose(); material.dispose();
 });
+
+it.each(['hearth', 'tide'] as const)('meshes the %s grounded stand within prop budgets and joins it to its lamp', async kit => {
+  const { raidChatStandBlueprint } = await import('./raid-chat-lantern');
+  const { MATERIALS } = await import('@chatdom/content');
+  const { VoxelBlueprintSchema } = await import('@chatdom/shared');
+  const { meshVoxelChunk, prepareAssetChunks, rasterizeBlueprint } = await import('@chatdom/voxel');
+  const stand = raidChatStandBlueprint(kit);
+  expect(VoxelBlueprintSchema.safeParse(stand).success).toBe(true);
+  expect(stand.styleId).toBe(kit);
+  expect(stand.boxes.length).toBeLessThanOrEqual(512);
+  const materials = new Set(MATERIALS.materials.map(m => m.id));
+  expect(stand.boxes.every(box => materials.has(box.material))).toBe(true);
+  const asset = rasterizeBlueprint(stand);
+  const occupied = asset.voxels.filter(material => material !== 0).length;
+  expect(occupied).toBeGreaterThan(0); expect(occupied).toBeLessThanOrEqual(20_000);
+  const triangles = prepareAssetChunks(asset, MATERIALS.materials, MATERIALS.revision)
+    .reduce((total, chunk) => total + meshVoxelChunk(chunk).indices.length / 3, 0);
+  expect(triangles).toBeGreaterThan(0); expect(triangles).toBeLessThanOrEqual(40_000);
+  const root = new THREE.Group(), geometry = new THREE.BoxGeometry(), material = new THREE.MeshBasicMaterial();
+  const layer = createRaidChatLanternLayer(root, { kit, material, mesh: () => new THREE.Mesh(geometry, material) });
+  try {
+    layer.apply([{ ...item('grounded'), position: [3, 6.25, 1], stand: true }]);
+    const standMesh = root.getObjectByName(stand.id) as THREE.InstancedMesh;
+    const lampMesh = root.getObjectByName(`moment-raid-chat-lantern-${kit}-${'azure'}`) as THREE.InstancedMesh | undefined;
+    expect(standMesh.count).toBe(1);
+    const matrix = new THREE.Matrix4(); standMesh.getMatrixAt(0, matrix);
+    const bottomCentre = new THREE.Vector3(3.5 * 0.125, 0, 3.5 * 0.125).applyMatrix4(matrix);
+    const topCentre = new THREE.Vector3(3.5 * 0.125, 10 * 0.125, 3.5 * 0.125).applyMatrix4(matrix);
+    expect(bottomCentre.toArray()).toEqual([3, 5, 1]);
+    expect(topCentre.toArray()).toEqual([3, 6.25, 1]);
+    const meshes: THREE.InstancedMesh[] = [];
+    root.traverse(obj => { if (obj instanceof THREE.InstancedMesh && obj.name.startsWith(`moment-raid-chat-lantern-${kit}-`)) meshes.push(obj); });
+    expect(lampMesh || meshes[0]).toBeDefined();
+    meshes[0]!.getMatrixAt(0, matrix);
+    const lampBottom = new THREE.Vector3(2.5 * 0.125, 0, 2.5 * 0.125).applyMatrix4(matrix);
+    expect(lampBottom.distanceTo(topCentre)).toBeLessThan(1e-6);
+  } finally { layer.dispose(); geometry.dispose(); material.dispose(); }
+});

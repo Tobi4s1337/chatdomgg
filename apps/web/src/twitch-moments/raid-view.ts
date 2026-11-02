@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { RaidChatCue, RaidChatLight, Vec3, VoxelBlueprint } from '@chatdom/shared';
+import { KingdomIdSchema, type RaidChatCue, type RaidChatLight, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
 import type { Tincture } from '../atlas/heraldry/design';
 import { CELL, type BannerKit } from './banner';
 import { breeze } from './choreography';
@@ -18,8 +18,14 @@ export const RAID_VIEW_LIMITS = {
   wagons: RAID_LIMITS.units * RAID_LIMITS.caravans, dye: 1400, adornments: 3 * RAID_LIMITS.units * RAID_LIMITS.caravans, cores: 96, glows: 40, pools: 40, arms: 8,
 } as const;
 
+export type RaidChatGround = (x: number, z: number) => number | null;
+
+/** Layout in metres; the two rows stay clear of the gate road. */
+export const RAID_CHAT_GATE_LAYOUT = { aside: 5, spacing: 1.4, start: 1.6, standHeight: 1.25, slots: 32 } as const;
+
 export interface RaidLayerHost {
   readonly kit: BannerKit;
+  readonly ground?: RaidChatGround;
   /** The kingdom's crafted voxel material (build lattice), carrying the `aLodFade` dissolve for instanced parts. */
   readonly material: THREE.Material;
   /** A prepared part's mesh (its geometry is the host's). */
@@ -158,14 +164,20 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
   let lights: readonly RaidChatLight[] = [];
   let anchors: { cue: RaidChatCue; position: THREE.Vector3; opacity: number }[] = [];
   let drawnLights: RaidChatLantern[] = [];
+  let ground = host.ground;
+  let gateLanterns = 0;
+  const gateSlots = new Map<string, { raidId: string; source: string; slot: number }>();
+  let priorWagonLights = new Set<string>();
+  const gateWakeAt = new Map<string, number>();
   let wagonLights = new Map<number, { light: RaidChatLight; slot: number }[]>();
   const lightSlots = new Map<string, { raidId: string; source: string; slot: number }>();
   function pruneLightSlots(): void {
     const active = new Map(lights.map(light => [light.lightId, light]));
-    for (const [id, assignment] of lightSlots) {
+    for (const assignments of [lightSlots, gateSlots]) for (const [id, assignment] of assignments) {
       const light = active.get(id);
-      if (!light || light.raid.raidId !== assignment.raidId || light.raid.fromKingdomId !== assignment.source) lightSlots.delete(id);
+      if (!light || light.raid.raidId !== assignment.raidId || light.raid.fromKingdomId !== assignment.source) assignments.delete(id);
     }
+    for (const id of gateWakeAt.keys()) if (!active.has(id)) gateWakeAt.delete(id);
   }
   const cores = new Cores(layer, RAID_VIEW_LIMITS.cores);
   const glows = new Glows(layer, RAID_VIEW_LIMITS.glows, false, 'raid-glows');
@@ -312,6 +324,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     const [px, , pz] = RAID_WAGON_CELLS.pivot, origin = RAID_WAGON_ORIGIN[kind];
     // Four fixed fixtures on the outside of the sideboards, clear of the wheels. The cap meets the rail.
     for (const { light, slot } of wagonLights.get(index) ?? []) {
+      if (drawnLights.some(drawn => drawn.id === light.lightId)) continue;
       const x = slot % 2 === 0 ? 5 : 12, z = slot < 2 ? -2.5 : 14.5;
       const position = cells(x - px, 1, z - pz).applyMatrix4(w);
       const opacity = fade * Math.min(1, Math.max(0, (atMs - light.asOf) / 350), Math.max(0, (light.expiresAt - atMs) / 500));
@@ -398,16 +411,17 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
       }
       cues = [...byCue.values()].sort((a, b) => b.asOf - a.asOf || a.lightId.localeCompare(b.lightId)).slice(0, 32);
     },
+    ground(sample: RaidChatGround | undefined): void { ground = sample; },
     chatAnchors: () => anchors.map(anchor => ({ ...anchor, position: anchor.position.clone() })),
     apply(frames: readonly RaidFrame[], atMs: number): void {
       for (const instances of pools.values()) instances.count = 0;
       cores.count = 0; glows.count = 0; lightPools.count = 0; gate = null;
       counts = { caravans: 0, wagons: 0 };
-      anchors = []; drawnLights = [];
+      anchors = []; drawnLights = []; gateLanterns = 0;
       cues = cues.filter(cue => cue.expiresAt > atMs);
       lights = lights.filter(light => light.expiresAt > atMs);
       pruneLightSlots();
-      const here = frames.length ? site() : null, line = frames.length ? path() : null;
+      const here = (frames.length || lights.length) ? site() : null, line = (frames.length || lights.length) ? path() : null;
       for (const frame of frames.slice(0, RAID_LIMITS.caravans)) {
         const set = bannersOf(frame.from.kingdomId);
         // No arms means no channel ID: nothing is drawn rather than a banner nobody bears.
@@ -445,6 +459,63 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
         if (here && frame.t < frame.sleep + RAID_BEAT.sleepFade) drawGate(frame, here, set, atMs);
         if (line) for (let i = 0; i < Math.min(frame.units, RAID_LIMITS.units); i++) if (drawWagon(frame, set, i, line, atMs)) counts.wagons++;
       }
+      // Gate slots are independent from wagon slots. A light whose assigned wagon is not
+      // presently visible can wait here; an unrelated caravan never hides it.
+      const wagonNow = new Set(drawnLights.map(light => light.id));
+      for (const id of wagonNow) gateWakeAt.delete(id);
+      if (here && line && ground) {
+        const eligible = lights.filter(light => light.asOf <= atMs && !wagonNow.has(light.lightId))
+          .sort((a, b) => a.lightId.localeCompare(b.lightId));
+        const occupied = new Set([...gateSlots.values()].map(assignment => assignment.slot));
+        const positions = new Map<number, THREE.Vector3 | null>();
+        const positionFor = (slot: number): THREE.Vector3 | undefined => {
+          if (positions.has(slot)) return positions.get(slot) ?? undefined;
+          const sign = slot % 2 ? 1 : -1;
+          const along = RAID_CHAT_GATE_LAYOUT.start + Math.floor(slot / 2) * RAID_CHAT_GATE_LAYOUT.spacing;
+          for (const extra of [0, 0.8, 1.6, 2.4]) {
+            const candidate = here.position.clone().addScaledVector(here.facing, along)
+              .addScaledVector(here.side, sign * (RAID_CHAT_GATE_LAYOUT.aside + extra));
+            let height: number | null = null;
+            try { height = ground!(candidate.x, candidate.z); } catch { /* A retired host supplies no fixture. */ }
+            if (height !== null && Number.isFinite(height)) {
+              candidate.y = height + RAID_CHAT_GATE_LAYOUT.standHeight; positions.set(slot, candidate); return candidate;
+            }
+          }
+          positions.set(slot, null);
+          return undefined;
+        };
+        for (const light of eligible) {
+          let assignment = gateSlots.get(light.lightId);
+          let position = assignment ? positionFor(assignment.slot) : undefined;
+          if (assignment && !position) {
+            occupied.delete(assignment.slot); gateSlots.delete(light.lightId); assignment = undefined;
+          }
+          if (!assignment) {
+            // A small party stays together near the gate. Existing leases keep their fixture.
+            for (let slot = 0; slot < RAID_CHAT_GATE_LAYOUT.slots; slot++) {
+              if (occupied.has(slot)) continue;
+              const candidate = positionFor(slot);
+              if (!candidate) continue;
+              position = candidate;
+              assignment = { raidId: light.raid.raidId, source: light.raid.fromKingdomId, slot };
+              gateSlots.set(light.lightId, assignment); occupied.add(slot); break;
+            }
+          }
+          if (!position) continue;
+          if (priorWagonLights.has(light.lightId)) gateWakeAt.set(light.lightId, atMs);
+          const wake = Math.max(light.asOf, gateWakeAt.get(light.lightId) ?? light.asOf);
+          const opacity = Math.min(1, Math.max(0, (atMs - wake) / 350), Math.max(0, (light.expiresAt - atMs) / 500));
+          if (opacity <= 0.01 || !KingdomIdSchema.safeParse(light.raid.fromKingdomId).success) continue;
+          drawnLights.push({ id: light.lightId, sourceKingdomId: light.raid.fromKingdomId, position: position.toArray(), yaw: Math.atan2(here.facing.x, here.facing.z), opacity, stand: true });
+          gateLanterns++;
+          const cue = cues.find(c => c.lightId === light.lightId && c.raid.raidId === light.raid.raidId
+            && c.raid.fromKingdomId === light.raid.fromKingdomId && c.kingdomId === light.kingdomId && c.origin === light.origin
+            && c.asOf <= atMs && c.expiresAt > atMs);
+          if (cue) anchors.push({ cue, position: position.clone().add(new THREE.Vector3(0, 1.125, 0)),
+            opacity: opacity * Math.min(1, (cue.expiresAt - atMs) / 500) });
+        }
+      }
+      priorWagonLights = wagonNow;
       for (const instances of pools.values()) instances.flush();
       cores.flush(); glows.flush(); lightPools.flush();
       chatLights.apply(drawnLights);
@@ -469,12 +540,18 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     stats: () => {
       let instances = 0;
       for (const p of pools.values()) instances += p.count;
-      return { caravans: counts.caravans, wagons: counts.wagons, gate: gate ? 1 : 0, instances, chatLanterns: chatLights.stats().lanterns, lights: cores.count + glows.count + lightPools.count };
+      const points = drawnLights.filter(light => light.stand).map(light => v3(light.position));
+      const bounds = new THREE.Box3().setFromPoints(points), centre = points.length ? bounds.getCenter(new THREE.Vector3()) : new THREE.Vector3();
+      return { caravans: counts.caravans, wagons: counts.wagons, gate: gate ? 1 : 0, instances,
+        chatLanterns: chatLights.stats().lanterns, chatGateLanterns: gateLanterns,
+        chatGateX: centre.x, chatGateY: centre.y, chatGateZ: centre.z,
+        chatGateSpan: points.length ? Math.hypot(bounds.max.x - bounds.min.x, bounds.max.z - bounds.min.z) : 0,
+        lights: cores.count + glows.count + lightPools.count };
     },
     dispose(): void {
       for (const instances of pools.values()) instances.dispose();
       pools.clear(); banners.clear();
-      chatLights.dispose(); cues = []; lights = []; anchors = []; lightSlots.clear();
+      chatLights.dispose(); cues = []; lights = []; anchors = []; lightSlots.clear(); gateSlots.clear(); gateWakeAt.clear(); priorWagonLights.clear();
       cores.dispose(); glows.dispose(); lightPools.dispose();
       root.remove(layer);
     },

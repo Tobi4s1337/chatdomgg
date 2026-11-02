@@ -14,6 +14,8 @@ export interface RaidChatLantern {
   readonly position: readonly [number, number, number];
   readonly yaw: number;
   readonly opacity?: number;
+  /** A grounded gate stand, with the supplied point at its top. */
+  readonly stand?: boolean;
 }
 
 export const RAID_CHAT_LANTERN_LIMIT = 64;
@@ -36,6 +38,17 @@ export function raidChatLanternBlueprint(kit: BannerKit, colour: Colour): VoxelB
   return blueprint(`moment-raid-chat-lantern-${kit}-${colour}`, kit, [5, 9, 5], b);
 }
 
+/** A stout timber post on a stepped stone foot, with a brass collar supporting the lamp. */
+export function raidChatStandBlueprint(kit: BannerKit): VoxelBlueprint {
+  return blueprint(`moment-raid-chat-stand-${kit}`, kit, [7, 10, 7], [
+    box(0, 0, 0, 7, 1, 7, MAT.darkStone),
+    box(1, 1, 1, 6, 2, 6, MAT.timber),
+    box(2, 2, 2, 5, 8, 5, MAT.bark),
+    box(1, 8, 1, 6, 9, 6, MAT.brass),
+    box(2, 9, 2, 5, 10, 5, MAT.timber),
+  ]);
+}
+
 /** Prewarm these with the scene's normal voxel mesh host before applying a frame. */
 export const raidChatLanternBlueprints = (kit: BannerKit): VoxelBlueprint[] =>
   COLOURS.map(colour => raidChatLanternBlueprint(kit, colour));
@@ -52,6 +65,7 @@ export function createRaidChatLanternLayer(root: THREE.Group, host: RaidChatLant
   layer.name = 'raid-chat-lanterns';
   root.add(layer);
   const pools = new Map<Colour, Pool>();
+  let stands: Pool | undefined;
   const colours = new Map<string, Colour | null>();
   const lightGeometry = new THREE.BoxGeometry(1, 1, 1);
   const lightMaterial = new THREE.MeshBasicMaterial({ color: 0xffd797, toneMapped: false });
@@ -80,10 +94,11 @@ export function createRaidChatLanternLayer(root: THREE.Group, host: RaidChatLant
   function clear(): void {
     count = 0;
     for (const p of pools.values()) { p.count = 0; p.flush(); }
+    if (stands) { stands.count = 0; stands.flush(); }
     lights.count = 0; lights.visible = false;
   }
   return {
-    blueprints: () => raidChatLanternBlueprints(host.kit),
+    blueprints: () => [...raidChatLanternBlueprints(host.kit), raidChatStandBlueprint(host.kit)],
     apply(items: readonly RaidChatLantern[]): void {
       if (disposed) return;
       clear();
@@ -105,12 +120,20 @@ export function createRaidChatLanternLayer(root: THREE.Group, host: RaidChatLant
         matrix.compose(position, quaternion.setFromAxisAngle(up, item.yaw), unit);
         // The voxel mesh is min-corner based; the supplied point is bottom centre.
         pool(colour).push(matrix.clone().multiply(translate.makeTranslation(-2.5 * CELL, 0, -2.5 * CELL)), fade);
+        if (item.stand) {
+          if (!stands) {
+            const part = raidChatStandBlueprint(host.kit);
+            stands = new Pool(host.mesh(part, new THREE.Vector3()).geometry, host.material, RAID_CHAT_LANTERN_LIMIT, layer, part.id);
+          }
+          stands.push(matrix.clone().multiply(translate.makeTranslation(-3.5 * CELL, -10 * CELL, -3.5 * CELL)), fade);
+        }
         // A restrained emissive core, not an individual point light or a large halo.
         lights.setMatrixAt(count, matrix.clone().multiply(translate.makeTranslation(0, 4 * CELL, 0))
           .multiply(scale.makeScale(2.5 * CELL * fade, 3.5 * CELL * fade, 2.5 * CELL * fade)));
         count++;
       }
       for (const p of pools.values()) p.flush();
+      stands?.flush();
       lights.count = count; lights.visible = count > 0;
       if (count) lights.instanceMatrix.needsUpdate = true;
     },
@@ -120,7 +143,7 @@ export function createRaidChatLanternLayer(root: THREE.Group, host: RaidChatLant
       if (disposed) return;
       disposed = true;
       for (const p of pools.values()) p.dispose();
-      pools.clear(); colours.clear();
+      pools.clear(); colours.clear(); stands?.dispose(); stands = undefined;
       lights.removeFromParent(); lights.dispose(); lightGeometry.dispose(); lightMaterial.dispose();
       layer.removeFromParent();
       count = 0;
