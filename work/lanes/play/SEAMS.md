@@ -248,7 +248,9 @@ What play guarantees:
   threshold boards, brass on the latch, at the ledger's interface volume. Reduced motion only fades.
 
 What the source must give (the kingdom entry; `KingdomWalkBinding.portal`, optional): `{ entry, endpoint, title,
-leave(), rejoin({ portal, anchor }) }`. Without it no door opens. Asked of front-door in play's progress (`needs:`).
+leave(), rejoin({ portal, anchor }) }`. Without it no door opens. The live kingdom entry's binding is written out as
+`work/lanes/play/patches/kingdom-entry-door.patch` for front-door's scope (see "Asked of front-door" below); until it
+lands no door opens in the live kingdom, and every play test of the door runs against its own source.
 
 Coming back outside the door (landed in the realm, additive; PL10, 2026-11-02). The kingdom room decides where you
 stand, never the client:
@@ -256,22 +258,34 @@ stand, never the client:
   the door it came back through, nothing else.
 - `apps/realm/src/portals/arrivals.ts`: `RealmPortalArrivals` keeps the doors by kind and who left which kingdom when.
   `door(kind, find)` registers a finder for the portal id's first segment (`tavern` for `tavern:<kingdomId>:door`);
-  `find({ kingdomId, portal, world })` returns `{ feet, yaw }` (metres, yaw byte, facing out) or null. A departure is
-  recorded when a person's own walker leaves the kingdom room (not a second tab replacing it), lasts six hours and is
-  spent by the next door arrival, found or not. A door of another kingdom, an unknown kind, a finder that throws or
+  `find({ kingdomId, portal, world })` returns `{ feet, yaw }` (metres, yaw byte, facing out) or null.
+  `departed(kingdomId, personId, feet?)` records a departure only with the walker's last server feet, which the room
+  reports once it applies `patches/kingdom-room-door-departure.patch` (below): when a person's own walker leaves on
+  purpose (Colyseus close 4000, which the client's `room.leave()` sends; not a dropped socket, a second tab replacing
+  it or a seat the server ended). A leave reported without feet records nothing and clears any earlier one, so until
+  the patch lands every arrival is at the gate. A departure lasts six hours, only the latest one counts, and it is spent by the next door arrival,
+  found or not. It opens a door only if those feet stood within 3 m across and 1.6 m up of that door's outside
+  (`PORTAL_DEPARTURE_REACH`; the client offers the door within 2.2 m of the same anchor), so walking out anywhere else
+  and naming the tavern is the gate. A door of another kingdom, an unknown kind, a finder that throws or
   returns non-finite feet: the gate. `installPortalArrivals(services, arrivals)` / `portalArrivalsFor(services)`.
-- `apps/realm/src/kingdom-room.ts` (three small additive hunks): `onJoin` reads `arrive`; a walker not resuming a seat
+- `apps/realm/src/kingdom-room.ts` (on HEAD, reviewed): `onJoin` reads `arrive`; a walker not resuming a seat
   stands at the found feet, facing out, only if they are clear and supported in the room's current collision world,
-  otherwise at `handle.spawn` as always. `onLeave` records the departure.
+  otherwise at `handle.spawn` as always. `onLeave` reports the person's own walker leaving, without feet.
+- **Asked of the realm room's owner, not applied** (review, 2026-11-02: changing `onLeave` is beyond a small additive
+  hook): `work/lanes/play/patches/kingdom-room-door-departure.patch` (`git apply --check` clean on HEAD, 4 lines).
+  `onLeave` reports a departure only for a consented close (`CloseCode.CONSENTED`, imported from `@colyseus/core`) of
+  the person's own current walker, with that walker's feet: `departed(kingdomId, personId, [x, y, z])`. Nothing else
+  in the room changes. Without it the door return is inert (always the gate), never wrong.
 - `apps/realm/src/main.ts`: `const doors = new RealmPortalArrivals(); installPortalArrivals(boot.services, doors);`.
 - Gather's one line in `main.ts`, right after it: `doors.door('tavern', ({ kingdomId, world }) => { const scene =
   boot.loader.current(kingdomId)?.scene, door = scene ? tavernPortalFor(kingdomId, scene, world) : null; return door ?
   door.returnAnchor : null; });` (`tavernPortalFor` from `./games/portal`; `returnAnchor` is already `{ feet, yaw }`).
 - Front-door's `rejoin` passes the door through: its `open()` takes an entry whose `ticket()` returns
   `{ ...join, arrive: { portal } }` for that one join (`connectRealm` parses `RealmJoinSchema` and joins with it as it is).
-- Checked by `apps/realm/src/portals/arrivals.test.ts` through the real transport: back through the door you stand
-  outside it facing out and others see you there; a first walk, a stranger, another kingdom's door or a door whose
-  outside is inside a wall all arrive at the gate.
+- Checked by `apps/realm/src/portals/arrivals.test.ts` through the real transport: a first walk, another kingdom's
+  door, a walk out away from the door or a door whose outside is inside a wall all arrive at the gate. Back through the
+  door you stand outside it facing out and others see you there: an expected fail until the room patch lands (checked
+  with the patch applied: it passes, so `it.fails` reports it; then make it an ordinary `it`).
 
 ### B1c. Walk features (landed in `slots.ts` and `play/features.ts`, additive; PL10, 2026-11-02)
 
@@ -320,10 +334,30 @@ Pier mounts with one line in `play/providers.ts`: `import '../fishing/play-slot'
   `WalkFeatureContext.audio`). Nothing else in the file changed.
 - `apps/web/src/kingdom/index.tsx`: the walk binding now lends the kingdom's `hour` and `kingdomName` to play.
 - `packages/shared/src/realm/messages.ts`, `apps/realm/src/kingdom-room.ts`, `apps/realm/src/main.ts`: the door
-  arrival above (an optional join field, three additive hunks, one composition line). Every join without `arrive`
-  behaves exactly as before.
+  arrival above (an optional join field, the reviewed hunks on HEAD, one composition line). Every join without
+  `arrive` behaves exactly as before. The `onLeave` change that binds a return to a leave at the door is asked of the
+  room's owner (`patches/kingdom-room-door-departure.patch`), not applied.
 - `apps/web/src/citizens/index.ts`: `patches/citizens-gait-ground.patch` applied (play owns `citizens/`; PL11 had not
   started). A sample may carry the drawn `ground` and `floor`, and the standing pose rises by the gait's `lift`.
+- **Asked of front-door, not applied** (review, 2026-11-02: `kingdom-entry/**` is front-door's scope, and a finished
+  lane does not move it into play's). `work/lanes/play/patches/kingdom-entry-door.patch` (`git apply --check` clean on
+  HEAD) touches `kingdom-entry/types.ts`, `live.ts`, `index.tsx`, a new `door-entry.test.ts` (2 cases) and two
+  expressions in `apps/web/src/main.tsx`, and makes the kingdom walk a door's source:
+  `KingdomEntrySource` takes an optional second argument `arrival: { portal }`, which the first fresh join's ticket
+  carries as `arrive` (any later fresh join after a drop is plain). `KingdomEntryConnection` gains optional `entry` and
+  `endpoint`; that `entry` reads the session afresh for each ticket, because the session's own entry asks under the
+  connection's abort signal, which ends as you go through the door. `KingdomEntry` passes the walk
+  `portal: { entry, endpoint, title, leave, rejoin }`: `leave` releases the connection and resolves once the room's
+  `onLeave` fires (or its socket is already closed), rejecting after 8 s while it may still be connected; `rejoin`
+  opens the kingdom with the door named and rejects with the gate's own words if it does not open. `open()` now
+  resolves whether it holds the kingdom; every existing caller ignores that. Sources without doors (simulated,
+  spectator) ignore the argument and lend no `entry`, so no door opens there.
+- **Composing with gather's own tavern return** (gather's `apps/realm/src/games/return.ts`, on lane/gather): gather
+  records a person's tavern session ending and stands their next fresh arrival at the door with no join field; play's
+  door arrivals need `arrive` and a consented leave from the kingdom taken at that door. Both give `{ feet, yaw }`
+  checked clear and supported. Where both land in `onJoin`, the integration is one expression:
+  `const door = resume ? undefined : this.doorArrival(auth, options) ?? tavernReturnsFor(services)?.arrival(auth.kingdomId, auth.personId, this.world, Date.now()) ?? undefined;`
+  with `door` used for position and yaw as play's hunk already does. Either alone stands you outside the tavern door.
 
 ### B2. The look (play provides to panel-window, front-door, atlas-map, raid-show, forge-wish)
 
