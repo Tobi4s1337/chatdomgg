@@ -23,6 +23,8 @@
 //
 // Every take writes `take.json` next to its frames: each frame's index, shot time, clock value and SHA-256 (of the
 // image, or of the encoded chunk for webcodecs).
+/* global AbortSignal -- Node's own global */
+import { Buffer } from 'node:buffer';
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, truncateSync, writeFileSync } from 'node:fs';

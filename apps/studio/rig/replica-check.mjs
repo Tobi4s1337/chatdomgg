@@ -8,6 +8,8 @@
 // Reads media/teaser/reference/live.dump.json and live@1920x1080.png (from rig/reference-capture.mjs). The reference
 // is another streamer's page, used only for layout: in every image written here their video, name, avatar, title,
 // about text, side bar and chat text are covered by neutral boxes.
+/* global getComputedStyle, Image -- read inside page.evaluate */
+import { Buffer } from 'node:buffer';
 import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';

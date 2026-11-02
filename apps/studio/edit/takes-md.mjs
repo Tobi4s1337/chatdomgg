@@ -2,7 +2,7 @@
 // resolution, frames recorded against frames expected, the renderer string, frames per minute, and whether every
 // frame's clock value is exactly n/fps (no dropped or doubled frames).   node apps/studio/edit/takes-md.mjs
 import { execSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 

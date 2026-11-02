@@ -3,7 +3,7 @@
 //   ?fixture=page&t=…   the page replica's own sample state (for building the replica)
 //   &player=key         a keyed player (transparent), for page plates composited later
 import { mountPage, type PageView } from './page';
-import type { PageRects, PageState, StudioApi } from './types';
+import type { PageState, StudioApi } from './types';
 
 
 const query = new URLSearchParams(location.search);

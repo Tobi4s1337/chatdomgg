@@ -7,6 +7,7 @@
 //
 // Every WebGL context is created with preserveDrawingBuffer, so the canvas still holds the frame it drew when the
 // recorder reads it after the settle wait (and a frame the page chose not to redraw keeps its last picture).
+/* global window, document, HTMLCanvasElement, VideoEncoder, VideoFrame, btoa, crypto -- runs in the page */
 (() => {
   if (globalThis.__studioCapture || window.top !== window) return;
 

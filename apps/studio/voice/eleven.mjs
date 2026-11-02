@@ -11,6 +11,7 @@
 // voice lookup is cached too; the subscription read is always live, because its
 // whole job is to report the account's current usage.
 
+import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, linkSync, copyFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -211,7 +212,7 @@ export async function getVoice(voiceId, { refresh = false } = {}) {
     if (!(err instanceof ElevenError) || (err.status !== 400 && err.status !== 404)) throw err;
     const j = await (await call('GET', '/v1/shared-voices', { query: { page_size: 5, search: voiceId } })).json();
     const v = (j.voices ?? []).find((x) => x.voice_id === voiceId);
-    if (!v) throw new Error(`Voice ${voiceId} is neither in the account nor in the Voice Library`);
+    if (!v) throw new Error(`Voice ${voiceId} is neither in the account nor in the Voice Library`, { cause: err });
     kept = {
       voice_id: v.voice_id,
       name: v.name,

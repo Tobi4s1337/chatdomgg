@@ -16,6 +16,9 @@
 // (curated measurements), reference/<name>.dump.json (every visible element with its box and computed style),
 // reference/css/ (Twitch's stylesheets, to read exact values), reference/fonts/, reference/icons/,
 // reference/badges/, reference/emotes/, reference/avatars/.
+/* global innerHeight, innerWidth, getComputedStyle, location, devicePixelRatio -- read inside page.evaluate */
+import { URLSearchParams } from 'node:url';
+import { Buffer } from 'node:buffer';
 import { chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';

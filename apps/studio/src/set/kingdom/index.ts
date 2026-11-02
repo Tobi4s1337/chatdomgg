@@ -158,6 +158,7 @@ export async function start(query: URLSearchParams, canvas: HTMLCanvasElement): 
   };
 
   // --- The frame driver: registered before the scene's own loop, so our state lands in the same frame ----------------
+  // eslint-disable-next-line prefer-const -- the frame driver reads it before the scene has mounted
   let kingdom: Kingdom | undefined;
   let forgeReady = false;
   let waiters: { calls: number; resolve: () => void }[] = [];
@@ -218,6 +219,7 @@ export async function start(query: URLSearchParams, canvas: HTMLCanvasElement): 
   // The scene makes its camera synchronously, before its first await: note it as it is made.
   const proto = THREE.PerspectiveCamera.prototype, updateProjection = proto.updateProjectionMatrix;
   proto.updateProjectionMatrix = function (this: THREE.PerspectiveCamera) {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- the point: keep the scene's own camera as it is made
     if (!camera && this.near === .15 && this.far === 2200) camera = this;
     return updateProjection.call(this);
   };

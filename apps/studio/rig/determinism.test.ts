@@ -1,6 +1,9 @@
 // Two recordings of the same frames must be byte-identical: every studio frame is a pure function of
 // (shot, t), and the recorder's virtual clock leaves nothing to the host's speed. Runs headless Chrome here
 // (DOM page plates only; the player is keyed) under the shared capture lock.
+//
+// It needs this worktree's web build (apps/web/dist, for the panel frame) and a turn in the capture queue, so the
+// repo's own `pnpm test` skips it. The studio's test script runs it: `pnpm --filter @chatdom/studio test`.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,7 +15,7 @@ import { acquireCaptureLock } from '../../../packages/testing/capture-lock.mjs';
 
 interface Sidecar { frames: { frame: number; sha256: string; clock: number }[] }
 
-describe('frame-stepped recording', () => {
+describe.skipIf(!process.env.CHATDOM_STUDIO_RECORD)('frame-stepped recording', () => {
   it('records the same frames twice, byte for byte', async () => {
     const release = await acquireCaptureLock();
     const dirs = [mkdtempSync(join(tmpdir(), 'studio-a-')), mkdtempSync(join(tmpdir(), 'studio-b-'))];

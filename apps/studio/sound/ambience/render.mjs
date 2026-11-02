@@ -10,6 +10,7 @@
 // as raw Float32 samples. With the browser and server closed and the lock released, Node writes the WAVs, mixes the
 // two beds into seamless 30 s loops, measures everything with ffmpeg (EBU R128, true peak, astats), writes the
 // edit-ready copies, the spectrograms, measurements.json and apps/studio/sound/ambience.json.
+/* global AbortSignal -- Node's own global */
 import { Buffer } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';

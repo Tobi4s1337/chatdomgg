@@ -11,6 +11,7 @@
 // One clock leads: the top frame's. Same-origin child frames register with it, start at its current time
 // and advance with it. The configuration comes from `globalThis.__VIRTUAL_CLOCK_CONFIG__` if the recorder
 // sets it in an earlier init script: { epoch: ms since 1970 at t = 0, origin: performance.now() at t = 0 }.
+/* global window, document, performance, addEventListener -- runs in the page */
 (() => {
   if (globalThis.__virtualClock) return;
   const config = globalThis.__VIRTUAL_CLOCK_CONFIG__ ?? {};
@@ -42,7 +43,7 @@
     return id;
   }
   function call(fn, args) {
-    try { typeof fn === 'function' ? fn(...args) : (0, eval)(String(fn)); }
+    try { if (typeof fn === 'function') fn(...args); else (0, eval)(String(fn)); }
     catch (error) { real.setTimeout(() => { throw error; }); }
   }
   function nextDue(limit) {
@@ -88,7 +89,7 @@
       if (!due) break;
       const [id, timer] = due;
       now = Math.max(now, timer.due);
-      if (timer.interval) timer.due += timer.interval, timer.seq = seq++;
+      if (timer.interval) { timer.due += timer.interval; timer.seq = seq++; }
       else timers.delete(id);
       call(timer.fn, timer.args ?? []);
     }

@@ -61,6 +61,32 @@ The scripts cannot listen. These picks are measured, and Tobias's ear has the la
 | S22 | Your chat is waiting. | 3 s | A 1.03 s, 8.1 st<br>B 1.12 s, 6.1 st<br>C 1.58 s, 12.5 st | **C** (1.58 s, -16.2 LUFS, TP -2.4) | audio/voice/final/rowan-kLhAst/edit/16-S22-C.mp3 |
 | CARD | Every chat… deserves a kingdom. | 3.6 s | A 2.30 s, 8.2 st<br>B 2.06 s, 12.7 st<br>C 2.35 s, 8.7 st | **B** (2.06 s, -16.2 LUFS, TP -1.9) | audio/voice/final/rowan-kLhAst/edit/17-CARD-B.mp3 |
 
+## Where every audio file lives
+
+Tobias's ruling (Mon 2 Nov): the audio is the best part of the teaser. Keep every take, the music and the sound
+design, and never regenerate or overwrite the chosen takes. Everything is in the media folder,
+`/srv/chatdom/media/teaser/`, outside git. `audio/KEEP.sha256` holds the SHA-256 of all 451 files below
+(286 MB). Check them with `cd /srv/chatdom/media/teaser && sha256sum -c audio/KEEP.sha256`.
+
+| What | Where (under media/teaser/) | Made by |
+|---|---|---|
+| Final narration, the picks the edit uses (17 lines) | `audio/voice/final/rowan-kLhAst/edit/NN-<shot>-<take>.mp3`, picked in `apps/studio/voice/final.json` | `voice/final.mjs` |
+| Final narration, all 51 takes (3 per line), untouched, with alignments | `audio/voice/final/rowan-kLhAst/raw/` (edit copies of every take in `edit/`) | `voice/final.mjs` |
+| Scratch narration (rough cut) | `audio/voice/scratch/rowan-kLhAst/` (`raw/`, `edit/`), indexed in `apps/studio/voice/scratch.json` | `voice/scratch.mjs` |
+| The three J01 candidates, five lines each | `audio/voice/j01/<voice>/` (`rowan-kLhAst`, `david-FF7Kdo`, `david-iBeucL`; `matched/` is loudness-matched) | `voice/j01.mjs` |
+| The model comparison (v3 against multilingual v2) | `audio/voice/model-compare/` | `voice/model-compare.mjs` |
+| Request cache (every paid render, so nothing is paid for twice) | `audio/voice/cache/` | `voice/eleven.mjs` |
+| Ambience beds and hero sounds, ready to cut | `audio/ambience/edit/` (`bed-evening-town.wav`, `bed-night-town.wav`, 11 `hero-*.wav`), described in `audio/ambience/README.md` and `apps/studio/sound/ambience.json` | `sound/ambience/render.mjs` |
+| Ambience as rendered, and every layer before mixing | `audio/ambience/raw/`, `audio/ambience/raw/layers/` | `sound/ambience/render.mjs` |
+| Temporary score (never publish) | `audio/music/temp-bed.wav`, `audio/music/temp-bed-18lufs.wav`, and the grid in `apps/studio/sound/temp-bed.json` | `sound/temp-bed.mjs` |
+| The first cut's mixes: narration, music and sound together, and the sound stem | `cuts/first-work/mix.wav`, `cuts/first-work/sound.wav` (the rough cut's stem is `cuts/rough-work/sound.wav`) | `edit/render.mjs` |
+| The narration pass on rough plates | `cuts/first-voicepass.mp4` | `edit/render.mjs` |
+| ElevenLabs sound effects | none yet: `audio/sfx/` is empty, because the key lacks `sound_generation` | `voice/sfx.mjs` |
+
+The voice and the score render deterministically: `final.mjs` reads every unchanged line from the cache, and
+`temp-bed.mjs` renders the same samples from the same code. Running either again reproduces the same files and
+costs nothing. Still, don't run them over the kept files: if a take has to change, render it into a new folder.
+
 ## Cost
 
 The final narration cost 417 credits: 36 new requests, plus 15 from the cache. The lane has now used 1,442 of its 40,000 credits

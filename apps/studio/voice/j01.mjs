@@ -27,7 +27,7 @@ for (const voiceId of candidateVoices()) {
   const estimate = J01_LINES.reduce((n, l) => n + l.text.length, 0) * 2;
   const { result } = await batch({ purpose: 'J01 voice comparison, five lines', voice: short, model: modelId, estimate }, async (count) => {
     const rendered = [];
-    for (const [i, line] of J01_LINES.entries()) {
+    for (const line of J01_LINES) {
       const text = forModel(modelId, line.text);
       rendered.push({ line, text, r: count(await tts({ voiceId, text, modelId, voiceSettings: settings, seed: SEED }), text.length) });
     }

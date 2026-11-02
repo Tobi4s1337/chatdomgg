@@ -5,7 +5,8 @@
   "description": "The teaser's private studio: the Twitch page replica, shot scripts, the frame-stepped recorder, voice and edit tooling. Never built for the product, never served publicly.",
   "scripts": {
     "serve": "node server/serve.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "cd ../.. && CHATDOM_STUDIO_RECORD=1 vitest run apps/studio"
   },
   "dependencies": {
     "solid-js": "1.9.18",

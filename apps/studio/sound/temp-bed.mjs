@@ -18,6 +18,7 @@
 // <media> is $CHATDOM_TEASER_MEDIA or /srv/chatdom/media/teaser. Every ffmpeg runs under nice -n 19 with
 // -threads 4. Deterministic: the same code renders the same samples.
 
+import { Buffer } from 'node:buffer';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
