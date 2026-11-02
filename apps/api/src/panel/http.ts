@@ -8,6 +8,7 @@ import { verifyViewerToken } from './token';
 import { PanelPictures, validWebp } from './pictures';
 import { createPanelGifts, type PanelGiftRoute } from './gifts';
 import { createPanelConfiguration } from './configuration';
+import { createPanelConfigurationPublisher } from './configuration-publisher';
 import { createPanelBroadcaster } from './broadcast';
 
 interface PanelServices {
@@ -19,6 +20,7 @@ interface PanelServices {
   fetch?: typeof fetch;
   gifts?: ReturnType<typeof createPanelGifts>;
   configuration?: ReturnType<typeof createPanelConfiguration>;
+  configurationPublisher?: ReturnType<typeof createPanelConfigurationPublisher>;
   broadcast?: ReturnType<typeof createPanelBroadcaster>;
 }
 const PREFIX = '/api/panel/v1/';
@@ -54,13 +56,19 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
   const gifts = services.gifts ?? createPanelGifts({ extensionId: options.extension?.clientId ?? '', extensionSecret: options.extension?.secret ?? '',
     ...(env.TWITCH_EXTENSION_CLIENT_SECRET ? { extensionClientSecret: env.TWITCH_EXTENSION_CLIENT_SECRET } : {}),
     ...(webhookSecret ? { webhookSecret } : {}), realm });
-  const configuration = services.configuration ?? createPanelConfiguration({ extensionSecret: options.extension?.secret ?? '', realm });
+  const configuration = services.configuration ?? createPanelConfiguration({ extensionId: options.extension?.clientId ?? '', extensionSecret: options.extension?.secret ?? '', realm });
+  const configurationEnabled = !supplied && options.origin === 'live' && env.PANEL_DISABLE_CONFIGURATION !== '1' && Boolean(services.panelSecret);
+  const configurationPublisher = services.configurationPublisher ?? createPanelConfigurationPublisher({
+    extensionId: options.extension?.clientId ?? '', extensionSecret: options.extension?.secret ?? '',
+    ownerId: env.TWITCH_EXTENSION_OWNER_ID ?? '', enabled: configurationEnabled, realm,
+  });
   const broadcastEnabled = !supplied && options.origin === 'live' && env.PANEL_DISABLE_BROADCAST !== '1' && services.panelSecret && options.extension;
   const broadcast = services.broadcast ?? createPanelBroadcaster({ ...(broadcastEnabled ? { extensionId: options.extension!.clientId, extensionSecret: options.extension!.secret } : {}), ...(env.TWITCH_EXTENSION_OWNER_ID ? { ownerId: env.TWITCH_EXTENSION_OWNER_ID } : {}),
     read: channelId => realm('/internal/realm/panel/kingdom', { kingdomId: channelId }) });
   // Supplied services are an explicitly owned test/embedding composition; the production door owns its worker.
   const stopGifts = supplied ? () => {} : gifts.startReconciliation();
   if (!supplied) broadcast.start();
+  if (!supplied) configurationPublisher.start();
   const handler = async (request: IncomingMessage, response: ServerResponse, pathname: string): Promise<void> => {
     if (pathname === `${PREFIX}bits-webhook`) {
       if (request.method !== 'POST' || request.headers.origin) { response.writeHead(403, HEADERS).end(); return; }
@@ -100,18 +108,21 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
     if (pathname === `${PREFIX}health`) {
       if (request.method !== 'GET') { send(405, { version: 1, status: 'refused' }); return; }
       const missing = [!options.extension?.clientId && 'TWITCH_EXTENSION_CLIENT_ID', !key && 'TWITCH_EXTENSION_SECRET',
-        !services.panelSecret && 'REALM_INGRESS_PANEL_SECRET'].filter((value): value is string => !!value);
+        (!services.panelSecret || services.panelSecret.length < 32) && 'REALM_INGRESS_PANEL_SECRET'].filter((value): value is string => !!value);
+      const externalMissing = [...missing, !(env.TWITCH_EXTENSION_OWNER_ID && ID.test(env.TWITCH_EXTENSION_OWNER_ID)) && 'TWITCH_EXTENSION_OWNER_ID'].filter((value): value is string => !!value);
       send(missing.length ? 503 : 200, { version: 1, status: missing.length ? 'unavailable' : 'ready', missing,
-        broadcast: env.PANEL_DISABLE_BROADCAST === '1' || options.origin !== 'live' ? { status: 'disabled', missing: [] } : { status: env.TWITCH_EXTENSION_OWNER_ID && ID.test(env.TWITCH_EXTENSION_OWNER_ID) ? 'configured' : 'unavailable', missing: env.TWITCH_EXTENSION_OWNER_ID && ID.test(env.TWITCH_EXTENSION_OWNER_ID) ? [] : ['TWITCH_EXTENSION_OWNER_ID'] },
+        broadcast: env.PANEL_DISABLE_BROADCAST === '1' || options.origin !== 'live' ? { status: 'disabled', missing: [] } : { status: externalMissing.length ? 'unavailable' : 'configured', missing: externalMissing },
+        configuration: env.PANEL_DISABLE_CONFIGURATION === '1' || options.origin !== 'live' ? { status: 'disabled', missing: [] } : { status: externalMissing.length ? 'unavailable' : 'configured', missing: externalMissing },
         gifts: gifts.needs().length ? { status: 'unavailable', missing: gifts.needs() } : { status: 'configured', missing: [] } }); return;
     }
-    if (pathname === `${PREFIX}configuration` || pathname === `${PREFIX}configure`) {
+    if (pathname === `${PREFIX}configuration` || pathname === `${PREFIX}configure` || pathname === `${PREFIX}configuration-sync`) {
       if (request.method !== 'POST') { send(405, { version: 1, status: 'refused' }); return; }
       if (!key) { send(503, { version: 1, status: 'unavailable', message: 'TWITCH_EXTENSION_CLIENT_ID and TWITCH_EXTENSION_SECRET are required.' }); return; }
       const chunks: Buffer[] = []; let size = 0;
       for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 8 * 1024) { send(413, { version: 1, status: 'refused' }); return; } chunks.push(chunk); }
       try {
-        const answer = await configuration.handle(pathname.endsWith('/configure') ? 'configure' : 'configuration', request.headers.authorization ?? null,
+        const route = pathname.endsWith('/configuration-sync') ? 'configuration-sync' : pathname.endsWith('/configure') ? 'configure' : 'configuration';
+        const answer = await configuration.handle(route, request.headers.authorization ?? null,
           JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'));
         send(answer.http, answer.body);
       } catch { send(400, { version: 1, status: 'refused' }); }
@@ -204,5 +215,5 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
       send(200, { ...claim, ...(pathname.endsWith('/presence') ? { status: 'accepted' } : {}), lit: presence.lit === true, stream: presence.stream ?? 'live' });
     } catch { send(503, { version: 1, status: 'unavailable', message: 'The kingdom is out of reach. Try again shortly.' }); }
   };
-  return Object.assign(handler, { dispose: () => { stopGifts(); broadcast.dispose(); } });
+  return Object.assign(handler, { dispose: () => { stopGifts(); broadcast.dispose(); configurationPublisher.dispose(); } });
 }

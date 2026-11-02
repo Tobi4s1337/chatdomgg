@@ -33,7 +33,9 @@ Production world/stream effects still need their owner's readiness acknowledgeme
    main/Herald supplies the real entry with Tech §7.2's six Tier 1 scopes. Do not invent a URL or forge connection.
 9. In two real panels read Kingdom, share identity, Take your place and light the citizen's window. Confirm real
    state in both, without fixtures. Check hidden/paused/offline stop conditions without granting presence.
-10. From Configure select tabs and about eight gifts with one band each; save/reload and verify persistence.
+10. From Configure select tabs and about eight gifts with one band each; wait for **Saved**, reload and verify
+    persistence. Pending changes offer **Check Twitch again** without another save. A routine authorization refresh
+    must retain unsaved edits; a real identity change must clear them.
     Keep another panel on Kingdom; settings must never open Gifts or move its current tab. Verify visible Bits
     amounts come from Twitch products.
 11. From Live Config Hide gifts: new gifts close and pending paid gifts wait. Resume; pending obligations survive.

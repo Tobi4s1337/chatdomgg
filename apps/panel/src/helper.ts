@@ -46,6 +46,8 @@ export interface HelperBridge {
   active?(): boolean;
   /** Increments only on onAuthorized, never on viewer.onChanged. */
   authorization?(): number;
+  /** Unverified Helper identity, used only to retain or clear local form state. */
+  uiIdentity?(): string | null;
   /** Asks Twitch to share the viewer's identity. Only meaningful from a gesture. */
   requestIdShare(): boolean;
   getProducts?(): Promise<readonly HelperProduct[]>;
@@ -73,6 +75,7 @@ export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
   const refreshes = new Set<() => void>();
   let current: HelperStatus = ext ? { kind: 'waiting' } : { kind: 'absent' };
   let token: string | null = null;
+  let uiIdentity: string | null = null;
   let visible = true, playing = false, authorization = 0;
   const emit = (next: HelperStatus) => { current = next; for (const listener of listeners) listener(next); };
   if (ext) {
@@ -93,6 +96,7 @@ export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
     const read = () => {
       if (!last) return;
       // An `A…` opaque ID is a logged-out viewer and a `U…` one is logged in. Neither is a Chatdom person.
+      uiIdentity = JSON.stringify([last.channelId, last.userId, ext.viewer?.role ?? 'viewer']);
       emit({ kind: 'authorized', loggedIn: last.userId.startsWith('U'), shared: ext.viewer?.isLinked === true, role: ext.viewer?.role ?? 'viewer', bits: ext.features?.isBitsEnabled === true });
     };
     ext.onAuthorized(auth => { last = auth; token = auth.token; authorization++; read(); });
@@ -111,6 +115,7 @@ export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
     visible: () => visible,
     active: () => visible && playing,
     authorization: () => authorization,
+    uiIdentity: () => uiIdentity,
     ...(ext?.bits ? {
       getProducts: () => ext.bits!.getProducts(),
       useBits: (sku: string) => { try { ext.bits!.useBits(sku); return true; } catch { return false; } },

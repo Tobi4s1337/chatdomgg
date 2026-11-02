@@ -9,6 +9,7 @@ if (![5171, 5191].includes(port)) throw new Error('Use lane gateway port 5171 or
 process.env.PUBLIC_REALM_TARGET = realm;
 // The isolated gateway may read Twitch, but it never broadcasts to real channels during lane captures.
 process.env.PANEL_DISABLE_BROADCAST = '1';
+process.env.PANEL_DISABLE_CONFIGURATION = '1';
 const root = new URL('../../', import.meta.url).pathname;
 const load = async path => (await runnerImport(new URL(path, import.meta.url).pathname, { root, configFile: false, logLevel: 'warn' })).module;
 const [{ createPanelHttp }, { createPanelAuthority }, { createTwitchUsers }] = await Promise.all([load('./http.ts'), load('../public/panel/reading.ts'), load('../public/panel/twitch-users.ts')]);

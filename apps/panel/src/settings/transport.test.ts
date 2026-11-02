@@ -1,73 +1,68 @@
 import { describe, expect, it } from 'vitest';
-import { createConfigurationHelper } from './helper';
 import { createConfigTransport } from './transport';
 import { DEFAULT_SETTINGS } from './schema';
 import type { HelperBridge } from '../helper';
 
-function fixture(mode: 'echo' | 'mismatch' | 'none' | 'conflict' | 'refused' = 'echo') {
-  let changed = () => {}, segment: { version: string; content: string } | undefined;
-  const config = createConfigurationHelper({ get broadcaster() { return segment; }, onChanged(cb) { changed = cb; }, set(_segment, version, content) { if (mode === 'none') return; segment = { version, content: mode === 'mismatch' ? '{}' : content }; changed(); } });
-  const helper: HelperBridge = { token: () => 'private', authorization: () => 1, status: () => ({ kind: 'authorized', loggedIn: true, shared: true, role: 'broadcaster', bits: true }), subscribe: () => () => {}, requestIdShare: () => false };
-  const current = { version: 1, status: 'settings', revision: '1', settings: DEFAULT_SETTINGS, connected: true };
-  const fetcher: typeof fetch = async () => new Response(JSON.stringify(mode === 'conflict' ? { version: 1, status: 'conflict', current } : mode === 'refused' ? { status: 'refused' } : current), { status: mode === 'refused' ? 403 : 200 });
-  return createConfigTransport(helper, config, 'https://example.test', fetcher, 5);
+const current = { version: 1 as const, status: 'settings' as const, revision: '1', settings: DEFAULT_SETTINGS, connected: true };
+const newer = { ...current, revision: '2', settings: { ...DEFAULT_SETTINGS, hidden: true } };
+const sync = (publication: 'pending' | 'verified', reading = current) => ({ version: 1, status: 'sync', reading, publication, verifiedAt: publication === 'verified' ? 100 : null });
+function setup(fetcher: typeof fetch, timeout = 10, requestTimeout = 20) {
+  let authorization = 1, notify = () => {};
+  const helper: HelperBridge = { token: () => 'private', authorization: () => authorization, status: () => ({ kind: 'waiting' }), subscribe: cb => { notify = () => cb(helper.status()); return () => {}; }, requestIdShare: () => false };
+  const transport = createConfigTransport(helper, 'https://example.test', fetcher, timeout, requestTimeout);
+  return { transport, changeIdentity: () => { authorization++; notify(); } };
 }
-describe('configuration confirmation', () => {
-  it('requires the realm acknowledgement and matching Twitch echo', async () => { expect((await fixture().save('0', DEFAULT_SETTINGS)).kind).toBe('saved'); });
-  it.each(['mismatch', 'none'] as const)('leaves %s echo pending', async mode => { expect((await fixture(mode).save('0', DEFAULT_SETTINGS)).kind).toBe('pending'); });
-  it('surfaces a conflict with the latest reading', async () => { expect((await fixture('conflict').save('0', DEFAULT_SETTINGS)).kind).toBe('conflict'); });
-  it('abandons an old authorization while waiting for an echo', async () => {
-    let notify = () => {}, authorization = 1;
-    const helper: HelperBridge = { token: () => 'private', authorization: () => authorization, status: () => ({ kind: 'authorized', loggedIn: true, shared: true, role: 'broadcaster', bits: true }), subscribe: cb => { notify = () => cb(helper.status()); return () => {}; }, requestIdShare: () => false };
-    const config = createConfigurationHelper({ onChanged() {}, set() {} });
-    const fetcher: typeof fetch = async () => new Response(JSON.stringify({ version: 1, status: 'settings', revision: '1', settings: DEFAULT_SETTINGS, connected: true }));
-    const pending = createConfigTransport(helper, config, 'https://example.test', fetcher, 100).save('0', DEFAULT_SETTINGS);
-    await new Promise(resolve => setTimeout(resolve, 0)); authorization++; notify();
-    expect((await pending).kind).toBe('changed');
+const response = (value: unknown) => new Response(JSON.stringify(value));
+describe('server-owned configuration publication', () => {
+  it('keeps a realm acknowledgement pending until the exact publication is verified', async () => {
+    const paths: string[] = [];
+    const { transport } = setup(async input => { paths.push(String(input)); return response(String(input).endsWith('/configure') ? current : sync('pending')); });
+    expect(await transport.save('0', DEFAULT_SETTINGS)).toEqual({ kind: 'pending', reading: current });
+    expect(paths.every(path => path.endsWith('/configure') || path.endsWith('/configuration-sync'))).toBe(true);
   });
-  it('times out a request even when the provider ignores abort', async () => {
-    const helper: HelperBridge = { token: () => 'private', authorization: () => 1, status: () => ({ kind: 'waiting' }), subscribe: () => () => {}, requestIdShare: () => false };
-    const hung: typeof fetch = () => new Promise(() => {});
-    const transport = createConfigTransport(helper, createConfigurationHelper(undefined), 'https://example.test', hung, 50, 5);
-    expect(await transport.read()).toBeNull();
+  it('confirms only a verified matching revision, settings and connection', async () => {
+    const { transport } = setup(async input => response(String(input).endsWith('/configure') ? current : sync('verified')));
+    expect(await transport.save('0', DEFAULT_SETTINGS)).toEqual({ kind: 'saved', reading: current });
   });
-  it('disposes pending echo immediately', async () => {
-    const helper: HelperBridge = { token: () => 'private', authorization: () => 1, status: () => ({ kind: 'waiting' }), subscribe: () => () => {}, requestIdShare: () => false };
-    let written = () => {}; const writing = new Promise<void>(resolve => { written = resolve; });
-    const config = createConfigurationHelper({ onChanged() {}, set() { written(); } });
-    const fetcher: typeof fetch = async () => new Response(JSON.stringify({ version: 1, status: 'settings', revision: '1', settings: DEFAULT_SETTINGS, connected: true }));
-    const transport = createConfigTransport(helper, config, 'https://example.test', fetcher, 10000);
-    const pending = transport.save('0', DEFAULT_SETTINGS); await writing; transport.dispose();
-    expect((await pending).kind).toBe('changed');
+  it.each([newer, { ...current, connected: false }, { ...current, settings: { ...DEFAULT_SETTINGS, hidden: true } }])('surfaces a different current reading', async value => {
+    const { transport } = setup(async input => response(String(input).endsWith('/configure') ? current : sync('verified', value)));
+    expect(await transport.save('0', DEFAULT_SETTINGS)).toEqual({ kind: 'conflict', reading: value });
   });
-  it('discards a read from an old identity', async () => {
-    let authorization = 1, respond!: (response: Response) => void;
-    const helper: HelperBridge = { token: () => 'private', authorization: () => authorization, status: () => ({ kind: 'waiting' }), subscribe: () => () => {}, requestIdShare: () => false };
-    const fetcher: typeof fetch = () => new Promise(resolve => { respond = resolve; });
-    const transport = createConfigTransport(helper, createConfigurationHelper(undefined), 'https://example.test', fetcher);
-    const pending = transport.read(); authorization++;
-    respond(new Response(JSON.stringify({ version: 1, status: 'settings', revision: '1', settings: DEFAULT_SETTINGS, connected: true })));
-    expect(await pending).toBeNull();
+  it('allows retrying a pending realm save without writing again', async () => {
+    let verified = false, writes = 0;
+    const { transport } = setup(async input => { if (String(input).endsWith('/configure')) { writes++; return response(current); } return response(sync(verified ? 'verified' : 'pending')); });
+    expect((await transport.save('0', DEFAULT_SETTINGS)).kind).toBe('pending'); verified = true;
+    expect((await transport.retrySync(current)).kind).toBe('saved'); expect(writes).toBe(1);
   });
-  it('rejects an oversized response', async () => {
-    const helper: HelperBridge = { token: () => 'private', status: () => ({ kind: 'waiting' }), subscribe: () => () => {}, requestIdShare: () => false };
-    const fetcher: typeof fetch = async () => new Response('x'.repeat(16385));
-    expect(await createConfigTransport(helper, createConfigurationHelper(undefined), 'https://example.test', fetcher).read()).toBeNull();
+  it('reports configure conflicts and refusals', async () => {
+    expect((await setup(async () => response({ status: 'conflict', current: newer })).transport.save('0', DEFAULT_SETTINGS)).kind).toBe('conflict');
+    expect((await setup(async () => new Response('', { status: 403 })).transport.save('0', DEFAULT_SETTINGS)).kind).toBe('refused');
   });
-  it.each(['before echo', 'after echo'] as const)('does not confirm a newer Hide arriving %s', async timing => {
-    const helper: HelperBridge = { token: () => 'private', authorization: () => 1, status: () => ({ kind: 'waiting' }), subscribe: () => () => {}, requestIdShare: () => false };
-    const old = { version: 1, status: 'settings', revision: '1', settings: DEFAULT_SETTINGS, connected: true };
-    const newer = { ...old, revision: '2', settings: { ...DEFAULT_SETTINGS, hidden: true } };
-    let callback = () => {}, segment: { version: string; content: string } | undefined, writes = 0, reads = 0;
-    const config = createConfigurationHelper({ get broadcaster() { return segment; }, onChanged(cb) { callback = cb; }, set(_segment, version, content) { writes++; segment = { version, content }; callback(); } });
-    const fetcher: typeof fetch = async input => {
-      const path = String(input); const value = path.endsWith('/configure') ? old : (++reads === 1 && timing === 'after echo' ? old : newer);
-      return new Response(JSON.stringify(value));
-    };
-    const result = await createConfigTransport(helper, config, 'https://example.test', fetcher).save('0', DEFAULT_SETTINGS);
-    expect(result.kind).toBe('conflict');
-    if (result.kind === 'conflict') expect(result.reading.settings.hidden).toBe(true);
-    expect(writes).toBe(timing === 'before echo' ? 0 : 1);
+  it.each(['dispose', 'identity'] as const)('cancels a hanging request on %s', async action => {
+    const state = setup(() => new Promise(() => {}), 10000, 10000);
+    const result = state.transport.save('0', DEFAULT_SETTINGS);
+    if (action === 'dispose') state.transport.dispose(); else state.changeIdentity();
+    expect((await result).kind).toBe('changed');
   });
-  it('surfaces refusal', async () => { expect((await fixture('refused').save('0', DEFAULT_SETTINGS)).kind).toBe('refused'); });
+  it('ignores an old identity read even when the provider returns later', async () => {
+    let respond!: (response: Response) => void;
+    const state = setup(() => new Promise(resolve => { respond = resolve; }));
+    const result = state.transport.readSync(); state.changeIdentity(); respond(response(sync('verified')));
+    expect(await result).toBeNull();
+  });
+  it('bounds response size and provider time', async () => {
+    expect(await setup(async () => new Response('x'.repeat(16385))).transport.readSync()).toBeNull();
+    expect(await setup(() => new Promise(() => {}), 10, 5).transport.readSync()).toBeNull();
+  });
+  it('does not accept malformed verification', async () => {
+    const { transport } = setup(async () => response({ ...sync('verified'), verifiedAt: null }));
+    expect(await transport.readSync()).toBeNull();
+  });
+  it.each(['01', '-1', '9223372036854775808', '1.0', ''])('rejects noncanonical revision %s', async revision => {
+    expect(await setup(async () => response(sync('verified', { ...current, revision }))).transport.readSync()).toBeNull();
+  });
+  it.each([-1, 1.5, Number.MAX_SAFE_INTEGER, Date.now() + 600_000])('rejects invalid verification time %s', async verifiedAt => {
+    expect(await setup(async () => response({ ...sync('verified'), verifiedAt })).transport.readSync()).toBeNull();
+  });
+
 });

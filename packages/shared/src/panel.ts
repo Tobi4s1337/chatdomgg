@@ -56,3 +56,11 @@ export interface PanelSettingsReading {
   /** Derived from the realm, never accepted from the config page. */
   readonly connected: boolean;
 }
+/** Twitch publication is separate from a durable realm save. Only the EBS can verify it. */
+export interface PanelSettingsSync {
+  readonly version: 1;
+  readonly status: 'sync';
+  readonly reading: PanelSettingsReading;
+  readonly publication: 'pending' | 'verified';
+  readonly verifiedAt: number | null;
+}

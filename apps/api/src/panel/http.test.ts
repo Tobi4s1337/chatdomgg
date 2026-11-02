@@ -14,7 +14,7 @@ const key = new Uint8Array(32).fill(42);
 async function token(claims: Record<string, unknown> = {}, signing = key) {
   return new SignJWT({ channel_id: '1234', opaque_user_id: 'Uviewer', role: 'viewer', user_id: '5678', ...claims }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('5m').sign(signing);
 }
-async function start(extension: { clientId: string; secret: string } | null = { clientId: 'panel-lane', secret: Buffer.from(key).toString('base64') }) {
+async function start(extension: { clientId: string; secret: string } | null = { clientId: 'panellane', secret: Buffer.from(key).toString('base64') }) {
   const directory = await mkdtemp(join(tmpdir(), 'panel-pictures-'));
   cleanup.push(() => rm(directory, { recursive: true, force: true }));
   const requests: { path: string; body: Record<string, unknown> }[] = [];
@@ -27,6 +27,7 @@ async function start(extension: { clientId: string; secret: string } | null = { 
     fetch: async (url, init) => {
       const path = new URL(String(url)).pathname, body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       requests.push({ path, body });
+      if (path.endsWith('/settings-sync')) return Response.json({ version: 1, status: 'sync', reading: { version: 1, status: 'settings', revision: '1', settings: DEFAULT_SETTINGS, connected: true }, publication: 'verified', verifiedAt: 1234 });
       if (path.endsWith('/settings') || path.endsWith('/settings-save')) return Response.json({ version: 1, status: 'settings', revision: '1', settings: body.settings ?? DEFAULT_SETTINGS, connected: true });
       if (path.endsWith('/gift-status') || path.endsWith('/gift-resolve')) return new Response(JSON.stringify({ version: 1, status: 'pending' }));
       if (path.endsWith('/forget')) return new Response(JSON.stringify({ version: 1, status: 'unavailable' }), { status: 503 });
@@ -61,8 +62,18 @@ describe('verified panel door', () => {
     expect((await call('configure', broadcaster, { expectedRevision: '1', settings, kingdomId: '9999' })).status).toBe(400);
     expect(requests).toHaveLength(2);
   });
+  it('reads publication state using the verified viewer channel and rejects forged or selected identities', async () => {
+    const { call, requests } = await start();
+    const response = await call('configuration-sync', await token());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ version: 1, status: 'sync', reading: { version: 1, status: 'settings', revision: '1', settings: DEFAULT_SETTINGS, connected: true }, publication: 'verified', verifiedAt: 1234 });
+    expect(requests).toEqual([{ path: '/internal/realm/panel/settings-sync', body: { kingdomId: '1234', extensionId: 'panellane' } }]);
+    expect((await call('configuration-sync', await token(), { kingdomId: '9999' })).status).toBe(400);
+    expect((await call('configuration-sync', await token({}, new Uint8Array(32).fill(9)))).status).toBe(401);
+    expect(requests).toHaveLength(1);
+  });
   it('names missing setup without credential values or startup exceptions', async () => {
-    for (const extension of [null, { clientId: 'panel-lane', secret: 'invalid' }]) {
+    for (const extension of [null, { clientId: 'panellane', secret: 'invalid' }]) {
       const { health, call, requests } = await start(extension);
       const response = await health();
       expect(response.status).toBe(503);

@@ -14,16 +14,34 @@ async function signed(payload: Record<string, unknown> = {}, signingKey: Uint8Ar
 
 describe('authenticated panel configuration', () => {
   it('takes the channel only from a verified viewer token and returns a bounded typed reading', async () => {
-    const realm = vi.fn(async () => ({ ...current, unexpectedPrivateField: 'must not leave' }));
-    const api = createPanelConfiguration({ extensionSecret: secret, realm });
+    const realm = vi.fn(async () => current);
+    const api = createPanelConfiguration({ extensionSecret: secret, extensionId: 'testextension', realm });
     expect(await api.handle('configuration', await signed({ role: 'viewer', user_id: undefined }), {})).toEqual({ http: 200, body: current });
     expect(realm).toHaveBeenCalledWith('/internal/realm/panel/settings', { kingdomId: '123' });
     expect((await api.handle('configuration', await signed(), { kingdomId: '456' })).http).toBe(400);
     expect(realm).toHaveBeenCalledTimes(1);
   });
 
+  it('reads durable publication evidence without accepting identity or treating a pending retry as Saved', async () => {
+    const sync = { version: 1, status: 'sync', reading: current, publication: 'pending', verifiedAt: null };
+    const realm = vi.fn(async (): Promise<Record<string, unknown>> => sync), api = createPanelConfiguration({ extensionSecret: secret, extensionId: 'testextension', realm });
+    expect(await api.handle('configuration-sync', await signed({ role: 'viewer' }), {})).toEqual({ http: 200, body: sync });
+    expect(realm).toHaveBeenCalledWith('/internal/realm/panel/settings-sync', { kingdomId: '123', extensionId: 'testextension' });
+    expect((await api.handle('configuration-sync', await signed(), { kingdomId: '456' })).http).toBe(400);
+    for (const invalid of [ { ...sync, verifiedAt: 123 }, { ...sync, publication: 'verified' },
+      { ...sync, publication: ['verified'], verifiedAt: null },
+      { ...sync, reading: { ...current, secret: 'not public' } }, { ...sync, extra: true } ]) {
+      realm.mockResolvedValueOnce(invalid);
+      expect((await api.handle('configuration-sync', await signed(), {})).http).toBe(503);
+    }
+    realm.mockResolvedValueOnce({ ...sync, publication: 'verified', verifiedAt: 123 });
+    expect(await api.handle('configuration-sync', await signed(), {})).toMatchObject({ body: { publication: 'verified', verifiedAt: 123 } });
+    realm.mockResolvedValueOnce({ ...current, unexpectedPrivateField: true });
+    expect((await api.handle('configuration', await signed(), {})).http).toBe(503);
+  });
+
   it('saves only with verified broadcaster identity matching the channel, without making Twitch calls', async () => {
-    const realm = vi.fn(async () => current), api = createPanelConfiguration({ extensionSecret: secret, realm });
+    const realm = vi.fn(async () => current), api = createPanelConfiguration({ extensionSecret: secret, extensionId: 'testextension', realm });
     const authorization = await signed();
     expect(await verifyBroadcaster(authorization, key)).toEqual({ channelId: '123', personId: '123', role: 'broadcaster', kind: 'shared' });
     expect(await api.handle('configure', authorization, { expectedRevision: '0', settings })).toEqual({ http: 200, body: current });
@@ -31,7 +49,7 @@ describe('authenticated panel configuration', () => {
   });
 
   it('refuses malformed, forged, expired, wrong-algorithm, external, unshared and mismatched broadcaster claims before the realm', async () => {
-    const realm = vi.fn(async () => current), api = createPanelConfiguration({ extensionSecret: secret, realm });
+    const realm = vi.fn(async () => current), api = createPanelConfiguration({ extensionSecret: secret, extensionId: 'testextension', realm });
     const invalid = [null, 'Bearer not-a-jwt', await signed({}, randomBytes(32)), await signed({}, key, 'HS512'),
       await signed({}, key, 'HS256', Math.floor(Date.now() / 1000) - 1),
       await signed({ role: 'viewer' }), await signed({ role: 'moderator' }), await signed({ role: 'external' }),
@@ -45,7 +63,7 @@ describe('authenticated panel configuration', () => {
   });
 
   it('rejects body identity, unsupported settings, purchased authority claims, oversized selections and invalid revisions', async () => {
-    const realm = vi.fn(async () => current), api = createPanelConfiguration({ extensionSecret: secret, realm }), authorization = await signed();
+    const realm = vi.fn(async () => current), api = createPanelConfiguration({ extensionSecret: secret, extensionId: 'testextension', realm }), authorization = await signed();
     const bad = [
       { expectedRevision: '0', settings, personId: '123' }, { expectedRevision: '0', settings, kingdomId: '123' },
       { expectedRevision: '0', settings: { ...settings, version: 2 } },
@@ -63,7 +81,7 @@ describe('authenticated panel configuration', () => {
 
   it('preserves conflicts and fails closed for invalid stored configuration and unavailable authority', async () => {
     const realm = vi.fn(async (): Promise<Record<string, unknown>> => ({ version: 1, status: 'conflict', current }));
-    const api = createPanelConfiguration({ extensionSecret: secret, realm }), authorization = await signed();
+    const api = createPanelConfiguration({ extensionSecret: secret, extensionId: 'testextension', realm }), authorization = await signed();
     expect(await api.handle('configure', authorization, { expectedRevision: '0', settings })).toEqual({ http: 200, body: { version: 1, status: 'conflict', current } });
     realm.mockResolvedValueOnce({ ...current, settings: { ...settings, version: 2 } });
     expect((await api.handle('configuration', authorization, {})).http).toBe(503);

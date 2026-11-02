@@ -32,7 +32,7 @@ console. Existing version details may require returning to Local Test; Hosted Te
    The last two are distinct secrets. Never reuse the Atlas application. Keep the private environment file outside
    the repo with mode `0600`; no values in command arguments, screenshots or logs. The host also needs its existing
    `REALM_INGRESS_PANEL_SECRET`, realm and database. Its operator owns restarting it.
-   For Extension PubSub, additionally set `TWITCH_EXTENSION_OWNER_ID` to the extension owner's numeric Twitch user
+   For Extension PubSub and Configuration Service publication, additionally set `TWITCH_EXTENSION_OWNER_ID` to the extension owner's numeric Twitch user
    ID, verified from the owning account. This public ID is a separate operator field, not a secret. Its role is
    distinct from the target channel; never infer it from that channel, even when the verified IDs happen to match.
    The publisher signs external JWTs with this owner as `user_id`
@@ -44,6 +44,8 @@ console. Existing version details may require returning to Local Test; Hosted Te
    The scripts never activate a channel, release products or delete subscriptions.
 8. Upload the versioned zip in **Files**, move to **Hosted Test** in Status, then **View on Twitch and Install**.
    Install on tobi4s_, open Configure and save broadcaster preferences version `1`, then activate **Panel 1**.
+   Wait for **Saved**, which requires server verification of Twitch's stored copy. If publication is pending, use
+   **Check Twitch again**; saving the same change repeatedly is unnecessary. Hide gates gifts immediately in the realm.
    Complete required configuration before activation if Twitch asks. Never forge a connected kingdom in settings.
 9. Check the channel in two allowlisted accounts and the Twitch mobile app. Follow the linked checklist through
    read, shared identity, Take your place, light, settings, Hide/resume and the first test-mode gift. Credentials
@@ -67,8 +69,8 @@ node apps/panel/scripts/subscribe-bits.mjs --origin https://chatdom.io
 
 `--inspect` authenticates and reads Twitch without registrations. The product/webhook tools need only the three
 extension credential values above; they use OAuth and do not need `TWITCH_EXTENSION_OWNER_ID`. The host's PubSub
-publisher does require the owner ID. Use a private environment file; `/run/secrets/chatdom-extension.env` below
-is an operator convention, not a file shipped by this lane.
+and Configuration Service publishers do require the owner ID. Use a private environment file;
+`/run/secrets/chatdom-extension.env` below is an operator convention, not a file shipped by this lane.
 
 ```sh
 node --env-file=/run/secrets/chatdom-extension.env --experimental-strip-types apps/panel/scripts/register-products.mjs --inspect
@@ -98,3 +100,22 @@ Check `/healthz` for host availability and `/api/panel/v1/health` for panel setu
 values. A ready response proves configuration, not payment or mounted effects. For an empty panel check allowlist
 and activation; for Out of reach check matching origins, URL/image allowlists, realm ingress and keys against the
 zip report. A narrow desktop capture does not replace testing on a real phone in the Twitch app.
+
+## Configuration recovery
+
+The realm saves preferences and Hide first. A durable server worker publishes the public reading to Twitch's
+broadcaster segment and verifies it with GET before the page says **Saved**. The page never writes the segment
+itself. Pending changes remain visible; **Check Twitch again** rechecks publication without another save.
+Live Hide pauses new gifts and holds pending paid gifts immediately after the realm accepts it, even while
+Twitch publication is pending. Products may be unavailable without preventing Hide.
+
+Apply the realm's additive migrations before starting the gateway. The publisher uses the same private realm
+ingress credential; `0012e_realm_panel_mirror.sql` stores obligations and request quota. All host replicas for one
+realm origin must use the same active Extension configuration. Startup is the trusted binding authority: a new
+Client ID activates a fresh generation and recovers existing channels without reopening Config. Restarting an
+obsolete deployment configuration can deliberately make its old Client ID active again.
+
+Requests are paced conservatively across replicas. Failed or interrupted publication retries durably, and periodic
+GET audits repair late writes. Dirty preferences take priority over audits. The audit target is 60 seconds; actual
+repair includes queue backlog and provider recovery. No cross-service atomicity or fixed repair deadline is promised.
+The isolated lane gateway disables both real PubSub and Configuration Service publication.

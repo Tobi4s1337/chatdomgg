@@ -14,6 +14,7 @@ import { RealmIngress } from '../service';
 import { RealmPanelGifts, type PanelGiftEffectAuthority } from './gifts';
 import { RealmPanelService } from './service';
 import { RealmPanelSettings } from './settings';
+import { panelMirrorContent } from './mirror';
 
 const origin = 'simulated' as const;
 const enabled = process.env.REALM_DATABASE_TESTS === '1';
@@ -24,7 +25,7 @@ function latch() {
 }
 
 describe.runIf(enabled)('panel settings and gift serialization against isolated development Postgres', () => {
-  const schema = `panel_settings_test_${randomBytes(6).toString('hex')}`;
+  const schema = `panel_window_test_${randomBytes(6).toString('hex')}`;
   const secret = randomBytes(32).toString('hex'), herald = randomBytes(32).toString('hex');
   const authorization = `Bearer ${secret}`;
   const names = new Map<KingdomId, string>(), plans = new Map<KingdomId, SettlementPlan>();
@@ -101,6 +102,11 @@ describe.runIf(enabled)('panel settings and gift serialization against isolated 
     expect(await settings.read({ kingdomId: id })).toEqual({ http: 200, body: { version: 1, status: 'settings', revision: '0', settings: DEFAULT_SETTINGS, connected: false } });
     expect((await panel.settings('', { kingdomId: id })).http).toBe(401);
     expect((await panel.settingsSave('Bearer incorrect', { kingdomId: id, personId: id, expectedRevision: '0', settings: DEFAULT_SETTINGS })).http).toBe(401);
+    expect((await panel.settingsSync('', { kingdomId: id, extensionId: 'testextension' })).http).toBe(401);
+    expect((await panel.settingsMirrorClaim('', { extensionId: 'testextension' })).http).toBe(401);
+    expect((await panel.settingsMirrorActivate('', { extensionId: 'testextension' })).http).toBe(401);
+    expect((await panel.settingsMirrorPermit('', { kingdomId: id, extensionId: 'testextension', claimId: randomUUID() })).http).toBe(401);
+    expect((await panel.settingsMirrorFinish('', { kingdomId: id, extensionId: 'testextension', claimId: randomUUID() })).http).toBe(401);
     expect((await settings.save({ kingdomId: id, personId: personId(), expectedRevision: '0', settings: DEFAULT_SETTINGS })).http).toBe(400);
     const hidden = { ...DEFAULT_SETTINGS, hidden: true };
     expect(await panel.settingsSave(authorization, { kingdomId: id, personId: id, expectedRevision: '0', settings: hidden })).toMatchObject({ http: 200, body: { status: 'settings', revision: '1', settings: hidden, connected: false } });
@@ -145,6 +151,7 @@ describe.runIf(enabled)('panel settings and gift serialization against isolated 
   it('derives connection from the retained realm and offers only selected bands with mounted effects', async () => {
     const subject = await founded();
     expect(await settings.read({ kingdomId: subject.kingdomId })).toMatchObject({ body: { connected: true } });
+    expect(await settings.mirror.sync({ extensionId: 'testextension', kingdomId: subject.kingdomId })).toMatchObject({ body: { status: 'sync', publication: 'pending', reading: { connected: true } } });
     const chosen: PanelSettings = { ...DEFAULT_SETTINGS, gifts: [{ giftId: 'kites', band: 'b' }, { giftId: 'flowerpetals', band: 'c' }, { giftId: 'bell', band: 'c' }] };
     expect(await save(subject.kingdomId, '0', chosen)).toMatchObject({ body: { connected: true, revision: '1' } });
     const authority = gifts(), shelf = await authority.gifts(subject);
@@ -156,6 +163,19 @@ describe.runIf(enabled)('panel settings and gift serialization against isolated 
     expect(await authority.gifts(subject)).toMatchObject({ body: { offers: [] } });
     expect((await authority.intent(intent(subject, 'flowerpetalsc'))).http).not.toBe(200);
     expect(await panel.kingdom(authorization, { kingdomId: subject.kingdomId })).toMatchObject({ body: { status: 'kingdom', settingsRevision: '2', settings: { tabs: { gifts: false } } } });
+  });
+
+  it('publishes connection changes even when the preference revision has not changed', async () => {
+    const id = kingdomId();
+    const before = await settings.read({ kingdomId: id });
+    if (before.body.status !== 'settings') throw new Error('Expected settings.');
+    await settings.mirror.activate({ extensionId: 'testextension' });
+    await db.query(`UPDATE realm_panel_settings_mirror SET extension_id = 'testextension', verified_content = $2,
+      binding_id = (SELECT binding_id FROM realm_panel_settings_mirror_quota WHERE origin = 'simulated'),
+      verified_ms = floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint, next_attempt_ms = 9999999999999 WHERE kingdom_id = $1`, [id, panelMirrorContent(before.body)]);
+    await founded(id);
+    expect(await settings.mirror.sync({ extensionId: 'testextension', kingdomId: id })).toMatchObject({ body: { publication: 'pending', reading: { revision: '0', connected: true }, verifiedAt: null } });
+    expect((await db.query('SELECT verified_content FROM realm_panel_settings_mirror WHERE kingdom_id = $1', [id])).rows[0].verified_content).toBeNull();
   });
 
   it('fails closed for unsupported saved settings instead of granting defaults', async () => {

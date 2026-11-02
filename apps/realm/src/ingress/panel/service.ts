@@ -17,6 +17,7 @@ import { personPrivacy, setPersonQuiet, forgetPerson, type RealmForgetAuthority,
 import type { RealmPanelGifts, PanelGiftReply } from './gifts';
 import type { PanelGiftFact, PanelSettings } from '../../../../../packages/shared/src/panel';
 import { readPanelSettings, type RealmPanelSettings, type PanelSettingsBody } from './settings';
+import type { PanelMirrorBody } from './mirror';
 
 const KingdomRequest = z.strictObject({ kingdomId: KingdomIdSchema });
 const PersonRequest = KingdomRequest.extend({ personId: PersonIdSchema });
@@ -52,7 +53,7 @@ export type PanelPublicEvent = { readonly at: number; readonly cursor: number } 
   | { readonly type: 'home'; readonly plotId: string }
   | { readonly type: 'forge'; readonly activityId: string }
   | { readonly type: 'moment'; readonly fact: TwitchMomentFact });
-export type PanelDoorBody = PanelClaimResult | PanelKingdomResult | PanelGiftReply['body'] | PanelSettingsBody
+export type PanelDoorBody = PanelClaimResult | PanelKingdomResult | PanelGiftReply['body'] | PanelSettingsBody | PanelMirrorBody
   | ({ readonly version: 1; readonly status: 'privacy' | 'quiet' } & PersonPrivacy)
   | { readonly version: 1; readonly status: 'forgotten'; readonly operationId: string; readonly erased: readonly string[]; readonly retained: readonly string[] }
   | { readonly version: 1; readonly status: 'pending'; readonly operationId: string }
@@ -93,6 +94,26 @@ export class RealmPanelService {
   async settingsSave(authorization: string, raw: unknown): Promise<PanelDoorReply> {
     if (!this.authenticate(authorization)) return unauthorized();
     return this.options.settings ? this.options.settings.save(raw) : unavailable();
+  }
+  async settingsSync(authorization: string, raw: unknown): Promise<PanelDoorReply> {
+    if (!this.authenticate(authorization)) return unauthorized();
+    return this.options.settings ? this.options.settings.mirror.sync(raw) : unavailable();
+  }
+  async settingsMirrorClaim(authorization: string, raw: unknown): Promise<PanelDoorReply> {
+    if (!this.authenticate(authorization)) return unauthorized();
+    return this.options.settings ? this.options.settings.mirror.claim(raw) : unavailable();
+  }
+  async settingsMirrorActivate(authorization: string, raw: unknown): Promise<PanelDoorReply> {
+    if (!this.authenticate(authorization)) return unauthorized();
+    return this.options.settings ? this.options.settings.mirror.activate(raw) : unavailable();
+  }
+  async settingsMirrorFinish(authorization: string, raw: unknown): Promise<PanelDoorReply> {
+    if (!this.authenticate(authorization)) return unauthorized();
+    return this.options.settings ? this.options.settings.mirror.finish(raw) : unavailable();
+  }
+  async settingsMirrorPermit(authorization: string, raw: unknown): Promise<PanelDoorReply> {
+    if (!this.authenticate(authorization)) return unauthorized();
+    return this.options.settings ? this.options.settings.mirror.permit(raw) : unavailable();
   }
 
   private async gift(authorization: string, raw: unknown, method: 'gifts' | 'intent' | 'status' | 'cancel' | 'resolve' | 'choices' | 'evidence' | 'reconcile' | 'inbox' | 'drain'): Promise<PanelDoorReply> {

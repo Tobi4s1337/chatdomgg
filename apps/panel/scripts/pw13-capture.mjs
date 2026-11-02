@@ -1,7 +1,7 @@
 /* global AbortSignal, structuredClone */
 // Layout fixture capture only: it does not prove that settings were saved to Twitch or the realm.
 // Run with the panel Vite server on 5192 and a real-GPU lease forwarding CDP to 9333.
-// --fallback captures only config@318x496 with local SwiftShader if the tunnel is down.
+// --fallback captures only config-pending@318x496 with local SwiftShader if the tunnel is down.
 import { randomBytes } from 'node:crypto';
 import { mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -42,7 +42,7 @@ try {
     browser = await chromium.connectOverCDP(ws.href, { timeout: 10000 });
   }
   const sizes = fallback ? [[318, 496]] : [[318, 496], [390, 844]];
-  for (const [width, height] of sizes) for (const view of fallback ? ['config'] : ['config', 'live_config']) {
+  for (const [width, height] of sizes) for (const view of fallback ? ['config-pending'] : ['config', 'config-pending', 'live_config']) {
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
     let reading = { version: 1, status: 'settings', revision: '1', connected: true, settings: structuredClone(DEFAULT_SETTINGS) };
     let revision = 1;
@@ -50,7 +50,7 @@ try {
       await context.route('**/*', async route => {
         const req = route.request(), url = new URL(req.url());
         if (req.url() === HELPER_URL) return route.fulfill({ status: 200, contentType: 'application/javascript', body: helper });
-        if (url.origin === backend && ['/api/panel/v1/configuration', '/api/panel/v1/configure'].includes(url.pathname)) {
+        if (url.origin === backend && ['/api/panel/v1/configuration', '/api/panel/v1/configure', '/api/panel/v1/configuration-sync'].includes(url.pathname)) {
           const headers = { 'access-control-allow-origin': base.origin, 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'POST, OPTIONS' };
           if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
           if (req.method() !== 'POST') return route.abort();
@@ -59,17 +59,21 @@ try {
             if (body.expectedRevision !== reading.revision) return route.fulfill({ status: 200, headers, json: { status: 'conflict', current: reading } });
             reading = { ...reading, revision: String(++revision), settings: body.settings };
           }
-          return route.fulfill({ status: 200, headers, json: reading });
+          const pending = view === 'config-pending';
+          return route.fulfill({ status: 200, headers, json: url.pathname.endsWith('/configuration-sync')
+            ? { version: 1, status: 'sync', reading, publication: pending ? 'pending' : 'verified', verifiedAt: pending ? null : Date.now() }
+            : reading });
         }
         if (url.origin === base.origin) return route.continue();
         return route.abort();
       });
       const page = await context.newPage();
-      await page.goto(new URL(`/${view}.html`, base).href, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.goto(new URL(`/${view === 'config-pending' ? 'config' : view}.html`, base).href, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60000 });
-      await page.getByRole('heading', { name: view === 'config' ? 'A window for your people' : 'A quiet switch for tonight' }).waitFor();
+      await page.getByRole('heading', { name: view !== 'live_config' ? 'A window for your people' : 'A quiet switch for tonight' }).waitFor();
       await page.getByText('Kingdom connected', { exact: true }).waitFor();
-      await (view === 'config' ? page.getByRole('switch', { name: 'Show you tab' }) : page.getByRole('button', { name: 'Hide panel gifts' })).waitFor();
+      await (view !== 'live_config' ? page.getByRole('switch', { name: 'Show you tab' }) : page.getByRole('button', { name: 'Hide panel gifts' })).waitFor();
+      if (view === 'config-pending') await page.getByRole('button', { name: 'Check Twitch again' }).waitFor();
       async function capture(name) {
         const horizontal = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
         if (horizontal) errors.push(`${name}: horizontal overflow`);
@@ -80,7 +84,7 @@ try {
         if ((await stat(path)).size > 2 * 1024 * 1024) errors.push(`${path}: larger than 2 MiB`);
         console.info(`Captured ${path}`);
       }
-      await capture(view === 'config' ? 'config' : 'live-config');
+      await capture(view === 'live_config' ? 'live-config' : view);
       if (view === 'config' && !fallback) {
         await page.getByRole('heading', { name: 'Little celebrations' }).scrollIntoViewIfNeeded();
         await page.locator('.cfg-band').first().scrollIntoViewIfNeeded();

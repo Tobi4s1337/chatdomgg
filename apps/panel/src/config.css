@@ -113,7 +113,7 @@
 .cfg-band { display: flex; align-items: center; gap: 10px; margin: 0 0 8px 29px; font: 700 14px Alegreya, Georgia, serif; }
 .cfg-band select { min-height: 44px; padding: 4px 10px; color: #302015; background: #f4e5c7; border: 1px solid #9f805c; border-radius: 3px; font: 400 14px Alegreya, Georgia, serif; }
 .cfg-save, .cfg-retry { min-height: 48px; padding: 10px 18px; color: #f9e8c9; background: linear-gradient(#82482c,#582d1d); border: 1px solid #bc8855; border-radius: 4px; box-shadow: inset 0 1px #e3b87c66, 0 2px 4px #0007; font: 700 15px Alegreya, Georgia, serif; cursor: pointer; }
-.cfg-save:disabled { opacity: .55; cursor: default; }
+.cfg-save:disabled, .cfg-retry:disabled { opacity: .55; cursor: default; }
 .cfg-retry { justify-self: start; }
 .cfg-band { display: block; min-width: 0; border: 0; padding: 0; }
 .cfg-band legend { padding: 0; margin-bottom: 5px; }

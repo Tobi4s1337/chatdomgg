@@ -31,6 +31,7 @@ import { createPanelHttp } from '../http';
 import { PanelPictures } from '../pictures';
 import { createPanelGifts } from './index';
 import { createPanelBroadcaster } from '../broadcast';
+import { createPanelConfigurationPublisher } from '../configuration-publisher';
 // @ts-expect-error The shared capture guard is a Node-only JavaScript utility.
 import { acquireCaptureLock } from '../../../../../packages/testing/capture-lock.mjs';
 // The development-only Helper is JavaScript and is never part of the Extension build.
@@ -52,6 +53,7 @@ const switchGift = { sku: 'bellb', cost: { amount: 300, type: 'bits' } };
 interface Harness {
   readonly bitsRequests: number;
   readonly pendingSku: string | null;
+  setIdentity(identity: 'shared' | 'logged-out' | 'unshared'): void;
   transactionComplete(event: { transactionReceipt: string; product: typeof product }): boolean;
   transactionCancelled(): boolean;
   publish(topic: string, message: string): void;
@@ -99,6 +101,11 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
   let apiOrigin: string, panelOrigin: string, realmOrigin: string;
   let giftLedger: RealmPanelGifts;
   let broadcaster: ReturnType<typeof createPanelBroadcaster> | undefined;
+  let publisher: ReturnType<typeof createPanelConfigurationPublisher> | undefined;
+  let configurationContent: string | undefined;
+  let configurationPuts = 0, configurationGets = 0;
+  let releaseConfigurationGet: (() => void) | undefined;
+  let configurationGetGate: Promise<void> | undefined;
   let composeApi: (broadcast?: ReturnType<typeof createPanelBroadcaster>) => ReturnType<typeof createPanelHttp>;
   let realmCall: (path: string, body: unknown) => Promise<Record<string, unknown>>;
   const openPages = new Set<Page>();
@@ -123,6 +130,26 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     if (url.origin === 'https://id.twitch.tv' && url.pathname === '/oauth2/validate') {
       expect(init?.headers).toMatchObject({ Authorization: `OAuth ${providerToken}` });
       return json({ client_id: extensionId, expires_in: 3600 });
+    }
+    if (url.origin === 'https://api.twitch.tv' && url.pathname === '/helix/extensions/configurations') {
+      const headers = new Headers(init?.headers);
+      expect(headers.get('client-id')).toBe(extensionId);
+      const { payload } = await jwtVerify(headers.get('authorization')!.slice(7), Buffer.from(extensionSecret, 'base64'), { algorithms: ['HS256'] });
+      expect(payload).toMatchObject({ role: 'external', user_id: ownerId });
+      expect(payload.user_id).not.toBe(kingdomId);
+      if (init?.method === 'PUT') {
+        const body = JSON.parse(String(init.body)) as { extension_id: string; broadcaster_id: string; segment: string; version: string; content: string };
+        expect(body).toMatchObject({ extension_id: extensionId, broadcaster_id: kingdomId, segment: 'broadcaster', version: '1' });
+        configurationContent = body.content; configurationPuts++;
+        return new Response(null, { status: 204 });
+      }
+      expect(init?.method ?? 'GET').toBe('GET');
+      expect(url.searchParams.get('extension_id')).toBe(extensionId);
+      expect(url.searchParams.get('broadcaster_id')).toBe(kingdomId);
+      expect(url.searchParams.getAll('segment')).toContain('broadcaster');
+      configurationGets++;
+      if (configurationContent !== undefined) await configurationGetGate;
+      return json({ data: configurationContent === undefined ? [] : [{ segment: 'broadcaster', broadcaster_id: kingdomId, version: '1', content: configurationContent }] });
     }
     if (url.origin === 'https://api.twitch.tv' && url.pathname === '/helix/extensions/pubsub') {
       const headers = new Headers(init?.headers);
@@ -213,7 +240,7 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     composeApi = broadcast => createPanelHttp({ authority: createPanelAuthority({ pool: realmDb, origin, publicOrigin: panelOrigin, users, kingdomName: async id => kingdomNames.get(KingdomIdSchema.parse(id)) ?? null }),
       origin, extension: { clientId: extensionId, secret: extensionSecret }, extraOrigins: [panelOrigin] },
     { realmOrigin, panelSecret, painterSecret: null, pictures: new PanelPictures(pictureDirectory), users,
-      gifts: createPanelGifts({ extensionId, extensionSecret, extensionClientSecret: clientSecret, realm: realmCall, fetch: provider }), ...(broadcast ? { broadcast } : {}) });
+      gifts: createPanelGifts({ extensionId, extensionSecret, extensionClientSecret: clientSecret, realm: realmCall, fetch: provider }), ...(broadcast ? { broadcast } : {}), ...(publisher ? { configurationPublisher: publisher } : {}) });
     panelHttp = composeApi();
     api = createServer((request, response) => { void panelHttp!(request, response, new URL(request.url!, apiOrigin).pathname).catch(() => { if (!response.headersSent) response.writeHead(500); response.end(); }); });
     await listen(api, apiPort!);
@@ -235,6 +262,8 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     await attempt(() => browser?.close());
     await Promise.all([attempt(() => vite?.close()), attempt(() => close(api))]);
     await attempt(() => panelHttp?.dispose());
+    releaseConfigurationGet?.();
+    await attempt(() => publisher?.dispose());
     await attempt(() => broadcaster?.dispose());
     await attempt(() => { if (realmListening) realm?.shutdown(); });
     await attempt(() => ingress?.stop());
@@ -254,12 +283,12 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     expect(accepted.status).toBe(202);
   }
 
-  async function openPanel(personId: string, view = 'panel.html', role = 'viewer', pauseTimers = false): Promise<Page> {
+  async function openPanel(personId: string, view = 'panel.html', role = 'viewer', pauseTimers = false, hangProducts = false): Promise<Page> {
     const context = await browser!.newContext({ viewport: { width: 318, height: 496 } });
     await context.route('**/*', async route => {
       const url = route.request().url();
       if (url === HELPER_URL) {
-        await route.fulfill({ contentType: 'application/javascript', body: helperSource(extensionSecret, { channel: kingdomId, user: personId, client: extensionId, identity: 'shared', role, bits: true, products: [product, otherBand, switchGift] }) });
+        await route.fulfill({ contentType: 'application/javascript', body: helperSource(extensionSecret, { channel: kingdomId, user: personId, client: extensionId, identity: 'shared', role, bits: true, products: [product, otherBand, switchGift] }) + (hangProducts ? '\nwindow.__stalledProducts = 0; window.Twitch.ext.bits.getProducts = () => { window.__stalledProducts++; return new Promise(() => {}); };' : '') });
       } else if (url.startsWith(`${panelOrigin}/`) || url.startsWith(`${apiOrigin}/`)) await route.continue();
       else { escapedRequests.push(new URL(url).origin); await route.abort(); }
     });
@@ -287,6 +316,15 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
       result[table] = Number((await db!.query(`SELECT count(*) AS n FROM ${table}`)).rows[0].n);
     }
     return result;
+  }
+  async function waitForSaved(page: Page) {
+    await expect.poll(async () => {
+      const status = await page.getByRole('status').innerText();
+      if (status === 'Saved') return status;
+      const retry = page.getByRole('button', { name: 'Check Twitch again', exact: true });
+      if (await retry.isVisible() && await retry.isEnabled()) await retry.click();
+      return status;
+    }, { timeout: 45_000, interval: 1000 }).toBe('Saved');
   }
   async function focused(page: Page, selector: string) {
     await expect.poll(() => page.locator(selector).evaluate(node => node === document.activeElement)).toBe(true);
@@ -362,7 +400,9 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     panelHttp!.dispose();
     broadcaster = createPanelBroadcaster({ extensionId, extensionSecret, ownerId,
       read: channelId => realmCall('/internal/realm/panel/kingdom', { kingdomId: channelId }), fetch: provider });
+    publisher = createPanelConfigurationPublisher({ extensionId, extensionSecret, ownerId, realm: realmCall, enabled: true, fetch: provider, pollMs: 100 });
     panelHttp = composeApi(broadcaster);
+    publisher.start();
     broadcaster.start();
     const before = await counts();
     expect((await db!.query('SELECT 1 FROM realm_deeds WHERE kingdom_id = $1 AND person_id = $2', [kingdomId, newcomer])).rowCount).toBe(0);
@@ -380,21 +420,52 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     await config.getByRole('switch', { name: 'Show you tab', exact: true }).click();
     await config.locator('label').filter({ has: config.locator('input[name="band-kites"][value="b"]') }).click();
     await config.locator('label').filter({ has: config.locator('input[name="band-bell"][value="b"]') }).click();
+    // A routine reauthorization performs a fresh read without throwing away unsaved choices.
+    let refreshReads = 0;
+    config.on('response', response => { if (response.url() === `${apiOrigin}/api/panel/v1/configuration-sync` && response.ok()) refreshReads++; });
+    await config.evaluate(() => (window as unknown as HarnessWindow).__panelHarness.setIdentity('shared'));
+    await expect.poll(() => refreshReads).toBeGreaterThan(0);
+    await expect.poll(() => config.getByRole('status').innerText()).toBe('Unsaved changes');
+    expect(await config.getByRole('switch', { name: 'Show you tab', exact: true }).getAttribute('aria-checked')).toBe('false');
+    expect(await config.locator('input[name="band-kites"][value="b"]').isChecked()).toBe(true);
+    expect(await config.locator('input[name="band-bell"][value="b"]').isChecked()).toBe(true);
+    // Losing and regaining identity starts a fresh form from the authoritative realm reading.
+    const leavingRead = config.waitForResponse(response => response.url() === `${apiOrigin}/api/panel/v1/configuration-sync`);
+    await config.evaluate(() => (window as unknown as HarnessWindow).__panelHarness.setIdentity('logged-out'));
+    await leavingRead;
+    const beforeReturn = refreshReads;
+    await config.evaluate(() => (window as unknown as HarnessWindow).__panelHarness.setIdentity('shared'));
+    await expect.poll(() => refreshReads).toBeGreaterThan(beforeReturn);
+    await expect.poll(() => config.getByRole('switch', { name: 'Show you tab', exact: true }).getAttribute('aria-checked')).toBe('true');
+    expect(await config.locator('input[name="band-kites"][value="a"]').isChecked()).toBe(true);
+    expect(await config.locator('input[name="band-bell"][value="a"]').isChecked()).toBe(true);
+    expect(await config.getByRole('button', { name: 'Save changes', exact: true }).isDisabled()).toBe(true);
+    await config.getByRole('switch', { name: 'Show you tab', exact: true }).click();
+    await config.locator('label').filter({ has: config.locator('input[name="band-kites"][value="b"]') }).click();
+    await config.locator('label').filter({ has: config.locator('input[name="band-bell"][value="b"]') }).click();
+    configurationGetGate = new Promise<void>(resolve => { releaseConfigurationGet = resolve; });
+    const previousGets = configurationGets, previousPuts = configurationPuts;
     await config.getByRole('button', { name: 'Save changes', exact: true }).click();
-    await expect.poll(() => config.getByRole('status').innerText()).toBe('Saved');
+    await expect.poll(() => configurationPuts, { timeout: 30_000 }).toBeGreaterThan(previousPuts);
+    await expect.poll(() => configurationGets, { timeout: 30_000 }).toBeGreaterThan(previousGets + 1);
+    expect(await config.getByRole('status').innerText()).not.toBe('Saved');
+    releaseConfigurationGet?.(); configurationGetGate = undefined;
+    await waitForSaved(config);
     const saved = await realmCall('/internal/realm/panel/settings', { kingdomId });
     expect(saved).toMatchObject({ version: 1, status: 'settings', connected: true, settings: { tabs: { kingdom: true, you: false, gifts: true }, gifts: expect.arrayContaining([{ giftId: 'kites', band: 'b' }]) } });
-    const echo = await config.evaluate(() => (window as unknown as { Twitch: { ext: { configuration: { broadcaster: { version: string; content: string } } } } }).Twitch.ext.configuration.broadcaster);
-    expect(echo.version).toBe('1'); expect(JSON.parse(echo.content)).toEqual(saved.settings);
+    expect(configurationPuts).toBeGreaterThan(0);
+    expect(configurationGets).toBeGreaterThan(previousGets);
+    expect(JSON.parse(configurationContent!)).toEqual(saved);
     await expect.poll(() => first.getByRole('button', { name: 'You', exact: true }).count()).toBe(0);
 
-    const liveConfig = await openPanel(kingdomId, 'live_config.html', 'broadcaster');
+    const liveConfig = await openPanel(kingdomId, 'live_config.html', 'broadcaster', false, true);
+    expect(await liveConfig.evaluate(() => (window as unknown as { __stalledProducts: number }).__stalledProducts)).toBeGreaterThan(0);
     await liveConfig.getByRole('button', { name: 'Hide panel gifts', exact: true }).click();
-    await expect.poll(() => liveConfig.getByRole('status').innerText()).toBe('Saved');
+    await waitForSaved(liveConfig);
     expect(await realmCall('/internal/realm/panel/settings', { kingdomId })).toMatchObject({ settings: { hidden: true } });
     expect(await realmCall('/internal/realm/panel/gifts', { kingdomId, personId: newcomer })).toMatchObject({ offers: [] });
     await liveConfig.getByRole('button', { name: 'Resume gifts', exact: true }).click();
-    await expect.poll(() => liveConfig.getByRole('status').innerText()).toBe('Saved');
+    await waitForSaved(liveConfig);
     expect(await realmCall('/internal/realm/panel/settings', { kingdomId })).toMatchObject({ settings: { hidden: false } });
     await first.getByRole('button', { name: 'Gifts', exact: true }).click();
     await first.locator('[data-gift-sku="kitesb"]').waitFor();
@@ -433,6 +504,6 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
       for (const privateValue of [transactionId, receipt, extensionSecret, panelSecret, clientSecret, providerToken, newcomer]) expect([exposed, ...requestUrls, ...consoleMessages, ...pageErrors].some(text => text.includes(privateValue))).toBe(false);
     }
     expect(escapedRequests).toEqual([]); expect(pageErrors.length).toBe(0);
-  }, 60_000);
+  }, 180_000);
 
 });

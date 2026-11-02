@@ -19,9 +19,9 @@ export function parsePanelSettings(value: unknown): PanelSettings | null {
   for (const selection of value.gifts) {
     if (!record(selection) || !keys(selection, ['giftId', 'band']) || typeof selection.giftId !== 'string'
       || !GIFT_CATALOGUE.some(gift => gift.id === selection.giftId) || seen.has(selection.giftId)
-      || !['a', 'b', 'c'].includes(String(selection.band))) return null;
+      || (selection.band !== 'a' && selection.band !== 'b' && selection.band !== 'c')) return null;
     seen.add(selection.giftId);
-    gifts.push({ giftId: selection.giftId, band: selection.band as 'a' | 'b' | 'c' });
+    gifts.push({ giftId: selection.giftId, band: selection.band });
   }
   return { version: 1, hidden: value.hidden, tabs: { kingdom: true, you: value.tabs.you, gifts: value.tabs.gifts }, gifts };
 }

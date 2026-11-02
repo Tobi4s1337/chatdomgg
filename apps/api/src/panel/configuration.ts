@@ -1,14 +1,15 @@
 import { jwtVerify } from 'jose';
 import { z } from 'zod';
-import type { PanelSettingsReading } from '../../../../packages/shared/src/panel';
+import type { PanelSettingsReading, PanelSettingsSync } from '../../../../packages/shared/src/panel';
 import { parsePanelSettings } from '../../../panel/src/settings/schema';
 import { extensionKey } from '../public/panel/token';
 import { verifyViewerToken } from './token';
 
-export type PanelConfigurationRoute = 'configuration' | 'configure';
+export type PanelConfigurationRoute = 'configuration' | 'configure' | 'configuration-sync';
 export interface PanelConfigurationReply { readonly http: number; readonly body: unknown }
 export interface PanelConfigurationOptions {
   readonly extensionSecret: string;
+  readonly extensionId?: string;
   readonly realm: (path: string, body: unknown) => Promise<Record<string, unknown>>;
   readonly now?: () => number;
 }
@@ -32,16 +33,24 @@ export async function verifyBroadcaster(authorization: string | null, key: Uint8
   return { channelId: payload.channel_id as string, personId: payload.user_id as string, role: 'broadcaster', kind: 'shared' };
 }
 
-function reading(raw: unknown): PanelSettingsReading | null {
-  if (!record(raw) || raw.version !== 1 || raw.status !== 'settings' || !Revision.safeParse(raw.revision).success || typeof raw.connected !== 'boolean') return null;
+export function parseConfigurationReading(raw: unknown): PanelSettingsReading | null {
+  if (!record(raw) || Object.keys(raw).length !== 5 || raw.version !== 1 || raw.status !== 'settings' || !Revision.safeParse(raw.revision).success || typeof raw.connected !== 'boolean') return null;
   const settings = parsePanelSettings(raw.settings);
   return settings ? { version: 1, status: 'settings', revision: raw.revision as string, settings, connected: raw.connected } : null;
+}
+function syncReading(raw: unknown): PanelSettingsSync | null {
+  if (!record(raw) || Object.keys(raw).length !== 5 || raw.version !== 1 || raw.status !== 'sync'
+    || raw.publication !== 'pending' && raw.publication !== 'verified') return null;
+  const current = parseConfigurationReading(raw.reading);
+  if (!current || raw.publication === 'pending' && raw.verifiedAt !== null
+    || raw.publication === 'verified' && (!Number.isSafeInteger(raw.verifiedAt) || Number(raw.verifiedAt) <= 0)) return null;
+  return { version: 1, status: 'sync', reading: current, publication: raw.publication as 'pending' | 'verified', verifiedAt: raw.verifiedAt as number | null };
 }
 const reply = (http: number, status: string, message: string): PanelConfigurationReply => ({ http, body: { version: 1, status, message } });
 const unavailable = () => reply(503, 'unavailable', 'The panel settings are out of reach. Try again shortly.');
 const refused = () => reply(400, 'refused', 'These panel settings could not be saved.');
 
-/** The authenticated realm mirror is the purchase gate. Helper configuration is written by the config page after this succeeds. */
+/** Realm saves gate purchases immediately. Only durable server publication can confirm the Twitch mirror. */
 export function createPanelConfiguration(options: PanelConfigurationOptions) {
   let key: Uint8Array | undefined;
   try { key = extensionKey(options.extensionSecret); } catch { /* Missing setup is an honest unavailable state. */ }
@@ -57,19 +66,25 @@ export function createPanelConfiguration(options: PanelConfigurationOptions) {
       }
       try {
         let answer: Record<string, unknown>;
-        if (route === 'configuration') {
+        if (route === 'configuration' || route === 'configuration-sync') {
           z.strictObject({}).parse(raw);
-          answer = await options.realm('/internal/realm/panel/settings', { kingdomId: identity.channelId });
+          if (route === 'configuration-sync' && !/^[a-zA-Z0-9]{1,100}$/.test(options.extensionId ?? '')) return unavailable();
+          answer = await options.realm(route === 'configuration-sync' ? '/internal/realm/panel/settings-sync' : '/internal/realm/panel/settings',
+            { kingdomId: identity.channelId, ...(route === 'configuration-sync' ? { extensionId: options.extensionId } : {}) });
         } else {
           const body = Write.parse(raw), settings = parsePanelSettings(body.settings);
           if (!settings) return refused();
           answer = await options.realm('/internal/realm/panel/settings-save', { kingdomId: identity.channelId, personId: identity.personId,
             expectedRevision: body.expectedRevision, settings });
         }
-        const saved = reading(answer);
+        if (route === 'configuration-sync') {
+          const sync = syncReading(answer);
+          return sync ? { http: 200, body: sync } : unavailable();
+        }
+        const saved = parseConfigurationReading(answer);
         if (saved) return { http: 200, body: saved };
         if (route === 'configure' && answer.version === 1 && answer.status === 'conflict') {
-          const current = reading(answer.current);
+          const current = parseConfigurationReading(answer.current);
           if (current) return { http: 200, body: { version: 1, status: 'conflict', current } };
         }
         return unavailable();

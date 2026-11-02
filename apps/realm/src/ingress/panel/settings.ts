@@ -6,6 +6,7 @@ import type { PanelSettings, PanelSettingsReading } from '../../../../../package
 import { DEFAULT_SETTINGS, parsePanelSettings } from '../../../../panel/src/settings/schema';
 import { RealmCommitUncertainError, RealmWriterFencedError,
   type DurableKingdom, type DurableRealmServices, type RealmDatabase } from '../../persistence';
+import { dirtyPanelMirror, ensurePanelMirror, RealmPanelMirror } from './mirror';
 
 type Sql = Pick<PoolClient, 'query'>;
 type Origin = 'live' | 'simulated';
@@ -84,22 +85,19 @@ export async function withPanelKingdom<T>(options: RealmPanelSettingsOptions, ki
 
 export class RealmPanelSettings {
   private pending = 0;
-  constructor(private readonly options: RealmPanelSettingsOptions) {}
+  readonly mirror: RealmPanelMirror;
+  constructor(private readonly options: RealmPanelSettingsOptions) {
+    this.mirror = new RealmPanelMirror({ db: options.db, origin: options.origin,
+      withReading: (id, work) => this.withCurrentReading(id, work) });
+  }
 
   async read(raw: unknown): Promise<PanelSettingsReply> {
     const parsed = Request.safeParse(raw); if (!parsed.success) return invalid();
     try {
-      const { kingdomId } = parsed.data;
-      const exists = await this.options.db.query('SELECT 1 FROM realm_kingdoms WHERE kingdom_id = $1 AND origin = $2', [kingdomId, this.options.origin]);
-      if (!exists.rowCount) return ok(await readPanelSettings(this.options.db, this.options.origin, kingdomId, false));
-      // Actual local authority, including resting kingdoms. A preference cannot claim this connection exists.
-      const hold = await this.options.services.retain(kingdomId);
-      try {
-        if (!hold.kingdom.current || hold.kingdom.origin !== this.options.origin) return unavailable();
-        const reading = await readPanelSettings(this.options.db, this.options.origin, kingdomId, true);
-        if (!hold.kingdom.current) return unavailable();
+      return await this.withCurrentReading(parsed.data.kingdomId, async (sql, reading) => {
+        await ensurePanelMirror(sql, this.options.origin, parsed.data.kingdomId);
         return ok(reading);
-      } finally { await hold.release(); }
+      });
     } catch { return unavailable(); }
   }
 
@@ -133,7 +131,31 @@ export class RealmPanelSettings {
       WHERE realm_panel_settings.revision = $4::bigint RETURNING revision::text`,
     [this.options.origin, kingdomId, JSON.stringify(settings), expected]);
     if (!result.rows[0]) return ok({ version: 1, status: 'conflict', current: await readPanelSettings(sql, this.options.origin, kingdomId, connected) });
+    await dirtyPanelMirror(sql, this.options.origin, kingdomId);
     return ok({ version: 1, status: 'settings', revision: result.rows[0].revision, settings, connected });
+  }
+
+  /** Serializes only the bounded DB read/ack with settings saves, never a Twitch request or world write. */
+  private async withCurrentReading<T>(kingdomId: KingdomId, work: (sql: Sql, reading: PanelSettingsReading) => Promise<T>): Promise<T> {
+    const exists = await this.options.db.query('SELECT 1 FROM realm_kingdoms WHERE kingdom_id = $1 AND origin = $2', [kingdomId, this.options.origin]);
+    const hold = exists.rowCount ? await this.options.services.retain(kingdomId) : null;
+    let sql: PoolClient | undefined;
+    try {
+      if (hold && (!hold.kingdom.current || hold.kingdom.origin !== this.options.origin)) throw new RealmWriterFencedError(kingdomId);
+      sql = await this.options.db.connect();
+      await sql.query('BEGIN');
+      await lockSettings(sql, this.options.origin, kingdomId);
+      if (!hold && (await sql.query('SELECT 1 FROM realm_kingdoms WHERE kingdom_id = $1 AND origin = $2', [kingdomId, this.options.origin])).rowCount) {
+        // Founding raced the precheck. Never retain a writer while holding the settings lock.
+        await sql.query('ROLLBACK'); sql.release(); sql = undefined;
+        return this.withCurrentReading(kingdomId, work);
+      }
+      const result = await work(sql, await readPanelSettings(sql, this.options.origin, kingdomId, !!hold));
+      if (hold && !hold.kingdom.current) throw new RealmWriterFencedError(kingdomId);
+      await sql.query('COMMIT');
+      return result;
+    } catch (error) { await sql?.query('ROLLBACK').catch(() => {}); throw error; }
+    finally { sql?.release(); await hold?.release(); }
   }
 
   private async beforeFounding<T>(kingdomId: KingdomId, work: (sql: Sql) => Promise<T>): Promise<T> {
