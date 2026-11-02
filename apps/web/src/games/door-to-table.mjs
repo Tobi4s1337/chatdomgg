@@ -1,6 +1,7 @@
 /* global AbortController, structuredClone */
 // From the square to the tables and back: three walkers on a founded kingdom cross the installed tavern door, two of
-// them play Pong, Stones and Hearth Dice to their results while the third watches, and all three walk out again.
+// them play Pong, Stones and Hearth Dice to their results while the third watches, and all three walk out again. A
+// fourth person stays on the square the whole time, so every transfer is seen from both rooms at once.
 // Headless realm clients only (no browser, no capture lock). Temporary reference sessions, memory only.
 // Run: nice -n 10 node apps/web/src/games/door-to-table.mjs
 import assert from 'node:assert/strict';
@@ -43,6 +44,7 @@ const report = { started: new Date().toISOString(),
   limitations: [
     'Headless realm clients drive the walk; the door crossing uses predicted feet the way the kingdom walk will, and play performs the transfer in the product.',
     'The kingdom room spawns arrivals at the portal return anchor because this fixture tells it to; choosing that anchor on return is the kingdom room\'s decision (play/integrator).',
+    'The kingdom room places a new arrival at yaw 0 (its spawn has feet only); the walker faces out from its first standing input, as the kingdom walk would turn to the anchor. A spawn yaw is the kingdom room\'s change.',
     'No browser, Twitch identity, durable session, database or GPU is involved.',
   ], checks: [], walkers: {}, games: {} };
 let loader, realm;
@@ -102,27 +104,34 @@ try {
   await listenLocalRealm(realm, created.transport, port, host);
   const sdk = new Client(`http://${host}:${port}`);
   const quiet = room => { room.reconnection.enabled = false; rooms.push(room); return room; };
+  // Play's transfer holds one room at a time: a person's next room opens only after the last one has closed.
+  const open = (person, room) => { assert.equal(person.open ?? null, null, `${person.label} opens a room while still in ${person.open?.roomId}`); person.open = room; return room; };
+  const close = async person => { const room = person.open; person.open = null; await room.leave(); };
 
   // --- The square: three walkers arrive outside the door and walk in. ---
-  const kingdomJoin = async ticket => {
-    const room = quiet(await sdk.joinOrCreate('kingdom', ticket, KingdomRoomState));
+  const kingdomJoin = async (person, ticket) => {
+    if (person.open) throw new Error(`${person.label} is still in ${person.open.roomId}`);
+    const room = open(person, quiet(await sdk.joinOrCreate('kingdom', ticket, KingdomRoomState)));
     room.onMessage('*', () => {});
     await until(() => room.state.walkers.get(room.sessionId), 'kingdom walker placed');
     return room;
   };
   const walkers = [];
   for (const label of ['player one', 'player two', 'watcher']) {
-    const ticket = base.issue(), room = await kingdomJoin(ticket);
-    walkers.push({ label, principal: byTicket.get(ticket.ticket), kingdom: room, ticket });
+    const ticket = base.issue(), person = { label }, room = await kingdomJoin(person, ticket);
+    walkers.push(Object.assign(person, { principal: byTicket.get(ticket.ticket), kingdom: room, ticket }));
   }
-  const square = walkers[2].kingdom;
-  await until(() => square.state.walkers.size === 3, 'three walkers on the square');
+  // Someone who stays outside: the square's own view of every departure and return.
+  const observer = { label: 'square observer' };
+  { const ticket = base.issue(); observer.kingdom = await kingdomJoin(observer, ticket); observer.principal = byTicket.get(ticket.ticket); }
+  const square = observer.kingdom;
+  await until(() => square.state.walkers.size === 4, 'four people on the square');
   for (const walker of walkers) {
     const body = walker.kingdom.state.walkers.get(walker.kingdom.sessionId);
     walker.arrived = [body.x, body.y, body.z];
     assert.ok(Math.hypot(body.x - portal.returnAnchor.feet[0], body.z - portal.returnAnchor.feet[2]) < .01, `${walker.label} starts at the door`);
   }
-  report.checks.push('Three walkers stand on the square outside the tavern door in one kingdom room.');
+  report.checks.push('Three walkers stand on the square outside the tavern door in one kingdom room, with a fourth person who stays outside throughout.');
 
   // Cross the door with the kingdom walk's own prediction: the same inputs drive the server and the local body.
   const crossIn = async walker => {
@@ -161,10 +170,11 @@ try {
   for (const walker of walkers) {
     walker.door = await crossIn(walker);
     // Play's transfer: leave the square first, then enter the tavern with a fresh ticket for the same person.
-    await walker.kingdom.leave();
-    await until(() => !square.state?.walkers.has(walker.kingdom.sessionId) || walker === walkers[2], `${walker.label} left the square`);
+    const leaving = walker.kingdom.sessionId;
+    await close(walker);
+    await until(() => !square.state.walkers.has(leaving), `${walker.label} left the square`);
     await assert.rejects(sdk.joinOrCreate('tavern', walker.ticket, TavernRoomState), 'the spent kingdom ticket never opens the tavern');
-    const room = quiet(await sdk.joinOrCreate('tavern', fresh(walker.principal), TavernRoomState));
+    const room = open(walker, quiet(await sdk.joinOrCreate('tavern', fresh(walker.principal), TavernRoomState)));
     walker.tavern = room; walker.state = tavernState(room);
     room.send('bootstrap');
     await until(() => walker.state.tables && walker.state.self && walker.state.interior && room.state.walkers.get(room.sessionId), `${walker.label} inside`);
@@ -177,7 +187,8 @@ try {
   await until(() => watcher.tavern.state.walkers.size === 3, 'three walkers in the tavern');
   assert.equal(one.tavern.roomId, `t:${REFERENCE_KINGDOM}`);
   assert.ok(walkers.every(w => w.tavern.roomId === one.tavern.roomId), 'one tavern room for the kingdom');
-  report.checks.push(`All three crossed the exterior door inward (predicted and authoritative feet within ${Math.max(...walkers.map(w => w.door.agreement)).toFixed(3)} m), left the kingdom room, were refused with the spent ticket, and entered ${one.tavern.roomId} with a fresh ticket as the same name and look, at the interior entry.`);
+  assert.equal(square.state.walkers.size, 1, 'only the observer is left on the square');
+  report.checks.push(`All three crossed the exterior door inward (predicted and authoritative feet within ${Math.max(...walkers.map(w => w.door.agreement)).toFixed(3)} m), left the kingdom room (the observer on the square saw each go before the tavern opened), were refused with the spent ticket, and entered ${one.tavern.roomId} with a fresh ticket as the same name and look, at the interior entry.`);
 
   // --- The room: walk to chairs through the interior's collision, sit, play, stand. ---
   const interior = createTavernInterior();
@@ -385,38 +396,73 @@ try {
   }
 
   // --- Out again: the interior doorway tells only the walker who crosses it; they come back to the square. ---
-  const back = await kingdomJoin(fresh(watcher.principal));
-  watcher.kingdom = null;
-  for (const walker of walkers) {
-    if (walker === watcher) continue;
-    await walkTo(walker, TAVERN_ENTRY.feet);
-    const room = walker.tavern, input = room.input({ mode: 'reliable' }), others = walkers.filter(w => w !== walker).map(w => w.state.exits);
-    const [ex, ez] = TAVERN_EXIT.through;
-    const timer = setInterval(() => {
-      const current = room.state.walkers.get(room.sessionId);
-      Object.assign(input.data, { moveX: Math.round(ex * 127), moveZ: Math.round(ez * 127), buttons: 0, yaw: 0, collisionRevision: interior.world.revision, placement: current.placement });
-      input.send();
-    }, 1000 / 30);
-    try { await until(() => walker.state.exits === 1, `${walker.label} reaches the interior doorway`, 15_000); } finally { clearInterval(timer); }
-    assert.deepEqual(walkers.filter(w => w !== walker).map(w => w.state.exits), others, 'only the crosser is told');
-    await room.leave();
-    await until(() => !watcher.tavern.state.walkers.has(room.sessionId), `${walker.label} left the tavern`);
-    const kingdom = await kingdomJoin(fresh(walker.principal));
-    const body = kingdom.state.walkers.get(kingdom.sessionId);
-    const returned = [body.x, body.y, body.z];
-    const facingOut = Math.sin(portal.returnAnchor.yaw * Math.PI / 128) * portal.door.through[0] + Math.cos(portal.returnAnchor.yaw * Math.PI / 128) * portal.door.through[1];
-    assert.ok(Math.hypot(returned[0] - portal.returnAnchor.feet[0], returned[2] - portal.returnAnchor.feet[2]) < .01);
-    assert.equal(insideTavernThreshold(portal.door, returned), false, 'the return is off the door');
-    const arrival = createThresholdWatch(portal.door);
-    assert.equal(arrival(returned), false, 'arriving outside never fires the door');
-    await until(() => [...back.state.walkers.values()].filter(w => w.name === walker.principal.publicName).length === 1, `${walker.label} once on the square`);
-    await sleep(400);
-    const named = [...back.state.walkers.values()].filter(w => w.name === walker.principal.publicName);
-    assert.equal(named.length, 1, `${walker.label} is on the square exactly once`);
-    report.walkers[walker.label].returned = { feet: returned, returnYawFacingOut: facingOut < -.999, onSquare: named.length };
-  }
+  // Both rooms are watched while each person transfers: by the watcher inside (until the watcher goes last) and by the
+  // observer on the square. A person is never in both at once, and opens the square only after the tavern has closed.
+  const named = (room, name) => room ? [...room.state.walkers.values()].filter(w => w.name === name) : [];
+  const walkOut = async (walker, inside) => {
+    const name = walker.principal.publicName, samples = { both: 0, tavern: 0, square: 0, neither: 0 };
+    const sample = () => {
+      const t = named(inside?.tavern, name).length > 0, q = named(square, name).length > 0;
+      samples[t && q ? 'both' : t ? 'tavern' : q ? 'square' : 'neither']++;
+    };
+    const watching = [square, inside?.tavern].filter(Boolean);
+    for (const room of watching) room.onStateChange(sample);
+    try {
+      await walkTo(walker, TAVERN_ENTRY.feet);
+      const room = walker.tavern, input = room.input({ mode: 'reliable' }), others = walkers.filter(w => w !== walker).map(w => w.state.exits);
+      const [ex, ez] = TAVERN_EXIT.through;
+      const timer = setInterval(() => {
+        const current = room.state.walkers.get(room.sessionId);
+        Object.assign(input.data, { moveX: Math.round(ex * 127), moveZ: Math.round(ez * 127), buttons: 0, yaw: 0, collisionRevision: interior.world.revision, placement: current.placement });
+        input.send();
+      }, 1000 / 30);
+      try { await until(() => walker.state.exits === 1, `${walker.label} reaches the interior doorway`, 15_000); } finally { clearInterval(timer); }
+      assert.deepEqual(walkers.filter(w => w !== walker).map(w => w.state.exits), others, 'only the crosser is told');
+      const leaving = room.sessionId;
+      await close(walker);
+      if (inside) await until(() => !inside.tavern.state.walkers.has(leaving), `${walker.label} left the tavern`);
+      assert.equal(named(square, name).length, 0, `${walker.label} is not on the square before the tavern closed`);
+      const kingdom = await kingdomJoin(walker, fresh(walker.principal));
+      walker.kingdom = kingdom;
+      const body = kingdom.state.walkers.get(kingdom.sessionId), spawnYaw = body.yaw;
+      // Standing still on the step, the walker first looks along the wall (so the square's view must change before
+      // the check can pass, even where the spawn's default already faces out), then turns to the anchor's facing as
+      // the kingdom walk does with its first input.
+      const turn = kingdom.input({ mode: 'reliable' });
+      const face = async (yaw, what) => {
+        const turning = setInterval(() => {
+          const current = kingdom.state.walkers.get(kingdom.sessionId);
+          Object.assign(turn.data, { moveX: 0, moveZ: 0, buttons: 0, yaw, collisionRevision: world.revision, placement: current.placement });
+          turn.send();
+        }, 1000 / 30);
+        try { await until(() => named(square, name)[0]?.yaw === yaw, `${walker.label} ${what}`); } finally { clearInterval(turning); }
+      };
+      const aside = (portal.returnAnchor.yaw + 64) % 256, asideRadians = aside * Math.PI / 128;
+      await face(aside, 'looks along the wall');
+      assert.ok(Math.sin(asideRadians) * portal.door.through[0] + Math.cos(asideRadians) * portal.door.through[1] > -.5, 'looking along the wall is not facing out');
+      await face(portal.returnAnchor.yaw, 'faces out on the square');
+      await sleep(400);
+      // The square's own view of the returned person: where they stand and which way they actually face.
+      const seen = named(square, name);
+      assert.equal(seen.length, 1, `${walker.label} is on the square exactly once`);
+      const actual = seen[0], returned = [actual.x, actual.y, actual.z], radians = actual.yaw * Math.PI / 128;
+      const facing = Math.sin(radians) * portal.door.through[0] + Math.cos(radians) * portal.door.through[1];
+      assert.ok(facing < -.999, `${walker.label} actually faces out (${facing.toFixed(4)})`);
+      assert.ok(Math.hypot(returned[0] - portal.returnAnchor.feet[0], returned[2] - portal.returnAnchor.feet[2]) < .01, `${walker.label} stands at the return anchor`);
+      assert.equal(insideTavernThreshold(portal.door, returned), false, 'the return is off the door');
+      assert.equal(createThresholdWatch(portal.door)(returned), false, 'arriving outside never fires the door');
+      assert.equal(actual.look, walker.principal.look, `${walker.label} keeps the same look`);
+      assert.equal(samples.both, 0, `${walker.label} was never in both rooms`);
+      return { feet: returned, spawnYaw, asideYaw: aside, actualYaw: actual.yaw, facingOut: +facing.toFixed(4), onSquare: seen.length, samples };
+    } finally { for (const room of watching) room.onStateChange.remove(sample); }
+  };
+  for (const walker of [one, two]) report.walkers[walker.label].returned = await walkOut(walker, watcher);
   assert.equal(watcher.tavern.state.walkers.size, 1, 'the tavern holds only the watcher');
-  report.checks.push('Both players walked out through the interior doorway; only the crosser was told, each left the tavern and came back to the square once, at the return anchor facing out, off the door, as the same name and look.');
+  report.walkers.watcher.returned = await walkOut(watcher, null);
+  await until(() => square.state.walkers.size === 4, 'everyone back on the square');
+  const names = [...square.state.walkers.values()].map(w => w.name);
+  assert.equal(new Set(names).size, 4, 'each person is on the square once');
+  report.checks.push('All three walked out through the interior doorway; only the crosser was told. Each closed the tavern before opening the square, was never seen in both rooms (sampled on every patch of both rooms), and came back once at the return anchor, off the door, as the same name and look. The square\'s view of each returned walker shows its actual yaw: first looking along the wall, then facing out.');
   assert.equal(JSON.stringify(scene.placements), placementsBefore, 'the kingdom is unchanged');
   report.result = 'passed';
 } catch (error) {
