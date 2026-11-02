@@ -95,13 +95,21 @@ gather does not edit play's files or implement a second generic transfer control
     has really let go (`TavernClient.leave()`, which awaits the SDK's leave; a connection already gone counts) and
     rejects while one may still hold you, so play's retry calls it again. An open still in flight when disposed
     is left as soon as it lands. `requestInput` defaults to the tavern's own pointer-lock lease on its seated canvas.
-  - The wiring is one line in play's `apps/web/src/play/providers.ts` once `play/portal.ts` is on the integration
-    branch: `registerPortalDestination(createTavernDestination({ audio: <play's retained KingdomAudio> }));` plus,
-    in the kingdom walk, `const descriptor = tavernPortalDescriptor(portal)`, `registerPortalDoor(descriptor)` and
-    `watchTavernDoor(portal, () => void enterPortal(descriptor))` on the predicted feet, where
-    `portal = tavernPortalFor(kingdomId, scene, world)`. Gather does not write these lines into play's files.
-  - `apps/web/src/tavern/play-portal.test.ts` checks the join with play's real `createPortalTransfer`. It loads
-    `play/portal.ts` through `import.meta.glob` and skips until that file is on the branch. Against `lane/play`
+  - **The wiring is one side-effect line in play's `apps/web/src/play/providers.ts`: `import '../tavern/register';`**
+    (2026-11-02 13:40; supersedes the hand-written providers and kingdom-walk lines). `tavern/register.ts` finds
+    play's `play/portals.ts` and `registerWalkFeature` in the build. It registers `createTavernDestination` with
+    one tavern mixer for the page, at play's world volume, and the walk feature `tavern-door`
+    (`tavern/play-door.ts`). That feature derives the door from the walk's founded scene and collision world once per
+    revision, puts up play's `registerPortalDoor` prompt and watches the predicted feet with `watchTavernDoor`,
+    calling `enterPortal`. Without play the module does nothing.
+  - **needs: play** two optional fields on `WalkFeatureContext`, `founded?: RealmFoundedScene` and
+    `world?(): CollisionWorld | null`, passed through `features.ts` and lent by `walk-scene.ts` (`founded, world:
+    currentWorld`). The patch is written out in `work/lanes/gather/patches/play-walk-founded.patch`: three files,
+    eight lines, additive. It applies cleanly and type-checks on `lane/play` `f57fb85e`. Without it the door is never
+    offered (no guessed door). Gather does not write into play's files.
+  - `apps/web/src/tavern/play-portal.test.ts` checks the join with play's real `createPortalTransfer`, and
+    `play-door.test.ts` the door feature in play's real keeper and slots. Both find play's files on disk at run time
+    (a build-time glob was hidden by vitest's module cache) and skip until they are on the branch. Against `lane/play`
     `6ace34fc` it passes, and the destination and descriptor type-check against play's own interfaces
     (`work/evidence/gather/ga10-portal.md`).
 - All three games consume that lease. Stones uses mouse motion or arrows to select, click/Enter/Space to drop,

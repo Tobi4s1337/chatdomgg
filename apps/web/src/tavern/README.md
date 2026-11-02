@@ -62,6 +62,10 @@ does not show an invented match. The working room/seat transport is tested separ
   derives the exterior doorway and a supported return anchor, facing out, from the installed tavern and its
   collision. The tavern room watches the interior doorway and tells only the walker who crossed it; the surface
   hands that to its `leave` option. The kingdom-side transfer and return belong to play.
+- Joining play is one line in play's `providers.ts`: `import '../tavern/register';`. Where play's door keeper is in
+  the build, it registers the destination (`play-slot.ts`) and the `tavern-door` walk feature (`play-door.ts`). That
+  feature offers play's prompt at the door and goes in when you walk through. It needs the walk's founded scene and
+  world on play's feature context (`work/lanes/gather/patches/play-walk-founded.patch`); without them no door shows.
 
 GA10 remains open. Still required: play's generic portal transfer and safe return using the descriptor,
 full database-authenticated matches and portal evidence, durable result/tally integration, remaining browser failure-path and database restart evidence,

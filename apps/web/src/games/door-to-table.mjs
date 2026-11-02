@@ -43,7 +43,7 @@ const report = { started: new Date().toISOString(),
   fixture: `Temporary reference sessions with synthetic identities, memory only. The kingdom is a founded hamlet generated from the seed "${seed}" with its tavern at growth level ${level}, not an adopted plan from a database.`,
   limitations: [
     'Headless realm clients drive the walk; the door crossing uses predicted feet the way the kingdom walk will, and play performs the transfer in the product.',
-    'New arrivals start at a fixture gate on the door\'s axis a step and a half out (the founded market anchors are far from the door); coming back out of the tavern, the kingdom room itself stands them at the derived return anchor facing out (games/return.ts).',
+    'New arrivals start at a fixture gate on the door\'s axis a step and a half out (the founded market anchors are far from the door); coming back out of the tavern, the kingdom room itself places them facing out (games/return.ts): at the derived return anchor when it is free, otherwise at the nearest clear spot beside it or a step further out.',
     'No browser, Twitch identity, durable session, database or GPU is involved.',
   ], checks: [], walkers: {}, games: {} };
 let loader, realm;
@@ -508,7 +508,11 @@ try {
   await until(() => square.state.walkers.size === 4, 'everyone back on the square');
   const names = [...square.state.walkers.values()].map(w => w.name);
   assert.equal(new Set(names).size, 4, 'each person is on the square once');
-  report.checks.push('All three walked out through the interior doorway; only the crosser was told. Each closed the tavern before opening the square, was never seen in both rooms (sampled on every patch of both rooms by an observer who stayed in each, on the way in and on the way out, the last person out included), and came back once, placed by the kingdom room at the return anchor already facing out (not at the gate where newcomers arrive), off the door, as the same name and look. The square\'s view of each returned walker shows its actual yaw: first looking along the wall, then facing out.');
+  const placed = [one, two, watcher].map(walker => {
+    const { atAnchor, fromAnchor } = report.walkers[walker.label].returned;
+    return atAnchor ? `${walker.label} on the free return anchor` : `${walker.label} ${fromAnchor.toFixed(2)} m beside it, the anchor being taken`;
+  }).join(', ');
+  report.checks.push(`All three walked out through the interior doorway; only the crosser was told. Each closed the tavern before opening the square, was never seen in both rooms (sampled on every patch of both rooms by an observer who stayed in each, on the way in and on the way out, the last person out included), and came back once, placed by the kingdom room already facing out (not at the gate where newcomers arrive), off the door, clear of everyone on the square, as the same name and look: ${placed}. The square's view of each returned walker shows its actual yaw: first looking along the wall, then facing out.`);
   assert.equal(JSON.stringify(scene.placements), placementsBefore, 'the kingdom is unchanged');
   report.result = 'passed';
 } catch (error) {

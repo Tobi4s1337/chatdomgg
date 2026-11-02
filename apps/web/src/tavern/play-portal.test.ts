@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { KingdomIdSchema, TavernPortalSchema, type TavernPortal } from '@chatdom/shared';
 import { TAVERN_INTERIOR_ENTRY, TAVERN_INTERIOR_EXIT } from '../../../../packages/content/src/tavern/portal';
@@ -33,7 +35,9 @@ interface Transfer {
 }
 type PlayPortal = { createPortalTransfer(options: { curtain: () => Curtain; readyMs?: number; stepMs?: number }): Transfer };
 
-const play = import.meta.glob<PlayPortal>('../play/portal.ts')['../play/portal.ts'];
+// Found on disk at run time, not through a build-time glob: a cached transform must never hide play's file once it lands.
+const playPath = fileURLToPath(new URL('../play/portal.ts', import.meta.url));
+const play = existsSync(playPath) ? () => import(/* @vite-ignore */ playPath) as Promise<PlayPortal> : undefined;
 
 const kingdomId = KingdomIdSchema.parse('900000004');
 const portal: TavernPortal = TavernPortalSchema.parse({ version: 1, id: `tavern:${kingdomId}:door`, kingdomId, sourceRoom: 'kingdom', destinationRoom: 'tavern',
