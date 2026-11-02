@@ -337,7 +337,9 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     const before = await counts();
     expect(Object.values(before)).toEqual([0, 0, 0, 0]);
     await first.getByRole('button', { name: 'Gifts', exact: true }).click();
-    const use = first.locator('[data-gift-sku="kitesa"]');
+    // The shelf shows each gift as a token; its page carries the Give button for each band Twitch offers.
+    const token = first.locator('[data-gift-id="kites"]'), use = first.locator('[data-gift-sku="kitesa"]');
+    await token.waitFor(); await token.click();
     await use.waitFor();
     // Native keyboard focus provides the same origin the actual checkout focus handoff uses.
     await use.focus(); await use.click();
@@ -375,8 +377,8 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     }
     expect(await counts()).toEqual(one);
     await first.getByRole('button', { name: 'Back to gifts', exact: true }).click();
-    await focused(first, '[data-gift-sku="kitesa"]');
-    await use.click();
+    await focused(first, '[data-gift-id="kites"]');
+    await token.click(); await use.click();
     await expect.poll(() => first.evaluate(() => (window as unknown as HarnessWindow).__panelHarness.bitsRequests)).toBe(2);
     await focused(first, '.gift-request h2');
     expect(await first.evaluate(() => (window as unknown as HarnessWindow).__panelHarness.transactionCancelled())).toBe(true);
@@ -385,7 +387,7 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     await expect.poll(async () => Number((await db!.query("SELECT count(*) AS n FROM realm_panel_gift_intents WHERE state = 'cancelled'")).rows[0].n)).toBe(1);
     expect(await counts()).toEqual(one);
     await first.getByRole('button', { name: 'Back to gifts', exact: true }).click();
-    await focused(first, '[data-gift-sku="kitesa"]');
+    await focused(first, '[data-gift-id="kites"]');
     expect(await counts()).toEqual(one);
     for (const page of [first, second]) {
       const exposed = await page.evaluate(() => JSON.stringify({ dom: document.documentElement.outerHTML, local: { ...localStorage }, session: { ...sessionStorage }, url: location.href }));
@@ -468,14 +470,17 @@ describe.runIf(enabled)('two real panels give a gift through the isolated lane s
     await waitForSaved(liveConfig);
     expect(await realmCall('/internal/realm/panel/settings', { kingdomId })).toMatchObject({ settings: { hidden: false } });
     await first.getByRole('button', { name: 'Gifts', exact: true }).click();
+    await first.locator('[data-gift-id="kites"]').click();
     await first.locator('[data-gift-sku="kitesb"]').waitFor();
     expect(await first.locator('[data-gift-sku="kitesa"]').count()).toBe(0);
+    await first.getByRole('button', { name: '‹ All gifts', exact: true }).click();
 
     // A paused witness clock prevents its five-second fallback from passing the PubSub assertion.
     polls.delete(witness);
     const second = await openPanel(witness, 'panel.html', 'viewer', true);
     await expect.poll(() => polls.get(witness) ?? 0).toBeGreaterThan(0);
     const baseline = polls.get(witness) ?? 0;
+    await first.locator('[data-gift-id="bell"]').click();
     await first.locator('[data-gift-sku="bellb"]').click();
     await expect.poll(() => first.evaluate(() => (window as unknown as HarnessWindow).__panelHarness.pendingSku)).toBe('bellb');
     const transactionId = `SIMULATED-switch-on-${randomUUID()}`, occurredAt = Date.now();
