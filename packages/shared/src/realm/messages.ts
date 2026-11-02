@@ -42,7 +42,7 @@ export const RealmIntentSchema = z.discriminatedUnion('type', [
 ]);
 export type RealmIntent = z.infer<typeof RealmIntentSchema>;
 export type RealmReceipt =
-  | { readonly version: 1; readonly id: string; readonly status: 'committed'; readonly writerEpoch: string; readonly sequence: number }
+  | { readonly version: 1; readonly id: string; readonly status: 'committed'; readonly writerEpoch: string; readonly sequence: number; readonly message?: string }
   | { readonly version: 1; readonly id: string; readonly status: 'applied'; readonly writerEpoch: string; readonly state: RealmInteractionState }
   | { readonly version: 1; readonly id: string; readonly status: 'held' | 'refused' | 'unavailable'; readonly message: string };
 

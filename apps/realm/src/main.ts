@@ -32,6 +32,7 @@ import { mountRaidCrierRoutes } from './raid-gate/crier-http';
 import { RaidGuestAuthority } from './raid-gate/guests';
 import { createRaidGuestRuntime } from './raid-gate/guest-runtime';
 import { createRaidGuestSpawn } from './raid-gate/guest-spawn';
+import { createRealmForgeChat } from './wiring/forge-chat-runtime';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -113,7 +114,9 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   citizens.use(boot.allocation, boot.services);
   boot.ingress.moments.useSettler(raidGuests.guardSettler(citizens));
   castle.use(boot.allocation, boot.store);
+  const forgeChat = await createRealmForgeChat({ pool, origin, services: boot.services, founded: id => !!boot.loader.current(id)?.scene });
   const evening = new RaidChatBridge({ origin, ingress: boot.ingress, gate, approvals, raidChat,
+    forgeChatObserver: forgeChat.observe,
     current: kingdomId => boot.services.kingdoms.get(kingdomId)?.current === true,
     beforeObservation: input => raidGuests.observe(input) });
   evening.use(boot.services);
@@ -127,6 +130,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
   const raidChatRead = mountRaidChatRead(transport.app, { origin, presentation: raidChat, current: kingdomId => boot.services.kingdoms.get(kingdomId)?.current === true });
+  forgeChat.mount(transport.app);
   ownRealmShutdown(server, transport, async () => {
     itemFoundation.dispose();
     dock.stop();
@@ -134,14 +138,15 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     await raidShow.close();
     await chatCommands.close();
     await raidCrier?.close();
-    try { await evening.stop(); }
-    finally { try { await boot.stop(); } finally { await raidGuests.close(); await pool.end(); } }
+    try { await forgeChat.stop(); }
+    finally { try { await evening.stop(); } finally { try { await boot.stop(); } finally { await raidGuests.close(); await pool.end(); } } }
   });
   try {
     await boot.readiness.start();
+    await forgeChat.start();
     await releasePort();
     await server.listen(port, host);
-  } catch (error) { itemFoundation.dispose(); dock.stop(); raidChatRead.close(); await raidShow.close(); await chatCommands.close(); await raidCrier?.close(); await evening.stop(); await boot.stop(); await raidGuests.close(); await pool.end(); throw error; }
+  } catch (error) { itemFoundation.dispose(); dock.stop(); raidChatRead.close(); await raidShow.close(); await chatCommands.close(); await raidCrier?.close(); await forgeChat.stop(); await evening.stop(); await boot.stop(); await raidGuests.close(); await pool.end(); throw error; }
   console.info(`${simulated ? 'SIMULATED' : 'LIVE'} realm on ${port}: adopted durable Postgres kingdoms in schema "${config.schema}"; `
     + (boot.ingress.gate.configured ? `service ingress at POST ${INGRESS_ROUTE} (${Object.keys(credentials).join(', ')})` : 'service ingress closed (no REALM_INGRESS_*_SECRET)')
     + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}; current approved geometry only`);

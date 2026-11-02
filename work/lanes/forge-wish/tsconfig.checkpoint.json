@@ -1,0 +1,21 @@
+{
+  "extends": "../../../tsconfig.json",
+  "include": [
+    "runtime/**/*.ts",
+    "../../../apps/codex/src/**/*.ts",
+    "../../../apps/realm/src/wiring/**/*.ts",
+    "../../../apps/realm/src/evening/bridge.ts",
+    "../../../apps/realm/src/evening/bridge.test.ts",
+    "../../../apps/realm/src/main.ts",
+    "../../../apps/realm/src/forge-chat/**/*.ts",
+    "../../../packages/forge/src/**/*.ts",
+    "../../../packages/content/src/forge-motifs/**/*.ts",
+    "../../../apps/web/src/forge-wish-bench/**/*.ts",
+    "../../../apps/web/src/forge/**/*",
+    "../../../apps/web/src/forge-*bench/**/*",
+    "../../../apps/web/src/interactions/places/AnvilVisit.tsx",
+    "../../../apps/web/vite.config.ts",
+    "../../../packages/content/src/forge-ornaments/**/*.ts",
+    "vitest.checkpoint.config.ts"
+  ]
+}

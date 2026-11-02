@@ -1,0 +1,26 @@
+.forge-wish-veil { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 22px; background: #100b18b8; box-sizing: border-box; pointer-events: auto; }
+.forge-wish-panel { width: min(520px, 100%); max-height: min(780px, calc(100dvh - 44px)); overflow: auto; box-sizing: border-box; padding: 24px; color: #f4e3bf; }
+.forge-wish-panel * { box-sizing: border-box; }
+.forge-wish-head { display: flex; justify-content: space-between; align-items: start; gap: 20px; padding: 0 2px 17px; border-bottom: 1px solid #d7b77765; }
+.forge-wish-kicker { margin: 0 0 7px; color: #dfba79; font: 13px/1.1 var(--cd-face-label); letter-spacing: .13em; }
+.forge-wish-head h2 { margin: 0; font: 30px/1.05 var(--cd-face-story); color: #fff0d0; }
+.forge-wish-body { padding: 2px; font: 17px/1.35 var(--cd-face-body); }
+.forge-wish-intro { margin: 17px 0; color: #f1dec0; }
+.forge-wish-slip, .forge-wish-result { margin: 16px 0; padding: 18px; color: #38261a; background: radial-gradient(ellipse at 25% 5%, #fbf1d8, transparent 75%), linear-gradient(165deg, #f3e6c6, #e3cfa3); box-shadow: inset 0 0 0 1px #fff8, 0 3px 8px #1a0b0870; border-radius: 3px; }
+.forge-wish-slip h3, .forge-wish-result h3 { margin: 0 0 7px; font: 24px/1.1 var(--cd-face-story); }
+.forge-wish-slip p, .forge-wish-result p { margin: 7px 0 12px; }
+.forge-wish-result .forge-wish-kicker { color: #81572b; }
+.forge-wish-cause { border-top: 1px solid #aa8c5a80; padding-top: 10px; }
+.forge-wish-label { display: block; margin: 20px 0 8px; color: #ffe8bb; font: 18px/1.2 var(--cd-face-story); }
+.forge-wish-field { display: block; width: 100%; min-height: 94px; resize: vertical; padding: 12px 13px; border: 1px solid #a78450; border-radius: 3px; color: #38261a; background: #f9edcf; font: 17px/1.35 var(--cd-face-body); }
+.forge-wish-count { margin: 3px 0 11px; color: #e3cba4; text-align: right; font-size: 13px; }
+.forge-wish-button { min-height: 44px; padding: 9px 18px; border: 1px solid #2b180e; border-radius: 5px; background: linear-gradient(#f0d399, #c99f5b); box-shadow: inset 0 1px #fff9, 0 2px 3px #160b08a0; color: #342113; cursor: pointer; font: 16px/1.1 var(--cd-face-label); letter-spacing: .025em; }
+.forge-wish-button:hover { filter: brightness(1.08); }
+.forge-wish-button:disabled { cursor: default; filter: grayscale(.5); opacity: .65; }
+.forge-wish-close, .forge-wish-secondary { background: #39251b; border-color: #b89056; box-shadow: inset 0 1px #ffffff20; color: #f8e5c0; }
+.forge-wish-close { min-height: 38px; padding: 7px 12px; font-size: 14px; }
+.forge-wish-footnote, .forge-wish-fallback, .forge-wish-note { color: #e7d0aa; font-size: 15px; }
+.forge-wish-footnote { margin: 10px 0 0; }
+.forge-wish-fallback { margin: 20px 0 1px; padding-top: 14px; border-top: 1px solid #caa66a55; }
+.forge-wish-error { color: #fff1d1; border-left: 3px solid #e4a75f; padding-left: 10px; }
+@media (max-width: 480px) { .forge-wish-veil { padding: 12px; align-items: center; } .forge-wish-panel { max-height: calc(100dvh - 24px); padding: 20px; } .forge-wish-head h2 { font-size: 27px; } .forge-wish-body { font-size: 16px; } }

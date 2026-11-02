@@ -75,21 +75,21 @@ export function createForgeMotif(motif: ForgeMotif, style: StyleKey): MotifGeome
     return {size:[24,16,18],boxes,mount:[12,0,9],emitter:[0,2,9]};
   }
   if (motif === 'crescent-moon') {
-    // The crescent cradles a lantern: continuous stepped rim and a caged glass heart.
-    add(2,0,2,6,2,6,p.metal); add(1,2,2,3,5,6,p.metal);
-    add(0,5,2,2,10,6,p.metal); add(1,10,2,3,13,6,p.metal);
-    add(2,13,2,5,14,6,p.metal); add(3,12,2,5,13,6,p.metal);
-    add(4,1,2,7,2,6,p.metal); add(6,2,3,7,3,5,p.metal);
-    add(2,4,3,6,10,5,MAT.glass);
-    add(2,3,2,6,4,6,p.metal); add(2,10,2,6,11,6,p.metal);
-    add(2,4,2,3,10,3,p.metal); add(5,4,2,6,10,3,p.metal);
-    add(2,4,5,3,10,6,p.metal); add(5,4,5,6,10,6,p.metal);
-    // Small star on the high tip, cut differently in each native kit.
-    add(4,11,3,6,12,5,p.light);
-    if (style === 'hearth') { add(5,11,3,7,12,5,p.metal); add(6,10,3,7,13,5,p.metal); }
-    else if (style === 'tide') { add(4,12,3,7,13,5,p.light); add(6,13,3,7,14,5,p.light); }
-    else { add(4,12,2,6,13,6,p.light); add(5,13,3,7,14,5,p.light); }
-    return {size:[8,14,8],boxes,mount:[4,0,4],emitter:[4,7,4]};
+    // A broad, open crescent, facing the street. The two tips and the
+    // little glass heart remain distinct even in a small projected silhouette.
+    add(3,0,2,8,2,6,p.metal); add(1,2,2,5,4,6,p.metal);
+    add(0,4,2,3,12,6,p.metal); add(1,12,2,5,14,6,p.metal);
+    add(3,14,2,8,16,6,p.metal);
+    add(7,1,3,10,2,5,p.metal); add(9,2,3,10,3,5,p.metal);
+    add(7,14,3,10,15,5,p.metal); add(9,13,3,10,14,5,p.metal);
+    // The glass is set into the inner curve, leaving the mouth of the moon
+    // open. Its metal foot and brow attach to the crescent, not to thin air.
+    add(2,6,3,4,10,5,MAT.glass);
+    add(2,5,2,5,6,6,p.metal); add(2,10,2,5,11,6,p.metal);
+    if (style === 'hearth') add(8,14,2,10,15,6,p.light);
+    else if (style === 'tide') add(8,14,3,10,16,5,p.light);
+    else add(7,14,2,9,16,6,p.light);
+    return {size:[12,16,8],boxes,mount:[6,0,4],emitter:[3,8,4]};
   }
   // Cast silhouette on an arrow, with raised face and separate folded wing plates.
   add(1,1,1,13,2,3,p.metal); add(6,0,1,8,2,3,p.metal); add(0,0,1,2,3,3,p.metal);

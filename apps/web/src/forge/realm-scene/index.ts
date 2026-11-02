@@ -68,8 +68,8 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
     if ((attachment.hostProfile === 'castle-keep') !== (attachment.slot === REALM_CASTLE_SLOT)) throw new Error('The committed host profile does not match its slot.');
     const home = options.home(attachment.slot);
     if (!home || home.blueprint.id !== attachment.hostId || homeFingerprint(home.blueprint) !== attachment.hostFingerprint) throw new Error('The committed home is no longer visible.');
-    const socket = findForgeSockets(home.blueprint, attachment.hostProfile).find(s => s.id === attachment.socketId);
-    const kit = forgeStyleKit(attachment.family);
+    const kit = forgeStyleKit(attachment.family, attachment.kitRevision);
+    const socket = findForgeSockets(home.blueprint, attachment.hostProfile, kit.revision).find(s => s.id === attachment.socketId);
     if (!socket || socket.origin.some((n, axis) => n !== attachment.origin[axis]) || kit.id !== attachment.kitId || kit.revision !== attachment.kitRevision) throw new Error('The committed socket or style has changed.');
     const result = assembleForge(attachment.draft.plan, kit, socket);
     checkForge(result, home.blueprint, attachment.hostProfile);

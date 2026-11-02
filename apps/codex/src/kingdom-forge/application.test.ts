@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCastleModule, createHome } from '@chatdom/content';
-import { KingdomIdSchema, PersonIdSchema, type ForgeDraft } from '@chatdom/shared';
+import { CURRENT_FORGE_STYLE_KIT_REVISION, assembleForge, findForgeSockets, forgeStyleKit } from '@chatdom/forge';
+import { FORGE_MOTIFS, KingdomIdSchema, PersonIdSchema, type ForgeDraft } from '@chatdom/shared';
 import type { ForgeProviders } from '../providers';
+import { FORGE_JUDGE_POLICY_VERSION, type ForgeWishSubject } from '../providers/policy';
+import { renderForgeContactSheet } from '../contact-sheet';
+import { FORGE_CERTIFICATE_FAMILIES, forgeMotifCertificate } from '../certificates';
 import { createKingdomForgeApplication } from './application';
+import { bindForgeCandidate } from './candidate';
 import type {
   ForgeActivity, ForgeAttachment, ForgeReservation, KingdomForgeAudit, KingdomForgeAuthority, KingdomForgeCommand,
 } from './ports';
@@ -16,13 +21,16 @@ const draft: ForgeDraft = {
   plan: { version: 2, kind: 'chimney', motif: 'sleeping-dragon', finish: 'native', accent: 'none' },
   title: 'The sleepy keeper', plaque: 'A quiet watch over a warm hearth.',
 };
-const pass = { outcome: 'pass' as const, reason: 'passed', records: [{ judge: 'controlled-test-judge', status: 'complete' }] };
+/** What both controlled gates read from the dragon wish's words. Quality is computed by the host, never read. */
+const dragonWish: ForgeWishSubject = { motif: 'sleeping-dragon', slot: 'chimney' };
+const pass = { outcome: 'pass' as const, reason: 'passed', records: [{ judge: 'controlled-test-judge', status: 'complete' }], subject: dragonWish };
+const read = (subject: ForgeWishSubject) => ({ ...pass, subject });
 
 /** Controlled authority only for this test. No test authorization implementation is exported to applications. */
-function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (event: ForgeActivity) => void) {
-  const home = createHome('house', 'hearth', 0), controller = new AbortController();
+function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (event: ForgeActivity) => void, words = command.words, family: 'hearth' | 'tide' | 'grove' = 'hearth') {
+  const home = createHome('house', family, 0), controller = new AbortController();
   const reservation: ForgeReservation = {
-    kingdomId: command.kingdomId, personId: command.personId, slot: 7, home, family: 'hearth',
+    kingdomId: command.kingdomId, personId: command.personId, slot: 7, home, family,
     reservationId: 'reservation-1', revision: 'home-revision-1', expiresAt: now + 60_000,
     safetyIdentifier: 'stable-hashed-citizen-456',
     attribution: { makerName: 'Rowan', kingdomName: 'Emberwick', approvalId: 'approved-names-1' },
@@ -40,10 +48,11 @@ function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (
     commit: vi.fn(async (input, lease) => {
       expect(lease.current()).toBe(true);
       expect(publicEvents.some(event => event.type === 'committed')).toBe(false);
-      expect(audits.at(-1)?.verdicts.map(verdict => verdict.outcome)).toEqual(['pass', 'pass']);
+      const audit = audits.at(-1)!;
+      expect([audit.verdicts[0]?.outcome, audit.verdicts[audit.selection?.verdict ?? 1]?.outcome]).toEqual(['pass', 'pass']);
       expect(input.expectedRevision).toBe(reservation.revision);
       expect(input.expectedHomeDigest).toMatch(/^[0-9a-f]{64}$/);
-      expect(input.creation.words).toBe(command.words);
+      expect(input.creation.words).toBe(words);
       coals--;
       durable = input.attachment;
       return { kind: 'committed' as const, committedAt: now };
@@ -60,6 +69,112 @@ function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (
 }
 
 describe('the kingdom Forge application', () => {
+  it('binds the exact current kit that generated the judged sheet and attachment', async () => {
+    const moonWish = { ...command, words: 'A borrowed moon for my lantern' };
+    const f = fixture('live', undefined, moonWish.words), lantern: ForgeDraft = {
+      plan: { version: 2, kind: 'lantern', motif: 'crescent-moon', finish: 'native', accent: 'none' },
+      title: 'The moon at home', plaque: 'A borrowed moon beside the hearth.',
+    };
+    vi.mocked(f.providers.draft).mockResolvedValue(lantern);
+    vi.mocked(f.providers.judgeWords).mockResolvedValue(read({ motif: 'crescent-moon', slot: 'lantern' }));
+    vi.mocked(f.providers.judgeResult).mockResolvedValue(read({ motif: 'crescent-moon', slot: 'lantern' }));
+    expect(await f.run(moonWish, f.lease)).toMatchObject({ kind: 'committed', attachment: { kitId: 'hearth-native', kitRevision: CURRENT_FORGE_STYLE_KIT_REVISION } });
+    // A certified, exactly-read subject in its named slot needs no quiet redraft and no second result read.
+    expect(f.audits[0]?.selection).toMatchObject({ delivery: 'delivered', shared: 'subject' });
+    expect(f.providers.draft).toHaveBeenCalledTimes(1);
+    expect(f.providers.judgeResult).toHaveBeenCalledTimes(1);
+    const socket = findForgeSockets(f.reservation.home).find(socket => socket.kind === lantern.plan.kind)!;
+    const current = assembleForge(lantern.plan, forgeStyleKit(f.reservation.family), socket);
+    const other = 3 - CURRENT_FORGE_STYLE_KIT_REVISION;
+    const preview = assembleForge(lantern.plan, forgeStyleKit(f.reservation.family, other),
+      findForgeSockets(f.reservation.home, 'street-home', other).find(socket => socket.kind === lantern.plan.kind)!);
+    const sheet = (piece: typeof current) => renderForgeContactSheet(piece.blueprint, { home: f.reservation.home, origin: piece.socket.origin });
+    const judged = vi.mocked(f.providers.judgeResult).mock.calls[0]![0];
+    expect(judged.contactSheet).toBe(sheet(current));
+    expect(judged.contactSheet).not.toBe(sheet(preview));
+    expect(f.audits[0]?.candidate).toEqual(bindForgeCandidate(lantern, f.reservation.home, current.kit));
+    expect(f.durable).toMatchObject({ kitId: current.kit.id, kitRevision: current.kit.revision, draft: lantern });
+  });
+
+  it('keeps host-computed quality in the private audit and charges once for a safe delivered piece', async () => {
+    // Both gates agree the words name no catalogue subject: the closest kit piece is delivered once, softened.
+    const teapot = { ...command, words: 'A little teapot steaming on my chimney' };
+    const f = fixture('live', undefined, teapot.words), unsupported = { motif: 'none', slot: 'chimney' } as const;
+    vi.mocked(f.providers.judgeWords).mockResolvedValue(read(unsupported));
+    vi.mocked(f.providers.judgeResult).mockResolvedValue(read(unsupported));
+    expect(await f.run(teapot, f.lease)).toMatchObject({ kind: 'committed', privateMessage: expect.stringContaining('closest') });
+    const quality = { policy: FORGE_JUDGE_POLICY_VERSION, recognisability: 0.3, completeness: 1, cleanMarks: 1, score: 0.58 };
+    expect(f.audits[0]?.verdicts[1]).toMatchObject({ quality, detailMatch: 'adapted', subject: unsupported, measure: {
+      words: unsupported, result: unsupported, plan: { motif: 'sleeping-dragon', kind: 'chimney' }, certificate: 'reads', slotAvailable: true,
+    } });
+    expect(f.audits[0]?.selection).toMatchObject({ delivery: 'softened', reason: 'vocabulary' });
+    // An unsupported subject's closest piece is final: no quality retry is spent on it.
+    expect(f.providers.draft).toHaveBeenCalledTimes(1);
+    expect(f.providers.judgeResult).toHaveBeenCalledTimes(1);
+    for (const value of ['recognisability', 'measure', 'certificate']) {
+      expect(JSON.stringify(f.publicEvents)).not.toContain(value);
+      expect(JSON.stringify(f.durable)).not.toContain(value);
+    }
+    expect(f.publicEvents.filter(event => event.type === 'committed')).toHaveLength(1);
+    expect(f.coals).toBe(0);
+    expect(await f.run(teapot, f.lease)).toEqual({ kind: 'already-committed' });
+    expect(f.authority.commit).toHaveBeenCalledTimes(1);
+    expect(f.coals).toBe(0);
+  });
+
+  it('keeps both retry detail summaries privately while retaining only selected result evidence', async () => {
+    // A finish the current kit's certificate finds unreadable, beside one that reads (revision one: hearth's copper owl).
+    // The retry is told to choose a readable finish.
+    const finishes = ['native', 'copper', 'ceramic'] as const;
+    const pick = FORGE_CERTIFICATE_FAMILIES.flatMap(family => FORGE_MOTIFS.flatMap(motif => {
+      const unread = finishes.find(finish => forgeMotifCertificate(family, CURRENT_FORGE_STYLE_KIT_REVISION, motif, finish) === 'unread');
+      const reads = finishes.find(finish => forgeMotifCertificate(family, CURRENT_FORGE_STYLE_KIT_REVISION, motif, finish) === 'reads');
+      return unread && reads ? [{ family, motif, unread, reads }] : [];
+    })).sort((a, b) => Number(b.motif === 'watchful-owl' && b.family === 'hearth') - Number(a.motif === 'watchful-owl' && a.family === 'hearth'))[0]!;
+    expect(pick).toBeDefined();
+    const owl = { ...command, words: 'A little one watching from my chimney' }, owlWish = { motif: pick.motif, slot: 'chimney' } as const;
+    const f = fixture('live', undefined, owl.words, pick.family);
+    const owlDraft = (finish: typeof finishes[number]): ForgeDraft => ({
+      plan: { version: 2, kind: 'chimney', motif: pick.motif, finish, accent: 'none' },
+      title: 'The chimney keeper', plaque: 'A patient keeper watches over the hearth.' });
+    vi.mocked(f.providers.judgeWords).mockResolvedValue(read(owlWish));
+    vi.mocked(f.providers.judgeResult).mockResolvedValue(read(owlWish));
+    vi.mocked(f.providers.draft).mockResolvedValueOnce(owlDraft(pick.unread)).mockResolvedValueOnce(owlDraft(pick.reads));
+    expect(await f.run(owl, f.lease)).toMatchObject({ kind: 'committed', attachment: { draft: owlDraft(pick.reads) } });
+    expect(f.providers.judgeResult).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(f.providers.draft).mock.calls[0]![0]).not.toHaveProperty('feedback');
+    expect(vi.mocked(f.providers.draft).mock.calls[1]![0].feedback).toContain('readable finishes');
+    expect(f.audits[0]).toMatchObject({ attempts: 2, selection: { verdict: 2, delivery: 'retried', shared: 'subject' }, verdicts: [
+      { outcome: 'pass', subject: owlWish },
+      { detailMatch: 'adapted', quality: { recognisability: 0.6, score: 0.76 }, records: [] },
+      { detailMatch: 'met', quality: { recognisability: 1, score: 1 }, records: pass.records, subject: owlWish,
+        measure: { certificate: 'reads', plan: { motif: pick.motif, kind: 'chimney' } } },
+    ] });
+    // The unselected attempt keeps only its bounded summary, never its reading or measure.
+    expect(f.audits[0]?.verdicts[1]).not.toHaveProperty('measure');
+    expect(f.audits[0]?.verdicts[1]).not.toHaveProperty('subject');
+    for (const key of ['detailMatch', 'quality', 'measure']) expect(f.audits[0]?.verdicts[0]).not.toHaveProperty(key);
+    expect(JSON.stringify(f.publicEvents)).not.toContain('detailMatch');
+    expect(JSON.stringify(f.durable)).not.toContain('detailMatch');
+    expect(f.coals).toBe(0);
+  });
+
+  it('softens safe high-scoring pieces with unverifiable details without exposing private scores or a refusal beat', async () => {
+    // The result gate's independent reading of the words disagrees with the word gate: the subject stays disputed.
+    const f = fixture();
+    vi.mocked(f.providers.judgeResult).mockResolvedValue(read({ motif: 'none', slot: 'chimney' }));
+    expect(await f.run(command, f.lease)).toMatchObject({ kind: 'committed', privateMessage: expect.stringContaining('closest') });
+    expect(f.providers.judgeResult).toHaveBeenCalledTimes(2);
+    const disputed = { detailMatch: 'unclear', quality: { recognisability: 0.7, score: 0.82 } };
+    expect(f.audits[0]).toMatchObject({ judgment: 'approved', selection: { delivery: 'softened', reason: 'quality', shared: 'slot' }, verdicts: [
+      { outcome: 'pass' }, disputed, disputed,
+    ] });
+    expect(f.publicEvents.map(event => event.type)).not.toContain('ended');
+    expect(JSON.stringify(f.publicEvents)).not.toContain('detailMatch');
+    expect(JSON.stringify(f.durable)).not.toContain('detailMatch');
+    expect(f.authority.commit).toHaveBeenCalledTimes(1);
+    expect(f.coals).toBe(0);
+  });
   it.each(['refused', 'held', 'canceled'] as const)('ends a staged %s run privately before reservation cleanup finishes', async kind => {
     const f = fixture();
     vi.mocked(f.providers.judgeWords).mockImplementation(async () => {
@@ -97,7 +212,7 @@ describe('the kingdom Forge application', () => {
     const publish = vi.fn(() => { throw new Error('SIMULATED unavailable broadcast'); });
     const unobserved = fixture('live', publish);
     vi.mocked(unobserved.providers.judgeWords).mockResolvedValue({ ...pass, outcome: 'hold' });
-    expect(await unobserved.run(command, unobserved.lease)).toEqual({ kind: 'held' });
+    expect(await unobserved.run(command, unobserved.lease)).toMatchObject({ kind: 'held', privateMessage: pass.reason });
     expect(publish).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ type: 'stage' }));
     expect(unobserved.publicEvents).toEqual([]);
   });
@@ -184,7 +299,7 @@ describe('the kingdom Forge application', () => {
 
     const held = fixture();
     vi.mocked(held.providers.judgeResult).mockResolvedValue({ ...pass, outcome: 'hold' });
-    expect(await held.run(command, held.lease)).toEqual({ kind: 'held' });
+    expect(await held.run(command, held.lease)).toMatchObject({ kind: 'held', privateMessage: pass.reason });
 
     const aborted = fixture();
     vi.mocked(aborted.providers.judgeResult).mockImplementation(async () => { aborted.controller.abort(); return pass; });
@@ -241,5 +356,5 @@ describe('the kingdom Forge application', () => {
       expect(timedOut.authority.commit).not.toHaveBeenCalled();
       expect(timedOut.coals).toBe(1);
     } finally { vi.useRealTimers(); }
-  }, 20_000);
+  }, 60_000);
 });

@@ -1,0 +1,17 @@
+<!-- Copy of the goals file open-questions.md from Tobias's workbook, 1 Nov 2026. Phase labels and a few unrelated words reworded; the content is unchanged. -->
+# Still open
+
+- **Forge on the Codex login:** Tech.md §11.1 says a ChatGPT sign-in must never power a viewer feature (consumer terms). The Forge also shares rate limits with the build agents. (why: An account action would stop both the Forge and development at once.; suggestion: Keep it for Monday; decide a switch date and budget before public launch.)
+- **No SIMULATED labels:** ChatDom principle 17 ("say plainly when something is simulated") and the expectation that the product works as shown. (why: A visitor or viewer who notices staged chat could read it as dishonest.; suggestion: Keep public surfaces real wherever possible; add one plain line in the YouTube video's description.)
+- **Day cycle:** How long is a kingdom day? Does going live pull the sky toward dusk so the lights show? (why: The lights are the heart of "presence is light".; suggestion: A 2-hour cycle offline; when live, the sky eases toward dusk over a few minutes.)
+- **Stream with lights only:** If chat-only people have no bodies, does the stream view still show a lively crowd? (why: The show is one of Chatdom's three promises.; suggestion: Streets show walkers; windows and bubbles carry chat; keepers and moments fill quiet nights.)
+- **Friends:** Who counts as a friend for the minimap? (why: It decides who can see your position.; suggestion: Mutual: both walked together or both added each other; never automatic from Twitch follows.)
+- **Continent names:** The reviewed language-name table needs your sign-off. (why: Political sensitivity.; suggestion: Codex drafts it; you review.)
+- **Seasons and leagues:** When, if at all, for promise 8 ("our tiny kingdom won its league")? (why: It drives the long-term "most epic kingdom" race.; suggestion: Revisit after launch data.)
+- **Hosting limits:** At what load do we move off this host? (why: Your other production services share it.; suggestion: Set a threshold (CPU on cores 0 to 8, memory, realm rooms).)
+- **ElevenLabs budget:** A monthly cap for spoken lines. (why: Cost grows with every kingdom.; suggestion: Cache every line; set a cap per kingdom per night.)
+- **Bits catalogue:** Exact moments, price bands, and whether day-long items wait for Twitch's written answer. (why: The extension review decides what passes.; suggestion: Submit the end-of-stream items first.)
+- **Tavern games:** Which two games first? (why: They must be fun on stream with chat as players.; suggestion: One quick and one strategic.)
+- **Campfire voice:** Voice by the streamer's invitation at launch, or text only? (why: Safety for audiences from 13.; suggestion: Text first; voice later.)
+- **Who raids tobi4s_?:** A real incoming raid and a real raid out need a friendly channel that is live at the same time. (why: Both Monday raid rows depend on it.; suggestion: Line up one friend for a short session; use small viewer counts.)
+- **Raid permission:** Is channel:manage:raids among the scopes tobi4s_ granted? (why: Without it the Raid Gate cannot start a raid.; suggestion: Check the Herald grant; re-grant if missing.)

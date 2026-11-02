@@ -33,6 +33,13 @@ The transaction stores both `committedAt` and provenance `firstForgedAt` as its 
 
 Bind `record` to a private audit sink and `publish` to a public observation sink. The audit contains the existing
 providers' bounded judge evidence, without the original wish, identity, whole house or raw provider errors.
+It records candidate attempts, actual model calls and the selected result index. Discarded results keep only
+bounded outcome/quality summaries; the selected draft and schema-ordered full home digest bind the approval
+to exactly what may land. A quiet retry cannot substitute an unchecked title, plaque or plan under the same run.
+New private approvals also bind the registered kit ID and revision. One trusted kit is captured before the model
+run and reused for socket selection, result-sheet assembly, audit binding and final attachment. Historical
+digest-only records can authorize revision one only, subject to the existing owned-home/family/current-kit
+checks; they cannot be upgraded into approval for a different revision.
 Judgment `approved` is a model-gate result, not a durable placement. Stage events have only an opaque activity ID
 and stage. Only a successful authority commit releases the approved draft, slot and safe provenance. Refusals,
 holds and errors return privately. If the listener fails, or cancellation arrives after commit, the durable
@@ -41,7 +48,40 @@ outbox/snapshot must recover the attachment without replaying the ceremony or ch
 The returned function yields a private outcome. A Herald sink can `await application(command, lease)` and route
 that outcome privately; it must not broadcast it. A duplicate kingdom/message key produces no second model run
 or public ceremony. Shared protocol promotion and public snapshot/replay wiring belong to main.
+After a durable commit, an optional private line describes the actual motif and any closest-shape adaptation.
+It uses finite host-authored descriptions rather than raw model prose or original wish text. Service outages,
+safety holds and authority prerequisite failures return their private causes without a quality refusal beat.
 
 The focused test uses controlled providers/authority and real assembly/contact-sheet rendering. It establishes
 ordering, idempotency, privacy projection and no commit for failed/stale runs. It does not establish durable realm
 transactions, live Twitch/model operation or production publication. No service is started by this module.
+
+Image verdict summaries include finite detail-match evidence privately. A missing or adapted detail prevents
+exact delivery and may trigger the existing quiet retry; it never changes a safety verdict. Both the selected
+raw evidence and discarded finite summaries retain this distinction. Quality-softened messages describe the
+actual piece and approximation without repeating an unverified claim that the chosen subject survived.
+
+## Durable execution adapter
+
+`createQueuedKingdomForgeApplication` consumes one owned `FileForgeWishQueue` claim. It saves the exact
+source, reservation, full home digest, attribution, safety identity, current policy and registered kit before
+model work. Its trusted execution hooks supply the queue-backed run state and persist the complete original
+commit request before the authority transaction. The ordinary nonqueued caller remains available.
+
+Recovery queries actual authority status first. Unavailable status or an ambiguous transaction returns
+`recovery-needed`, keeps private recovery data and does not release the attempt. A confirmed committed attempt
+can replay only its saved exact command through the authority's existing repository-digest check; it can do so
+after the old reservation or service lease expires, using the current queue claim. A status receipt alone
+cannot recreate or approve a changed attachment.
+
+A worker shutdown suspends work. An explicit witnessed withdrawal saves its terminal intent before the
+idempotent release, then checks status again in case a commit won the race. Lost storage, commit or release
+acknowledgments remain private recovery work. Neither an error body nor a filesystem path becomes a reply.
+Finite stopped outcomes are retained privately for the worker's later delivery; successful private copy is
+reconstructed from the actual selected draft and bounded delivery explanation.
+
+This adapter suppresses its own committed observation: the realm's durable outbox owns that publication.
+It does not call `queue.finish`, deliver an owner reply, schedule a ritual or activate the existing Herald
+handoff. Its caller must persist the owner outcome and presentation decision before terminal privacy cleanup.
+After a pending execution, release/reclaim the queue worker before executing again so its checkpoint snapshot
+and expenditure are current. Public queue counts and authenticated broadcaster projections are separate work.
