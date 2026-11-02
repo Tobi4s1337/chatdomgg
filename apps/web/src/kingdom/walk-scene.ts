@@ -12,8 +12,9 @@ import { interactionSound, mountInteractionController, type InteractionPlaces } 
 import { bindWalkInteractions } from './walk-interactions';
 import { createHomeStepMaterial, createOthersSteps, createPlacementStepSurface, createPublicStepSurface, createStepCueMaterial, othersStepDistance } from './walk-footsteps';
 import type { createKingdomSound } from './sound';
+import type { KingdomAudio } from '@chatdom/audio';
 import { presentWalkers, type WalkerPresentation } from './walker-presentation';
-import { createWalkerFigures, createWalkerSplit } from './walker-figures';
+import { createWalkerFigures, createWalkerSplit, createWalkerViewTest } from './walker-figures';
 import { createPlaySession, type PlaySession } from '../play/session';
 import type { PlayBuildEntry, PlayVolume } from '../play/host';
 import { wayHomeFrom } from '../play/way-home';
@@ -46,7 +47,9 @@ export interface KingdomWalkBinding {
   /** A real place's own view, opened only after room acceptance. */
   readonly interactionPlaces?: InteractionPlaces;
   /** The play layer's facts the entry knows: whether the stream is live, and where building really opens. */
-  readonly play?: { readonly live?: () => boolean; readonly build?: PlayBuildEntry };
+  readonly play?: { readonly live?: () => boolean; readonly build?: PlayBuildEntry;
+    /** The scene's hour and the kingdom's approved name, for walk features (play SEAMS B1c). */
+    readonly hour?: () => number; readonly kingdomName?: string };
   /**
    * The entry's way through doors into rooms of their own (the tavern): its session, its transport, leaving this room
    * and joining it again at a door. Without it no door opens (play/portal.ts).
@@ -79,12 +82,14 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
   sound: Pick<ReturnType<typeof createKingdomSound>, 'cue' | 'enabled'> & {
     /** The ledger's volumes, applied live; `volumes` names the faders it really honours. Without it there is no Sound section. */
     setVolumes?: (volume: PlaySettings['volume']) => void; volumes?: readonly PlayVolume[];
+    /** The unlocked mixer itself for walk features, or null while it may not sound. Without it features hear nothing. */
+    audio?: () => KingdomAudio | null;
   }) {
   const looks = binding.appearances ?? createDefaultCitizenLooks(), lookIds = new Set(looks.map(look => look.id));
   const knownLook = (id: string) => lookIds.has(id);
   const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool });
   // The nearest 64 walkers are drawn in full; everyone further off as one instanced draw of simple figures.
-  const split = createWalkerSplit(), figures = createWalkerFigures(scene, material), eye = new THREE.Vector3();
+  const split = createWalkerSplit(), inView = createWalkerViewTest(), figures = createWalkerFigures(scene, material), eye = new THREE.Vector3();
   const client = binding.client;
   const currentWorld = () => 'query' in binding.collision
     ? binding.collision.revision === client.room.state.collisionRevision ? binding.collision : null
@@ -138,6 +143,16 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         scene, camera,
         now: () => performance.now(),
         interactionFocused: () => !!interactions.debug.focus,
+      },
+      features: {
+        selfWalkerId: () => selfWalker() ? client.selfId : null,
+        walkers: () => poses.map(pose => ({ id: pose.id, position: [pose.x, pose.y, pose.z] as const, yaw: headingFromByte(pose.yaw), self: pose.self, name: pose.name })),
+        // The kingdom page always lends its hour; dusk is the page's own opening hour when a host lends none.
+        hour: () => binding.play?.hour?.() ?? 19.5,
+        kingdomName: binding.play?.kingdomName ?? '',
+        founded, world: currentWorld,
+        audio: () => sound.audio?.() ?? null,
+        overlayHost: host,
       },
     });
   } catch (error) { stopHands(); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); figures.dispose(); throw error; }
@@ -245,7 +260,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
     /** Call after the final camera transform, so frustum culling uses the camera that actually draws. */
     draw(now: number) {
       // A walker whose look is not here yet is still a person in the street: a simple figure until it is.
-      const parts = split.split(connected ? poses : [], eye.setFromMatrixPosition(camera.matrixWorld), now);
+      const parts = split.split(connected ? poses : [], eye.setFromMatrixPosition(camera.matrixWorld), now, inView(camera));
       const full = parts.full.filter(({ pose }) => knownLook(pose.look));
       // Your own body is never a stand-in figure: it hides in first person, which a figure cannot.
       const simple = [...parts.simple, ...parts.full.filter(({ pose }) => !knownLook(pose.look) && !pose.self)];
@@ -268,7 +283,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         position: [pose.x, bodyY(pose), pose.z] as const, heading: pose.yaw * Math.PI * 2 / 256,
         distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, gesture: toolPoses.has(pose.id) ? 'point' : controller.gestureFor(pose.id, now),
         ...(pose.posture ? { posture: pose.posture } : {}),
-        // The gait's drawn ground and floors (citizens-gait-ground.patch, asked of PL11): read once the renderer takes them.
+        // The gait reads the drawn ground and floors, so no sole cuts a slope or a stair while standing or walking.
         ...gaitGround(pose.id),
         opacity: detail * (pose.self ? play.selfHidden ? 0 : controller.owner === 'walking' ? controller.selfOpacity : 1 : 1), time: now / 1000 })), camera);
       ground.retain(drawnHeights);

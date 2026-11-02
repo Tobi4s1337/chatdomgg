@@ -5,14 +5,17 @@ import { Icon, SignInSeal, SiteFooter } from '@chatdom/ui';
 import { announceSignInOutcome, brandLink, readSealSession, refreshSeals, SESSION_EVENT, walkReturnView, type Session } from '@chatdom/ui/site';
 import { RealmEntryError, realmEntryFailureMessage } from '../realm/adapters/entry';
 import { gateKingdom, gateWords, type GateState } from './gate';
-import type { KingdomEntryConnection, KingdomEntrySource } from './types';
+import type { KingdomEntryArrival, KingdomEntryConnection, KingdomEntrySource } from './types';
 import '@chatdom/ui/kit.css';
 import '@chatdom/ui/fonts.css';
 import '@chatdom/ui/site.css';
 import './entry.css';
 
-export type { KingdomEntryConnection, KingdomEntrySource } from './types';
+export type { KingdomEntryArrival, KingdomEntryConnection, KingdomEntrySource } from './types';
 export { gateKingdom, gateWords, type GateState } from './gate';
+
+/** How long a door waits for the room to confirm the leave before saying so (play then tries again). */
+const DOOR_LEAVE_MS = 8_000;
 
 /** The approved public name of the kingdom, if the realm can say it; the gate reads well without it. */
 async function kingdomName(kingdomId: string, signal: AbortSignal): Promise<string | null> {
@@ -54,17 +57,18 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
     setNotice(undefined);
   }
 
-  async function open(sceneRevision = false) {
+  /** Resolves true once this opening holds the kingdom; false when it was refused, replaced or closed. */
+  async function open(sceneRevision = false, arrival?: KingdomEntryArrival): Promise<boolean> {
     release(sceneRevision);
-    if (closed) return;
+    if (closed) return false;
     const current = generation, controller = new AbortController();
     request = controller;
     setState('opening');
     setSaid(undefined);
     try {
       // The engine and the entry come in together; neither waits on the other.
-      const [{ default: Kingdom }, next] = await Promise.all([import('../kingdom'), props.open(controller.signal)]);
-      if (closed || current !== generation || controller.signal.aborted) { next.dispose(); return; }
+      const [{ default: Kingdom }, next] = await Promise.all([import('../kingdom'), props.open(controller.signal, arrival)]);
+      if (closed || current !== generation || controller.signal.aborted) { next.dispose(); return false; }
       connection = next;
       unmount = render(() => <Kingdom founded={next.scene} presenceFeed={next.presenceFeed} {...(next.chatFeed ? { chatFeed: next.chatFeed } : {})}
         {...(next.growthFeed ? { growthFeed: next.growthFeed } : {})}
@@ -74,22 +78,42 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
           manifest: next.manifest, onSceneNeeded: () => {
             // Finish the current scene frame before disposing its renderer and controller.
             queueMicrotask(() => { if (!closed && current === generation) void open(true); });
-          } }} />, host);
+          }, ...(next.entry && next.endpoint ? { portal: {
+            entry: next.entry, endpoint: next.endpoint, title: next.kingdomName,
+            // Safe to repeat: resolves once the room has really let you go, rejects only while it may still hold you.
+            leave: () => leaveRoom(next),
+            rejoin: async ({ portal }) => { if (!await open(false, { portal })) throw new Error(said() ?? 'The way back is not open yet.'); },
+          } } : {}) }} />, host);
       setNotice(next.notice);
       setState('connected');
+      return true;
     } catch (error) {
-      if (closed || current !== generation) return;
+      if (closed || current !== generation) return false;
       release();
       const status = error instanceof RealmEntryError ? error.status : 'unavailable';
       if (status === 'unauthenticated') {
         // The visit ended (or never began): every seal on the page reads the session again before it is offered.
         setState('waiting');
         void refreshSeals();
-        return;
+        return false;
       }
       setSaid(realmEntryFailureMessage(error));
       setState(status === 'refused' ? 'refused' : 'closed');
+      return false;
     }
+  }
+
+  /** Walking through a door: stop the walk and close this connection, then wait for the room to confirm it. */
+  async function leaveRoom(through: KingdomEntryConnection) {
+    const room = through.client.room;
+    const gone = new Promise<void>((resolve, reject) => {
+      if (!room.connection.isOpen) { resolve(); return; }
+      const left = () => { clearTimeout(timer); resolve(); };
+      const timer = setTimeout(() => { room.onLeave.remove(left); reject(new Error('The kingdom has not let you go yet.')); }, DOOR_LEAVE_MS);
+      room.onLeave.once(left);
+    });
+    if (connection === through) release();
+    await gone;
   }
 
   async function begin() {

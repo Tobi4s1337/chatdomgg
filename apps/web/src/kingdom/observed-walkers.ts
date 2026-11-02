@@ -11,7 +11,7 @@ import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import type { RealmWalkerPose } from '../realm/client';
 import type { WalkerLabel } from './walk-scene';
 import { presentWalkers, type WalkerPresentation } from './walker-presentation';
-import { createWalkerFigures, createWalkerSplit } from './walker-figures';
+import { createWalkerFigures, createWalkerSplit, createWalkerViewTest } from './walker-figures';
 
 export type WalkerSlots = ReadonlyMap<number, WalkerPresentation>;
 
@@ -73,7 +73,7 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
   const looks = createDefaultCitizenLooks(), known = new Set(looks.map(look => look.id));
   const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool });
   // The nearest walkers in full, the rest as simple figures, crossfading at the boundary.
-  const split = createWalkerSplit(), figures = createWalkerFigures(scene, material);
+  const split = createWalkerSplit(), inView = createWalkerViewTest(), figures = createWalkerFigures(scene, material);
   const track = createObservedWalkerTrack(manifest);
   let poses: readonly WalkerPresentation[] = [];
   const terrain = land ? sampleFoundedTerrain(land.plan) : undefined;
@@ -89,7 +89,7 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
     frame(now: number) { poses = presentWalkers(track.sample(now), track.seats, registry); return poses; },
     draw(now: number, visible = true) {
       // A walker whose look is not here yet is still a person in the street: a simple figure until it is.
-      const parts = split.split(visible ? poses : [], eye.setFromMatrixPosition(camera.matrixWorld), now);
+      const parts = split.split(visible ? poses : [], eye.setFromMatrixPosition(camera.matrixWorld), now, inView(camera));
       const full = parts.full.filter(({ pose }) => known.has(pose.look));
       const simple = [...parts.simple, ...parts.full.filter(({ pose }) => !known.has(pose.look))];
       const dt = lastDraw === null ? 0 : Math.max(0, Math.min(.1, (now - lastDraw) / 1000));

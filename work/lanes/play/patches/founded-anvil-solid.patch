@@ -1,0 +1,89 @@
+diff --git a/apps/realm/src/founded/artifact.ts b/apps/realm/src/founded/artifact.ts
+index 5c9406e1..d2f7bef7 100644
+--- a/apps/realm/src/founded/artifact.ts
++++ b/apps/realm/src/founded/artifact.ts
+@@ -10,7 +10,6 @@ import { decodeFoundedScene } from './validate';
+ /** Accepted static places the current town does not have yet. Integration must not stand in for these. */
+ export const ABSENT_PLACE_DEPENDENCIES = [
+   'pier: no accepted pier/landing site or content exists in the adopted SettlementPlan or @chatdom/content; plaza->pier acceptance waits for it',
+-  'anvil: the Forge anvil is a browser presentation (apps/web/src/forge/anvil-hero), not an accepted content blueprint or adopted site; not a static solid in this scene',
+   'civic places (footbridge, gateway, noticeboard, benches, lantern posts): reviewed blueprints exist in @chatdom/content/civic but no accepted site places them in an adopted plan',
+   'tavern, campfire and home interiors: no accepted static site or interior content is adopted',
+   'kingdom name: no kingdom-level approved public name exists in realm authority; only per-home attribution carries approved names',
+diff --git a/apps/web/src/walk/solids-cases.ts b/apps/web/src/walk/solids-cases.ts
+index 2f5ebe39..ed03fc2a 100644
+--- a/apps/web/src/walk/solids-cases.ts
++++ b/apps/web/src/walk/solids-cases.ts
+@@ -88,9 +88,8 @@ export function describeSolids(name: string, make: () => Promise<Land>) {
+       expect(startsAround(land, anvil).length).toBeGreaterThanOrEqual(6);
+     });
+ 
+-    // needs: grand-world places the anvil's solid box in the founded placements (see the lane report). Until it does,
+-    // a walker walks straight through the anvil everyone sees: this case fails, honestly.
+-    it.fails('stops a walker at the anvil', () => {
++    // The anvil is drawn by the Forge hero, so its solid is compiled by compileFoundedScene, not placed.
++    it('stops a walker at the anvil', () => {
+       expectSolid(land, anvilFixture(land.scene));
+     }, TIMEOUT);
+   });
+diff --git a/packages/world/src/founded-world/collision.ts b/packages/world/src/founded-world/collision.ts
+index 66e56288..d0226da9 100644
+--- a/packages/world/src/founded-world/collision.ts
++++ b/packages/world/src/founded-world/collision.ts
+@@ -8,7 +8,26 @@ import { TERRAIN_ART_PRODUCER } from '../terrain-art/types';
+ 
+ /** Changes to sampling/known volume must change this identity before a revision is reused. */
+ export const FOUNDED_TERRAIN_VERSION = `founded-terrain:2/${TERRAIN_ART_PRODUCER}` as const;
+-export const FOUNDED_PHYSICS_VERSION = `${COLLISION_COMPILER_VERSION}/${FOUNDED_TERRAIN_VERSION}` as const;
++/** The static solids the scene's own placements do not carry (see `FOUNDED_ANVIL_SOLIDS`). */
++export const FOUNDED_STATIC_SOLIDS_VERSION = 'founded-anvil:1' as const;
++export const FOUNDED_PHYSICS_VERSION = `${COLLISION_COMPILER_VERSION}/${FOUNDED_TERRAIN_VERSION}/${FOUNDED_STATIC_SOLIDS_VERSION}` as const;
++
++/**
++ * The Forge anvil is drawn by the kingdom's anvil hero, not by a scene placement (a placement would draw a second,
++ * plain anvil inside the hero), so its solid enters here, where the realm and every walking client compile the same
++ * world. Cells are the hero's 0.0625 m lattice about the anvil (`foundedAnvilPosition` in interactions/founded.ts,
++ * restated in `foundedAnvil` so the compiler stays free of the interaction graph), with the horn toward +X: the stone
++ * block (x -15..9, z -9..9, up to its top course) and the iron above it to the 1.43 m face (x -14..22, z -6..6).
++ * Rows start one cell under the street; the hero's rows are lifted by -0.0075 m so row 22's top is the face.
++ * apps/web/src/walk/solids-cases.ts checks these boxes against the hero's sculpt voxel for voxel.
++ */
++const ANVIL_CELL = .0625, ANVIL_ROW_LIFT = 1.43 - 23 * ANVIL_CELL;
++export const FOUNDED_ANVIL_SOLIDS = [
++  { from: [-15, -1, -9], to: [9, 7, 9] },
++  { from: [-14, 7, -6], to: [22, 23, 6] },
++] as const;
++const ANVIL_ID = 'forge:anvil', ANVIL_ASSET = 'founded:forge-anvil:1';
++const ANVIL_MIN = [-15, -1, -9] as const, ANVIL_SIZE = [37, 24, 18] as const;
+ 
+ /**
+  * Same 16m chunk footprint and half-metre cell-centre sampling as kingdom/terrain-worker.ts. Its render halos
+@@ -46,8 +65,26 @@ function buildTerrain(plan: SettlementPlan): SampledTerrain {
+ 
+ /** Compile already validated, receipt-matched public geometry on either end of walking. */
+ export function compileFoundedScene(scene: RealmFoundedScene): CollisionWorld {
+-  return compileCollisionWorld({ revision: scene.collisionRevision, materials: scene.materials, assets: scene.assets,
+-    placements: scene.placements, terrain: sampleFoundedTerrain(scene.plan) });
++  const anvil = foundedAnvil(scene);
++  return compileCollisionWorld({ revision: scene.collisionRevision, materials: scene.materials,
++    assets: anvil ? [...scene.assets, anvil.asset] : scene.assets,
++    placements: anvil ? [...scene.placements, anvil.placement] : scene.placements, terrain: sampleFoundedTerrain(scene.plan) });
++}
++
++/** The anvil as one collision-only asset and placement; null only if the scene has no solid material at all. */
++function foundedAnvil(scene: RealmFoundedScene) {
++  const material = scene.materials.materials.find(m => m.solid)?.id;
++  if (material === undefined) return null;
++  if (scene.placements.some(p => p.id === ANVIL_ID) || scene.assets.some(a => a.assetHash === ANVIL_ASSET)) {
++    throw new Error('The founded scene already names the Forge anvil; it is a compiled solid, not a placement.');
++  }
++  const at: Vec3 = [0, scene.plan.market.elevation, 8], local = (v: readonly number[]) => v.map((n, i) => n - ANVIL_MIN[i]!) as unknown as Vec3;
++  return {
++    asset: { assetHash: ANVIL_ASSET, blueprint: { lattice: 'avatar' as const, size: ANVIL_SIZE as unknown as Vec3,
++      boxes: FOUNDED_ANVIL_SOLIDS.map(box => ({ from: local(box.from), to: local(box.to), material })) } },
++    placement: { id: ANVIL_ID, assetHash: ANVIL_ASSET, rotation: 0,
++      position: [at[0] + ANVIL_MIN[0] * ANVIL_CELL, at[1] + ANVIL_MIN[1] * ANVIL_CELL + ANVIL_ROW_LIFT, at[2] + ANVIL_MIN[2] * ANVIL_CELL] as Vec3 },
++  };
+ }
+ 
+ /** Physical ground under one location. A caller still must check support and body clearance in the compiled world. */

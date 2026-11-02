@@ -63,7 +63,7 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
   const practice=()=>!!forgeStatus()?.open||buildSession()?.controller.snapshot().mode==='SIMULATED'||!!housewarming();
   async function attachWalk(binding:KingdomWalkBinding){
     if(!engine||unmounted)return;
-    await engine.attachWalk({...binding,hud:host,play:{live:()=>source()==='LIVE CHAT',...binding.play},interactionPlaces:binding.interactionPlaces??{
+    await engine.attachWalk({...binding,hud:host,play:{live:()=>source()==='LIVE CHAT',hour:()=>hour(),kingdomName:props.kingdomName??'',...binding.play},interactionPlaces:binding.interactionPlaces??{
       open(accepted,closed){
         if(accepted.action!=='forge')return null;
         setAnvilVisit({leave:closed});

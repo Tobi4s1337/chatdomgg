@@ -59,8 +59,8 @@ if (window.location.pathname === '/dock' || window.location.pathname === '/dock/
   ]);
   const query = new URLSearchParams(location.search);
   let checkedLiveSource: KingdomEntrySource | undefined;
-  const live: KingdomEntrySource = async signal => {
-    if (checkedLiveSource) return checkedLiveSource(signal);
+  const live: KingdomEntrySource = async (signal, arrival) => {
+    if (checkedLiveSource) return checkedLiveSource(signal, arrival);
     const kingdom = KingdomIdSchema.safeParse(query.get('kingdom'));
     if (!kingdom.success) throw new RealmEntryError('refused', 'Choose a kingdom to visit from the Atlas.');
     const response = await fetch(REALM_ENTRY_ROUTE.replace(':kingdomId', encodeURIComponent(kingdom.data)), {
@@ -78,7 +78,7 @@ if (window.location.pathname === '/dock' || window.location.pathname === '/dock/
     }
     checkedLiveSource = createLiveKingdomEntrySource({ kingdomId: kingdom.data, kingdomName: info.data.name,
       endpoint: `${location.origin}/live-realm-data` });
-    return checkedLiveSource(signal);
+    return checkedLiveSource(signal, arrival);
   };
   render(() => <KingdomEntry open={query.get('source') === 'simulated' ? openSimulatedKingdomEntry : live} />, root);
 } else {

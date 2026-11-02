@@ -1,5 +1,8 @@
 import type { Camera, Matrix4, Object3D, Scene } from 'three';
+import type { KingdomAudio } from '@chatdom/audio';
 import type { KingdomId, Vec3 } from '@chatdom/shared';
+import type { CollisionWorld } from '@chatdom/shared/realm';
+import type { RealmFoundedScene } from '@chatdom/world';
 import type { PlaceOpener } from '../interactions/places/openers';
 
 /**
@@ -152,6 +155,31 @@ export interface ToolContext extends PlayContext {
   readonly camera: Camera;
 }
 
+/**
+ * A feature that lives for the whole walk of a kingdom (pier's SEAMS 2a): mounted once the room has placed you, disposed
+ * as you leave. It reads the room, the scene and the walkers whether or not a tool is in hand.
+ */
+export interface WalkFeatureContext extends Omit<ToolContext, 'holdPose'> {
+  /** Your walker id in the room (its session id), or null before it has placed you. */
+  selfWalkerId(): string | null;
+  /** Everyone play draws, you included: feet in world metres, yaw in radians (0 faces +Z), approved name. */
+  walkers(): readonly { readonly id: string; readonly position: Vec3; readonly yaw: number; readonly self: boolean; readonly name: string }[];
+  /** The scene's hour, 0..24. */
+  hour(): number;
+  /** The kingdom's approved name; empty when it has none. */
+  readonly kingdomName: string;
+  /** The installed scene this walk stands on, and its collision world for the room's current revision (null while it changes). */
+  readonly founded?: RealmFoundedScene;
+  world?(): CollisionWorld | null;
+  /** A full-window, pointer-transparent layer over the world, under the HUD pieces. */
+  readonly overlay: HTMLElement;
+  /** The kingdom's own audio, once a gesture has unlocked it and while it may sound; null otherwise. */
+  audio(): KingdomAudio | null;
+  /** Each drawn frame, before the render: seconds since the last frame, and `performance.now()`. */
+  onFrame(listener: (dt: number, now: number) => void): () => void;
+}
+export interface WalkFeatureProvider { readonly id: string; mount(ctx: WalkFeatureContext): () => void }
+
 /** A prompt at a place that is not a realm interaction target ("Take a rod", "Read the Almanac"). */
 export interface WorldPromptProvider {
   readonly id: string;
@@ -176,6 +204,7 @@ const places = new Map<string, PlaceProvider>();
 const actions = new Map<string, ActionBinding>();
 const tools = new Map<string, HeldToolProvider>();
 const prompts = new Map<string, WorldPromptProvider>();
+const features = new Map<string, WalkFeatureProvider>();
 let equipped: string | null = null;
 let hands: ObservedWalkerHands | null = null;
 const listeners = new Set<() => void>();
@@ -229,6 +258,12 @@ export function equippedTool(): string | null { return equipped; }
 
 export function registerWorldPrompt(provider: WorldPromptProvider): () => void { return named(prompts, 'world prompt', provider); }
 export function worldPrompts(): readonly WorldPromptProvider[] { return byId(prompts); }
+
+/** A feature mounted for every walk while it is registered (one registered while you walk mounts on the next frame). */
+export function registerWalkFeature(provider: WalkFeatureProvider): () => void {
+  return named(features, 'walk feature', provider, f => { if (typeof f.mount !== 'function') throw new Error(`The walk feature ${f.id} needs a mount.`); });
+}
+export function walkFeatures(): readonly WalkFeatureProvider[] { return byId(features); }
 
 /** Other walkers' right-hand grips, so their tools can be drawn. Null while no kingdom is walked or they are not drawn. */
 export function observedWalkerHand(walkerId: string): Matrix4 | null { return hands?.hand(walkerId) ?? null; }

@@ -66,7 +66,8 @@ const TOWN_LINES = ['gg', 'LETS GO', 'hi chat!', 'who else is walking right now?
   'evening from the coast 🌊', 'I can see your lantern from mine', 'brb tea', 'raid soon?', 'the castle at dusk though'];
 const LINES = ['Evening, everyone!', 'the lanterns are on along our street', 'Who is coming to the campfire?',
   'Rowan, your roof looks amazing', 'just got home 🌿', 'that raid last night was something'];
-const NAMES = ['Juniper', 'Moss', 'Hazel', 'Bramble', 'Clover', 'Finch'];
+// Never the walkers' names (Rowan, Wren, Juniper): someone out walking is not also chatting from home.
+const NAMES = ['Sage', 'Moss', 'Hazel', 'Bramble', 'Clover', 'Finch'];
 
 type KingdomTestWindow = Window & {
   __chatdomReady?: boolean;
@@ -227,7 +228,8 @@ async function stage(name: string) {
     const target: Vec3 = [homes.reduce((s, h) => s + h.position[0], 0) / homes.length, spot.feet[1] + 2,
       homes.reduce((s, h) => s + h.position[2], 0) / homes.length];
     const away = Math.atan2(spot.feet[0] - target[0], spot.feet[2] - target[2]);
-    kingdom.pose([spot.feet[0] + Math.sin(away) * 6, spot.feet[1] + 4.5, spot.feet[2] + Math.cos(away) * 6], target, 50);
+    // Over the shoulders and no further: the bubbles' reach (28 m at the usual density) is measured from this camera.
+    kingdom.pose([spot.feet[0] + Math.sin(away) * 3, spot.feet[1] + 3.5, spot.feet[2] + Math.cos(away) * 3], target, 50);
   }
   if (still.camera === 'high') {
     // Above and behind the walker, looking down the street it faces: the crowd near and far, and the lit homes beyond.

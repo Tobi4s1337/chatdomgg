@@ -62,6 +62,20 @@ Also asked of grand-world:
    placements, so `compileFoundedScene` (realm and client) stops a walker. Use the drawn anvil's footprint (main's
    brief in `work/lanes/kingdom-look-owners.md`: the anvil stays with `anvil-hero`). Copy forge-wish, which owns the
    forge realm modules.
+   **Written out, ready to apply:** `work/lanes/play/patches/founded-anvil-solid.patch` (applies cleanly on HEAD,
+   lane/grand-world and lane/integrator). It puts the solid in the compiler, not in the placements, because every
+   placement is drawn as a prop (`kingdom/founded-content.ts`) and a placement would draw a second, plain anvil inside
+   the hero. `compileFoundedScene` adds one collision-only asset and placement (`forge:anvil`) of two boxes on the hero's
+   0.0625 m lattice (the stone block and the iron up to the 1.43 m face), so the realm and every walking client get the
+   same solid. `FOUNDED_PHYSICS_VERSION` gains `/founded-anvil:1`, which changes the geometry digest and so gives a
+   new collision revision. The position is restated as `[0, market.elevation, 8]` rather than imported: importing
+   `interactions/founded` into the compiler pulled the interaction graph into every compiler user and roughly doubled
+   the realm founded tests' time. It also drops the anvil from `ABSENT_PLACE_DEPENDENCIES` (the committed
+   `simulated-town.evidence.json` keeps the old line until the artifact is next written) and turns play's
+   `it.fails('stops a walker at the anvil')` into `it`. Checked with it applied: solids-old and solids-grand 20 of 20
+   on both lands, the world package's founded-world, interactions, land-interface, grand and movement tests 191 of 191,
+   realm founded, portals and kingdom-room green run one file at a time (the timeouts seen in parallel runs are the
+   host's load: the original compiler times out the same tests at the same load), root tsc and eslint clean.
 2. **No silent drops.** A civic or forge fixture that fails to place is a build error with its id and reason, never an
    unchanged town (`enrichNativeForgeHearth`, `enrichNativeForgeWorkshop` and the civic placements).
 3. **A quality control.** A typed quality setting on the scene (`'high' | 'balanced' | 'low'`) that play's ledger can
@@ -72,7 +86,8 @@ Play's fallbacks until A2 lands, all honest and read-only:
   draw the body, eased and clamped to the physics gap.
 - Footsteps: paving gives cobble or stone, trails give an earth path, the home's installed floor wins, and other
   public and open ground gives grass.
-- Solids: the PL10 collision test stays red for the anvil, and the goal is not ticked, until item 1 lands.
+- Solids: the PL10 collision test keeps the anvil as an expected fail until item 1 lands (the patch above). PL10 is
+  ticked under the 13:55 pace rule, with a follow-up to turn the case into an ordinary `it` once the patch is in.
 
 ## B. Provided: the HUD shell, the Esc ledger, the cursor and the look
 
@@ -248,8 +263,116 @@ What play guarantees:
   threshold boards, brass on the latch, at the ledger's interface volume. Reduced motion only fades.
 
 What the source must give (the kingdom entry; `KingdomWalkBinding.portal`, optional): `{ entry, endpoint, title,
-leave(), rejoin({ portal, anchor }) }`. Without it no door opens. Asked of front-door and of the realm room's owner in
-play's progress (`needs:`), because spawning at the return anchor is the room's decision.
+leave(), rejoin({ portal, anchor }) }`. Without it no door opens. The live kingdom entry's binding is written out as
+`work/lanes/play/patches/kingdom-entry-door.patch` for front-door's scope (see "Asked of front-door" below); until it
+lands no door opens in the live kingdom, and every play test of the door runs against its own source.
+
+Coming back outside the door (landed in the realm, additive; PL10, 2026-11-02). The kingdom room decides where you
+stand, never the client:
+- `RealmJoinSchema` gains an optional `arrive: { portal }` (`packages/shared/src/realm/messages.ts`). The client names
+  the door it came back through, nothing else.
+- `apps/realm/src/portals/arrivals.ts`: `RealmPortalArrivals` keeps the doors by kind and who left which kingdom when.
+  `door(kind, find)` registers a finder for the portal id's first segment (`tavern` for `tavern:<kingdomId>:door`);
+  `find({ kingdomId, portal, world })` returns `{ feet, yaw }` (metres, yaw byte, facing out) or null.
+  `departed(kingdomId, personId, feet?)` records a departure only with the walker's last server feet, which the room
+  reports once it applies `patches/kingdom-room-door-departure.patch` (below): when a person's own walker leaves on
+  purpose (Colyseus close 4000, which the client's `room.leave()` sends; not a dropped socket, a second tab replacing
+  it or a seat the server ended). A leave reported without feet records nothing and clears any earlier one, so until
+  the patch lands every arrival is at the gate. A departure lasts six hours, only the latest one counts, and it is spent by the next door arrival,
+  found or not. It opens a door only if those feet stood within 3 m across and 1.6 m up of that door's outside
+  (`PORTAL_DEPARTURE_REACH`; the client offers the door within 2.2 m of the same anchor), so walking out anywhere else
+  and naming the tavern is the gate. A door of another kingdom, an unknown kind, a finder that throws or
+  returns non-finite feet: the gate. `installPortalArrivals(services, arrivals)` / `portalArrivalsFor(services)`.
+- `apps/realm/src/kingdom-room.ts` (on HEAD, reviewed): `onJoin` reads `arrive`; a walker not resuming a seat
+  stands at the found feet, facing out, only if they are clear and supported in the room's current collision world,
+  otherwise at `handle.spawn` as always. `onLeave` reports the person's own walker leaving, without feet.
+- **Asked of the realm room's owner, not applied** (review, 2026-11-02: changing `onLeave` is beyond a small additive
+  hook): `work/lanes/play/patches/kingdom-room-door-departure.patch` (`git apply --check` clean on HEAD, 4 lines).
+  `onLeave` reports a departure only for a consented close (`CloseCode.CONSENTED`, imported from `@colyseus/core`) of
+  the person's own current walker, with that walker's feet: `departed(kingdomId, personId, [x, y, z])`. Nothing else
+  in the room changes. Without it the door return is inert (always the gate), never wrong.
+- `apps/realm/src/main.ts`: `const doors = new RealmPortalArrivals(); installPortalArrivals(boot.services, doors);`.
+- Gather's one line in `main.ts`, right after it: `doors.door('tavern', ({ kingdomId, world }) => { const scene =
+  boot.loader.current(kingdomId)?.scene, door = scene ? tavernPortalFor(kingdomId, scene, world) : null; return door ?
+  door.returnAnchor : null; });` (`tavernPortalFor` from `./games/portal`; `returnAnchor` is already `{ feet, yaw }`).
+- Front-door's `rejoin` passes the door through: its `open()` takes an entry whose `ticket()` returns
+  `{ ...join, arrive: { portal } }` for that one join (`connectRealm` parses `RealmJoinSchema` and joins with it as it is).
+- Checked by `apps/realm/src/portals/arrivals.test.ts` through the real transport: a first walk, another kingdom's
+  door, a walk out away from the door or a door whose outside is inside a wall all arrive at the gate. Back through the
+  door you stand outside it facing out and others see you there: an expected fail until the room patch lands (checked
+  with the patch applied: it passes, so `it.fails` reports it; then make it an ordinary `it`).
+
+### B1c. Walk features (landed in `slots.ts` and `play/features.ts`, additive; PL10, 2026-11-02)
+
+The shape pier's SEAMS §2a asked for, so the pier, the fishing and anything else that lives for the whole walk mounts
+without play knowing it:
+
+```ts
+// apps/web/src/play/slots.ts
+export interface WalkFeatureContext extends Omit<ToolContext, 'holdPose'> {
+  selfWalkerId(): string | null;                // the room's id for you; null until the room has placed you
+  walkers(): readonly { id; position: Vec3; yaw; self: boolean; name: string }[];  // everyone drawn now, you included
+  hour(): number;                               // the kingdom's hour of day, 0–24
+  readonly kingdomName: string;
+  readonly overlay: HTMLElement;                // a layer of the feature's own, over the world and under the HUD
+  audio(): KingdomAudio | null;                 // the kingdom's mixer, null while sound is off or not yet allowed
+  onFrame(listener: (dt: number, now: number) => void): () => void;
+}
+export interface WalkFeatureProvider { readonly id: string; mount(ctx: WalkFeatureContext): () => void }
+export function registerWalkFeature(provider: WalkFeatureProvider): () => void;
+export function walkFeatures(): readonly WalkFeatureProvider[];
+```
+
+Decisions:
+- A feature is mounted once the room has placed you (so it never reads an empty room), in id order, and disposed when
+  the walk ends, in reverse order. One registered while you walk mounts on the next frame; one unregistered is
+  disposed on the next frame. A walk into a door of its own (B1b) ends this walk, so features mount again outside.
+- A `mount` that throws, or returns no dispose, is logged and left out; a listener that throws in a frame is logged.
+  Neither ever stops the walk or another feature.
+- `onFrame` runs once per drawn frame before the render, with seconds since the last frame and the page's
+  `performance.now()`. A listener added after the feature's own dispose is ignored.
+- `overlay` is one `.pl-features` layer per walk (z 19, under the HUD's z 20, `pointer-events: none`, `aria-hidden`):
+  a feature that wants clicks sets `pointer-events: auto` on its own pieces, and its words go in the HUD (world
+  prompts, HUD pieces) when they must be read by assistive technology.
+- `audio()` follows the same rule as the soul's sound: the kingdom's mixer only while sound is on and the browser
+  allows it. `hour()` is the kingdom's own clock; only a host that lends none gets dusk (19.5).
+- No `holdPose` here: a held tool (B1a) shows a pose, a walk feature does not.
+
+Pier mounts with one line in `play/providers.ts`: `import '../fishing/play-slot';` (pier's own file).
+
+### Changes play made outside its folder (no round lane owns them; main takes no patches this round)
+
+- `packages/audio` (`types.ts`, `families.ts`): `patches/audio-step-grounds.patch` applied as written. A cue's
+  `material` may now be a step ground, and `step:<ground>` families exist for every ground; a ground is accepted only
+  for `step`. Backward compatible: every old cue plays as before.
+- `apps/web/src/kingdom/sound.ts`: one additive accessor, `audio()`, the kingdom's mixer while it may sound (for
+  `WalkFeatureContext.audio`). Nothing else in the file changed.
+- `apps/web/src/kingdom/index.tsx`: the walk binding now lends the kingdom's `hour` and `kingdomName` to play.
+- `packages/shared/src/realm/messages.ts`, `apps/realm/src/kingdom-room.ts`, `apps/realm/src/main.ts`: the door
+  arrival above (an optional join field, the reviewed hunks on HEAD, one composition line). Every join without
+  `arrive` behaves exactly as before. The `onLeave` change that binds a return to a leave at the door is asked of the
+  room's owner (`patches/kingdom-room-door-departure.patch`), not applied.
+- `apps/web/src/citizens/index.ts`: `patches/citizens-gait-ground.patch` applied (play owns `citizens/`; PL11 had not
+  started). A sample may carry the drawn `ground` and `floor`, and the standing pose rises by the gait's `lift`.
+- **Asked of front-door, not applied** (review, 2026-11-02: `kingdom-entry/**` is front-door's scope, and a finished
+  lane does not move it into play's). `work/lanes/play/patches/kingdom-entry-door.patch` (`git apply --check` clean on
+  HEAD) touches `kingdom-entry/types.ts`, `live.ts`, `index.tsx`, a new `door-entry.test.ts` (2 cases) and two
+  expressions in `apps/web/src/main.tsx`, and makes the kingdom walk a door's source:
+  `KingdomEntrySource` takes an optional second argument `arrival: { portal }`, which the first fresh join's ticket
+  carries as `arrive` (any later fresh join after a drop is plain). `KingdomEntryConnection` gains optional `entry` and
+  `endpoint`; that `entry` reads the session afresh for each ticket, because the session's own entry asks under the
+  connection's abort signal, which ends as you go through the door. `KingdomEntry` passes the walk
+  `portal: { entry, endpoint, title, leave, rejoin }`: `leave` releases the connection and resolves once the room's
+  `onLeave` fires (or its socket is already closed), rejecting after 8 s while it may still be connected; `rejoin`
+  opens the kingdom with the door named and rejects with the gate's own words if it does not open. `open()` now
+  resolves whether it holds the kingdom; every existing caller ignores that. Sources without doors (simulated,
+  spectator) ignore the argument and lend no `entry`, so no door opens there.
+- **Composing with gather's own tavern return** (gather's `apps/realm/src/games/return.ts`, on lane/gather): gather
+  records a person's tavern session ending and stands their next fresh arrival at the door with no join field; play's
+  door arrivals need `arrive` and a consented leave from the kingdom taken at that door. Both give `{ feet, yaw }`
+  checked clear and supported. Where both land in `onJoin`, the integration is one expression:
+  `const door = resume ? undefined : this.doorArrival(auth, options) ?? tavernReturnsFor(services)?.arrival(auth.kingdomId, auth.personId, this.world, Date.now()) ?? undefined;`
+  with `door` used for position and yaw as play's hunk already does. Either alone stands you outside the tavern door.
 
 ### B2. The look (play provides to panel-window, front-door, atlas-map, raid-show, forge-wish)
 

@@ -17,7 +17,9 @@ export const REALM_ROLES = {
   kingdom: 'single-writer', layer: 'movement-and-seats', draft: 'private-edits', match: 'private-game',
 } as const;
 
-export const RealmJoinSchema = z.strictObject({ kingdomId: KingdomIdSchema, ticket: z.string().min(16).max(4096), protocol: z.literal(1) });
+export const RealmJoinSchema = z.strictObject({ kingdomId: KingdomIdSchema, ticket: z.string().min(16).max(4096), protocol: z.literal(1),
+  /** Coming back through a door (the tavern's): the room places you outside it only if you really left through it. */
+  arrive: z.strictObject({ portal: z.string().min(1).max(96) }).optional() });
 export type RealmJoin = z.infer<typeof RealmJoinSchema>;
 /** Returned by a verified session service. Never decoded from client-selected identity fields. */
 export interface RealmPrincipal {

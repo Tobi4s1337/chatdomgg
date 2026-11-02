@@ -20,18 +20,28 @@ export interface WalkerPoint {
   readonly posture?: string | undefined;
 }
 type Eye = { readonly x: number; readonly y: number; readonly z: number };
+/** Whether a walker is in view (with a margin for turning). Walkers out of view only take what full detail is left. */
+export type WalkerInView = (pose: WalkerPoint) => boolean;
+/** Out of view ranks behind everyone in view, keeping its own distance order among the rest. */
+const OUT_OF_VIEW_M = 1e5;
+/** A walker this close to the frustum still counts as in view: a turn brings them in before their detail is needed. */
+export const IN_VIEW_MARGIN_M = 3;
 
 /**
  * Pure split into the nearest `limit` walkers (full) and the rest (simple). Pass the previous full set as
  * `previous` for hysteresis: someone already drawn in full keeps their detail until a newcomer is clearly nearer,
  * so a walker at the boundary never flips between full and simple from one frame to the next. You are always full.
+ * With `inView`, the detail goes to the people you can see: everyone in view ranks first, nearest first, and walkers
+ * out of view only fill what is left (from a high camera half the nearest people stand behind it, and the cut-off
+ * would otherwise run through the crowd right in front of you).
  */
-export function nearestWalkers<T extends WalkerPoint>(poses: readonly T[], eye: Eye, limit = FULL_WALKER_LIMIT, previous: ReadonlySet<string> = new Set()) {
+export function nearestWalkers<T extends WalkerPoint>(poses: readonly T[], eye: Eye, limit = FULL_WALKER_LIMIT, previous: ReadonlySet<string> = new Set(), inView?: WalkerInView) {
   const scored: { pose: T; score: number }[] = [];
   for (const pose of poses) {
     if (![pose.x, pose.y, pose.z].every(Number.isFinite)) continue;
     const distance = Math.hypot(pose.x - eye.x, pose.y - eye.y, pose.z - eye.z);
-    scored.push({ pose, score: pose.self || pose.posture ? -Infinity : previous.has(pose.id) ? distance * KEEP_FACTOR - KEEP_MARGIN_M : distance });
+    const near = previous.has(pose.id) ? distance * KEEP_FACTOR - KEEP_MARGIN_M : distance;
+    scored.push({ pose, score: pose.self || pose.posture ? -Infinity : inView && !inView(pose) ? OUT_OF_VIEW_M + near : near });
   }
   scored.sort((a, b) => a.score - b.score || (a.pose.id < b.pose.id ? -1 : a.pose.id > b.pose.id ? 1 : 0));
   const count = Math.max(0, Math.floor(limit));
@@ -46,10 +56,10 @@ export function createWalkerSplit(limit = FULL_WALKER_LIMIT) {
   const blend = new Map<string, number>();
   let lastNow: number | undefined;
   return {
-    split<T extends WalkerPoint>(poses: readonly T[], eye: Eye, now = performance.now()): { full: BlendedWalker<T>[]; simple: BlendedWalker<T>[] } {
+    split<T extends WalkerPoint>(poses: readonly T[], eye: Eye, now = performance.now(), inView?: WalkerInView): { full: BlendedWalker<T>[]; simple: BlendedWalker<T>[] } {
       const dt = lastNow === undefined ? 0 : Math.max(0, Math.min(100, now - lastNow));
       lastNow = now;
-      const result = nearestWalkers(poses, eye, limit, fullIds);
+      const result = nearestWalkers(poses, eye, limit, fullIds, inView);
       fullIds = new Set(result.full.map(pose => pose.id));
       const full: BlendedWalker<T>[] = [], simple: BlendedWalker<T>[] = [], seen = new Set<string>();
       for (const pose of [...result.full, ...result.simple]) {
@@ -264,5 +274,16 @@ export function createWalkerFigures(scene: THREE.Object3D, lighting: VoxelRender
     },
     clear() { shown.clear(); heads.clear(); if (mesh) mesh.count = 0; lastNow = undefined; },
     dispose() { shown.clear(); heads.clear(); if (mesh) { scene.remove(mesh); mesh.dispose(); } geometry.dispose(); material.dispose(); },
+  };
+}
+
+/** The view test for a split from the camera that draws: the frustum, widened by `margin` metres around each body. One per renderer; nothing is allocated per frame. */
+export function createWalkerViewTest(margin = IN_VIEW_MARGIN_M) {
+  const frustum = new THREE.Frustum(), projectionView = new THREE.Matrix4(), sphere = new THREE.Sphere(new THREE.Vector3(), .9 + margin);
+  const test: WalkerInView = pose => { sphere.center.set(pose.x, pose.y + .9, pose.z); return frustum.intersectsSphere(sphere); };
+  return (camera: THREE.Camera): WalkerInView => {
+    camera.updateWorldMatrix(true, false);
+    frustum.setFromProjectionMatrix(projectionView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse), camera.coordinateSystem);
+    return test;
   };
 }

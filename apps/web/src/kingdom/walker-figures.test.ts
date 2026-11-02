@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { expect, it } from 'vitest';
 import { MATERIALS } from '@chatdom/content';
 import { createVoxelMaterial } from '@chatdom/render';
-import { createWalkerFigures, FIGURE_ATTRIBUTE_SLOTS, FIGURE_VERTEX, createWalkerSplit, FIGURE_HEAD_TOP_M, FIGURE_VARYINGS, nearestWalkers, walkerFigureGeometry, WALKER_DETAIL_BLEND_MS } from './walker-figures';
+import { createWalkerFigures, FIGURE_ATTRIBUTE_SLOTS, FIGURE_VERTEX, createWalkerSplit, createWalkerViewTest, FIGURE_HEAD_TOP_M, FIGURE_VARYINGS, nearestWalkers, walkerFigureGeometry, WALKER_DETAIL_BLEND_MS } from './walker-figures';
 
 const walker = (id: string, z: number, self = false) => ({ id, x: 0, y: 0, z, ...(self ? { self } : {}) });
 const eye = { x: 0, y: 1.6, z: 0 };
@@ -15,6 +15,35 @@ it('splits the nearest 64 walkers into full detail and keeps you in full however
   const me = walker('me', 500, true);
   expect(nearestWalkers([...crowd, me], eye).full[0]).toBe(me);
   expect(nearestWalkers([...crowd, { ...walker('lost', 0), x: NaN }], eye).simple.some(pose => pose.id === 'lost')).toBe(false);
+});
+
+it('gives full detail to the people in view first, so a high camera never draws the crowd in front of you as figures', () => {
+  // The crowd still's camera: 11 m behind and 9 m above the walker, looking down the street, over 160 people 2 to
+  // 16 m around the walker; the nearest to the camera stand behind and below it, out of view.
+  const camera = new THREE.PerspectiveCamera(55, 1440 / 900, .1, 500);
+  camera.position.set(0, 9, -11); camera.lookAt(0, 1, 14); camera.updateMatrixWorld();
+  const ring = Array.from({ length: 160 }, (_, i) => {
+    const angle = i * 2.399963, radius = 2 + 14 * Math.sqrt((i + .5) / 160);
+    return { id: `c${String(i).padStart(3, '0')}`, x: Math.sin(angle) * radius, y: 0, z: Math.cos(angle) * radius };
+  });
+  const from = { x: 0, y: 9, z: -11 }, inView = createWalkerViewTest(0)(camera);
+  const distance = (pose: { x: number; y: number; z: number }) => Math.hypot(pose.x - from.x, pose.y - from.y, pose.z - from.z);
+  const seen = ring.filter(inView).sort((a, b) => distance(a) - distance(b));
+  expect(seen.length).toBeGreaterThan(64);
+  // By distance alone, people out of view take full detail while people in view nearer the walker do not.
+  const plain = nearestWalkers(ring, from).full;
+  expect(plain.filter(pose => !inView(pose)).length).toBeGreaterThan(10);
+  // In view first: the 64 are the nearest people in the picture.
+  const { full } = nearestWalkers(ring, from, 64, new Set(), inView);
+  expect(full.map(pose => pose.id)).toEqual(seen.slice(0, 64).map(pose => pose.id));
+  // With fewer people in view than the budget, the nearest out of view fill the rest.
+  const few = [...seen.slice(0, 20), ...ring.filter(pose => !inView(pose))];
+  const filled = nearestWalkers(few, from, 64, new Set(), inView).full;
+  expect(filled.slice(0, 20).map(pose => pose.id)).toEqual(seen.slice(0, 20).map(pose => pose.id));
+  const outside = ring.filter(pose => !inView(pose)).sort((a, b) => distance(a) - distance(b));
+  expect(filled.slice(20).map(pose => pose.id)).toEqual(outside.slice(0, 44).map(pose => pose.id));
+  // The margin counts people just past the edge of the picture as in view, ready for a turn.
+  expect(ring.filter(createWalkerViewTest()(camera)).length).toBeGreaterThan(seen.length);
 });
 
 it('never flickers a walker at the 64th place between full and simple', () => {
