@@ -34,6 +34,27 @@ describe('tavern destination', () => {
     expect(tavernArrival(world, [{ x: 3, z: 6 }])).toEqual([...TAVERN_ENTRY.feet]);
   });
 
+  it('keeps arrivals apart when the doorway is full: the next free reachable spot, never on top of someone', () => {
+    const { world, registry } = createTavernInterior();
+    const standing: { x: number; z: number }[] = [];
+    for (let n = 0; n < 72; n++) {
+      const feet = tavernArrival(world, standing);
+      expect(standingClear(world, feet), `arrival ${n}`).toBe(true);
+      expect(feet[2], `arrival ${n} stays a step in from the threshold`).toBeLessThanOrEqual(TAVERN_ENTRY.feet[2]);
+      for (const other of standing) expect(Math.hypot(other.x - feet[0], other.z - feet[2]), `arrival ${n}`).toBeGreaterThanOrEqual(ARRIVAL_SPACING);
+      if (n >= 11 && n % 10 === 1) for (const target of registry.targets()) {
+        expect(() => seatApproachDriver(world, feet, target.approach, [14, 10]), `${n} → ${target.id}`).not.toThrow();
+      }
+      standing.push({ x: feet[0], z: feet[2] });
+    }
+    // A floor with no free spot left still gives a real standing spot, the one farthest from everyone.
+    const packed: { x: number; z: number }[] = [];
+    for (let x = 0; x <= 14; x += .5) for (let z = 0; z <= 10; z += .5) packed.push({ x, z });
+    const last = tavernArrival(world, packed);
+    expect(standingClear(world, last)).toBe(true);
+    expect(Math.min(...packed.map(o => Math.hypot(o.x - last[0], o.z - last[2])))).toBeGreaterThan(0);
+  });
+
   it('spawns on a clear supported floor and stops bodies at walls and furniture', () => {
     const { kit, world } = createTavernInterior();
     expect(standingClear(world, TAVERN_ENTRY.feet)).toBe(true);
