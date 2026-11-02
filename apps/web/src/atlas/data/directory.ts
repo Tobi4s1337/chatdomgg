@@ -95,14 +95,15 @@ const DAB = /^[a-f0-9]{16}$/;
 
 const MAX_INT = Number.MAX_SAFE_INTEGER;
 const uint = int(0, MAX_INT);
-const portrait: Check = (value, path) => {
+export const portrait: Check = (value, path) => {
   if (value === undefined || value === null) return;
   strict(value, path, { url: text(256, PORTRAIT_URL), freshUntil: epoch });
 };
 function checkPortraitAge(picture: ChannelPortrait | null | undefined, servedAt: number, path: string): void {
   if (picture && picture.freshUntil > servedAt + PORTRAIT_MAX_AGE_MS + 60_000) fail(path, 'a picture expiring within its source day');
 }
-const face: Check = (value, path) => {
+/** A channel face exactly as the service projects it (shared by the road, finder and caravan replies). */
+export const face: Check = (value, path) => {
   const f = strict(value, path, {
     id: text(32, CHANNEL_ID),
     login: nullable(text(64, /^[a-z0-9_]+$/)),
@@ -202,7 +203,7 @@ export function dabHashOf(channelId: string): string {
   return toHex(sha256(utf8(channelId))).slice(0, 16);
 }
 
-async function getJson(source: PreviewSource, url: string, signal?: AbortSignal): Promise<unknown> {
+export async function getJson(source: PreviewSource, url: string, signal?: AbortSignal): Promise<unknown> {
   if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError');
   const local = new AbortController();
   let timedOut = false;
@@ -251,7 +252,7 @@ async function getJson(source: PreviewSource, url: string, signal?: AbortSignal)
   }
 }
 
-function checked<T>(validate: (value: unknown, preview: string) => T, value: unknown, preview: string): T {
+export function checked<T>(validate: (value: unknown, preview: string) => T, value: unknown, preview: string): T {
   try {
     return validate(value, preview);
   } catch (error) {

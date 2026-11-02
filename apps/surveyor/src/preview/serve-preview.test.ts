@@ -23,6 +23,9 @@ afterEach(async () => {
   while (cleanup.length) await cleanup.pop()!();
 });
 
+/** Close the service started last (a data directory has one road-ledger writer at a time). */
+const stopLast = async () => { await cleanup.pop()?.(); };
+
 const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 
 async function start(dataDir: string, options: AtlasServiceOptions = {}): Promise<number> {
@@ -314,6 +317,8 @@ describe('names projection (R16)', () => {
     expect(names.logins).toContain('fixture_town');
     expect(names.freshUntil).toEqual(Array(3).fill(sweepAt(3) + 48 * HOUR));
 
+    // One service holds a data directory's road ledger at a time: the first stops before the later one opens.
+    await stopLast();
     const later = await start(dataDir, { now: () => sweepAt(5) + 24 * HOUR });
     expect(ServedNamesSchema.parse(JSON.parse((await get(later, `/map-data/v1/preview/${first.preview.id}/names`)).text)).ids).toEqual([CAPITAL, TOWN, VILLAGE]);
   });
@@ -366,6 +371,7 @@ describe('names projection (R16)', () => {
 
     const path = join(previewDir(dataDir, third.preview.id), 'names.json');
     writeFileSync(path, readFileSync(path, 'utf8').replace('Fixture Capital', 'Fixture Capitol'));
+    await stopLast();
     const fresh = await start(dataDir, { now: () => sweepAt(60) });
     expect((await get(fresh, `/map-data/v1/preview/${third.preview.id}/names`)).status).toBe(404);
   });

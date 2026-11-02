@@ -1,4 +1,4 @@
-import { createEffect, onCleanup, Show } from 'solid-js';
+import { createEffect, onCleanup, Show, type JSX } from 'solid-js';
 import { blazon, shieldDesign } from '../heraldry';
 import type { CardReply, CardRoad } from '../data/directory';
 import type { Settler } from '../data/model';
@@ -32,6 +32,8 @@ export function Card(props: {
   onRoad: (road: CardRoad) => void;
   onRetry: () => void;
   onEnter?: (holding: DoorHolding) => void;
+  /** The road ledger's view of its roads (see RegisterFacts). */
+  ledger?: (() => JSX.Element | null) | undefined;
 }) {
   let closeButton: HTMLButtonElement | undefined;
   const region = () => props.world.regions[props.settler.region];
@@ -122,6 +124,7 @@ export function Card(props: {
         onAirNow={props.live ? props.live.liveClass > 0 : null}
         onRoad={props.onRoad}
         onRetry={props.onRetry}
+        ledger={props.ledger}
       />
       <p class="atlas-card-note">
         Survey of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} (UTC). Draft land: this holding may still move before the first edition.

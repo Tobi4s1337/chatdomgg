@@ -459,16 +459,28 @@ export class MapView {
     this.road = road;
     this.dirty = true;
     if (!road || !frame) return;
+    this.frameRoad(road);
+  }
+
+  /**
+   * Fly so both ends of a road sit in the free area with room around them, no closer than kingdom distance (`limit`
+   * caps it nearer still); a road whose ends are far apart opens out to show them both. Draws nothing itself.
+   */
+  frameRoad(road: { ax: number; ay: number; bx: number; by: number }, limit: number = DISTANCE_STOP.kingdom): void {
     const insets = this.insets();
     const width = Math.max(120, this.view.width - insets.left - insets.right);
     const height = Math.max(120, this.view.height - insets.top - insets.bottom);
     const dx = Math.abs(road.bx - road.ax);
     const dy = Math.abs(road.by - road.ay);
     const fit = Math.min(width / Math.max(1e-6, dx * 1.6), height / Math.max(1e-6, dy * 1.6));
-    this.flyTo((road.ax + road.bx) / 2, (road.ay + road.by) / 2, Math.min(DISTANCE_STOP.kingdom, fit));
+    this.flyTo((road.ax + road.bx) / 2, (road.ay + road.by) / 2, Math.min(limit, fit));
   }
 
-  /** Lay the live layer over the land (or take it away). Its frames redraw the map through its version. */
+  /** The canvas resolution the map draws at, for layers that letter their own text. */
+  get resolution(): number {
+    return this.pixelRatio;
+  }
+
   /**
    * Draw a presentation with the map's own camera: its `under` part between the land and the holdings' marks, its
    * `over` part above every mark and name. One layer at a time; null removes it.

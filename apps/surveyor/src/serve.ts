@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -9,11 +10,13 @@ import { nameFreshUntil, withheldReader } from './policy/visibility';
 import { PREVIEW_KIND, PreviewIdSchema, PreviewWorldSchema, ServedNamesSchema, type PreviewNames } from './preview/schema';
 import { previewDir, readPreviewManifest, readPreviewNames } from './preview/store';
 import { layout, readCurrent, readManifest } from './store/revisions';
-import { LIVE_FILES, liveRoot, liveTargetDir, readLiveManifest, readLiveState } from './live/store';
+import { LIVE_FILES, liveRoot, liveTargetDir, readFrame, readLiveManifest, readLiveState } from './live/store';
 import { DirectoryFallback } from './directory/fallback';
 import { LookupUnavailable, twitchLookupFromEnv, type TwitchLookup } from './directory/twitch-lookup';
 import { loadDirectory, type Directory, type DirectoryRefusal, type Lookup } from './directory/directory';
 import { createRoadRuntime, type RoadRuntimeOptions } from './roads/runtime';
+import { busiestRoads, caravanEvent, channelRoads, finder, roadStory, type LiveNow, type PublicRoadsContext } from './roads/public';
+import { AtlasRaidSchema, type AtlasRaid } from '@chatdom/shared';
 
 /**
  * The Atlas data service. It serves a fixed set of routes below /map-data from the current revision and nothing
@@ -58,6 +61,20 @@ const LOGIN = '[a-z0-9_]{1,25}';
 const DIRECTORY_SEARCH = new RegExp(`^/map-data/v1/preview/(${PREVIEW_ID})/search$`);
 const DIRECTORY_CARD = new RegExp(`^/map-data/v1/preview/(${PREVIEW_ID})/card/(?:(${ID})|login/(${LOGIN})|dab/([a-f0-9]{16}))$`);
 const DIRECTORY_ROAD = new RegExp(`^/map-data/v1/preview/(${PREVIEW_ID})/road/(?:(${ID})/(${ID})|login/(${LOGIN})/(${LOGIN}))$`);
+/** The road ledger's public reads: one channel's roads, one road's story, and the busiest roads of a land. */
+export const ROADS_CHANNEL = new RegExp(`^/map-data/v1/roads/(${PREVIEW_ID})/channel/(${ID})$`);
+export const ROADS_STORY = new RegExp(`^/map-data/v1/roads/(${PREVIEW_ID})/road/(?:(${ID})/(${ID})|login/(${LOGIN})/(${LOGIN}))$`);
+export const ROADS_BUSIEST = new RegExp(`^/map-data/v1/roads/(${PREVIEW_ID})/busiest$`);
+/** The Raid Gate's target finder. */
+export const GATE_FINDER = new RegExp(`^/map-data/v1/gate/(${PREVIEW_ID})/finder$`);
+const FINDER_FROM = new RegExp(`^${ID}$`);
+/** The busiest roads of a land are computed at most this often per withheld list. */
+const BUSIEST_CACHE_MS = 60_000;
+/** A herald raid rides as a caravan only while it is this fresh (event time to storage). */
+export const CARAVAN_FRESH_MS = 60_000;
+/** The private road ingest: its one route and its body limit. */
+export const INGEST_PATH = '/v1/roads/observe';
+export const INGEST_MAX_BYTES = 16 * 1024;
 /** Registers held in memory at once: the current preview and one a tab may still be pinned to. */
 const MAX_DIRECTORIES = 2;
 /** A request waits this long for a register still being read before it is told to come back. */
@@ -89,6 +106,8 @@ export interface AtlasServiceOptions {
   now?: () => number;
   /** How often the live watcher looks for a new frame (tests shorten it). */
   liveWatchMs?: number;
+  /** Bearer token the private ingest requires; null requires none. Defaults to ATLAS_INGEST_TOKEN. */
+  ingestToken?: string | null;
 }
 
 /**
@@ -119,10 +138,27 @@ export function projectNames(names: PreviewNames, withheld: ReadonlySet<string>,
 
 export interface AtlasService {
   server: Server;
+  /**
+   * The private road ingest (`POST /v1/roads/observe`). It shares no route with `server` and is listened on only
+   * where the operator binds it: loopback by default, never proxied by the public gateway.
+   */
+  ingest: Server;
   /** The currently served revision, or null while none has been imported. */
   revision(): string | null;
   close(): Promise<void>;
 }
+
+function fileStamp(path: string): string {
+  try {
+    const stat = statSync(path);
+    return `${stat.mtimeMs}:${stat.size}:${stat.ino}`;
+  } catch {
+    return '-';
+  }
+}
+
+/** Fixed reason codes for a refused ingest body; the payload itself is never echoed. */
+type IngestReason = 'content-type' | 'json' | 'schema' | 'simulation' | 'source' | 'conflict';
 
 export function createAtlasService(dataDir: string, log: (line: string) => void = () => {}, options: AtlasServiceOptions = {}): AtlasService {
   const paths = layout(dataDir);
@@ -257,15 +293,7 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
   let livePointers = new Map<string, { key: string; body: string; etag: string }>();
   function livePointer(id: string): { body: string; etag: string } | null {
     if (!PreviewIdSchema.safeParse(id).success || !existsSync(previewDir(dataDir, id))) return null;
-    const stamp = (path: string) => {
-      try {
-        const stat = statSync(path);
-        return `${stat.mtimeMs}:${stat.size}:${stat.ino}`;
-      } catch {
-        return '-';
-      }
-    };
-    const key = `${stamp(join(liveTargetDir(dataDir, id), 'manifest.json'))}|${stamp(join(liveRoot(dataDir), 'state.json'))}`;
+    const key = `${fileStamp(join(liveTargetDir(dataDir, id), 'manifest.json'))}|${fileStamp(join(liveRoot(dataDir), 'state.json'))}`;
     const cached = livePointers.get(id);
     if (cached?.key === key) return cached;
     let manifest = null;
@@ -314,7 +342,7 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
    * The register of each preview (search, cards, roads), read once in the background from the preview's own revision
    * and kept for the two most recent previews. Answers are projected per request through the withheld list.
    */
-  const directories = new Map<string, { promise: Promise<Directory>; failedAt: number | null }>();
+  const directories = new Map<string, { promise: Promise<Directory>; failedAt: number | null; settled?: Directory }>();
   function directory(id: string): Promise<Directory> | null {
     if (!PreviewIdSchema.safeParse(id).success || !existsSync(previewDir(dataDir, id))) {
       directories.delete(id);
@@ -326,9 +354,10 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
       directories.set(id, held);
       return held.promise;
     }
-    const slot: { promise: Promise<Directory>; failedAt: number | null } = { promise: Promise.resolve(null as never), failedAt: null };
+    const slot: { promise: Promise<Directory>; failedAt: number | null; settled?: Directory } = { promise: Promise.resolve(null as never), failedAt: null };
     const started = Date.now();
     slot.promise = loadDirectory(dataDir, id).then((built) => {
+      slot.settled = built;
       log(`register of ${id}: ${built.size} named channels from ${built.revision} in ${Date.now() - started} ms`);
       return built;
     }, (error: unknown) => {
@@ -341,6 +370,76 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
     directories.set(id, slot);
     while (directories.size > MAX_DIRECTORIES) directories.delete(directories.keys().next().value!);
     return slot.promise;
+  }
+
+  /** The register of a preview only if it is already read: a caravan never waits for a warming register. */
+  function settledDirectory(id: string): Directory | null {
+    return directories.get(id)?.settled ?? null;
+  }
+
+  /**
+   * The channels on air in a preview's current live frame, read through the shared decoders against the register's
+   * own alignment and kept until the manifest changes. A missing or unreadable frame means nobody is known live.
+   */
+  const liveNowCache = new Map<string, { key: string; value: Promise<LiveNow> }>();
+  function liveNow(id: string, register: Directory): Promise<LiveNow> {
+    const key = `${fileStamp(join(liveTargetDir(dataDir, id), 'manifest.json'))}|${register.revision}`;
+    const cached = liveNowCache.get(id);
+    if (cached?.key === key) return cached.value;
+    const value = (async (): Promise<LiveNow> => {
+      const manifest = readLiveManifest(dataDir, id);
+      if (!manifest || !register.alignment) return { asOf: null, ids: new Set() };
+      const frame = await readFrame(dataDir, id, manifest, register.alignment);
+      return { asOf: frame.asOf, ids: register.liveIds(frame) };
+    })().catch((error: unknown) => {
+      // Not kept: the next request tries the frame again.
+      if (liveNowCache.get(id)?.value === value) liveNowCache.delete(id);
+      log(`live frame of ${id} unreadable: ${(error instanceof Error ? error.message : String(error)).slice(0, 200)}`);
+      return { asOf: null, ids: new Set<string>() };
+    });
+    liveNowCache.set(id, { key, value });
+    while (liveNowCache.size > MAX_DIRECTORIES) liveNowCache.delete(liveNowCache.keys().next().value!);
+    return value;
+  }
+
+  const roadContext = (): PublicRoadsContext => ({ ledger: roads.ledger, twitch, fallback });
+  const busiestCache = new Map<string, { key: string; at: number; body: Promise<unknown> }>();
+  function busiest(id: string, register: Directory, ids: ReadonlySet<string>, at: number): Promise<unknown> {
+    const key = `${withheld.current().key}|${register.revision}`;
+    const cached = busiestCache.get(id);
+    if (cached && cached.key === key && at - cached.at < BUSIEST_CACHE_MS) return cached.body;
+    const body = busiestRoads(roadContext(), register, ids, at);
+    body.catch(() => { if (busiestCache.get(id)?.body === body) busiestCache.delete(id); });
+    busiestCache.set(id, { key, at, body });
+    while (busiestCache.size > MAX_DIRECTORIES) busiestCache.delete(busiestCache.keys().next().value!);
+    return body;
+  }
+
+  /**
+   * One freshly witnessed raid rides once to the streams open right now. Nothing is buffered: a stream that opens
+   * later never sees it. Each land judges both ends through its own register and the current withheld list; a land
+   * whose register is still warming drops the caravan (the road is in the ledger all the same).
+   */
+  function caravan(raid: AtlasRaid): void {
+    for (const [id, clients] of streams) {
+      const register = settledDirectory(id);
+      if (!register) continue;
+      const list = withheld.current();
+      if (list.error) continue;
+      const audience = [...clients.keys()];
+      void caravanEvent(roadContext(), register, raid, list.ids, now()).then((event) => {
+        const latest = withheld.current();
+        if (!event || latest.error || latest.key !== list.key) return;
+        const frame = `event: raid\ndata: ${JSON.stringify(event)}\n\n`;
+        for (const res of audience) if (clients.has(res) && !res.writableEnded && !res.destroyed) res.write(frame);
+      }).catch(() => undefined);
+    }
+  }
+
+  /** A herald raid newly stored by the ingest or the raid-show pull rides only while it is fresh. */
+  function heraldCaravan(raid: AtlasRaid): void {
+    const age = now() - (raid.occurredAt ?? raid.observedAt);
+    if (age <= CARAVAN_FRESH_MS && age >= -5_000) caravan(raid);
   }
 
   /**
@@ -517,6 +616,28 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
       const [a, b]: [Lookup, Lookup] = roadMatch[2] ? [{ id: roadMatch[2] }, { id: roadMatch[3]! }] : [{ login: roadMatch[4]! }, { login: roadMatch[5]! }];
       return answerDirectory(res, roadMatch[1]!, head, (register, ids, at) => register.road(a, b, ids, at));
     }
+    const roadsChannel = ROADS_CHANNEL.exec(path);
+    if (roadsChannel) {
+      return answerDirectory(res, roadsChannel[1]!, head, (register, ids, at) => channelRoads(roadContext(), register, roadsChannel[2]!, ids, at));
+    }
+    const roadsStory = ROADS_STORY.exec(path);
+    if (roadsStory) {
+      const [a, b]: [Lookup, Lookup] = roadsStory[2] ? [{ id: roadsStory[2] }, { id: roadsStory[3]! }] : [{ login: roadsStory[4]! }, { login: roadsStory[5]! }];
+      return answerDirectory(res, roadsStory[1]!, head, (register, ids, at) => roadStory(roadContext(), register, a, b, ids, at));
+    }
+    const roadsBusiest = ROADS_BUSIEST.exec(path);
+    if (roadsBusiest) {
+      return answerDirectory(res, roadsBusiest[1]!, head, (register, ids, at) => busiest(roadsBusiest[1]!, register, ids, at));
+    }
+    const finderMatch = GATE_FINDER.exec(path);
+    if (finderMatch) {
+      const params = new URLSearchParams(query >= 0 ? url.slice(query + 1) : '');
+      const from = params.get('from') ?? '';
+      if (!FINDER_FROM.test(from)) return send(res, 400, JSON.stringify({ error: 'query-from' }), {}, head);
+      const q = params.get('q');
+      const request = { from, query: q !== null && q.trim() !== '' ? q : null, portraits: params.get('portraits') === '1', ip: clientIp(req) };
+      return answerDirectory(res, finderMatch[1]!, head, async (register, ids, at) => finder(roadContext(), register, await liveNow(finderMatch[1]!, register), request, ids, at));
+    }
     const livePointerMatch = LIVE_POINTER.exec(path);
     if (livePointerMatch) {
       const pointer = livePointer(livePointerMatch[1]!);
@@ -583,10 +704,109 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
   });
   server.requestTimeout = 10_000;
   server.headersTimeout = 5_000;
+
+  const ingestToken = options.ingestToken === undefined ? process.env.ATLAS_INGEST_TOKEN || null : options.ingestToken;
+  const tokenDigest = ingestToken ? createHash('sha256').update(ingestToken).digest() : null;
+  /** Compared as fixed-length digests, so neither the token's length nor its prefix leaks through timing. */
+  function authorized(req: IncomingMessage): boolean {
+    if (!tokenDigest) return true;
+    const header = req.headers.authorization;
+    const presented = typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7) : '';
+    const same = timingSafeEqual(createHash('sha256').update(presented).digest(), tokenDigest);
+    return same && presented.length > 0;
+  }
+  function ingestReply(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
+    if (res.headersSent) return void res.end();
+    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers });
+    res.end(JSON.stringify(body));
+  }
+  const invalid = (res: ServerResponse, reason: IngestReason) => ingestReply(res, 422, { kind: 'invalid', reason });
+  /**
+   * One witnessed herald raid in, one durable receipt out. The ledger's observe is synchronous and fsyncs before it
+   * returns, and Node runs one handler at a time, so concurrent identical posts store once and answer duplicate.
+   */
+  function accept(res: ServerResponse, raw: Buffer): void {
+    let input: unknown;
+    try {
+      input = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw));
+    } catch {
+      return invalid(res, 'json');
+    }
+    const parsed = AtlasRaidSchema.safeParse(input);
+    if (!parsed.success) {
+      const claimed = input as { source?: unknown; evidence?: { kind?: unknown } } | null;
+      const simulated = typeof claimed === 'object' && claimed !== null && (claimed.source === 'simulation' || claimed.evidence?.kind === 'simulated');
+      return invalid(res, simulated ? 'simulation' : 'schema');
+    }
+    const raid = parsed.data;
+    if (raid.source === 'simulation' || raid.evidence.kind !== 'observed') return invalid(res, 'simulation');
+    if (raid.source !== 'herald') return invalid(res, 'source');
+    let receipt;
+    try {
+      receipt = roads.ledger.observe(raid);
+    } catch (error) {
+      if (error instanceof Error && /^Conflicting road raid ID /.test(error.message)) return invalid(res, 'conflict');
+      return ingestReply(res, 503, { kind: 'unavailable' }, { 'retry-after': '30' });
+    }
+    ingestReply(res, 200, { kind: receipt.kind, raidId: receipt.raidId, road: receipt.road, raids: receipt.raids });
+    if (receipt.kind === 'stored') heraldCaravan(raid);
+  }
+  const ingest = createServer((req, res) => {
+    try {
+      const path = (req.url ?? '/').split('?')[0];
+      if (path !== INGEST_PATH) return ingestReply(res, 404, { kind: 'not-found' });
+      if (req.method !== 'POST') return ingestReply(res, 405, { kind: 'method-not-allowed' }, { allow: 'POST' });
+      if (!authorized(req)) return ingestReply(res, 401, { kind: 'unauthorized' });
+      if (!/^application\/json\s*(?:;.*)?$/i.test(String(req.headers['content-type'] ?? ''))) return invalid(res, 'content-type');
+      const declared = Number(req.headers['content-length']);
+      const tooLarge = () => {
+        ingestReply(res, 413, { kind: 'too-large' }, { connection: 'close' });
+        req.resume();
+      };
+      if (Number.isFinite(declared) && declared > INGEST_MAX_BYTES) return tooLarge();
+      const parts: Buffer[] = [];
+      let size = 0;
+      let refused = false;
+      req.on('data', (chunk: Buffer) => {
+        if (refused) return;
+        size += chunk.byteLength;
+        if (size > INGEST_MAX_BYTES) {
+          refused = true;
+          parts.length = 0;
+          return tooLarge();
+        }
+        parts.push(chunk);
+      });
+      req.on('end', () => {
+        if (refused || res.writableEnded) return;
+        try {
+          accept(res, Buffer.concat(parts));
+        } catch {
+          ingestReply(res, 503, { kind: 'unavailable' }, { 'retry-after': '30' });
+        }
+      });
+      req.on('error', () => res.destroy());
+    } catch {
+      ingestReply(res, 503, { kind: 'unavailable' }, { 'retry-after': '30' });
+    }
+  });
+  ingest.requestTimeout = 5_000;
+  ingest.headersTimeout = 3_000;
+
   current();
   let roads: ReturnType<typeof createRoadRuntime>;
   try {
-    roads = createRoadRuntime(dataDir, options.roads, log);
+    roads = createRoadRuntime(dataDir, {
+      ...options.roads,
+      onLiveRaid: (raid) => {
+        options.roads?.onLiveRaid?.(raid);
+        caravan(raid);
+      },
+      onHeraldRaid: (raid) => {
+        options.roads?.onHeraldRaid?.(raid);
+        heraldCaravan(raid);
+      },
+    }, log);
   } catch (error) {
     clearInterval(watcher);
     twitch?.close();
@@ -595,13 +815,18 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
   let closed: Promise<void> | undefined;
   return {
     server,
+    ingest,
     revision: () => current()?.survey.revision ?? null,
     close: () => closed ??= (async () => {
       clearInterval(watcher);
       twitch?.close();
       for (const clients of streams.values()) for (const res of clients.keys()) res.end();
       const stopped = new Promise<void>((done) => server.close(() => done()));
+      const ingestStopped = new Promise<void>((done) => ingest.close(() => done()));
       server.closeAllConnections();
+      ingest.closeAllConnections();
+      // The ingest stops taking posts before the ledger is released.
+      await ingestStopped;
       await Promise.all([stopped, roads.close()]);
     })(),
   };

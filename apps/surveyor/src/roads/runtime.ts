@@ -48,6 +48,11 @@ export interface RoadRuntimeOptions {
   now?: () => number;
   /** Fresh original SSE only, after durable storage and current gap recovery. Never called by backfill. */
   onLiveRaid?: (raid: AtlasRaid) => void;
+  /**
+   * Herald raids the raid-show pull newly stored, after durable storage. The first pass after start is restart
+   * catch-up and never reports; the receiver still applies its own freshness rule to each raid.
+   */
+  onHeraldRaid?: (raid: AtlasRaid) => void;
 }
 
 /** Lives and stops with the Atlas service. One bounded page per pass, no overlapping polls or retry storm. */
@@ -73,7 +78,7 @@ export function createRoadRuntime(dataDir: string, options: RoadRuntimeOptions =
   const stop = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pending: Promise<void>;
-  let polling = false, recoveryNeeded = true, nextRecorderAt = 0;
+  let polling = false, recoveryNeeded = true, nextRecorderAt = 0, pulledOnce = false;
   let generation = 0, readyGeneration = -1;
   let streamConnected = false, connectedAt: number | null = null, lastObservedAt: number | null = null;
   let gapSince: number | null = base ? now() : null;
@@ -122,8 +127,13 @@ export function createRoadRuntime(dataDir: string, options: RoadRuntimeOptions =
       }
     }
     if (endpoint && !stop.signal.aborted) {
-      try { await pullRoadPage(ledger, endpoint, AbortSignal.any([stop.signal, AbortSignal.timeout(timeoutMs)]), options.fetch); }
-      catch (error) { failures.push(`raid-show:${failureReason(error)}`); }
+      const announce = pulledOnce && options.onHeraldRaid;
+      try {
+        await pullRoadPage(ledger, endpoint, AbortSignal.any([stop.signal, AbortSignal.timeout(timeoutMs)]), options.fetch, {
+          onStored: (raids) => { if (announce) for (const raid of raids) announce(raid); },
+        });
+        pulledOnce = true;
+      } catch (error) { failures.push(`raid-show:${failureReason(error)}`); }
     }
     polling = false;
     if (stop.signal.aborted) return;

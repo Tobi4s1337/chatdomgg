@@ -65,8 +65,11 @@ export function RegisterFacts(props: {
   onAirNow: boolean | null;
   onRoad: (road: CardRoad) => void;
   onRetry: () => void;
+  /** The road ledger's view of this channel's roads, when the service has one; null falls back to the register's. */
+  ledger?: (() => JSX.Element | null) | undefined;
 }) {
   const card = () => (props.state.status === 'ready' ? props.state.reply : null);
+  const ledger = () => props.ledger?.() ?? null;
   return (
     <Switch>
       <Match when={props.state.status === 'loading'}>
@@ -105,6 +108,7 @@ export function RegisterFacts(props: {
                 </Show>
               </div>
             </dl>
+            <Show when={!ledger()} fallback={ledger()}>
             <Show when={c().roads} fallback={<p class="atlas-roads-empty">No raid history recorded yet.</p>}>{(roads) => (
             <section class="atlas-roads" aria-labelledby="atlas-roads-title">
               <h3 id="atlas-roads-title">
@@ -139,6 +143,7 @@ export function RegisterFacts(props: {
               </p>
             </section>
             )}</Show>
+            </Show>
           </>
         )}
       </Match>
@@ -237,6 +242,7 @@ export function WaitingCard(props: {
   onClose: () => void;
   onRoad: (road: CardRoad) => void;
   onRetry: () => void;
+  ledger?: (() => JSX.Element | null) | undefined;
 }) {
   const close = useCardKeys(() => props.face.id, props.onClose);
   const card = () => (props.state.status === 'ready' ? props.state.reply : null);
@@ -280,7 +286,7 @@ export function WaitingCard(props: {
           )}
         </Show>
       </dl>
-      <RegisterFacts state={props.state} world={props.world} onAirNow={props.live ? props.onAir : null} onRoad={props.onRoad} onRetry={props.onRetry} />
+      <RegisterFacts state={props.state} world={props.world} onAirNow={props.live ? props.onAir : null} onRoad={props.onRoad} onRetry={props.onRetry} ledger={props.ledger} />
       <p class="atlas-card-note">
         Pencilled into the realm of its language and game. This place stays the same until the channel claims land.
       </p>

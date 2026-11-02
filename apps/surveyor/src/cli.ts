@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkDataDir } from './check';
-import { dataDirFrom, founderKeyPemFrom, importConfigFrom, liveConfigFrom, serveConfigFrom } from './config';
+import { dataDirFrom, founderKeyPemFrom, importConfigFrom, ingestConfigFrom, liveConfigFrom, serveConfigFrom } from './config';
 import { founderKey } from './edition/authorization';
 import { runAuthorize, runFound, runRehearsal, runSettle } from './edition/commands';
 import { EditionNumberSchema } from './edition/schema';
@@ -205,12 +205,20 @@ async function main(argv: string[]): Promise<number> {
   }
   if (command === 'serve') {
     const config = serveConfigFrom(process.env);
-    const service = createAtlasService(config.dataDir, (line) => console.log(`atlas:serve ${line}`));
+    const ingestConfig = ingestConfigFrom(process.env);
+    const service = createAtlasService(config.dataDir, (line) => console.log(`atlas:serve ${line}`), { ingestToken: ingestConfig?.token ?? null });
     await new Promise<void>((resolve, reject) => {
       service.server.once('error', reject);
       service.server.listen(config.port, config.host, () => resolve());
     });
     console.log(`atlas:serve http://${config.host}:${config.port}/map-data/v1/survey (${service.revision() ?? 'no revision yet'})`);
+    if (ingestConfig) {
+      await new Promise<void>((resolve, reject) => {
+        service.ingest.once('error', reject);
+        service.ingest.listen(ingestConfig.port, ingestConfig.host, () => resolve());
+      });
+      console.log(`atlas:serve road ingest on http://${ingestConfig.host}:${ingestConfig.port}/v1/roads/observe (${ingestConfig.token ? 'token required' : 'no token'})`);
+    }
     const stop = () => void service.close().then(() => process.exit(0));
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);

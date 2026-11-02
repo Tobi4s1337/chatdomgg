@@ -19,13 +19,23 @@ export interface RoadReceipt {
   raids: number;
 }
 
+/** Raids one way along a road, under the same lower-bound rules as the road's own totals. */
+export interface RoadDirection {
+  raids: number;
+  viewers: number;
+}
+
 export interface RoadSummary {
   key: string;
-  /** Decimal channel IDs, in lexicographic order; direction lives in events. */
+  /** Decimal channel IDs, in lexicographic order; direction lives in events and in forward/backward. */
   from: string;
   to: string;
   raids: number;
   viewers: number;
+  /** Raids from `from` to `to`; with aggregate evidence, a lower bound like the totals. */
+  forward: RoadDirection;
+  /** Raids from `to` to `from`. */
+  backward: RoadDirection;
   /** Historical start is unknown when aggregate evidence includes unlocated raids. */
   firstAt: number | null;
   firstObservedEventAt: number | null;
@@ -37,6 +47,23 @@ export interface RoadSummary {
   countBasis: 'observations' | 'at-least';
   /** Canonical observations only, in durable observation order. */
   events: readonly AtlasRaid[];
+}
+
+/** A road without its observations: what list reads return, so a listing never copies whole histories. */
+export type RoadLine = Omit<RoadSummary, 'events'>;
+
+function line(summary: RoadSummary): RoadLine {
+  return {
+    key: summary.key, from: summary.from, to: summary.to, raids: summary.raids, viewers: summary.viewers,
+    forward: { ...summary.forward }, backward: { ...summary.backward },
+    firstAt: summary.firstAt, firstObservedEventAt: summary.firstObservedEventAt, historyStartKnown: summary.historyStartKnown,
+    lastAt: summary.lastAt, observedRaids: summary.observedRaids, observedViewers: summary.observedViewers, countBasis: summary.countBasis,
+  };
+}
+
+/** Strongest first: most raids, most travellers, the latest, then the key. */
+function stronger(a: RoadSummary, b: RoadSummary): number {
+  return b.raids - a.raids || b.viewers - a.viewers || b.lastAt - a.lastAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 }
 
 const CursorSourceSchema = z.string().min(1).max(512);
@@ -173,7 +200,13 @@ export class RoadLedger {
   private readonly aggregates = new Map<string, Aggregate>();
   private readonly directedAggregates = new Map<string, Aggregate[]>();
   private readonly summaries = new Map<string, RoadSummary>();
+  /** Road keys by channel, so one channel's roads never scan the whole ledger. */
+  private readonly byChannel = new Map<string, Set<string>>();
   private readonly checkpoints = new Map<string, string>();
+  /** Bumped on every summary change; the cached ranking is rebuilt only after one. */
+  private version = 0;
+  private ranking: { version: number; roads: RoadSummary[] } | null = null;
+  private earliest: number | null = null;
 
   constructor(dataDir: string) {
     const dataExisted = existsSync(dataDir);
@@ -385,10 +418,65 @@ export class RoadLedger {
 
   roads(channelId?: string): RoadSummary[] {
     this.assertOpen();
-    return [...this.summaries.values()]
-      .filter((road) => channelId === undefined || road.from === channelId || road.to === channelId)
-      .sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
-      .map((road) => structuredClone(road));
+    return this.select(channelId).map((road) => structuredClone(road));
+  }
+
+  /** One channel's roads (or every road) without their observations, in key order. */
+  lines(channelId?: string): RoadLine[] {
+    this.assertOpen();
+    return this.select(channelId).map(line);
+  }
+
+  /** The newest canonical observations of one road, newest event first. */
+  recent(from: string, to: string, limit: number): AtlasRaid[] {
+    this.assertOpen();
+    const events = this.summaries.get(roadKey(from, to))?.events ?? [];
+    return [...events].sort((a, b) => raidTime(b) - raidTime(a) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .slice(0, Math.max(0, limit)).map((raid) => structuredClone(raid));
+  }
+
+  /**
+   * The strongest roads that `accept` lets through, at most `limit`. The ranking is computed once per change of
+   * the ledger, so repeated reads between raids only walk it.
+   */
+  busiest(limit: number, accept: (road: RoadLine) => boolean = () => true): RoadLine[] {
+    this.assertOpen();
+    if (this.ranking?.version !== this.version) {
+      this.ranking = { version: this.version, roads: [...this.summaries.values()].sort(stronger) };
+    }
+    const chosen: RoadLine[] = [];
+    for (const road of this.ranking.roads) {
+      if (chosen.length >= limit) break;
+      const candidate = line(road);
+      if (accept(candidate)) chosen.push(candidate);
+    }
+    return chosen;
+  }
+
+  /** The earliest event time among canonical observations, or null before the first. */
+  earliestEventAt(): number | null {
+    this.assertOpen();
+    return this.earliest;
+  }
+
+  private select(channelId?: string): RoadSummary[] {
+    const keys = channelId === undefined ? [...this.summaries.keys()] : [...this.byChannel.get(channelId) ?? []];
+    return keys.sort().map((key) => this.summaries.get(key)!);
+  }
+
+  private put(summary: RoadSummary): void {
+    if (!this.summaries.has(summary.key)) {
+      for (const channel of [summary.from, summary.to]) {
+        let keys = this.byChannel.get(channel);
+        if (!keys) {
+          keys = new Set();
+          this.byChannel.set(channel, keys);
+        }
+        keys.add(summary.key);
+      }
+    }
+    this.summaries.set(summary.key, summary);
+    this.version++;
   }
 
   close(): void {
@@ -498,8 +586,15 @@ export class RoadLedger {
         const firstObservedEventAt = Math.min(previous?.firstObservedEventAt ?? time, time);
         const observedRaids = (previous?.observedRaids ?? 0) + 1;
         const observedViewers = (previous?.observedViewers ?? 0) + raid.viewers;
-        this.summaries.set(key, {
+        const ahead = raid.fromKingdomId === from;
+        const forward = previous?.forward ?? { raids: 0, viewers: 0 };
+        const backward = previous?.backward ?? { raids: 0, viewers: 0 };
+        this.earliest = Math.min(this.earliest ?? time, time);
+        // Aggregate roads are recomputed below; this incremental tally is exact for observation-only roads.
+        this.put({
           key, from, to, raids: observedRaids, viewers: observedViewers,
+          forward: ahead ? { raids: forward.raids + 1, viewers: forward.viewers + raid.viewers } : { ...forward },
+          backward: ahead ? { ...backward } : { raids: backward.raids + 1, viewers: backward.viewers + raid.viewers },
           firstAt: firstObservedEventAt, firstObservedEventAt, historyStartKnown: true,
           observedRaids, observedViewers, countBasis: 'observations',
           lastAt: Math.max(previous?.lastAt ?? time, time),
@@ -544,7 +639,7 @@ export class RoadLedger {
     const totals = this.aggregateTotals(first, second);
     const [from, to] = key.split('~') as [string, string];
     const firstObservedEventAt = previous?.firstObservedEventAt ?? null;
-    this.summaries.set(key, {
+    this.put({
       key, from, to, ...totals, firstObservedEventAt,
       firstAt: totals.historyStartKnown ? firstObservedEventAt : null,
       observedRaids: previous?.observedRaids ?? 0,
@@ -570,10 +665,13 @@ export class RoadLedger {
 
   /** A candidate projection lets overflow fail before any bytes are appended. */
   private aggregateTotals(first: string, second: string, candidate?: Exclude<Body, { kind: 'checkpoint' }>): {
-    raids: number; viewers: number; lastAt: number; historyStartKnown: boolean;
+    raids: number; viewers: number; lastAt: number; historyStartKnown: boolean; forward: RoadDirection; backward: RoadDirection;
   } {
     let raids = 0;
     let viewers = 0;
+    const [keyFrom] = roadKey(first, second).split('~') as [string, string];
+    let forward: RoadDirection = { raids: 0, viewers: 0 };
+    let backward: RoadDirection = { raids: 0, viewers: 0 };
     let lastAt = this.summaries.get(roadKey(first, second))?.lastAt ?? 0;
     let historyStartKnown = true;
     for (const [from, to] of [[first, second], [second, first]] as const) {
@@ -621,7 +719,9 @@ export class RoadLedger {
       }
       raids = safeAdd(raids, directedRaids);
       viewers = safeAdd(viewers, directedViewers);
+      if (from === keyFrom) forward = { raids: directedRaids, viewers: directedViewers };
+      else backward = { raids: directedRaids, viewers: directedViewers };
     }
-    return { raids, viewers, lastAt, historyStartKnown };
+    return { raids, viewers, lastAt, historyStartKnown, forward, backward };
   }
 }

@@ -86,6 +86,12 @@ export class RoadLayer implements MapLayer {
     return this.changed;
   }
 
+  /** Free the road, the column and the bearer's arms (a caravan that has arrived leaves nothing behind). */
+  destroy(): void {
+    this.under.destroy({ children: true });
+    this.over.destroy({ children: true, texture: true, textureSource: true });
+  }
+
   set(next: Partial<RoadState>): void {
     const merged = { ...this.state, ...next };
     if (merged.head === this.state.head && merged.inked === this.state.inked && merged.time === this.state.time
@@ -213,14 +219,14 @@ export function figureHeight(scale: number): number {
   return Math.max(14, Math.min(24, 11 + scale * 0.45));
 }
 
-function polyline(g: Graphics, points: number[]): void {
+export function polyline(g: Graphics, points: number[]): void {
   if (points.length < 4) return;
   g.moveTo(points[0]!, points[1]!);
   for (let i = 2; i < points.length; i += 2) g.lineTo(points[i]!, points[i + 1]!);
 }
 
 /** Dashes along a screen polyline: `dash` px drawn, `gap` px left. Pixi strokes have no dash pattern of their own. */
-function dashed(g: Graphics, points: number[], dash: number, gap: number): void {
+export function dashed(g: Graphics, points: number[], dash: number, gap: number): void {
   let drawing = true;
   let left = dash;
   for (let i = 2; i < points.length; i += 2) {

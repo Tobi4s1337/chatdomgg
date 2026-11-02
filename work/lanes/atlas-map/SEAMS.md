@@ -212,10 +212,41 @@ cursor with its final observation in its own durable ledger; empty/short pages
 never reset history. Unconfigured or failed reads make no “no raids” assertion.
 This is adoption of the frozen pull contract, with no new route or shared type.
 
-The separate private POST and `createAtlasRoadIngress` client described above
-remain optional and are not implemented by this checkpoint. Public ledger routes
-and the gate finder are also not yet exposed. Operator adoption and remaining work
-are recorded in `AM11-durable-roads.md`.
+Operator adoption and recovery are recorded in `AM11-durable-roads.md`.
+
+## Roads, caravans and the gate settled — 2 Nov, AM11
+
+Nothing in §2 or §3 is renamed; this fills in what AM11 left open. Details and evidence: `AM11-roads-and-gate.md`.
+
+- **Gate mode works.** `mountAtlas(el, { mode: 'gate' }).gate` is the `AtlasGateHost` of
+  `apps/web/src/raid-gate/ports.ts`, unchanged (a type test fails if either side drifts). Calls made before the map is
+  drawn wait for it: the latest `open` wins, `follow` and `travel` keep their order, `close` clears what is held.
+  `closed` is emitted only when the board closes itself; `close()` from the host is silent. A pick emits
+  `{kind:'target', channel, land}` with `founded: false`, `kingdomName: null`, `contentClassification: 'unknown'` (the
+  Atlas has no founded-kingdom or classification record yet) and `land` `waiting` (placed) or `edge` (no place).
+  `follow` waits up to 120 s for the raid's caravan to appear on the public stream, matched by raid ID or by the same
+  pair within 30 s. Bench: `/-/atlas-embed?mode=gate&from=<channelId>` (default tobi4s_, 129634568).
+- **Public reads** (GET/HEAD, ids are Twitch IDs, `pv-…` is the map ID):
+  - `/map-data/v1/roads/<pv>/channel/<id>`: every road of one channel, strongest first (64 at most, `total` counts all).
+  - `/map-data/v1/roads/<pv>/road/<idA>/<idB>` and `/road/login/<loginA>/<loginB>`: one road's story. When a road
+    exists both ways are objects (an unridden way reads zero); `null` both ways with `basis: 'none'` means no raid
+    between them has been seen since `since`.
+  - `/map-data/v1/roads/<pv>/busiest`: the 400 strongest roads with both ends placed, no names.
+  - `/map-data/v1/gate/<pv>/finder?from=<id>[&q=<text>][&portraits=1]`: groups `roads`, `realm`, `neighbours`, then
+    `search` when `q` is given. Proposals are live only and each channel appears once; search keeps offline matches
+    (shown, not selectable).
+- **Caravans** ride as `event: raid` on the existing `/map-data/v1/live/<pv>/events` stream, only to streams open at
+  that moment, never buffered or replayed. A raid from raid-show (ingest or pull) rides only within 60 s of its event.
+- **Private ingest** is built: `POST /v1/roads/observe` on its own listener (`ATLAS_INGEST_PORT`, `ATLAS_INGEST_HOST`
+  default 127.0.0.1, optional `ATLAS_INGEST_TOKEN`), as in §3; the public server answers 405 to it. Further replies:
+  413 `too-large`, 422 reasons `content-type | json | schema | simulation | source | conflict`.
+  `createAtlasRoadIngress({ url, token?, fetch?, timeoutMs? })` in `apps/surveyor/src/roads/client.ts` implements
+  `AtlasRoadIngress`; it rejects with `AtlasRoadIngressError` and checks the echoed `raidId`.
+- **Gateway allowlist, applied here.** No round lane owns `apps/api/src/public/routes.ts`, so this lane made the
+  smallest additive change itself, as its own change for the reviewer: one `MAP_ROADS` pattern routes
+  `/map-data/v1/roads/<pv>/channel/<id>`, `/roads/<pv>/road/<idA>/<idB>`, `/roads/<pv>/road/login/<a>/<b>`,
+  `/roads/<pv>/busiest` and `/map-data/v1/gate/<pv>/finder` to the optional map service. Every existing route is
+  unchanged, and `routes.test.ts` checks the new paths and their near misses. The private ingest is never routed.
 
 ## Return to the same view — 2 Nov, AM10 (asked by front-door for FD12)
 
