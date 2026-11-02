@@ -5,13 +5,15 @@
  * after a step through starts on the drawing and lets it fade into the world.
  *
  * The layer moves nobody. It reads the gate controller's snapshot through `journeyScene` and hands the march call a
- * place to speak from while the world is inked. Without the Atlas in the build, the road is inked on the parchment
- * between the two seals instead of on the map; nothing else changes.
+ * place to speak from while the world is inked. The Atlas draws the rise and the road only when, as the journey
+ * begins, its map is drawn and can place both ends (`mapCarries`; the walk warms it once the walker may travel);
+ * otherwise, and without the Atlas in the build, the road is inked on the parchment between the two seals. One
+ * journey never switches between the two.
  */
 import { createSignal, For, onCleanup, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { KingdomId } from '../../../api/src/raid-gate/contracts';
-import type { GateSnapshot } from './controller';
+import type { GateSnapshot, JourneySnapshot } from './controller';
 import {
   arrivingHere, clearJourneyMemo, journeyScene, readJourneyMemo, stepThroughAt, walkPath, writeJourneyMemo,
   type JourneyMemo, type JourneyScene,
@@ -30,14 +32,14 @@ type LayerState = 'idle' | 'road' | 'through' | 'arriving' | 'leaving';
 export type JourneyLayerOptions = Readonly<{
   /** The kingdom this page shows. */
   here: KingdomId;
-  /** Whether the Atlas draws the road (its gate mode is in the build); otherwise the parchment carries it. */
-  mapBundled: boolean;
   storage: Storage | null;
   clock: () => number;
   /** Walks the page on; defaults to `location.assign`. */
   navigate?: (path: string) => void;
   reducedMotion?: boolean;
   parent?: HTMLElement;
+  /** Whether the Atlas in `mapHost` can carry this journey's road right now. Asked once, as its road begins. */
+  mapCarries?: (journey: JourneySnapshot) => boolean;
 }>;
 
 export type JourneyLayer = Readonly<{
@@ -78,6 +80,8 @@ export function mountJourneyLayer(options: JourneyLayerOptions): JourneyLayer {
   const [state, setState] = createSignal<LayerState>('idle');
   const [stage, setStage] = createSignal<'rise' | 'road' | 'drawing' | 'through'>('rise');
   const [ends, setEnds] = createSignal<Ends | null>(null);
+  /** Which surface this journey's road is drawn on, chosen as its road begins. */
+  const [map, setMap] = createSignal<'atlas' | 'paper'>('paper');
   const listeners = new Set<(covering: boolean) => void>();
   let roadShownAt: number | null = null, stepping: ReturnType<typeof setTimeout> | undefined, fading: ReturnType<typeof setTimeout> | undefined;
   let disposed = false, lastCovering = false;
@@ -116,6 +120,7 @@ export function mountJourneyLayer(options: JourneyLayerOptions): JourneyLayer {
     if (scene.kind === 'road') {
       if (state() !== 'road' && state() !== 'through') {
         clearTimeout(fading);
+        setMap(options.mapCarries?.(scene.journey) ? 'atlas' : 'paper');
         roadShownAt = options.clock();
         remember(s, null);
         go('road');
@@ -149,7 +154,7 @@ export function mountJourneyLayer(options: JourneyLayerOptions): JourneyLayer {
     }
   }
 
-  const unrender = render(() => <JourneyView state={state()} stage={stage()} ends={ends()} mapBundled={options.mapBundled}
+  const unrender = render(() => <JourneyView state={state()} stage={stage()} ends={ends()} map={map()}
     mapHost={mapHost} wordsHost={wordsHost} reduced={options.reducedMotion === true} />, root);
 
   return {
@@ -174,14 +179,14 @@ const TORCHES = [0, 1, 2, 3, 4];
 /** How much of the road is inked at each stage (the CSS draws the same share); the column rides only what is drawn. */
 const drawn = (stage: string) => stage === 'rise' ? 0.16 : stage === 'road' ? 0.72 : 1;
 
-function JourneyView(props: { state: LayerState; stage: string; ends: Ends | null; mapBundled: boolean; mapHost: HTMLElement; wordsHost: HTMLElement; reduced: boolean }) {
+function JourneyView(props: { state: LayerState; stage: string; ends: Ends | null; map: 'atlas' | 'paper'; mapHost: HTMLElement; wordsHost: HTMLElement; reduced: boolean }) {
   onCleanup(() => { props.mapHost.remove(); props.wordsHost.remove(); });
-  return <div class="rj-layer" data-state={props.state} data-stage={props.stage} data-map={props.mapBundled ? 'atlas' : 'paper'}
+  return <div class="rj-layer" data-state={props.state} data-stage={props.stage} data-map={props.map}
     data-reduced={props.reduced ? '' : undefined} aria-hidden={props.state === 'idle' ? 'true' : undefined}>
     <div class="rj-ink" />
     <div class="rj-paper" />
     {props.mapHost}
-    <Show when={!props.mapBundled && props.ends}>{ends =>
+    <Show when={props.map === 'paper' && props.ends}>{ends =>
       <div class="rj-road" role="img" aria-label={`The road from ${ends().from.name || 'home'} to ${ends().to.name || 'the gate'}`}>
         <svg viewBox="0 0 1000 400" aria-hidden="true">
           <defs>

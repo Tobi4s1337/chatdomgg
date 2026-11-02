@@ -71,6 +71,7 @@ export function classify(pathname: string, search: string): PublicRoute {
   if (AUTH.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/raid-gate\/crier\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/raid-gate\/guest\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
+  if (pathname === '/api/raid-gate/passport/travels') return { kind: 'auth' };
   if (/^\/api\/raid-gate\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/realm\/forge\/chat\/(?:status|authorize|callback|wish|revoke)$/.test(pathname)) return { kind: 'realm' };
   if (pathname === '/api/realm/forge/queue') return { kind: 'realm' };

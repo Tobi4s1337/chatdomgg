@@ -124,6 +124,11 @@
 .rg-facts b { color: var(--ink); }
 
 /* The private bench's destination finder, on a parchment card. */
+/* The Atlas's gate mode, when the bench binds it: the whole window under the board, seen only while choosing. */
+.rg-atlas-host { position: absolute; inset: 0; z-index: 2; visibility: hidden; opacity: 0; transition: opacity .5s; }
+.rg-atlas-host.is-open { visibility: visible; opacity: 1; }
+/* The Atlas keeps its own finder at the right; the gate's board steps to the other side while the map is open. */
+.rg-route:has(.rg-atlas-host.is-open) .rg-pane { right: auto; left: 24px; }
 .rg-finder { position: absolute; z-index: 3; left: 34px; top: 108px; width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; color: var(--ink); border-radius: 4px;
   background: linear-gradient(#f3e4c4, #e8d2a7); box-shadow: 0 0 0 1px #6b4c2a, 0 14px 30px #0b0d1a88; }
 .rg-finder h3 { margin: 12px 0 6px; font: 400 15px 'IM Fell English SC', Georgia, serif; letter-spacing: .1em; text-transform: lowercase; color: #6b5238; }

@@ -8,9 +8,10 @@
  */
 import { REALM_ENTRY_ROUTE, RealmEntryInfoSchema } from '@chatdom/shared/realm';
 import type { KingdomId } from '../../../api/src/raid-gate/contracts';
-import { deferGateAtlas, gateAtlasBundled } from './atlas-gate';
+import { deferGateAtlas, gateAtlasBundled, type GateAtlasModules } from './atlas-gate';
+import type { GateSnapshot } from './controller';
 import type { RaidGateController } from './controller';
-import { gateForPage, readJourneyMemo } from './journey';
+import { gateForPage, mapCarriesJourney, readJourneyMemo } from './journey';
 import type { JourneyLayer } from './JourneyLayer';
 import { mountRaidMarchCall } from './march-call';
 import type { GateKingdom, RaidGateApi } from './ports';
@@ -34,7 +35,7 @@ export type WalkGateOptions = Readonly<{
   api?: RaidGateApi;
   /** Reads a kingdom's approved name; defaults to the realm's entry route. */
   readName?: (kingdomId: KingdomId, signal: AbortSignal) => Promise<string | null>;
-  /** Whether the Atlas's gate mode is in this build; defaults to the bundle. */
+  /** Whether the Atlas's gate mode may ride the journey; defaults to whether this build carries it. */
   mapBundled?: boolean;
 }>;
 
@@ -57,6 +58,14 @@ async function readRealmName(kingdomId: KingdomId, signal: AbortSignal): Promise
   return info.success && info.data.kingdomId === kingdomId ? info.data.name : null;
 }
 
+/** A build without the map: nothing to load. */
+const NO_MAP: GateAtlasModules = {};
+
+/** Whether this viewer may soon travel: they chose to march, may follow the party, are under way, or are abroad. */
+export function mayTravel(s: GateSnapshot): boolean {
+  return s.joined || s.canTravel || s.journey !== null || s.welcome !== null;
+}
+
 /**
  * Mounts the gate for one walk. Returns its disposer. The march call appears only when the authority has something
  * to say to this person; the journey layer covers the world only while a place is held for them.
@@ -70,13 +79,16 @@ export function mountWalkGate(options: WalkGateOptions): () => void {
   const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   let layer: JourneyLayer | null = null;
   let disposeCall: (() => void) | null = null;
+  /** Whether the warmed map is drawn, and which kingdoms it could place (asked once each). */
+  let drawn = false;
+  const placed = new Map<KingdomId, boolean>();
 
   void (async () => {
     // The layer is loaded with the walk, not with the page: a walk that never meets the gate costs one small chunk.
     const { mountJourneyLayer } = await import('./JourneyLayer');
     if (life.signal.aborted) return;
     const journey = layer = mountJourneyLayer({
-      here: options.kingdomId, mapBundled: options.mapBundled ?? gateAtlasBundled(), storage, clock, reducedMotion: reduced,
+      here: options.kingdomId, storage, clock, reducedMotion: reduced, mapCarries: journey => mapCarriesJourney(drawn, placed, journey),
       ...(options.navigate ? { navigate: options.navigate } : {}),
     });
     const memo = readJourneyMemo(storage, clock());
@@ -84,12 +96,27 @@ export function mountWalkGate(options: WalkGateOptions): () => void {
     if (life.signal.aborted) return;
     const here: GateKingdom = { kingdomId: options.kingdomId, name: name ?? 'this kingdom', login: '' };
     const gate = gateForPage(here, memo);
-    const atlas = deferGateAtlas(() => journey.mapHost, life.signal);
+    const withMap = options.mapBundled ?? gateAtlasBundled();
+    const atlas = withMap
+      ? deferGateAtlas(() => journey.mapHost, life.signal, undefined, { onReady: state => { drawn = state === 'map'; } })
+      : deferGateAtlas(() => journey.mapHost, life.signal, NO_MAP);
+    let warmed = false;
+    const place = (kingdomId: KingdomId | null | undefined) => {
+      if (!atlas || !kingdomId || placed.has(kingdomId)) return;
+      placed.set(kingdomId, false);
+      void atlas.resolve(kingdomId, life.signal).then(found => { if (found && found.land !== 'edge') placed.set(kingdomId, true); }, () => undefined);
+    };
     disposeCall = mountRaidMarchCall({
       kingdomId: gate.kingdomId, source: gate, origin, signal: life.signal, parent: options.host, placement: 'slot', atlas, clock,
       ...(options.api ? { api: options.api } : {}),
       ...(options.keyHint ? { keyHint: options.keyHint } : {}),
-      onSnapshot: snapshot => journey.follow(snapshot),
+      onSnapshot: snapshot => {
+        // The map is drawn ahead of the rise for anyone who may travel, so the journey rides on it from its first step.
+        if (atlas && !warmed && mayTravel(snapshot)) { warmed = true; atlas.warm(); }
+        // Both ends are looked up on the map ahead of the road, so the journey knows whether the map can carry it.
+        if (warmed) for (const end of [snapshot.source.kingdomId, snapshot.destination?.target.kingdomId, snapshot.journey?.from, snapshot.journey?.to]) place(end);
+        journey.follow(snapshot);
+      },
       onMount(piece, controller) {
         options.onController?.(controller);
         // While the world is inked the piece speaks from the foot of the journey; afterwards it goes back to the HUD.
