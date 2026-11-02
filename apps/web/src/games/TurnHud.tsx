@@ -2,6 +2,7 @@ import { For, Show, createSignal, onCleanup } from 'solid-js';
 import type { GatherTableView } from '@chatdom/shared';
 import './turn-games.css';
 
+const TURN_SECONDS = 30;
 const diePips: readonly (readonly number[])[] = [[], [4], [0, 8], [0, 4, 8], [0, 2, 6, 8], [0, 2, 4, 6, 8], [0, 2, 3, 5, 6, 8]];
 
 export function TurnGameHud(props: {
@@ -26,7 +27,9 @@ export function TurnGameHud(props: {
   const name = (index: number) => props.table().players?.[index] ?? 'Player';
   const turn = () => isStones() ? stones()?.turn : dice()?.turn;
   const yourTurn = () => game()?.phase === 'playing' && props.seat() !== null && props.seat() === turn();
-  const seconds = () => Math.max(0, Math.ceil(((game()?.deadline ?? clock()) - clock()) / 1000));
+  // A turn grants thirty seconds. The frame's server time can trail the move that set the deadline by a tick, so
+  // the count is bounded to the turn rather than ever showing 31.
+  const seconds = () => Math.min(TURN_SECONDS, Math.max(0, Math.ceil(((game()?.deadline ?? clock()) - clock()) / 1000)));
   const message = () => {
     if (!props.connected()) return 'Reconnecting to your chair…';
     if (props.table().status === 'unavailable') return 'The last save is unconfirmed. Try again shortly.';
