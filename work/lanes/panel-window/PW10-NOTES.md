@@ -1,3 +1,44 @@
+# PW10 checkpoint — 2 November 2026, occlusion and framing
+
+PW10 is still unticked. This session took the reviewer's follow-up, "check occlusion and framing changes in dense kingdoms". The check found two real faults in the last checkpoint, and both are fixed.
+
+## What was wrong
+
+- **The "Yours" ring sat on glass nobody could see.** Slot 11's first pane faces east. From the hero eye at (-65, 40, 128) that glass at (-65.5, 10, 84) is edge-on: the dot product of its outward normal with the line to the eye is 0.5 m. The ring in the last painting sat on the edge of the house, not on a lit window. Nothing checked whether the pane faced the camera or was hidden.
+- **Widening moved the camera in, not out.** `captureView()` puts its target only 16 m in front of the eye. The old widening stepped back 1 to 3.4 times the eye-to-target distance from a point halfway to the town, so the "wider" shot stood 16 to 54 m from that point, closer than the hero. The unit test had used a target 140 m away and so never showed it.
+
+## Implemented
+
+- **Sightline** (`apps/web/src/panel-painter/windows.ts` `createSight`). This is a ray from the eye to the glass, lifted 6 cm off the pane. It is tested against the voxel boxes of every placement the renderer draws: homes, civic buildings, props and trees, from `foundedContent(...).content`. Each placement is rejected first by its bounding sphere, then by its local bounds. The ray is also tested over the land (`terrainHeight`), read on a 1 m lattice and remembered. Each 8 m tile gets a ceiling from five samples plus 4 m, so the exact land is read only where the line runs low. Authored panes sit in a recess inside their own wall, and the probe showed every house hiding its own glass. So the building whose bounds hold the glass is left out of its own sightline.
+- **Facing.** `paintedWindows` leaves out glass whose outward normal (same table as `createWindowLights`) faces away from the eye, and, given a sightline, glass that is hidden. Its signature only gained an optional `sight`.
+- **Framing** (`paintingView`). The hero shot stays when every lit window shows in it, and on an empty night. Otherwise the page tries the hero composition turned around the keep (`plan.castle.centre` + 12 m) by 0, ±25, ±50 and ±75 degrees. Each turn is re-centred on the facing lit glass and the keep, and starts at the shot's own distance along its own line before stepping back. A turn is skipped if its eye is less than 4 m above the land, if a hill hides the keep or if the castle leaves the frame. The turn that shows the most lit glass wins, and the nearer turn wins a tie. When no turn shows more than the hero, the hero stays.
+- The painter page passes `{ castle, sight, ground }` to both calls. The renderer is untouched.
+
+## Verified
+
+- A probe against the lane's two real founded scenes (13 homes; 162 and 227 placements), with the renderer's real hamlet hero (market + (-65, 31, 118), looking at the castle):
+  - A first sightline that did not leave out the host building hid 10 of the 13 panes behind their own walls. With the host left out, the hero sees slots 2, 3, 4, 6 and the royal window. The rest face away or sit behind the next home down the slope, for example slot 1 behind 3, 5 and 7, and slot 10 behind 11.
+  - Slot 11 alone: the hero shows nothing. The +25° turn shows it at (0.13, 0.82) with the keep in frame (eye (-38, 31, 136)).
+  - Slot 0 alone: the −25° turn. Slots 1, 3 and 5: the +25° turn shows 2 of 3.
+  - All 13 lit: the +50° turn shows 9, where the hero shows 4–5.
+  - Framing takes 70–120 ms on a warm land cache, and 300–700 ms the first time.
+- Vitest `apps/web/src/panel-painter`: 9 passed. Four of them are new: a recessed window is marked, while one behind a neighbour's wall, behind a hill or turned away is not; land reads are remembered across 50 sightlines; the turn to a newcomer whose glass faces away keeps the castle; and a buried home keeps the hero. The existing edge-of-town widening test still passes with direction kept.
+- `node --test` painter runner and policy: 8 passed. Focused `tsc` over the painter and `eslint apps/web/src/panel-painter` are clean.
+- Lane-stack capture `--only tap`, rendered with SwiftShader because the GPU tunnel was down (`chatdom-pc status` exit 3):
+  - Painting 01 at 0 lights kept the hero shot.
+  - Tap to lit took 1418 ms at 318×496 and 370 ms at 390×844, both confirmed by the realm.
+  - Painting 02 at 1 light took the +25° turn and lists `11:1328:8242`, which is what the offline probe predicted. The WebP is 30.9 KB.
+  - I looked at painting 02, `lit-kingdom@318x496` and `lit-kingdom@390x844`. The ring and the "Yours" tag sit on the edge home's front window, the one facing the camera. At 318×496 the castle still crowns the picture. At 390×844 the panel pans to the window, so the castle crops out at the right edge, as before.
+  - Word counts are unchanged: lit Kingdom 12, walk-in 11, lit You 11, card 46 and Gifts 10.
+  - The first attempt this session lost painting 02 when the SwiftShader page closed under host load (load average about 23). The real error was hidden behind dev-server noise. The runner's page notes now skip the dev server's own error forwarding. The capture now waits up to 150 s for a light left over from the previous run to lapse, instead of stopping.
+
+## Doubts
+
+- Thin occluders count as solid: a lamp post's box or a fence can hide a pane by a hair. Partly hidden glass is judged by its centre only.
+- The land ceiling assumes the land rises at most 4 m inside an 8 m tile above its corners and centre. A sharper ridge could let a mark through.
+- The picture may now turn by 25–75° from one minute to the next as lights come and go. A turn is chosen only when it shows more lit glass than the hero does. Whether the panel's change of picture reads as a cut needs a real-GPU look.
+- Walkers and citizens are not occluders.
+
 # PW10 checkpoint — 2 November 2026, morning
 
 PW10 is still unticked. This session closed the doubt from the last checkpoint ("the lit window is hard to distinguish in the painting"). The cause was not the glow: the viewer's window was never in the picture.

@@ -110,7 +110,8 @@ export async function runPainter(config, { once = false, signal, report = consol
             const page = await context.newPage();
             entry = { page, sceneHash: null, errors: [] }; warm.set(kingdomId, entry);
             const noted = entry.errors;
-            const note = text => { noted.push(text); noted.splice(0, noted.length - 3); };
+            // The dev server's own error forwarding (lane stack only) would crowd out the error that matters.
+            const note = text => { if (/Vite server|WebSocket closed without opened/.test(text)) return; noted.push(text); noted.splice(0, noted.length - 3); };
             page.on('pageerror', error => note(reason(error)));
             page.on('crash', () => note('The painter page crashed.'));
             page.on('console', message => { if (message.type() === 'error') note(message.text().split('\n')[0].replace(/Bearer\s+\S+/gi, 'Bearer …').slice(0, 200)); });

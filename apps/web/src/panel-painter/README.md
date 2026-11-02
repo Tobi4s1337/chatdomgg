@@ -41,9 +41,19 @@ and `X-Chatdom-Revision` headers. Every upload uses `PANEL_PAINTER_SECRET`, neve
 Each upload also names the painting's lit windows in `X-Chatdom-Windows` (`slot:x:y`, comma-separated, x and y in
 ten-thousandths of the frame). The page reads them from the frozen frame's own camera (`captureView()`) and the same
 public houses the scene lights. Each position is the first authored pane of a house, which is the glass
-`createWindowLights` makes glow. Windows outside the frame or behind the camera are left out. The panel marks a
-viewer's window only when the realm confirms it lit and this painting lists it, so the mark never runs ahead of the
-picture.
+`createWindowLights` makes glow. Windows outside the frame or behind the camera are left out, and so is glass that
+faces away from the camera or that a sightline shows is hidden. The sightline (`createSight`) runs from the eye to the
+glass through the voxel boxes of every placement the renderer draws (homes, civic buildings, props and trees) and over
+the land (`terrainHeight`, read once per metre and skipped where an eight-metre tile's ceiling lies below the line).
+Authored windows sit in a recess inside their own wall, so the building whose bounds hold the glass is left out of its
+own sightline. The panel marks a viewer's window only when the realm confirms it lit and this painting lists it, so
+the mark never runs ahead of the picture.
+
+The shot (`paintingView`) is the renderer's hero shot whenever every lit window shows in it, and on an empty night.
+Otherwise the page tries the hero composition turned around the castle (0, ±25, ±50 and ±75 degrees), each re-centred on
+the lit glass and the keep and stepped back along its own line until they fit. It keeps the turn that shows the most lit
+glass, nearest first on a tie. A turn whose eye is under the land, whose view of the keep is behind a hill or whose
+picture loses the castle is skipped. When no turn shows more than the hero does, the hero shot stays.
 
 Missing geometry, public presence or shared clock gives no new painting. Unfounded waiting land needs the land owner's
 bare-land composition: the existing kingdom scene adds civic buildings even when homes are empty, so it cannot serve

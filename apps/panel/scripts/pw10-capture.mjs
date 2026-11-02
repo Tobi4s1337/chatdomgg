@@ -214,8 +214,11 @@ try {
     const state = await realmKingdom().catch(() => null);
     throw new Error(`${error.message} Realm: ${state ? `${state.status} ${state.stream} streamLive=${state.presence?.streamLive} ${state.presence?.connection}` : 'unreadable'}.`);
   });
-  const tapperBefore = await realmPresence(tapper);
-  if (tapperBefore.lit) throw new Error('The tapping viewer is still lit from an earlier run; wait for the 90 s lease to lapse.');
+  // A run started soon after another finds the tapping viewer still lit; the realm dims them when the lease lapses.
+  if ((await realmPresence(tapper)).lit) {
+    console.info('The tapping viewer is still lit from an earlier run; waiting for the realm to dim them.');
+    await waitFor(async () => !(await realmPresence(tapper)).lit, 'the earlier light to lapse', 150_000);
+  }
 
   const painterConfig = { webOrigin: origin, apiOrigin: GATEWAY, realmOrigin: REALM, kingdomIds: [kingdom],
     ingressSecret: env.REALM_INGRESS_PANEL_SECRET, uploadSecret: env.PANEL_PAINTER_SECRET, ...(gpu ? { cdpOrigin: 'http://127.0.0.1:9333' } : {}) };
