@@ -20,6 +20,7 @@ import { bindForgeCandidate } from '../../../codex/src/kingdom-forge/candidate';
 import { createForgeProviders } from '../../../codex/src/providers';
 import { forgeJudgeQuestions } from '../../../codex/src/providers/policy';
 import { renderForgeContactSheet } from '../../../codex/src/contact-sheet';
+import { forgeAuthorityDeferred } from '../../../codex/src/kingdom-forge/defer';
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0)) await close(); });
@@ -376,4 +377,49 @@ it('forges onto the real native keep after evidenced qualification and replays w
   expect(f.state().castle?.attachments[input.attachment.socketId]).toBe(input.attachment.id);
   expect(f.state().attachments[input.attachment.id]?.attachment.hostProfile).toBe('castle-keep');
   expect(f.facts.reduce(applyRealmFact, f.initial)).toEqual(f.state());
+});
+
+it.each([false, true])('retries a capacity-raced reserve when the competing slot has already cleared: %s', async clearBeforeReply => {
+  const f = await fixture(), first = f.wish(), other = f.wish(), lease = caller().lease;
+  const execute = f.kingdom.execute.bind(f.kingdom);
+  vi.spyOn(f.kingdom, 'execute').mockImplementationOnce(async (...args) => {
+    const [, command, source, meta] = args;
+    if (command.type !== 'forge.reserve') throw new Error('Expected reserve proposal');
+    const competing = { ...command, record: { ...command.record,
+      attempt: { key: other.key, attemptId: other.attemptId },
+      reservation: { ...command.record.reservation, reservationId: 'competing-reservation' } } };
+    expect(await execute('controlled:reserve-race', competing, source, meta)).toMatchObject({ status: 'committed' });
+    const rejected = await execute(...args);
+    if (clearBeforeReply) await f.authority.release(other);
+    return rejected;
+  });
+  const waiting = await f.authority.reserve(first, lease);
+  expect(waiting).toMatchObject({ kind: 'held' });
+  expect(forgeAuthorityDeferred(waiting)).toBe(true);
+  expect(f.state().reservations[first.key]).toBeUndefined();
+  if (!clearBeforeReply) await f.authority.release(other);
+  f.advance(1_000);
+  const resumed = await f.reserve(first, lease);
+  expect(resumed.expiresAt).toBeGreaterThan(f.state().stream.startedAt);
+  expect(f.state().reservations[first.key]?.attempt).toEqual({ key: first.key, attemptId: first.attemptId });
+  expect(f.facts.filter(fact => fact.body.type === 'forge.reserve')).toHaveLength(2);
+  expect(f.state().coals[personId]).toBe(2);
+});
+
+it('reconciles concurrent changed reserve proposals to one actual reservation and one reserve fact', async () => {
+  const f = await fixture(), wish = f.wish(), lease = caller().lease;
+  const execute = f.kingdom.execute.bind(f.kingdom);
+  let reached!: () => void, resume!: () => void;
+  const entered = new Promise<void>(resolve => { reached = resolve; });
+  const waiting = new Promise<void>(resolve => { resume = resolve; });
+  vi.spyOn(f.kingdom, 'execute').mockImplementationOnce(async (...args) => {
+    reached(); await waiting; return execute(...args);
+  });
+  const earlier = f.authority.reserve(wish, lease); await entered;
+  f.advance(1_000);
+  const later = await f.reserve(wish, lease); resume();
+  expect(await earlier).toEqual({ kind: 'reserved', reservation: later });
+  expect(f.facts.filter(fact => fact.body.type === 'forge.reserve')).toHaveLength(1);
+  expect(Object.keys(f.state().reservations)).toEqual([wish.key]);
+  expect(f.state().coals[personId]).toBe(2);
 });

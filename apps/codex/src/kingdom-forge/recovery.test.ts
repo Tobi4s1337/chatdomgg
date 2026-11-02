@@ -3,6 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHearthHome } from '@chatdom/content';
+import { PersonIdSchema } from '@chatdom/shared';
 import { WORLD_FIXTURE_KINGDOM as kingdomId, WORLD_FIXTURE_PERSON as personId } from '@chatdom/shared/world-fixtures';
 import type { RealmFact, RealmOwnedForgeHost, RealmPrivateState, RealmStoredOutcome } from '@chatdom/shared/realm';
 import { createRealmState } from '../../../../packages/world/src/realm/reducer';
@@ -15,13 +16,15 @@ import { ForgeWriteGate } from '../../../realm/src/wiring/gate';
 import { createForgeProviders } from '../providers';
 import { forgeJudgeQuestions } from '../providers/policy';
 import { FileForgeWishQueue } from '../wish-queue';
+import { ForgeWishWorker } from '../wish-worker';
 import { createQueuedKingdomForgeApplication } from './recovery';
+import { forgeMessageKey } from '../../../realm/src/wiring/forge';
 
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 
 /** Real authority, reducer, write guard and immutable approval reader over a controlled repository. */
-async function fixture() {
+async function fixture(makers = 1) {
   const directory = await mkdtemp(join(tmpdir(), 'forge-coordinator-recovery-'));
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   let now = Date.now();
@@ -33,6 +36,14 @@ async function fixture() {
   let state: RealmPrivateState = { ...createRealmState(kingdomId, 'simulated'), homes: { [home.id]: home },
     coals: { [personId]: 2 }, stream: { sessionId: 'night', startedAt: now - 10_000, liveUntil: now + 900_000 },
     rights: { [personId]: { revision: 1, forge: true, build: true, blocked: false, safetyIdentifier: 'stable-hashed-citizen-identifier' } } };
+  const people = [personId];
+  for (let i = 1; i < makers; i++) {
+    const person = PersonIdSchema.parse(String(910100 + i)); people.push(person);
+    const id = `recovery-plot-${i}`;
+    state = { ...state, homes: { ...state.homes, [id]: { ...home, id, slot: 7 + i, ownerId: person,
+      allocationReceipt: `recovery-deed-${i}`, attribution: { ...home.attribution, makerName: `Citizen ${i}` } } },
+    coals: { ...state.coals, [person]: 2 }, rights: { ...state.rights, [person]: state.rights[personId]! } };
+  }
   const gate = new ForgeWriteGate(), guards = gate.install({ origin: 'simulated' }).guards;
   const facts: RealmFact[] = [], receipts = new Map<string, RealmStoredOutcome>(), payloads = new Map<string, string>();
   const repository: DurableRepository = {
@@ -65,7 +76,11 @@ async function fixture() {
   const retained = await services.retain(kingdomId); cleanups.push(() => retained.release());
   vi.spyOn(retained.kingdom, 'databaseNow').mockImplementation(() => now);
   const approvals = new FileForgeApprovals(join(directory, 'approvals'));
-  const actualAuthority = createForgeAuthority({ kingdomId, origin: 'simulated', retain: () => services.retain(kingdomId) }, { approvals, gate });
+  let denyRetain = false;
+  const actualAuthority = createForgeAuthority({ kingdomId, origin: 'simulated', retain: () => {
+    if (denyRetain) { denyRetain = false; return Promise.resolve(null); }
+    return services.retain(kingdomId);
+  } }, { approvals, gate });
   let statusUnavailable = false, loseCommitReply = false, failCommit = false, failRelease = false, loseReleaseReply = false;
   const authority = { ...actualAuthority,
     status: vi.fn(async (...args: Parameters<typeof actualAuthority.status>) => {
@@ -105,7 +120,8 @@ async function fixture() {
   const claim = async () => { const value = await queue.claimNext(); expect(value).not.toBeNull(); if (!value) throw new Error('Expected claim'); return value; };
   const application = () => createQueuedKingdomForgeApplication({ queue, authority, providers,
     now: () => now, record: value => approvals.record(value), publish: event => { published.push(event); } });
-  return { get queue() { return queue; }, command, admitted, claim, application, openAgain, authority, actualAuthority,
+  return { get queue() { return queue; }, command, admitted, claim, application, openAgain, authority, actualAuthority, people, approvals,
+    denyNextRetain: () => { denyRetain = true; },
     facts, stages, runner, published, spool, state: () => state, loseCommitReply: () => { loseCommitReply = true; },
     recoverStatus: () => { statusUnavailable = false; }, advance: (milliseconds: number) => { now += milliseconds; },
     failCommit: (value: boolean) => { failCommit = value; }, failRelease: (value: boolean) => { failRelease = value; },
@@ -263,5 +279,108 @@ it('does not return a committed recovery to a claim revoked while its exact comm
   expect(f.stages).toEqual(['words', 'draft', 'result']);
   expect(f.state().coals[personId]).toBe(1);
   expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(1);
+  expect(f.authority.release).not.toHaveBeenCalled();
+});
+
+it('parks a fully judged later commit without releasing or spending, then commits the exact saved candidate in order', async () => {
+  const f = await fixture(), first = await f.claim();
+  expect(await f.application()(first, { canCommit: () => false })).toMatchObject({ kind: 'recovery-needed' });
+  expect(f.stages).toEqual(['words', 'draft', 'result']);
+  expect(f.state().coals[personId]).toBe(2);
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(0);
+  expect(f.published).toHaveLength(0);
+  expect(f.authority.release).not.toHaveBeenCalled();
+  await f.queue.retry(first); const resumed = await f.claim();
+  expect(await f.application()(resumed, { canCommit: () => true })).toMatchObject({ kind: 'committed' });
+  expect(resumed.attempt).toEqual(first.attempt);
+  expect(f.stages).toHaveLength(3); expect(f.state().coals[personId]).toBe(1);
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(1);
+});
+
+it('reconciles a proven exact commit even while a newer first-commit barrier is closed or withdrawn', async () => {
+  const f = await fixture(), first = await f.claim(); f.loseCommitReply();
+  expect(await f.application()(first)).toMatchObject({ kind: 'recovery-needed' });
+  await f.openAgain(); f.recoverStatus(); const resumed = await f.claim();
+  await f.queue.withdraw({ kingdomId, reason: 'deleted', scope: { kind: 'message', messageId: f.command.messageId } });
+  expect(f.queue.canCommit(resumed)).toBe(false);
+  expect(await f.application()(resumed, { canCommit: () => false, canReserve: () => false })).toMatchObject({ kind: 'committed' });
+  expect(f.stages).toHaveLength(3); expect(f.state().coals[personId]).toBe(1);
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(1);
+  expect(f.authority.release).not.toHaveBeenCalled();
+});
+
+it.each(['reserve', 'revalidate', 'commit', 'approval'] as const)('suspends a transient actual %s dependency outage without terminal cleanup', async operation => {
+  const f = await fixture(), first = await f.claim();
+  if (operation === 'reserve') vi.spyOn(f.authority, 'reserve').mockImplementationOnce((...args) => {
+    f.denyNextRetain(); return f.actualAuthority.reserve(...args);
+  });
+  if (operation === 'revalidate') vi.spyOn(f.authority, 'revalidate').mockImplementationOnce((...args) => {
+    f.denyNextRetain(); return f.actualAuthority.revalidate(...args);
+  });
+  if (operation === 'commit') f.authority.commit.mockImplementationOnce((...args) => {
+    f.denyNextRetain(); return f.actualAuthority.commit(...args);
+  });
+  if (operation === 'approval') vi.spyOn(f.approvals, 'approved').mockRejectedValueOnce(new Error('approval storage unavailable'));
+  expect(await f.application()(first)).toMatchObject({ kind: 'recovery-needed' });
+  expect(f.authority.release).not.toHaveBeenCalled();
+  expect(f.state().coals[personId]).toBe(2);
+  await f.queue.retry(first); const resumed = await f.claim();
+  expect(await f.application()(resumed)).toMatchObject({ kind: 'committed' });
+  expect(resumed.attempt).toEqual(first.attempt); expect(f.stages).toEqual(['words', 'draft', 'result']);
+  expect(f.state().coals[personId]).toBe(1);
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(1);
+});
+
+it('keeps an actual capacity hold retryable under the same attempt without starting a model call', async () => {
+  const f = await fixture(), first = await f.claim(), messageId = 'prior-reservation';
+  const occupied = { ...f.command, ...{ key: forgeMessageKey(kingdomId, messageId), attemptId: 'prior-attempt', messageId } };
+  const lease = { signal: new AbortController().signal, current: () => true };
+  expect(await f.actualAuthority.reserve(occupied, lease)).toMatchObject({ kind: 'reserved' });
+  expect(await f.application()(first)).toMatchObject({ kind: 'recovery-needed' });
+  expect(f.stages).toEqual([]); expect(f.authority.release).not.toHaveBeenCalled();
+  await f.actualAuthority.release(occupied); await f.queue.retry(first);
+  expect(await f.application()(await f.claim())).toMatchObject({ kind: 'committed' });
+  expect(f.stages).toHaveLength(3); expect(f.state().coals[personId]).toBe(1);
+});
+
+it('runs three queued wishes through actual authority with two anvils, parallel drafts and arrival-ordered commits', async () => {
+  const f = await fixture(3);
+  const commands = [f.command, ...f.people.slice(1).map((who, index) => ({ ...f.command, personId: who, messageId: `ordered-${index}` }))];
+  // The head is unavailable before reserve. Later claims must not fill both anvils behind it.
+  f.authority.status.mockRejectedValueOnce(new Error('head prerequisite unavailable'));
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const original = f.runner.getMockImplementation()!;
+  let drafts = 0;
+  f.runner.mockImplementation(async request => {
+    const value = await original(request);
+    if (!request.model && ++drafts === 1) await held;
+    return value;
+  });
+  const worker = new ForgeWishWorker({ queue: f.queue, retryMs: 100, maxConcurrent: 2,
+    execute: (claim, control) => f.application()(claim, control) });
+  // Register shutdown before registry/queue cleanup, even when an assertion fails with the head paused.
+  cleanups.push(async () => { release(); await worker.stop(); });
+  for (const command of commands) await worker.admit(command);
+  await worker.start();
+  const until = async (test: () => boolean | Promise<boolean>) => {
+    const deadline = Date.now() + 90_000;
+    while (!await test()) {
+      if (Date.now() > deadline) throw new Error(JSON.stringify({ drafts, stages: f.stages,
+        queue: (await f.queue.list()).map(({ sequence, state, stage, modelCalls, outcome }) => ({ sequence, state, stage, modelCalls, outcome })),
+        facts: f.facts.map(fact => fact.body.type), active: worker.activeCount }));
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  };
+  await until(() => drafts >= 2);
+  expect(Object.keys(f.state().reservations)).toHaveLength(2);
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(0);
+  release();
+  await until(async () => (await f.queue.list()).every(receipt => receipt.state === 'finished'));
+  const facts = f.facts.filter(fact => fact.body.type === 'forge.commitApproved');
+  expect(facts.map(fact => fact.body.type === 'forge.commitApproved' ? fact.body.attempt.key : '')).toEqual(commands.map(command => forgeMessageKey(kingdomId, command.messageId)));
+  expect(f.people.map(who => f.state().coals[who])).toEqual([1, 1, 1]);
+  expect(f.stages).toHaveLength(9);
+  expect((await f.queue.list()).map(receipt => receipt.delivery?.acknowledged)).toEqual([false, false, false]);
   expect(f.authority.release).not.toHaveBeenCalled();
 });

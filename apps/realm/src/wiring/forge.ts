@@ -8,6 +8,7 @@ import { REALM_BASE_ANVILS, RealmBusyError, RealmHeldError, RealmWriterFencedErr
   type RealmCommandMeta } from '../persistence';
 import type { RealmForgeAttemptStatus, RealmForgeAuthority, RealmForgeOptions, RealmWiringLog } from './types';
 import { forgeDraftDigest } from '../../../codex/src/kingdom-forge/candidate';
+import { deferForgeAuthority } from '../../../codex/src/kingdom-forge/defer';
 
 /** Long enough for the coordinator's three-minute run and its checks; it accepts at most ten minutes. */
 export const FORGE_RESERVATION_MS = 300_000;
@@ -176,7 +177,11 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
     caller: () => boolean): Promise<RealmStoredOutcome | Canceled>;
   async function run(kingdom: DurableKingdom, step: Step, attempt: ForgeAttempt, command: RealmDomainCommand, meta: RealmCommandMeta,
     caller?: () => boolean): Promise<RealmStoredOutcome | Canceled> {
-    const id = commandId(step, attempt);
+    // A rejected reserve may be proposed again after capacity returns. Its expiry and native snapshot
+    // can then differ, so each exact proposal needs its own immutable repository digest binding.
+    // The reducer still owns one reservation per source attempt. Commit/release identities stay fixed.
+    const id = step === 'reserve'
+      ? `${commandId(step, attempt)}:${sha256(JSON.stringify(command)).slice(0, 48)}` : commandId(step, attempt);
     const execute = () => kingdom.execute(id, command, 'forge', { anvilCapacity: anvils, ...meta, ...(caller ? { current: caller } : {}) });
     try {
       // Release and expiry belong to no caller's lease: they always run.
@@ -211,7 +216,10 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
   const authority: RealmForgeAuthority = {
     origin,
     async reserve(input, lease) {
-      if (!options || !gate || input.kingdomId !== kingdomId || !live(lease)) { note('reserve', 'cold', !options ? 'unconfigured' : !gate ? 'ungated' : 'closed'); return { kind: 'cold' }; }
+      if (!options || !gate || input.kingdomId !== kingdomId || !live(lease)) {
+        note('reserve', 'cold', !options ? 'unconfigured' : !gate ? 'ungated' : 'closed');
+        return !options || !gate ? deferForgeAuthority({ kind: 'cold' as const }, 'unavailable') : { kind: 'cold' };
+      }
       if (!TokenSchema.safeParse(input.attemptId).success || input.key !== forgeMessageKey(input.kingdomId, input.messageId)
         || !Number.isSafeInteger(input.observedAt)) { note('reserve', 'held', 'attempt'); return { kind: 'held' }; }
       return holding<Reserved>(async kingdom => {
@@ -238,8 +246,8 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
         // Explain the actual committed prerequisite privately. The reducer still rechecks these in its transaction.
         if ((own(state.coals, input.personId) ?? 0) < 1) return { kind: 'held', privateMessage: privateCause('coal') } as const;
         const active = Object.values(state.reservations).filter(record => record.reservation.expiresAt > now);
-        if (active.some(record => record.reservation.personId === input.personId)) return { kind: 'held', privateMessage: privateCause('working') } as const;
-        if (active.length >= anvils) return { kind: 'held', privateMessage: privateCause('busy') } as const;
+        if (active.some(record => record.reservation.personId === input.personId)) return deferForgeAuthority({ kind: 'held', privateMessage: privateCause('working') } as const, 'capacity');
+        if (active.length >= anvils) return deferForgeAuthority({ kind: 'held', privateMessage: privateCause('busy') } as const, 'capacity');
         const reservation: ForgeReservation = {
           reservationId: `forge-reservation-${attemptDigest(input).slice(0, 32)}`, kingdomId, personId: input.personId,
           ...native(home, blueprint),
@@ -262,12 +270,21 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
         if (made(kingdom.privateState, input.key)) return { kind: 'already-committed' } as const;
         const kind = result.reason === 'cold' ? 'cold' : 'held';
         note('reserve', kind, result.reason);
+        const fresh = kingdom.privateState;
+        // Capacity may already have cleared after the rejection. Its old answer cannot become terminal
+        // merely because a competing reservation was released before this read.
+        if (result.reason === 'held' && eligibility(fresh, input.personId, kingdom.databaseNow(), kingdom.layoutRevision).kind === 'eligible'
+          && (own(fresh.coals, input.personId) ?? 0) >= 1 && (!after || after.attempt.attemptId === input.attemptId))
+          return deferForgeAuthority({ kind: 'held' as const }, 'capacity');
+        if (result.reason === 'cold' && eligibility(kingdom.privateState, input.personId, kingdom.databaseNow(), kingdom.layoutRevision).kind === 'eligible')
+          return deferForgeAuthority({ kind: 'cold' as const }, 'unavailable');
         return { kind } as const;
-      }, () => { note('reserve', 'cold', 'closed'); return { kind: 'cold' } as const; });
+      }, () => { note('reserve', 'cold', 'closed'); return deferForgeAuthority({ kind: 'cold' as const }, 'unavailable'); });
     },
 
     async revalidate(attempt, reservationId, lease) {
-      if (!options || !gate || !live(lease)) return { kind: 'cold' };
+      if (!options || !gate || !live(lease)) return !options || !gate
+        ? deferForgeAuthority({ kind: 'cold' as const }, 'unavailable') : { kind: 'cold' };
       return holding<Revalidated>(async kingdom => {
         if (!live(lease)) return { kind: 'cold' } as const;
         const state = kingdom.privateState, now = kingdom.databaseNow(), r = own(state.reservations, attempt.key);
@@ -282,11 +299,14 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
         if (state.stream.sessionId !== r.streamSessionId) { note('revalidate', 'cold', 'night'); return { kind: 'cold' } as const; }
         // The CURRENT home, even when it changed: the coordinator compares it with what its judges saw.
         return { kind: 'current', native: native(found.home, found.blueprint) } as const;
-      }, () => ({ kind: 'cold' } as const));
+      }, () => deferForgeAuthority({ kind: 'cold' as const }, 'unavailable'));
     },
 
     async commit(input, lease) {
-      if (!options || !gate || !live(lease)) { note('commit', 'cold', !options ? 'unconfigured' : !gate ? 'ungated' : 'closed'); return { kind: 'cold' }; }
+      if (!options || !gate || !live(lease)) {
+        note('commit', 'cold', !options ? 'unconfigured' : !gate ? 'ungated' : 'closed');
+        return !options || !gate ? deferForgeAuthority({ kind: 'cold' as const }, 'unavailable') : { kind: 'cold' };
+      }
       const draft = ForgeDraftSchema.safeParse(input.attachment.draft);
       if (!draft.success) return { kind: 'held' };
       return holding<Committed>(async kingdom => {
@@ -331,9 +351,12 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
         if (made(kingdom.privateState, input.key)) { note('commit', 'already-committed'); return { kind: 'already-committed' } as const; }
         // Every new publication still needs the judges' own current audited approval of this exact candidate.
         // A model-approved event, a historical policy receipt or an API key alone never attaches anything.
-        const approval = await options.approvals.approved(input.key, input.attachment.runId,
-          { draftDigest: forgeDraftDigest(draft.data), homeDigest: input.expectedHomeDigest,
-            kitId: input.attachment.kitId, kitRevision: input.attachment.kitRevision }).catch(() => null);
+        let approval: string | null;
+        try {
+          approval = await options.approvals.approved(input.key, input.attachment.runId,
+            { draftDigest: forgeDraftDigest(draft.data), homeDigest: input.expectedHomeDigest,
+              kitId: input.attachment.kitId, kitRevision: input.attachment.kitRevision });
+        } catch { return deferForgeAuthority({ kind: 'held' as const }, 'unavailable'); }
         if (!approval || !TokenSchema.safeParse(approval).success) { note('commit', 'held', 'gates'); return { kind: 'held' } as const; }
         if (!live(lease)) { note('commit', 'cold', 'canceled'); return { kind: 'cold' } as const; }
         const state = kingdom.privateState, now = kingdom.databaseNow();
@@ -362,13 +385,16 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
         if (result.status === 'rejected') {
           const kind = result.reason === 'cold' ? 'cold' : 'held';
           note('commit', kind, result.reason);
+          if (result.reason === 'cold' && live(lease)
+            && eligibility(kingdom.privateState, r.reservation.personId, kingdom.databaseNow(), kingdom.layoutRevision).kind === 'eligible'
+            && r.reservation.expiresAt > kingdom.databaseNow()) return deferForgeAuthority({ kind: 'cold' as const }, 'unavailable');
           return { kind } as const;
         }
         if (made(kingdom.privateState, input.key)) return { kind: 'already-committed' } as const;
         const kind = result.reason === 'cold' ? 'cold' : 'held';
         note('commit', kind, result.reason);
         return { kind } as const;
-      }, () => { note('commit', 'cold', 'closed'); return { kind: 'cold' } as const; });
+      }, () => { note('commit', 'cold', 'closed'); return deferForgeAuthority({ kind: 'cold' as const }, 'unavailable'); });
     },
 
     async release(attempt) {

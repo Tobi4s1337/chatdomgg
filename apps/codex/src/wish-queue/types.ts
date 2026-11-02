@@ -11,6 +11,38 @@ export type ForgeWishTerminal =
   | { readonly kind: 'committed'; readonly runId: string; readonly committedAt: number }
   | { readonly kind: 'refused' | 'held' | 'cold' | 'canceled' };
 
+/** Trusted finite copy, never the wish, a failed draft or a provider's raw explanation. */
+export interface ForgeWishCompletion {
+  readonly terminal: ForgeWishTerminal;
+  readonly message: string;
+}
+/** One logical owner outcome. Transport handoff is not an acknowledgement by its recipient. */
+export interface ForgeWishOwnerDelivery {
+  readonly replyId: string;
+  readonly message: string;
+  readonly acknowledged: boolean;
+}
+export interface ForgeWishOwnerAcknowledgement extends ForgeAttempt {
+  readonly replyId: string;
+}
+export interface ForgeWishOwnerQuery {
+  readonly afterSequence?: number;
+  readonly limit?: number;
+}
+export interface ForgeWishClaimOptions {
+  /** Trusted scheduler exclusions for parked commits/dependencies; never deletes or resequences a wish. */
+  readonly excludeKeys?: ReadonlySet<string>;
+}
+/** Through is the original witnessed timestamp, never a new timestamp assigned to a cleanup retry. */
+export interface ForgeWishWithdrawal {
+  readonly kingdomId: KingdomId;
+  readonly reason: 'deleted' | 'moderated' | 'offline' | 'coverage';
+  readonly scope:
+    | { readonly kind: 'message'; readonly messageId: string }
+    | { readonly kind: 'person'; readonly personId: PersonId; readonly through: number }
+    | { readonly kind: 'kingdom'; readonly through: number };
+}
+
 /** Safe for operational code, not a public HTTP response: identities and private outcomes still need filtering. */
 export interface ForgeWishReceipt extends ForgeAttempt {
   readonly sequence: number;
@@ -25,6 +57,7 @@ export interface ForgeWishReceipt extends ForgeAttempt {
   readonly modelCalls: number;
   readonly callLimit: 5 | 7;
   readonly outcome?: ForgeWishTerminal;
+  readonly delivery?: ForgeWishOwnerDelivery;
 }
 
 /** Immutable private snapshot. Its data is not an approval and must be validated by the resuming adapter. */
@@ -45,7 +78,10 @@ export interface ForgeWishClaim {
   readonly attempt: ForgeAttempt;
   readonly command: KingdomForgeCommand;
   readonly checkpoints: readonly ForgeWishCheckpoint[];
+  /** Process/claim lifetime. Losing it suspends work and never means moderation withdrew a wish. */
   readonly signal: AbortSignal;
+  /** Witnessed withdrawal only; ownership remains live so the worker can reconcile and clean up. */
+  readonly withdrawal: AbortSignal;
   current(): boolean;
 }
 

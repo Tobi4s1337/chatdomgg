@@ -9,6 +9,7 @@ import { forgeDeliveryMessage } from '../wish-decision';
 import { FileForgeWishQueue, type ForgeWishClaim, type ForgeWishJson } from '../wish-queue';
 import { createKingdomForgeApplication, type KingdomForgeOptions, type KingdomForgeResult } from './application';
 import type { ForgeCommitRequest, KingdomForgeExecution } from './execution';
+import { forgeAuthorityDeferred } from './defer';
 import type { CommittedForgeAttachment, ForgeAttempt, ForgeReservation, KingdomForgeAuthority,
   KingdomForgeCommand, KingdomForgeLease } from './ports';
 
@@ -65,6 +66,10 @@ export interface QueuedKingdomForgeControl {
   readonly lease?: KingdomForgeLease;
   /** Explicit witnessed withdrawal, separate from worker/service lifetime. */
   readonly withdrawal?: AbortSignal;
+  /** Trusted durable admission order; only a first publication is gated. Exact committed recovery bypasses it. */
+  readonly canCommit?: () => boolean;
+  /** Keep an anvil available for earlier accepted work that has not reserved yet. */
+  readonly canReserve?: () => boolean;
 }
 
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -93,14 +98,21 @@ export function createQueuedKingdomForgeApplication(options: QueuedKingdomForgeO
     const { queue, authority } = options, attempt = claim.attempt, command = claim.command;
     const expectedCommand = commandDigest(command), origin = authority.origin;
     const snapshots = new Map(claim.checkpoints.map(checkpoint => [checkpoint.id, checkpoint.data]));
-    const withdrawal = () => control.withdrawal?.aborted === true;
+    const withdrawal = () => claim.withdrawal.aborted || control.withdrawal?.aborted === true;
     const owned = () => claim.current() && !claim.signal.aborted;
-    const signal = AbortSignal.any([claim.signal, ...(control.lease ? [control.lease.signal] : []),
+    const signal = AbortSignal.any([claim.signal, claim.withdrawal, ...(control.lease ? [control.lease.signal] : []),
       ...(control.withdrawal ? [control.withdrawal] : [])]);
     const live = () => owned() && !signal.aborted && (control.lease?.current() ?? true);
     const lease: KingdomForgeLease = { signal, current: live };
     // Used only after status proves a monotonic committed outcome: exact replay cannot make a new piece.
     const recoveryLease: KingdomForgeLease = { signal: claim.signal, current: owned };
+    const mayCommit = () => { try { return control.canCommit?.() ?? true; } catch { return false; } };
+    const firstCommit: KingdomForgeAuthority['commit'] = async (input, caller) => {
+      if (!mayCommit()) throw new Error('This wish is waiting for its turn at the anvil.');
+      const result = await authority.commit(input, { signal: caller.signal, current: () => caller.current() && mayCommit() });
+      if (forgeAuthorityDeferred(result)) throw new Error('The Forge authority is awaiting recovery.');
+      return result;
+    };
     const save = async (id: string, stage: 'words' | 'commit', data: unknown) => {
       if (!owned()) throw new Error('The Forge worker no longer owns this wish.');
       const json = JSON.parse(JSON.stringify(data)) as ForgeWishJson;
@@ -148,7 +160,11 @@ export function createQueuedKingdomForgeApplication(options: QueuedKingdomForgeO
     };
     const replay = async (saved: SavedCommit, knownCommitted: boolean): Promise<KingdomForgeResult> => {
       if (!owned() || !knownCommitted && !live()) return pending(attempt);
-      const result = await wait(() => authority.commit(structuredClone(saved.input), knownCommitted ? recoveryLease : lease));
+      if (!knownCommitted && !mayCommit()) return pending(attempt);
+      const result = await wait(() => knownCommitted
+        ? authority.commit(structuredClone(saved.input), recoveryLease)
+        : firstCommit(structuredClone(saved.input), lease));
+      if (forgeAuthorityDeferred(result)) return pending(attempt);
       if (!owned()) return pending(attempt);
       if (result.kind !== 'committed') {
         if (knownCommitted) return pending(attempt); // A receipt cannot substitute for an exact payload match.
@@ -213,6 +229,7 @@ export function createQueuedKingdomForgeApplication(options: QueuedKingdomForgeO
           }
           if (previous) {
             const current = await wait(() => authority.revalidate(attempt, reservation.reservationId, lease));
+            if (forgeAuthorityDeferred(current)) throw new Error('The Forge authority is awaiting recovery.');
             if (!live()) throw new Error('The Forge worker was interrupted.');
             if (current.kind !== 'current' || current.native.revision !== reservation.revision
               || current.native.slot !== reservation.slot || current.native.family !== reservation.family
@@ -232,8 +249,18 @@ export function createQueuedKingdomForgeApplication(options: QueuedKingdomForgeO
         },
       };
       const run = createKingdomForgeApplication({ ...options,
+        authority: { ...authority, commit: firstCommit, reserve: async (...args) => {
+          if (control.canReserve && !control.canReserve()) throw new Error('An earlier wish is waiting for its anvil.');
+          const result = await authority.reserve(...args);
+          if (forgeAuthorityDeferred(result)) throw new Error('The anvil is waiting for its present work.');
+          return result;
+        }, revalidate: async (...args) => {
+          const result = await authority.revalidate(...args);
+          if (forgeAuthorityDeferred(result)) throw new Error('The Forge authority is awaiting recovery.');
+          return result;
+        } },
         // Committed pieces already belong to the authority's durable outbox. Never replay that ceremony here.
-        publish: event => { if (event.type !== 'committed') options.publish(event); },
+        publish: event => { if (event.type !== 'committed' && mayCommit()) options.publish(event); },
       });
       const outcome = await run(command, lease, execution);
       if (!owned()) return pending(attempt);

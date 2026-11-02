@@ -249,3 +249,56 @@ admission is wired, the Forge-owned bridge must persist authenticated arrivals, 
 durably deliver one owner outcome, and coordinate an ordered presentation cursor before terminal cleanup.
 Public queue counts/own position and the authenticated broadcaster's named view still need their projections.
 The run module's independent read gates, five/seven-call limits and failed FW10 visual calibration remain intact.
+
+## 11. Durable worker and witnessed cleanup (FW11, private checkpoint)
+
+`wish-worker/ForgeWishWorker` now wraps the queue-backed coordinator with bounded model work and separate
+bounded owner projections. Carry its lifetime lease, withdrawal and `canReserve`/`canCommit` predicates into
+`createQueuedKingdomForgeApplication`. The actual authority still owns each reservation, piece, coal and
+outbox row. Terminal completion atomically erases queued words/checkpoints and stores one finite private
+reply. Neither the observer nor `kingdom.toOwner` is an owner's acknowledgement. No production setup line,
+Herald route, shared/browser contract or UI was changed here.
+
+The remaining Herald handoff requires these exact additive changes, owned with raid-show:
+
+- In `packages/shared/src/realm/herald.ts`, add optional stable `sourceId` and original `observedAt` fields to
+  the Forge cancel and clear variants; new senders must supply both. Keep all old exports and required fields.
+  The stable source ID is the normalized deletion/clear event's ID; the timestamp is its original `at`, never
+  the time of an HTTP retry. Message deletion may persist its permanent exact-message predicate without a
+  timestamp, but person/room cutoff cleanup cannot infer one from arrival time.
+- In `apps/herald/src/ingest/ingest.ts`, pass that existing normalized ID/`at` through `#delete`, `#userClear`
+  and `#roomClear`. Presence remove, offline and source-lost already carry stable source IDs and observation
+  times; preserve those identities. Do not infer a moderation decision from a service lease becoming false.
+- In `apps/herald/src/realm-delivery/delivery.ts`, put wishes and their cleanup into a durable retryable private
+  handoff, replacing the current transient post-only path. Remove queued wish words after a confirmed durable
+  realm acknowledgement; never make them a permanent public delivery ledger. A timeout retries the same exact
+  source command. The realm's 202 must follow its synced enqueue/withdrawal, not the start of an async run.
+  Storage/capacity failure returns a retryable failure. Original source order must survive retries, including
+  deletion before wish arrival; the realm's predicates are idempotent and never evicted.
+- The in-process Forge sink currently receives only `{ signal, current() }`, which combines shutdown,
+  freshness and moderation. Keep that as suspension and use explicit witnessed cleanup for withdrawal. A
+  false lease alone has no durable reason or cutoff and cannot safely cancel a resumed wish.
+
+Until that reliable producer and the owned realm adapter are integrated together, the current production
+Herald path remains unchanged and its ACK must not be described as durable wish acceptance. This is an exact
+handoff requirement, not a claim that those other-lane patches have landed.
+
+The realm adapter must persist a source/session-bound witness of actual committed chat ingress before the
+first provider call. The ordinary bridge's ninety-second intake freshness check cannot simply be rerun on
+old queued words after restart. Resume validates that original witness plus current authority rights/night/
+home; it never invents presence from queue admission. Proven committed status recovery precedes new-work
+eligibility so an offline restart can still recover the exact already-created piece.
+
+Owner integration still needs an authenticated read/replay plus exact `{ key, attemptId, replyId }` ACK. Read
+pages include acknowledged outcomes so pagination never consumes a reply. Existing Forge-chat projection is
+only a transport-specific status record; ordinary chat-origin wishes have no corresponding wish-box row. The
+web realm intent adapter also ignores unsolicited receipt IDs. An actual Forge-owned owner inbox/consumer is
+therefore required before claiming the maker heard a terminal result. Public queue count/position projections
+must omit words and private reasons; names require the authenticated broadcaster.
+
+Commit order is now gated at the real first-write lease. It is not a viewer's played cursor. The existing
+outbox remains the sole committed publisher; the Forge scene's FIFO and snapshot restore must be tested with
+actual delivery/reconnect before ritual acceptance. Queued held/refused/withdrawn outcomes also need a stable
+`ended` activity projection: the durable coordinator deliberately avoids the old terminal release branch that
+emits it. Runtime startup/reconnect must reconcile lingering activity IDs rather than replay old ceremonies.
+Callback resources must settle separately on shutdown, and lifetime receipt/withdrawal indexing is still open.

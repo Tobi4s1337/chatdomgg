@@ -5,6 +5,14 @@ current Herald handoff as durable. The accepted ritual and the two independent m
 
 ## Decisions
 
+- **2026-11-02 — Persist replies with cleanup and reserve the head's anvil first.** One atomic terminal
+  replacement erases words/checkpoints and saves a finite owner reply. Transport success never consumes it;
+  only the exact authenticated owner ACK does. Withdrawals persist monotonic witnessed source cutoffs under
+  the same filesystem owner and fence active work synchronously. The bounded worker suspends on shutdown or
+  temporary authority/storage loss. Later drafts wait until earlier work has confirmed its reservation or
+  terminal intent, then first commits remain arrival-ordered at the actual transactional lease. A reserve
+  proposal's full command digest gets its own repository identity, avoiding changed-expiry conflicts after
+  a capacity race. No production admission or ceremony-consumed cursor is activated by this checkpoint.
 - **2026-11-02 — Keep the arrival and its attempt together.** A durable arrival owns the exact canonical command,
   a keyed payload binding, one attempt ID and its queue sequence. A duplicate may observe this work; it may not
   change its words, maker, home selector or observation time. A restart preserves that identity. The authority's
@@ -38,11 +46,19 @@ the original saved payload to the actual authority; its repository command diges
 the prior reservation or service lease expires. An explicit withdrawal saves terminal intent before cleanup
 and reconciles a possible committed race. Dependency failures stay finite private pending outcomes.
 
-The adapter intentionally does not finish the queue or deliver a response. Those belong to a service worker
-that must durably coordinate owner delivery, moderation revocations and ordered presentation before deleting
-private artifacts. The existing production Herald route is still unchanged. Exact checks and isolated-process evidence are in
+The adapter intentionally does not finish the queue or deliver a response. The private `wish-worker` now
+owns bounded scheduling, durable completion and non-consuming projections. The queue persists withdrawals,
+owner replies and exact owner ACKs; first reserve/commit predicates prevent priority inversion and out-of-order
+new commits. Actual owner consumers, production admission/lifecycle and ceremony processing remain unconnected.
+The existing production Herald route is still unchanged. Exact checks and isolated-process evidence are in
 `work/evidence/forge-wish/fw11-coordinator-checkpoint.md`. No module-level restart test
 certifies its admission, independent realm/service lifetime or ceremony behavior.
+
+The worker's projection callbacks receive an abortable lifetime lease and are capped separately from model
+executions. Failed callbacks back off, a hanging callback does not stall model work, and a completed callback
+never ACKs the owner. The integrating service must settle its actual transport resources on shutdown and
+reconcile lingering transient activity IDs. See `SEAMS.md` section 11 for the exact reliable Herald cleanup
+metadata/handoff requirement and owner consumer gap. Queue lifetime metadata still needs indexing.
 
 ## Ownership and durable boundaries
 

@@ -1,16 +1,20 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { KingdomIdSchema, PersonIdSchema, TokenSchema } from '@chatdom/shared';
+import { KingdomIdSchema, PersonIdSchema, TokenSchema, type KingdomId, type PersonId } from '@chatdom/shared';
 import type { KingdomForgeCommand } from '@chatdom/shared/realm';
 import { z } from 'zod';
 import { PrivateWishFiles } from './files';
 import { copyWishJson } from './json';
+import { matchesWithdrawal, mergeWithdrawal, ownerDeliverySchema, ownerQuerySchema, ownerReplyId,
+  withdrawalName, withdrawalRecordSchema, withdrawalSchema } from './lifecycle';
 import { ForgeWishQueueError, type FileForgeWishQueueOptions, type ForgeWishCheckpoint,
-  type ForgeWishCheckpointInput, type ForgeWishClaim, type ForgeWishModelStage, type ForgeWishReceipt,
-  type ForgeWishTerminal } from './types';
+  type ForgeWishCheckpointInput, type ForgeWishClaim, type ForgeWishClaimOptions, type ForgeWishCompletion,
+  type ForgeWishModelStage, type ForgeWishOwnerAcknowledgement, type ForgeWishOwnerQuery,
+  type ForgeWishReceipt, type ForgeWishTerminal, type ForgeWishWithdrawal } from './types';
 
 export * from './types';
 
 const MAX_RECORD_BYTES = 1_100_000;
+const MAX_WITHDRAWAL_BYTES = 2_048;
 const integer = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const keySchema = z.string().regex(/^forge-chat-[a-f0-9]{64}$/);
@@ -24,6 +28,9 @@ const terminalSchema = z.union([
   z.strictObject({ kind: z.literal('committed'), runId: TokenSchema, committedAt: integer }),
   z.strictObject({ kind: z.enum(['refused', 'held', 'cold', 'canceled']) }),
 ]);
+const completionSchema = z.strictObject({ terminal: terminalSchema, message: ownerDeliverySchema.shape.message });
+const ownerAcknowledgementSchema = z.strictObject({ key: keySchema, attemptId: TokenSchema,
+  replyId: ownerDeliverySchema.shape.replyId });
 const checkpointSchema = z.strictObject({ id: TokenSchema, stage: z.enum(['words', 'drafting', 'result', 'commit']),
   modelCalls: integer.max(7), data: z.unknown() });
 const recordSchema = z.strictObject({
@@ -34,11 +41,12 @@ const recordSchema = z.strictObject({
   binding: sha, callLimit: z.union([z.literal(5), z.literal(7)]),
   extension: z.enum(['fit', 'vocabulary']).optional(),
   calls: z.array(z.strictObject({ ordinal: integer.min(1).max(7), stage: modelStageSchema })).max(7),
-  expiresAt: integer.optional(), outcome: terminalSchema.optional(),
+  expiresAt: integer.optional(), outcome: terminalSchema.optional(), delivery: ownerDeliverySchema.optional(),
   private: z.strictObject({ words: z.string().min(1).max(240), checkpoints: z.array(checkpointSchema).max(16) }).optional(),
 });
 type RecordData = z.infer<typeof recordSchema>;
-interface ActiveClaim { readonly claim: ForgeWishClaim; readonly abort: AbortController; readonly expiresAt: number;
+interface ActiveClaim { readonly claim: ForgeWishClaim; readonly abort: AbortController;
+  readonly withdrawal: AbortController; readonly expiresAt: number;
   readonly timer: ReturnType<typeof setTimeout> }
 
 const keyFor = (command: Pick<KingdomForgeCommand, 'kingdomId' | 'messageId'>) =>
@@ -53,6 +61,7 @@ const plain = (record: RecordData): ForgeWishReceipt => ({
   personId: record.personId, messageId: record.messageId, slot: record.slot, observedAt: record.observedAt,
   state: record.state, stage: record.stage, generation: record.generation, modelCalls: record.calls.length,
   callLimit: record.callLimit, ...(record.outcome ? { outcome: structuredClone(record.outcome) } : {}),
+  ...(record.delivery ? { delivery: structuredClone(record.delivery) } : {}),
 });
 
 /**
@@ -62,6 +71,8 @@ const plain = (record: RecordData): ForgeWishReceipt => ({
 export class FileForgeWishQueue {
   private readonly records = new Map<string, RecordData>();
   private readonly active = new Map<string, ActiveClaim>();
+  /** Includes synchronous in-flight barriers. Storage failure poisons this owner instead of relaxing one. */
+  private readonly withdrawals = new Map<string, ForgeWishWithdrawal>();
   private serial: Promise<unknown> = Promise.resolve();
   private sequence = 0;
   private closed = false;
@@ -93,12 +104,12 @@ export class FileForgeWishQueue {
       const names = await files.names();
       for (const name of names) {
         if (name.startsWith('.pending-')) await files.clearTemporary(name);
-        else if (!/^(?:owner\.lock|queue\.json|queue\.key|wish-[a-f0-9]{64}\.json)$/.test(name))
+        else if (!/^(?:owner\.lock|queue\.json|queue\.key|(?:wish|withdrawal)-[a-f0-9]{64}\.json)$/.test(name))
           throw new ForgeWishQueueError('corrupt');
       }
       let header = await files.read('queue.json', 256), key = await files.read('queue.key', 65);
       if (header === null) {
-        if (names.some(name => name.startsWith('wish-'))) throw new ForgeWishQueueError('corrupt');
+        if (names.some(name => name.startsWith('wish-') || name.startsWith('withdrawal-'))) throw new ForgeWishQueueError('corrupt');
         // The key is installed first; a death before the header can safely finish initialization on reopen.
         if (key === null) { key = randomBytes(32).toString('hex'); await files.write('queue.key', key); }
         header = JSON.stringify({ version: 1, origin: input.origin });
@@ -112,6 +123,13 @@ export class FileForgeWishQueue {
         origin: input.origin, maxConcurrent, maxPending, claimMs, now: input.now ?? Date.now,
       });
       const sequences = new Set<number>();
+      for (const name of names.filter(name => name.startsWith('withdrawal-'))) {
+        const bytes = await files.read(name, MAX_WITHDRAWAL_BYTES);
+        if (bytes === null) throw new ForgeWishQueueError('corrupt');
+        const record = queue.decodeWithdrawal(bytes);
+        if (name !== withdrawalName(record)) throw new ForgeWishQueueError('corrupt');
+        queue.withdrawals.set(name, record);
+      }
       for (const name of names.filter(name => name.startsWith('wish-'))) {
         const bytes = await files.read(name, MAX_RECORD_BYTES);
         if (bytes === null) throw new ForgeWishQueueError('corrupt');
@@ -156,13 +174,84 @@ export class FileForgeWishQueue {
     });
   }
 
-  async claimNext(): Promise<ForgeWishClaim | null> {
+  /**
+   * A witnessed withdrawal fences authority leases synchronously, even while an earlier write awaits sync.
+   * Its promise acknowledges durable storage, not just that in-memory fence. Shutdown never calls this.
+   */
+  withdraw(input: ForgeWishWithdrawal): Promise<void> {
+    try {
+      const parsed = inputData(withdrawalSchema, input);
+      if (this.closed) throw new ForgeWishQueueError('closed');
+      if (this.failed) throw new ForgeWishQueueError('unavailable');
+      const name = withdrawalName(parsed), previous = this.withdrawals.get(name);
+      const next = mergeWithdrawal(previous, parsed);
+      this.withdrawals.set(name, next);
+      // Enqueue durability before abort listeners can enqueue their own cleanup. The public method does
+      // not await anything before the fence, and a duplicate still waits for the first write to finish.
+      const durable = this.work(async () => {
+        if (next !== previous) await this.persistWithdrawal(next);
+      });
+      for (const active of this.active.values()) if (matchesWithdrawal(next, active.claim.receipt))
+        active.withdrawal.abort();
+      return durable;
+    } catch (error) {
+      return Promise.reject(error instanceof ForgeWishQueueError ? error : new ForgeWishQueueError('invalid'));
+    }
+  }
+
+  /** Exact historical predicate only. Current rights, bans and coverage remain realm authority decisions. */
+  isWithdrawn(wish: Pick<ForgeWishReceipt, 'kingdomId' | 'personId' | 'messageId' | 'observedAt'>): boolean {
+    const scopes: ForgeWishWithdrawal['scope'][] = [
+      { kind: 'message', messageId: wish.messageId },
+      { kind: 'person', personId: wish.personId, through: 0 },
+      { kind: 'kingdom', through: 0 },
+    ];
+    return scopes.some(scope => {
+      const found = this.withdrawals.get(withdrawalName({ kingdomId: wish.kingdomId, reason: 'deleted', scope }));
+      return found !== undefined && matchesWithdrawal(found, wish);
+    });
+  }
+
+  /** First-commit order, never a claim that a ceremony was shown or acknowledged by a viewer. */
+  canCommit(claim: ForgeWishClaim): boolean {
+    let record: RecordData;
+    try { record = this.owned(claim); } catch { return false; }
+    if (this.isWithdrawn(record)) return false;
+    for (const previous of this.records.values()) if (previous.kingdomId === record.kingdomId
+      && previous.sequence < record.sequence && previous.state !== 'finished') return false;
+    return true;
+  }
+
+  /** Never fill the anvils behind a head wish that has not acquired its own reservation yet. */
+  canReserve(claim: ForgeWishClaim): boolean {
+    let record: RecordData;
+    try { record = this.owned(claim); } catch { return false; }
+    if (this.isWithdrawn(record)) return false;
+    for (const previous of this.records.values()) if (previous.kingdomId === record.kingdomId
+      && previous.sequence < record.sequence && previous.state !== 'finished'
+      && !previous.private?.checkpoints.some(value => value.id === 'application-binding' || value.id === 'application-terminal')) return false;
+    return true;
+  }
+
+  async claimNext(options: ForgeWishClaimOptions = {}): Promise<ForgeWishClaim | null> {
+    let excluded: Set<string>;
+    try {
+      excluded = new Set(options.excludeKeys ?? []);
+      if ([...excluded].some(key => !keySchema.safeParse(key).success)) throw new Error();
+    } catch { throw new ForgeWishQueueError('invalid'); }
     return this.work(async () => {
       await this.reclaimExpired();
       if (this.active.size >= this.options.maxConcurrent) return null;
       const busy = new Set([...this.active.values()].map(({ claim }) =>
         `${claim.receipt.kingdomId}:${claim.receipt.personId}`));
+      const firstByMaker = new Map<string, number>();
+      for (const pending of this.records.values()) if (pending.state !== 'finished') {
+        const maker = `${pending.kingdomId}:${pending.personId}`;
+        firstByMaker.set(maker, Math.min(firstByMaker.get(maker) ?? Infinity, pending.sequence));
+      }
       const record = [...this.records.values()].filter(record => record.state === 'queued'
+        && !excluded.has(record.key)
+        && firstByMaker.get(`${record.kingdomId}:${record.personId}`) === record.sequence
         && !busy.has(`${record.kingdomId}:${record.personId}`))
         .sort((a, b) => a.sequence - b.sequence)[0];
       if (!record) return null;
@@ -171,17 +260,19 @@ export class FileForgeWishQueue {
       if (!Number.isSafeInteger(expiresAt)) throw new ForgeWishQueueError('invalid');
       const claimed = { ...record, state: 'running' as const, generation: record.generation + 1, expiresAt };
       await this.persist(claimed);
-      const abort = new AbortController();
+      const abort = new AbortController(), withdrawal = new AbortController();
+      if (this.isWithdrawn(claimed)) withdrawal.abort();
       const claim: ForgeWishClaim = Object.freeze({
         receipt: Object.freeze(plain(claimed)), attempt: Object.freeze({ key: claimed.key, attemptId: claimed.attemptId }),
         command: Object.freeze({ kingdomId: claimed.kingdomId, personId: claimed.personId, messageId: claimed.messageId,
           slot: claimed.slot, observedAt: claimed.observedAt, words: claimed.private!.words }),
         checkpoints: structuredClone(claimed.private!.checkpoints) as ForgeWishCheckpoint[], signal: abort.signal,
+        withdrawal: withdrawal.signal,
         current: () => !this.closed && !this.failed && !abort.signal.aborted
           && this.active.get(claimed.key)?.claim === claim && this.safeNow() < expiresAt,
       });
       const timer = setTimeout(() => abort.abort(), this.options.claimMs); timer.unref?.();
-      this.active.set(claimed.key, { claim, abort, expiresAt, timer });
+      this.active.set(claimed.key, { claim, abort, withdrawal, expiresAt, timer });
       return claim;
     });
   }
@@ -191,6 +282,7 @@ export class FileForgeWishQueue {
     if (!modelStageSchema.safeParse(stage).success) throw new ForgeWishQueueError('invalid');
     return this.work(async () => {
       const record = this.owned(claim);
+      if (this.isWithdrawn(record)) throw new ForgeWishQueueError('stale');
       if (record.calls.length >= record.callLimit) throw new ForgeWishQueueError('budget');
       const ordinal = record.calls.length + 1;
       await this.persist({ ...record, stage, calls: [...record.calls, { ordinal, stage }] });
@@ -249,6 +341,47 @@ export class FileForgeWishQueue {
     });
   }
 
+  /**
+   * Production terminal boundary: save the actual finite owner outcome in the SAME durable replacement
+   * that erases words and recovery evidence. A delivery failure can never require running this wish again.
+   */
+  async complete(claim: ForgeWishClaim, input: ForgeWishCompletion): Promise<ForgeWishReceipt> {
+    const parsed = inputData(completionSchema, input);
+    return this.work(async () => {
+      const record = this.owned(claim);
+      const next: RecordData = { ...record, state: 'finished', outcome: parsed.terminal,
+        delivery: { replyId: ownerReplyId(record.messageId), message: parsed.message, acknowledged: false } };
+      delete next.private; delete next.expiresAt;
+      await this.persist(next); this.revoke(record.key); return plain(next);
+    });
+  }
+
+  /** Private owner-scoped pages, including acknowledged outcomes so pagination never implies receipt. */
+  async ownerOutcomes(kingdomId: KingdomId, personId: PersonId,
+    input: ForgeWishOwnerQuery = {}): Promise<ForgeWishReceipt[]> {
+    const owner = inputData(z.strictObject({ kingdomId: KingdomIdSchema, personId: PersonIdSchema }), { kingdomId, personId });
+    const query = inputData(ownerQuerySchema, input);
+    return this.work(async () => [...this.records.values()].filter(record => record.kingdomId === owner.kingdomId
+      && record.personId === owner.personId && record.state === 'finished' && record.delivery !== undefined
+      && record.sequence > (query.afterSequence ?? 0))
+      .sort((a, b) => a.sequence - b.sequence).slice(0, query.limit ?? 32).map(plain));
+  }
+
+  /** A trusted adapter must authenticate this exact owner before calling; socket handoff is never an ACK. */
+  async acknowledgeOwner(kingdomId: KingdomId, personId: PersonId,
+    input: ForgeWishOwnerAcknowledgement): Promise<void> {
+    const owner = inputData(z.strictObject({ kingdomId: KingdomIdSchema, personId: PersonIdSchema }), { kingdomId, personId });
+    const ack = inputData(ownerAcknowledgementSchema, input);
+    return this.work(async () => {
+      const record = this.records.get(ack.key);
+      if (!record || record.state !== 'finished' || record.kingdomId !== owner.kingdomId
+        || record.personId !== owner.personId || record.attemptId !== ack.attemptId
+        || record.delivery?.replyId !== ack.replyId) throw new ForgeWishQueueError('conflict');
+      if (record.delivery.acknowledged) return;
+      await this.persist({ ...record, delivery: { ...record.delivery, acknowledged: true } });
+    });
+  }
+
   async get(key: string): Promise<ForgeWishReceipt | null> {
     if (!keySchema.safeParse(key).success) throw new ForgeWishQueueError('invalid');
     return this.work(async () => { const record = this.records.get(key); return record ? plain(record) : null; });
@@ -268,7 +401,7 @@ export class FileForgeWishQueue {
       for (const key of this.active.keys()) this.revoke(key);
       try { await this.files.close(); }
       catch { throw new ForgeWishQueueError('unavailable'); }
-      finally { this.secret.fill(0); this.records.clear(); }
+      finally { this.secret.fill(0); this.records.clear(); this.withdrawals.clear(); }
     });
     return this.closing;
   }
@@ -320,6 +453,23 @@ export class FileForgeWishQueue {
     catch { this.fail(); throw new ForgeWishQueueError('unavailable'); }
     this.records.set(record.key, record);
   }
+  private async persistWithdrawal(withdrawal: ForgeWishWithdrawal) {
+    const record = { version: 1, origin: this.options.origin, withdrawal };
+    const payload = JSON.stringify(record), bytes = JSON.stringify({ payload: record, mac: this.mac(payload) });
+    if (Buffer.byteLength(bytes) > MAX_WITHDRAWAL_BYTES) { this.fail(); throw new ForgeWishQueueError('full'); }
+    try { await this.files.write(withdrawalName(withdrawal), bytes); }
+    catch { this.fail(); throw new ForgeWishQueueError('unavailable'); }
+  }
+  private decodeWithdrawal(bytes: string): ForgeWishWithdrawal {
+    try {
+      const outer = z.strictObject({ payload: z.unknown(), mac: sha }).parse(JSON.parse(bytes));
+      const payload = JSON.stringify(outer.payload);
+      if (!timingSafeEqual(Buffer.from(this.mac(payload), 'hex'), Buffer.from(outer.mac, 'hex'))) throw new Error();
+      const record = withdrawalRecordSchema.parse(outer.payload);
+      if (record.origin !== this.options.origin) throw new Error();
+      return record.withdrawal;
+    } catch { throw new ForgeWishQueueError('corrupt'); }
+  }
   private decode(bytes: string): RecordData {
     try {
       const outer = z.strictObject({ payload: z.unknown(), mac: sha }).parse(JSON.parse(bytes));
@@ -331,7 +481,9 @@ export class FileForgeWishQueue {
         || record.calls.some((call, index) => call.ordinal !== index + 1)
         || (record.state === 'running') !== (record.expiresAt !== undefined)
         || (record.state === 'finished') !== (record.outcome !== undefined)
-        || (record.state === 'finished') === (record.private !== undefined)) throw new Error();
+        || (record.state === 'finished') === (record.private !== undefined)
+        || record.delivery !== undefined && (record.state !== 'finished'
+          || record.delivery.replyId !== ownerReplyId(record.messageId))) throw new Error();
       if (record.private) {
         if (this.binding({ kingdomId: record.kingdomId, personId: record.personId, messageId: record.messageId,
           slot: record.slot, observedAt: record.observedAt, words: record.private.words }) !== record.binding) throw new Error();

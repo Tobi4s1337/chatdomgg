@@ -14,7 +14,7 @@ const privateFile = (info: Stats) => info.isFile() && info.nlink === 1
 export class PrivateWishFiles {
   private constructor(private readonly root: FileHandle, private readonly owner: FileHandle) {}
   private path(name: string) {
-    if (!/^(?:owner\.lock|queue\.json|queue\.key|wish-[a-f0-9]{64}\.json|\.pending-[a-f0-9-]{36}\.json)$/.test(name))
+    if (!/^(?:owner\.lock|queue\.json|queue\.key|(?:wish|withdrawal)-[a-f0-9]{64}\.json|\.pending-[a-f0-9-]{36}\.json)$/.test(name))
       throw new ForgeWishQueueError('invalid');
     return `/proc/self/fd/${this.root.fd}/${name}`;
   }
