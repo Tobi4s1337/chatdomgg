@@ -3,10 +3,17 @@ import { CitizenChatCueSchema, PRESENCE_LEASE_MS, type CitizenChatCue, type Forg
 import { REALM_CASTLE_SLOT, RealmHeraldEnvelopeSchema, RealmHeraldForgeCommandSchema, type KingdomForgeCommand, type KingdomForgeLease, type KingdomForgeOutcome, type RealmHeraldChat, type RealmPrivateMessage } from '@chatdom/shared/realm';
 import { createKingdomForgeApplication, type KingdomForgeFault, type KingdomForgeResult } from '../../../codex/src/kingdom-forge/application';
 import { createForgeProviders, type ForgeProviders } from '../../../codex/src/providers';
+import { createWarmCodexRunner, type WarmCodexRunner } from '../../../codex/src/providers/warm';
 import { decodeIngressCheckpoint, presenceEpoch, presencePerson, type IngressReply, type RealmIngress } from '../ingress';
 import type { DurableKingdom, DurableRealmServices } from '../persistence';
 import { createForgeAuthority, forgeMessageKey, type FileForgeApprovals, type ForgeWriteGate, type RealmWiringLog } from '../wiring';
 import { forgeDeliveryMessage } from '../../../codex/src/wish-decision';
+import { createQueuedKingdomForgeApplication } from '../../../codex/src/kingdom-forge/recovery';
+import { FileForgeWishQueue, ForgeWishQueueError, type ForgeWishClaim, type ForgeWishReceipt, type ForgeWishWithdrawal } from '../../../codex/src/wish-queue';
+import { ForgeWishWorker, type ForgeWishExecutionControl } from '../../../codex/src/wish-worker';
+import { forgeHostForPerson } from '@chatdom/shared/realm';
+import { ForgeRitualPresenter } from '../forge-queue/presenter';
+import type { ForgeQueueSource } from '../forge-queue/http';
 
 const MAX_PENDING = 32;
 const RUN_LEASE_MS = 600_000;
@@ -42,10 +49,29 @@ export interface RealmEveningOptions {
   /** How long a wish waits for its chat witness to commit; defaults to EVIDENCE_WAIT_MS. Tests shorten it. */
   readonly evidenceWaitMs?: number;
   readonly forgeLog?: (event: RealmWiringLog | (KingdomForgeFault & { readonly kind: 'forge-fault'; readonly kingdomId: KingdomId })) => void;
+  /**
+   * The durable wish line. When set, a wish is written to this private directory before Herald hears 202, survives
+   * a restart at any stage, forges alongside a few others, and reaches the room one ritual at a time in order.
+   */
+  readonly forgeQueue?: {
+    readonly directory: string;
+    /** Wishes forged at once across the realm (each kingdom is still bounded by its anvils). */
+    readonly maxConcurrent?: number;
+    readonly retryMs?: number;
+    /** Presentation pacing; tests shorten these. */
+    readonly ritualMs?: number;
+    readonly revealMs?: number;
+  };
 }
 
 type Application = ReturnType<typeof createKingdomForgeApplication>;
-interface Context { readonly kingdom: DurableKingdom; readonly run: Application; readonly stop: () => void }
+type Authority = ReturnType<typeof createForgeAuthority>;
+type QueuedApplication = ReturnType<typeof createQueuedKingdomForgeApplication>;
+interface Context { readonly kingdom: DurableKingdom; readonly run: Application; readonly authority: Authority; queued?: QueuedApplication; readonly stop: () => void }
+type WishRef = Pick<KingdomForgeCommand, 'kingdomId' | 'personId' | 'messageId'>;
+const OFFLINE = 'The forge fire rests while the stream is offline. Bring your wish when the kingdom wakes; your coal stays yours.';
+const INTAKE_CHECKPOINT = 'realm-intake';
+const terminalKinds = new Set(['committed', 'held', 'cold', 'canceled', 'refused']);
 interface Pending { readonly command: KingdomForgeCommand; readonly abort: AbortController; readonly promise: Promise<KingdomForgeOutcome> }
 type ForgeChatProgress<T = ForgeChatObservation> = T extends ForgeChatObservation
   ? Omit<T, 'origin' | 'kingdomId' | 'personId' | 'messageId' | 'at'> : never;
@@ -67,10 +93,52 @@ export class RealmEveningBridge {
   private readonly speechCleared = new Map<string, { readonly through: number; readonly until: number }>();
   private speechWaiting = 0;
   private stopped = false;
+  private queue: FileForgeWishQueue | null = null;
+  private worker: ForgeWishWorker | null = null;
+  private starting: Promise<void> | undefined;
+  readonly presenter: ForgeRitualPresenter;
+  /** The Forge's own long-lived model process; calls fall back to cold runs on their own when it is down. */
+  private readonly warm: WarmCodexRunner | null = null;
+  /** The latest offline cut per kingdom, so a wish it stopped says why. Memory only; a restart says the plain stop. */
+  private readonly offlineThrough = new Map<KingdomId, number>();
 
   constructor(readonly options: RealmEveningOptions) {
-    this.providers = options.providers ?? createForgeProviders();
+    if (!options.providers && process.env.FORGE_WARM !== '0') this.warm = createWarmCodexRunner();
+    this.providers = options.providers ?? createForgeProviders(this.warm ? { runCodex: this.warm } : {});
+    this.presenter = new ForgeRitualPresenter({
+      publish: (kingdomId, event) => { const kingdom = this.services?.kingdoms.get(kingdomId); if (kingdom?.current) kingdom.transient({ type: 'forge', event }); },
+      ...(options.forgeQueue?.ritualMs !== undefined ? { minimumMs: options.forgeQueue.ritualMs } : {}),
+      ...(options.forgeQueue?.revealMs !== undefined ? { revealMs: options.forgeQueue.revealMs } : {}),
+    });
   }
+
+  /** Open the durable wish line and resume every wish a previous process left unfinished. */
+  start(): Promise<void> {
+    const config = this.options.forgeQueue;
+    if (!config) return Promise.resolve();
+    this.starting ??= (async () => {
+      const maxConcurrent = config.maxConcurrent ?? 3;
+      const queue = await FileForgeWishQueue.open({ directory: config.directory, origin: this.options.origin, maxConcurrent, maxPending: 256 });
+      const worker = new ForgeWishWorker({ queue, maxConcurrent, retryMs: config.retryMs ?? 1_000,
+        execute: (claim, control) => this.execute(claim, control),
+        completed: receipt => this.completed(receipt) });
+      // A week of finished, heard wishes is plenty to recognise a late duplicate from Herald.
+      await queue.prune(Date.now() - 7 * 24 * 60 * 60_000).catch(() => 0);
+      for (const receipt of await queue.list()) if (receipt.state !== 'finished') this.presenter.track(receipt);
+      this.queue = queue; this.worker = worker;
+      try { await worker.start(); } catch (error) { this.queue = null; this.worker = null; await queue.close().catch(() => {}); throw error; }
+    })();
+    return this.starting;
+  }
+
+  /** The anvil's public line for the queue route. */
+  readonly line: ForgeQueueSource = {
+    line: kingdomId => this.presenter.line(kingdomId),
+    name: (kingdomId, personId) => {
+      const kingdom = this.services?.kingdoms.get(kingdomId);
+      return kingdom ? forgeHostForPerson(kingdom.privateState, personId as never)?.attribution.makerName ?? null : null;
+    },
+  };
 
   use(services: DurableRealmServices): void {
     if (this.services && this.services !== services) throw new Error('The evening bridge already belongs to a realm registry');
@@ -105,14 +173,18 @@ export class RealmEveningBridge {
       off();
       if (this.contexts.get(kingdom.kingdomId)?.kingdom !== kingdom) return;
       this.contexts.delete(kingdom.kingdomId);
-      this.cancel(kingdom.kingdomId);
+      // A durable wish only pauses when its kingdom closes; it resumes when the kingdom opens again.
+      if (!this.worker) this.cancel(kingdom.kingdomId);
     };
-    this.contexts.set(kingdom.kingdomId, { kingdom, run, stop });
+    this.contexts.set(kingdom.kingdomId, { kingdom, run, authority, stop });
     return stop;
   }
 
   /** In-process adapter for Herald's existing ForgeCommandSink. */
-  readonly sink = async (command: KingdomForgeCommand, lease: KingdomForgeLease): Promise<void> => { await this.run(command, lease); };
+  readonly sink = async (command: KingdomForgeCommand, lease: KingdomForgeLease): Promise<void> => {
+    if (this.worker) { await this.admit(command); return; }
+    await this.run(command, lease);
+  };
 
   async run(command: KingdomForgeCommand, incoming?: KingdomForgeLease): Promise<KingdomForgeOutcome> {
     if (this.stopped || !this.services) return { kind: 'cold' };
@@ -262,6 +334,15 @@ export class RealmEveningBridge {
       return { http: 202, body: { version: 1, status: 'accepted' } };
     }
     const forge = input.forge;
+    if (this.worker) {
+      // Herald hears 202 only once the wish (or its withdrawal) is synced to the private line.
+      try {
+        if (forge.type === 'wish') await this.admit(forge.command);
+        else if (forge.type === 'cancel') await this.withdraw(forge.kingdomId, 'deleted', { messageId: forge.messageId });
+        else await this.withdraw(forge.kingdomId, 'moderated', forge.personId === undefined ? {} : { personId: forge.personId });
+      } catch { return { http: 503, body: { version: 1, status: 'unavailable', message: 'The Forge is taking its present wishes. Try again shortly.' } }; }
+      return { http: 202, body: { version: 1, status: 'accepted' } };
+    }
     if (forge.type === 'wish') {
       if (this.pending.size >= MAX_PENDING) return { http: 503, body: { version: 1, status: 'unavailable', message: 'The Forge is taking its present wishes. Try again shortly.' } };
       void this.run(forge.command);
@@ -343,6 +424,11 @@ export class RealmEveningBridge {
 
   async stop(): Promise<void> {
     this.stopped = true;
+    // Suspend, never withdraw: every unfinished wish keeps its words, stage and spent calls for the next process.
+    await this.starting?.catch(() => {});
+    if (this.worker) { await this.worker.stop(); await this.queue?.close().catch(() => {}); this.worker = null; this.queue = null; }
+    this.presenter.clear();
+    await this.warm?.close().catch(() => {});
     this.withdrawn.clear();
     this.speechActive.clear();
     this.speechWithdrawn.clear(); this.speechCleared.clear();
@@ -352,8 +438,114 @@ export class RealmEveningBridge {
   }
 
   private revoke(input: PresenceInput): void {
+    if (this.worker) {
+      // The withdrawal fences running work synchronously; its durable write completes in the background.
+      if (input.kind === 'stream' && !input.live) {
+        this.offlineThrough.set(input.kingdomId, Date.now());
+        void this.withdraw(input.kingdomId, 'offline', {}).catch(() => {});
+      }
+      else if (input.kind === 'source-lost') void this.withdraw(input.kingdomId, 'coverage', {}).catch(() => {});
+      else if (input.kind === 'remove') void this.withdraw(input.kingdomId, 'coverage', { personId: input.personId }).catch(() => {});
+      return;
+    }
     if ((input.kind === 'stream' && !input.live) || input.kind === 'source-lost') this.cancel(input.kingdomId);
     else if (input.kind === 'remove') this.cancel(input.kingdomId, { personId: input.personId });
+  }
+
+  /** Durable admission: the exact command is synced before this resolves. A duplicate is the same wish. */
+  private async admit(command: KingdomForgeCommand): Promise<void> {
+    const parsed = RealmHeraldForgeCommandSchema.safeParse(command);
+    if (!parsed.success || !this.worker) throw new ForgeWishQueueError('invalid');
+    const { receipt } = await this.worker.admit(parsed.data);
+    if (receipt.state !== 'finished') this.presenter.track(receipt);
+  }
+
+  private withdraw(kingdomId: KingdomId, reason: ForgeWishWithdrawal['reason'], filter: { readonly messageId?: string; readonly personId?: string }): Promise<void> {
+    if (!this.worker) return Promise.reject(new ForgeWishQueueError('closed'));
+    // Herald gives no original time for a clear; everything observed up to now is covered, never later wishes.
+    const through = Date.now();
+    const scope: ForgeWishWithdrawal['scope'] = filter.messageId !== undefined ? { kind: 'message', messageId: filter.messageId }
+      : filter.personId !== undefined ? { kind: 'person', personId: filter.personId as never, through } : { kind: 'kingdom', through };
+    return this.worker.withdraw({ kingdomId, reason, scope });
+  }
+
+  /**
+   * One claimed wish, resumed from wherever it stopped. The intake (the wish's own chat message heard live) runs once
+   * and is saved; everything after it is the durable coordinator. Losing the kingdom, the process or the stream
+   * session pauses or quietly stops the wish; nothing is spent twice and the reveal plays once, from the outbox.
+   */
+  private async execute(claim: ForgeWishClaim, control: ForgeWishExecutionControl): Promise<KingdomForgeResult> {
+    const command = claim.command, suspended: KingdomForgeResult = { kind: 'recovery-needed', ...claim.attempt };
+    const services = this.services, queue = this.queue;
+    if (!services || !queue || this.stopped) return suspended;
+    const hold = await services.retain(command.kingdomId);
+    try {
+      const kingdom = hold.kingdom;
+      if (this.contexts.get(command.kingdomId)?.kingdom !== kingdom) this.attach(kingdom);
+      const context = this.contexts.get(command.kingdomId);
+      if (!context || context.kingdom !== kingdom || !kingdom.current) return suspended;
+      const base = () => !this.stopped && control.lease.current() && kingdom.current;
+      let intake = this.intake(claim);
+      if (!intake) {
+        if (claim.withdrawal.aborted) return { kind: 'canceled' };
+        const started = kingdom.databaseNow();
+        if (command.observedAt > started + CLOCK_SKEW_MS || started - command.observedAt >= PRESENCE_LEASE_MS) {
+          this.fault(command.kingdomId, 'time-budget');
+          return { kind: 'cold', privateMessage: LATE };
+        }
+        const witness = await this.witnessed(kingdom, command, () => base() && !claim.withdrawal.aborted);
+        if (!base()) return suspended;
+        if (claim.withdrawal.aborted) return { kind: 'canceled' };
+        if (witness !== 'heard') {
+          if (witness === 'unreachable') this.fault(command.kingdomId, 'dependency');
+          return { kind: 'cold', privateMessage: witness === 'unreachable' ? UNREACHABLE : UNHEARD };
+        }
+        const sessionId = kingdom.privateState.stream.sessionId;
+        if (sessionId === null || kingdom.privateState.stream.liveUntil <= kingdom.databaseNow()) return { kind: 'cold', privateMessage: OFFLINE };
+        await queue.checkpoint(claim, { id: INTAKE_CHECKPOINT, stage: 'words', data: { version: 1, sessionId } });
+        intake = { sessionId };
+        await this.observe(command, { status: 'working' });
+      }
+      const sessionId = intake.sessionId;
+      const live = () => { const state = kingdom.privateState; return state.stream.sessionId === sessionId && state.stream.liveUntil > kingdom.databaseNow(); };
+      // The stream this wish was made in has ended: stop it for good (releasing any reservation), never wait forever.
+      if (!live() && !claim.withdrawal.aborted) await queue.withdraw({ kingdomId: command.kingdomId, reason: 'offline', scope: { kind: 'message', messageId: command.messageId } });
+      context.queued ??= createQueuedKingdomForgeApplication({ queue, authority: context.authority, providers: this.providers,
+        now: () => kingdom.databaseNow(), record: audit => this.options.approvals.record(audit),
+        fault: fault => this.options.forgeLog?.({ kind: 'forge-fault', kingdomId: kingdom.kingdomId, ...fault }),
+        publish: event => { if (event.type !== 'committed') this.presenter.offer(kingdom.kingdomId, event); } });
+      const result = await context.queued(claim, { withdrawal: control.withdrawal, canReserve: control.canReserve, canPresent: () => true,
+        lease: { signal: control.lease.signal, current: () => base() && live() },
+        canCommit: () => control.canCommit() && this.presenter.ready(command.kingdomId, claim.attempt.attemptId) });
+      const outcome: KingdomForgeResult = result.kind === 'canceled' && (!live() || (this.offlineThrough.get(command.kingdomId) ?? -1) >= command.observedAt) ? { kind: 'canceled', privateMessage: OFFLINE } : result;
+      if (terminalKinds.has(outcome.kind)) this.presenter.finish(command.kingdomId, claim.receipt.key, outcome.kind === 'committed');
+      return outcome;
+    } finally { await hold.release(); }
+  }
+
+  private intake(claim: ForgeWishClaim): { readonly sessionId: string } | undefined {
+    const data = claim.checkpoints.find(checkpoint => checkpoint.id === INTAKE_CHECKPOINT)?.data;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
+    const sessionId = (data as { readonly sessionId?: unknown }).sessionId;
+    return typeof sessionId === 'string' ? { sessionId } : undefined;
+  }
+
+  /**
+   * The maker hears the finished wish: privately in the room and in the wish box's own record. Only when that record
+   * has it is the reply acknowledged; otherwise the worker tries again later and the room receipt repeats its ID.
+   */
+  private async completed(receipt: ForgeWishReceipt): Promise<void> {
+    const outcome = receipt.outcome, delivery = receipt.delivery;
+    this.presenter.finish(receipt.kingdomId, receipt.key, outcome?.kind === 'committed');
+    if (!outcome || !delivery || delivery.acknowledged || !this.queue) return;
+    const ref: WishRef = { kingdomId: receipt.kingdomId, personId: receipt.personId, messageId: receipt.messageId };
+    const kingdom = this.services?.kingdoms.get(receipt.kingdomId);
+    const result: KingdomForgeResult = outcome.kind === 'committed'
+      ? { kind: 'committed', published: false, privateMessage: delivery.message, attachment: { id: outcome.runId, committedAt: outcome.committedAt } as never }
+      : outcome.kind === 'refused' ? { kind: 'refused', message: delivery.message } : { kind: outcome.kind, privateMessage: delivery.message };
+    if (kingdom?.current) try { this.privateOutcome(kingdom, ref, result); } catch { /* the room may be closing; the record below still answers */ }
+    if (!await this.observeOutcome(ref, result)) throw new Error('The wish box record is not reachable yet.');
+    await this.queue.acknowledgeOwner(receipt.kingdomId, receipt.personId, { key: receipt.key, attemptId: receipt.attemptId, replyId: delivery.replyId });
   }
 
   /**
@@ -398,7 +590,7 @@ export class RealmEveningBridge {
       privateMessage: forgeDeliveryMessage(made.attachment.draft) };
   }
 
-  private privateOutcome(kingdom: DurableKingdom, command: KingdomForgeCommand, outcome: KingdomForgeResult): void {
+  private privateOutcome(kingdom: DurableKingdom, command: WishRef, outcome: KingdomForgeResult): void {
     if (outcome.kind === 'committed') {
       if (outcome.privateMessage) kingdom.toOwner(command.personId, { type: 'receipt', receipt: { version: 1,
         id: `forge:${digest(command.messageId).slice(0, 48)}`, status: 'committed', writerEpoch: kingdom.writerEpoch,
@@ -413,25 +605,26 @@ export class RealmEveningBridge {
     kingdom.toOwner(command.personId, reply);
   }
 
-  private async observe(command: KingdomForgeCommand, outcome: ForgeChatProgress): Promise<void> {
+  private async observe(command: WishRef, outcome: ForgeChatProgress): Promise<boolean> {
     // No wish words or provider evidence cross this private seam. A failed projection is recoverable
     // from the durable committed piece, and must never become a retry of the authority or chat write.
     try { await this.options.forgeChatObserver?.({ origin: this.options.origin, kingdomId: command.kingdomId,
-      personId: command.personId, messageId: command.messageId, at: Date.now(), ...outcome } as ForgeChatObservation); }
-    catch { /* owner projection unavailable; the authoritative outcome remains unchanged */ }
+      personId: command.personId, messageId: command.messageId, at: Date.now(), ...outcome } as ForgeChatObservation); return true; }
+    catch { return false; /* owner projection unavailable; the authoritative outcome remains unchanged */ }
   }
 
-  private async observeOutcome(command: KingdomForgeCommand, outcome: KingdomForgeResult): Promise<void> {
+  private async observeOutcome(command: WishRef, outcome: KingdomForgeResult): Promise<boolean> {
     if (outcome.kind === 'committed') {
-      await this.observe(command, { status: 'delivered', attachmentId: outcome.attachment.id,
+      return this.observe(command, { status: 'delivered', attachmentId: outcome.attachment.id,
         committedAt: outcome.attachment.committedAt, ...(outcome.privateMessage ? { message: outcome.privateMessage } : {}) });
     } else if (outcome.kind !== 'already-committed') {
       const status = outcome.kind === 'recovery-needed' ? 'cold' : outcome.kind;
-      await this.observe(command, { status, message: outcome.privateMessage ?? (outcome.kind === 'refused'
+      return this.observe(command, { status, message: outcome.privateMessage ?? (outcome.kind === 'refused'
         ? outcome.message : outcome.kind === 'held' ? 'Your wish waits privately at the Forge.'
           : outcome.kind === 'canceled' ? 'The wish has stopped. Your coal stays yours.'
             : 'The forge is cold tonight. Your home is unchanged.') });
     }
+    return true;
   }
 
   private key(kingdomId: KingdomId, messageId: string): string { return digest(JSON.stringify([kingdomId, messageId])); }

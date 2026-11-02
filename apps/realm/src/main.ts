@@ -11,6 +11,7 @@ import { RealmEntryInfoSchema } from '@chatdom/shared/realm';
 import { join } from 'node:path';
 import { ForgeWriteGate, FileForgeApprovals } from './wiring';
 import { RealmEveningBridge, mountEveningRoutes } from './evening';
+import { mountForgeQueueRoutes } from './forge-queue/http';
 import { createRealmCitizens } from './evening/citizens';
 import { createRealmCastle } from './evening/castle';
 import { attachEveningInteractions } from './evening/interactions';
@@ -89,6 +90,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const forgeChat = await createRealmForgeChat({ pool, origin, services: boot.services, founded: id => !!boot.loader.current(id)?.scene });
   const evening = new RealmEveningBridge({ origin, ingress: boot.ingress, gate, approvals,
     forgeChatObserver: forgeChat.observe,
+    forgeQueue: { directory: join(foundedDirectory, 'forge-queue') },
     beforeObservation: input => citizens.observe(input) });
   evening.use(boot.services);
   const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
@@ -97,6 +99,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
   forgeChat.mount(transport.app);
+  mountForgeQueueRoutes(transport.app, evening.line, { pool, origin, secureCookies: new URL(process.env.REALM_PUBLIC_ORIGIN ?? 'http://localhost:5190').protocol === 'https:' });
   ownRealmShutdown(server, transport, async () => {
     dock.stop();
     try { await forgeChat.stop(); }
@@ -104,6 +107,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   });
   try {
     await boot.readiness.start();
+    await evening.start();
     await forgeChat.start();
     await releasePort();
     await server.listen(port, host);
