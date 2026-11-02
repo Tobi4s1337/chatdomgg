@@ -19,7 +19,7 @@
 // For each size: a fresh browser context (cold cache) opens the walk and records time to the designed gate, to
 // the loaded frame and to walkable. Then for each view the server places the walker a few metres short of the
 // spot, the camera is turned by a real mouse drag, the walker walks in with the W key, and the page is captured.
-/* global AbortSignal, AbortController, TextDecoderStream, performance -- Node 22 and page globals */
+/* global AbortSignal, AbortController, TextDecoderStream, performance, setInterval, clearInterval -- Node 22 and page globals */
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -86,6 +86,11 @@ let loader, realm, api, land, preview, browser, release;
 const cleanups = [];
 const sockets = new Set();
 const own = server => server.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
+/** A loopback-only internal server on an OS-assigned port (never a capture or service port). */
+const listenInternal = server => new Promise((done, fail) => {
+  server.once('error', fail);
+  server.listen({ port: 0, host, exclusive: true }, () => { server.off('error', fail); done(server.address().port); });
+});
 async function listenFirst(server, candidates) {
   for (const port of candidates) {
     const ok = await new Promise(done => {
@@ -278,15 +283,13 @@ try {
   const realmPort = pc ? 5191 : null;
   if (pc) await realm.listen(5191, host);
   else {
-    let bound;
-    // uWS listens with port reuse, so a taken port would silently share another process's socket.
-    // Probe each port exclusively with Node first; only a port nobody holds is given to the realm.
-    for (const port of CAPTURE_PORTS) {
-      const probe = createNetServer();
-      const free = await new Promise(done => { probe.once('error', () => done(false)); probe.listen({ port, host, exclusive: true }, () => probe.close(() => done(true))); });
-      if (free) { await realm.listen(port, host); bound = port; break; }
-    }
-    assert.ok(bound, 'No realm port'); report.realmPort = bound;
+    // Off the GPU the realm, session and land servers are the bench's own loopback internals: only the preview's
+    // proxy talks to them, so they take an OS-assigned port and leave the capture ports to what a browser opens.
+    // uWS listens with port reuse, so the port is first claimed exclusively by Node, then handed to the realm.
+    const probe = createNetServer();
+    const bound = await new Promise((done, fail) => { probe.once('error', fail); probe.listen({ port: 0, host, exclusive: true }, () => { const { port } = probe.address(); probe.close(() => done(port)); }); });
+    await realm.listen(bound, host);
+    report.realmPort = bound;
   }
 
   // Bench session and ticket endpoint (the API's shape; Twitch OIDC itself is not under test here).
@@ -317,14 +320,14 @@ try {
     reply(404, { version: 1, status: 'unavailable', message: 'Not on this bench.' });
   });
   own(api);
-  const apiPort = await listenFirst(api, CAPTURE_PORTS.filter(p => p !== report.realmPort));
+  const apiPort = pc ? await listenFirst(api, CAPTURE_PORTS.filter(p => p !== report.realmPort)) : await listenInternal(api);
 
   const { createLandReadServer } = await import(pathToFileURL(resolve('shots/grand-world/land-server/server.mjs')).href);
   // Unpublished: the land routes hang like the live realm's unknown routes do, so only the probe's timeout ends them.
   land = unpublished ? createHttpServer(req => { report.heldLandRequests = (report.heldLandRequests ?? 0) + 1; req.socket.setTimeout(0); })
     : createLandReadServer(resolve('shots/grand-world/land-bake-g3'));
   own(land);
-  const landPort = await listenFirst(land, CAPTURE_PORTS.filter(p => p !== report.realmPort && p !== apiPort));
+  const landPort = pc ? await listenFirst(land, CAPTURE_PORTS.filter(p => p !== report.realmPort && p !== apiPort)) : await listenInternal(land);
 
   process.env.CHATDOM_REALM_TARGET = `http://${host}:${realmPort ?? report.realmPort}`;
   process.env.CHATDOM_API_TARGET = `http://${host}:${apiPort}`;

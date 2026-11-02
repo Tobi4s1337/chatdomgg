@@ -1000,7 +1000,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     townCover?.update({time,walkers:[]});
     if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,groundHeight(lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...(civicLife?.sources()??[]),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...forge.sources(),...(realmForge?.sources()??[]),...(growth?.sources()??[]),...(dockVisuals?.sources()??[]),...raidTorchLights(moments?.metrics())];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
     const people=walk??observed;
-    if(people)options.onWalkers?.(monarchView.labels(people.labels()).filter(label=>{
+    if(people)options.onWalkers?.(monarchView.labels(people.labels(),canvas.clientHeight).filter(label=>{
       const person=people.poses.find(p=>p.id===label.id);
       return person&&!windowOccluded(nearBlockers,[camera.position.x,camera.position.y,camera.position.z],[person.x,person.y+1.95,person.z]);
     }));

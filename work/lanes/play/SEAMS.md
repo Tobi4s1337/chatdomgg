@@ -487,7 +487,9 @@ export const REALM_LOOK_ROUTES = {
   otherwise it adds nothing. Keep the spread last in the sample so a future `lookYaw` of play's own wins only if
   it is spread after it.
 - **Name tags:** the scene maps the labels it hands to `onWalkers`: the verified monarch's `name` reads
-  `"<Title> <name>"` (`monarchNameTag`, "Monarch tobi4s_"). Nothing in play's label component changes. If play
+  `"<Title> <name>"` (`monarchNameTag`, "Monarch tobi4s_"), and its `y` is raised by the crown's projected height
+  (`CROWN_TAG_LIFT_M`) so the tag stands above the crown's tips instead of over them; every other label passes
+  unchanged. Nothing in play's label component changes. If play
   later styles the monarch's tag (a small crown glyph, a gold rule), read `crown` from the room's walker
   (`WalkerSchema.crown`, the title or empty) or from the stream frame's `RealmObservedWalker.crown`; never infer it
   from a name.

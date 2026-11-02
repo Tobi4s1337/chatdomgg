@@ -4,7 +4,7 @@ import type { SettlementPlan } from '@chatdom/world';
 import { MONARCH_CHANNEL, MonarchChannelReplySchema, REALM_CASTLE_SLOT, REALM_NO_HOME_SLOT, monarchCrownOf, monarchNameTag,
   type ArrivalStanding, type MonarchChannelReply, type MonarchTitle, type RealmWalkerFeed, type RealmWalkerFrame } from '@chatdom/shared/realm';
 import { createMonarchPresence } from './presence';
-import { createMonarchCrown } from './crown';
+import { CROWN_TAG_LIFT_M, createMonarchCrown } from './crown';
 import { createHomeMark } from './home-mark';
 import { provideWalkerGaze } from './gaze';
 import { bearingWords, createArrivalLine, firstArrival, rememberArrival, type ArrivalLine } from './arrival-line';
@@ -21,7 +21,7 @@ export interface MonarchRoom {
   onMessage(type: string, callback: (message: unknown) => void): (() => void) | unknown;
 }
 interface Pose { readonly id: string; readonly x: number; readonly y: number; readonly z: number; readonly yaw: number; readonly self?: boolean }
-interface Label { readonly id: string; readonly name: string; readonly self: boolean; readonly opacity?: number }
+interface Label { readonly id: string; readonly name: string; readonly self: boolean; readonly opacity?: number; /** Screen y in CSS pixels, as projected from the head anchor. */ readonly y?: number }
 export interface MonarchPeople {
   readonly poses: readonly Pose[];
   readonly heads?: ReadonlyMap<string, THREE.Vector3>;
@@ -49,7 +49,8 @@ const toRadians = (yaw: number) => yaw * Math.PI * 2 / 256;
 export function createMonarchView(options: MonarchViewOptions) {
   const presence = createMonarchPresence(), crown = createMonarchCrown(options.scene, options.lighting), home = createHomeMark(options.scene);
   const observedCrowns = new Map<string, MonarchTitle>();
-  let disposed = false, people: MonarchPeople | null = null, lastNow: number | null = null;
+  let disposed = false, people: MonarchPeople | null = null, lastNow: number | null = null, lastCamera: THREE.Camera | null = null;
+  const tagPoint = new THREE.Vector3(), tagLifted = new THREE.Vector3();
   let walk: { room: MonarchRoom; kingdomName: string; line: ArrivalLine; stop: () => void; firstSelfAt: number | null; asked: number;
     reply: MonarchChannelReply | null; spoken: boolean } | null = null;
   const stopGaze = provideWalkerGaze(pose => presence.gaze({ id: pose.id, x: pose.x, z: pose.z, heading: toRadians(pose.yaw) }, performance.now())?.yaw);
@@ -113,7 +114,7 @@ export function createMonarchView(options: MonarchViewOptions) {
      */
     frame(now: number, frame: { readonly people: MonarchPeople | null; /** Your own body's opacity (it fades as the camera comes close). */ readonly selfOpacity?: number; readonly camera: THREE.Camera; readonly night: number; readonly time: number }): number {
       if (disposed) return 0;
-      people = frame.people;
+      people = frame.people; lastCamera = frame.camera;
       const poses = people?.poses ?? [];
       const update = presence.update(now, poses.map(pose => ({ id: pose.id, x: pose.x, y: pose.y, z: pose.z, crown: crownOf(pose.id) ?? null, self: !!pose.self })));
       if (update.arrived) options.bell();
@@ -128,10 +129,21 @@ export function createMonarchView(options: MonarchViewOptions) {
       speak(now, frame.camera);
       return presence.beacon(now);
     },
-    /** The name tags as drawn: the monarch's reads their title and name. */
-    labels<T extends Label>(labels: readonly T[]): T[] {
+    /**
+     * The name tags as drawn: the monarch's reads their title and name, and with `viewportHeight` (the canvas's CSS
+     * height) it stands above the crown's tips instead of over them.
+     */
+    labels<T extends Label>(labels: readonly T[], viewportHeight?: number): T[] {
       const monarch = presence.monarch;
-      return labels.map(label => monarch && label.id === monarch.id ? { ...label, name: monarchNameTag(monarch.title, label.name) } : label);
+      return labels.map(label => {
+        if (!monarch || label.id !== monarch.id) return label;
+        const named = { ...label, name: monarchNameTag(monarch.title, label.name) };
+        const head = crown.head;
+        if (!head || !lastCamera || !(viewportHeight! > 0) || !Number.isFinite(label.y)) return named;
+        tagPoint.copy(head).project(lastCamera); tagLifted.set(head.x, head.y + CROWN_TAG_LIFT_M, head.z).project(lastCamera);
+        const lift = (tagLifted.y - tagPoint.y) * viewportHeight! / 2;
+        return Number.isFinite(lift) && lift > 0 ? { ...named, y: label.y! - lift } : named;
+      });
     },
     inspect() { const monarch = presence.monarch; return { monarch: monarch ? { title: monarch.title, self: monarch.self } : null, arrivedAt: presence.arrivedAt, lineShown: walk?.line.shown ?? false }; },
     dispose() { if (disposed) return; disposed = true; this.detachWalk(); stopGaze(); crown.dispose(); home.dispose(); },

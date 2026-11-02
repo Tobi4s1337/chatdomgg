@@ -76,6 +76,14 @@ export function crownGeometry(): THREE.BufferGeometry {
 /** How far the circlet sits into the hair below the head's visible top (the head anchor adds 8 cm above it). */
 export const CROWN_SEAT_M = .08 + .035;
 
+/** The circlet's height in metres, from the band's foot to the tips of the tall points. */
+export const CROWN_HEIGHT_M = Math.max(...crownBoxes().map(box => box.max[1]));
+/**
+ * How far above the head anchor the monarch's name tag stands, so it keeps the same air above the crown's tips as
+ * everyone else's tag keeps above their hair (the anchor is the visible top plus 8 cm).
+ */
+export const CROWN_TAG_LIFT_M = CROWN_HEIGHT_M - CROWN_SEAT_M + .08;
+
 /** The crown on one head. `place(null)` takes it off; a fading wearer fades it with them. */
 export function createMonarchCrown(scene: THREE.Object3D, lighting: VoxelRenderState) {
   const geometry = crownGeometry(), material = createWalkerFigureMaterial(lighting);
@@ -89,11 +97,16 @@ export function createMonarchCrown(scene: THREE.Object3D, lighting: VoxelRenderS
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   scene.add(mesh);
   const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), at = new THREE.Vector3(), unit = new THREE.Vector3(1, 1, 1);
+  const worn = new THREE.Vector3();
+  let wearing = false;
   return {
     mesh,
+    /** The head anchor the crown sits under this frame, or null while nobody wears it. */
+    get head(): THREE.Vector3 | null { return wearing ? worn : null; },
     /** `head` is the renderer's head anchor (visible top centre plus 8 cm); `heading` the body's, in radians. */
     place(head: THREE.Vector3 | null | undefined, heading = 0, opacity = 1) {
-      if (!head || ![head.x, head.y, head.z, heading, opacity].every(Number.isFinite) || opacity <= .02) { mesh.count = 0; return; }
+      if (!head || ![head.x, head.y, head.z, heading, opacity].every(Number.isFinite) || opacity <= .02) { mesh.count = 0; wearing = false; return; }
+      worn.copy(head); wearing = true;
       rotation.setFromAxisAngle(up, heading);
       matrix.compose(at.set(head.x, head.y - CROWN_SEAT_M, head.z), rotation, unit);
       mesh.setMatrixAt(0, matrix); mesh.count = 1; mesh.instanceMatrix.needsUpdate = true;
