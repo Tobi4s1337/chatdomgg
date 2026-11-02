@@ -88,6 +88,7 @@ import { createRealmSoulClock } from '../soul/realm-clock';
 import { createCivicLife } from './civic-life';
 import { createPlaceMounts, type PlaceMounter } from './grand-land/place-mount';
 import { createPlaceShot } from './grand-land/place-shot';
+import { createKingdomReveal } from './grand-land/reveal';
 import type { PlaceShot } from '../interactions/places/framing';
 import { createKingdomLayers } from './grand-land/kingdom-layer';
 import { createSceneStills, type SceneStillOptions } from './grand-land/scene-still';
@@ -161,11 +162,16 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const landReceipt=grandRecipe?await foundedLandReceipt(options.founded!,options.foundedReceipt):undefined;
   const publishedLand=landReceipt?await probePublishedLand({kingdomId:String(options.founded!.kingdomId),receipt:landReceipt,...(options.signal?{signal:options.signal}:{})}):undefined;
   const useGrandLand=!!grandRecipe&&(publishedLand?.kind==='published'||!!options.overview);
+  // A kingdom on its own world (grand-land-2) opens under sea mist as its community grows; a pinned land is all open.
+  const reveal=useGrandLand&&grandRecipe!.generator==='grand-land-2'?own(createKingdomReveal(String(options.founded!.kingdomId))):undefined;
+  let revealHolds=false;
   // Begin reading the published land now (binding, metadata, surface, then the town's own regions) instead of after setup.
   const landOpening=useGrandLand?openHostedGrandLand({plan:layout,kingdomId:String(options.founded!.kingdomId),recipe:grandRecipe!,receipt:landReceipt!,
     ...(publishedLand?.kind==='published'?{binding:publishedLand.binding}:{}),...(options.signal?{signal:options.signal}:{}),
     ...(opening?{onProgress:(stats:{readonly networkBytes:number;readonly cacheBytes:number;readonly cacheHits:number})=>reportLandBytes(stats)}:{})}):undefined;
   if(landOpening)earlyCleanups.push(()=>landOpening.dispose());
+  // The mist is laid from the verified surface before any region of the land is drawn.
+  if(reveal&&landOpening)void landOpening.opened.then(({source})=>{if(!disposed)reveal.lay(source.surface,source.metadata.seat,layout.homes.length);},()=>undefined);
   // Bytes really read for the land (network and browser cache), against the first view's plan once it exists.
   function reportLandBytes(stats:{readonly networkBytes:number;readonly cacheBytes:number;readonly cacheHits:number}){
     const land=grandLand?.stats;
@@ -846,6 +852,12 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     post.update({environment:grade,hour,focusDistance:camName==='window'||forgeDirected||forge.status().busy?camera.position.distanceTo(forgeDirected&&realmForge?realmForge.focusPoint:target):null,beacon:{position:new THREE.Vector3(...beaconPosition),strength:beacon},forge:{position:new THREE.Vector3(0,layout.market.elevation+1.6,8),strength:realmForge?.active()||forge.status().busy?1:0}});
     const nextWaterQuality=sceneQualityBudget(qualityChoice,openedQuality,canvas.clientWidth).water;
     if(nextWaterQuality!==waterQuality){waterQuality=nextWaterQuality;water.setQuality(waterQuality);}
+    if(reveal){
+      // An opening is a director beat: while the mist rolls back the lens looks over the town at the land coming clear.
+      const shot=reveal.update(dt,{fog:grade.fog,sun:grade.sun,night:grade.night});
+      if(shot&&!revealHolds&&!placeShot.inspect().requested){placeShot.set(shot);revealHolds=true;}
+      else if(!shot&&revealHolds){placeShot.set(null);revealHolds=false;}
+    }
     water.update({time,environment:grade,camera,sources:[
       ...[...windows.getSources(),...build.getSources()].map(source=>({...source,kind:'window' as const})),
       {position:beaconPosition,strength:beacon,kind:'beacon'},
@@ -926,7 +938,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   if(useGrandLand){
     canvas.dataset.hostedLand=JSON.stringify({phase:'opening',kingdomId:String(options.founded!.kingdomId)});
     tasks.push(Promise.resolve(landReceipt!).then(receipt=>prepareHostedGrandLand({scene,camera,renderer,plan:layout,receipt,opening:landOpening!,...(publishedLand?.kind==='published'?{binding:publishedLand.binding}:{}),kingdomId:String(options.founded!.kingdomId),recipe:grandRecipe!,signal:abort.signal,
-      materialFactory:(palette,town)=>{physicalRegion=town;const material=createHostedGrandMaterial(palette,ground,town,townUse);townFloors.push(material);sunShadows.bindReceiver(material.material);return material;},
+      materialFactory:(palette,town)=>{physicalRegion=town;const material=createHostedGrandMaterial(palette,ground,town,townUse,reveal?.mist.uniforms);townFloors.push(material);sunShadows.bindReceiver(material.material);return material;},
       register:mesh=>sunShadows.register(mesh),
       onProgress:fraction=>options.onProgress('Opening the wider kingdom',.7+.25*fraction),
       onError:error=>failLight(error.message),
@@ -949,7 +961,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       }
       // The island's sea runs on to the horizon (as on /-/grand), so the lens sees as far as the open sea reaches.
       camera.far=Math.max(camera.far,land.bounds.getSize(new THREE.Vector3()).length()+(overview?overview.inspect().limits.maxDistance:camera.position.length()),GRAND_OPEN_SEA*1.05);camera.updateProjectionMatrix();
-      const replacement=own(createWaterSurface({bodies:[],reaches:[],ground:land.water.ground,raster:land.water.raster,quality:waterQuality,openSea:GRAND_OPEN_SEA}));
+      const replacement=own(createWaterSurface({bodies:[],reaches:[],ground:land.water.ground,raster:land.water.raster,quality:waterQuality,openSea:GRAND_OPEN_SEA,...(reveal?{mist:reveal.mist.uniforms}:{})}));
       water.root.removeFromParent();water.dispose();water=replacement;scene.add(water.root);
       poseRevision++;
       await Promise.all([land.ready,fringe]);opening?.step('ground');precompile();
@@ -1027,7 +1039,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     seekGrowthCeremony(seconds:number|null){growth?.seek(seconds);},
     /** Whether this kingdom can frame a camera now; the grand land's wide shots exist only once its land is searched. */
     offers:(view:CameraName)=>view==='island'||view==='vista'?!!shotOf(view):true,
-    inspect:()=>({townGround:townGround?{...townGround.report,ms:townMs,yielded:townYielded,cover:townCover?.stats()??null}:null,fringe:{trees:fringeTrees,region:physicalRegion??null},shots:{island:landShots?.island??null,hero:landShots?.hero??null,vista:landShots?.vista??null,searching:!!shotSteps,opening:openingState,openingElapsed},overview:overview?.inspect()??null,placeShot:placeShot.inspect(),land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),shadow:{...sunShadows.stats},moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
+    inspect:()=>({townGround:townGround?{...townGround.report,ms:townMs,yielded:townYielded,cover:townCover?.stats()??null}:null,fringe:{trees:fringeTrees,region:physicalRegion??null},shots:{island:landShots?.island??null,hero:landShots?.hero??null,vista:landShots?.vista??null,searching:!!shotSteps,opening:openingState,openingElapsed},overview:overview?.inspect()??null,placeShot:placeShot.inspect(),reveal:reveal?{...reveal.inspect(),opening:reveal.opening?{kind:reveal.opening.kind,line:reveal.opening.line,lifting:reveal.opening.lifting}:null}:null,land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,soul:soul?.inspect(),dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),shadow:{...sunShadows.stats},moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
       if(!crowd.receiveChat(input))return false;
       const cue=CitizenChatCueSchema.parse(input),at=Date.now();
       if(cue.asOf<=at&&at-cue.asOf<=5000&&cue.expiresAt>at)arrivalDirector?.chat(cue.slot,at);
@@ -1051,7 +1063,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       return new Promise<void>((resolve,reject)=>{handoffAwaiter={view:copy,resolve,reject};});
     },
     /** Low-priority game framing; clearing it resumes the current director without resetting it. */
-    setPlaceShot(shot:PlaceShot|null){placeShot.set(shot);},
+    setPlaceShot(shot:PlaceShot|null){revealHolds=false;placeShot.set(shot);},
     /** The drawn ground under (x, z) on the land on screen (SEAMS A2 surfaceAt); null where unknown or still loading. Presentation and audio only. */
     surfaceAt(x:number,z:number){return landSurface?.(x,z)??null;},
     /** The held pier shot's pose when the kingdom has a pier; the director offers the shot only then. */

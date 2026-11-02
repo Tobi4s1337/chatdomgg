@@ -1,3 +1,4 @@
+import { LAND_MIST_GLSL } from '../../../../../../packages/render/src/grand/mist';
 import { PILLAR_CAP } from './pillars';
 
 /** Most foam contacts (piles, stones, hulls, weir crests) one surface carries. */
@@ -31,6 +32,7 @@ export const waterFragment = /* glsl */ `
   #define gl_FragColor waterColour
   in vec3 vWorld;
   in vec3 vFlow;
+  ${LAND_MIST_GLSL}
 
   #ifdef QUANTIZED_GROUND
   precision highp usampler2D;
@@ -275,6 +277,9 @@ export const waterFragment = /* glsl */ `
     alpha = alpha * (1.0 - foam) + foam;
     // Distance haze, matching the voxel fog's share of the scene density.
     float haze = min(0.86, 1.0 - exp(-distanceToEye * uFogDensity));
+    // The sea mist over unopened land (off unless the kingdom's world is still opening), under the distance haze.
+    vec4 mist = landMist(vWorld);
+    colour = mix(colour, mist.rgb * alpha, mist.a);
     colour = mix(colour, uFog * alpha, haze);
     // The open sea's far reach becomes the horizon itself.
     if (uOpenSea > 0.0) colour = mix(colour, domeHorizon(-view) * alpha, smoothstep(uOpenSea * 0.12, uOpenSea * 0.7, length(toEye.xz)));

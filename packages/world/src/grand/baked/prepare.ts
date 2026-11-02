@@ -2,7 +2,7 @@ import type { SettlementPlan } from '../../settlement/types';
 import { generateGrandLand } from '../generate';
 import { seatKingdomOnLand, settlementGround, clearKingdomStructures, type SeatedKingdom } from '../kingdom';
 import { GRAND_REGION, type GrandLand } from '../types';
-import { HOSTED_PAVING, HOSTED_GRAND_COMPILER } from './types';
+import { HOSTED_PAVING, HOSTED_GRAND_COMPILER, bakedCompilersOf } from './types';
 export { HOSTED_GRAND_COMPILER } from './types';
 
 import type { GrandLandRecipe } from '../recipe';
@@ -13,8 +13,7 @@ export interface PreparedGrandLand { readonly land: GrandLand; readonly seated: 
 
 /** The installed plan is a constraint on the larger recipe, never regenerated or moved. */
 export function prepareInstalledLand(plan: SettlementPlan, recipe: GrandLandRecipe): PreparedGrandLand {
-  if (recipe.mesher !== HOSTED_GRAND_COMPILER || recipe.generator !== 'grand-land-1'
-    || recipe.grader !== 'gk11-grade-3' || recipe.kit !== 'grand-artisans-1')
+  if (!bakedCompilersOf(recipe) || (recipe.generator === 'grand-land-2') !== !!recipe.seed.world)
     throw new Error('This land recipe requires its pinned compiler');
   const land = generateGrandLand(recipe.seed);
   const seated = seatKingdomOnLand(land, plan, recipe.frame);

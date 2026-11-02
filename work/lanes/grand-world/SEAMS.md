@@ -981,3 +981,15 @@ Run in the deployed checkout (lane/integrator with this checkpoint merged). Noth
 
 Still open for the integrator (unchanged): the Chronicle's historical scenes do not pass through the founded store, so
 replaying an old receipt shows today's land unless that exact receipt was published (`publish-cli`).
+
+## GW13 every channel its own world — the asks (2026-11-02, checkpoint)
+
+- **needs: integrator** — a kingdom founded on its own world needs its `grand-land-2` recipe pinned at founding and
+  bound into the founded receipt, so the realm bakes and serves it and the browser can verify it. Today only adopted
+  `grand-land-1` recipes exist (`adoptedGrandRecipe`); `grandSeedFromGenesis(recipe, name, { character })` in
+  `packages/world/src/grand/world.ts` (or `grandSeedForHolding` in `apps/web/src/grand/holding-world.ts` for an Atlas
+  holding) makes the seed. Grand-world will add the realm's immutable recipe store and the served-recipe check next.
+- **needs: chronicle** — each opening is offered as a Chronicle page. The opening is a pure function of the baked
+  surface, the founded town's columns and the citizen count (`grandRevealField`, `grandRevealStage`,
+  `grandRevealOpening` in `packages/world/src/grand/reveal.ts`); the page text is `opening.line`. The realm sees the
+  count cross a milestone; it should append one page per crossing, never more than once per stage.

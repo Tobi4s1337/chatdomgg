@@ -7,6 +7,7 @@ import { assertGround, basinDistance, waterAt, type WaterAt, type WaterGround } 
 import { basinGeometry, reachGeometry } from './geometry';
 import { assertRaster, OPEN_SEA_DEPTH, openSeaGeometry, rasterGeometry, rasterSamples, rasterWaterAt, type WaterRaster } from './raster';
 import { FLOW_PERIOD, waterPhases } from './phases';
+import { NO_MIST, type LandMistUniforms } from '../../../../../../packages/render/src/grand/mist';
 import { PILLAR_CAP, selectPillars, type PillarSelection, type WaterLightSource } from './pillars';
 import { createPlanarReflection, type PlanarReflectionOptions, type ReflectionDiagnostics, type ReflectionFrame, type ReflectionReport } from './reflection';
 import { BASIN_CAP, CONTACT_CAP, waterFragment, waterVertex } from './shader';
@@ -43,6 +44,8 @@ export interface WaterSurfaceOptions {
   readonly contacts?: readonly WaterContact[];
   readonly quality: WaterQuality;
   readonly reflection?: PlanarReflectionOptions;
+  /** The land's sea mist (GW13), shared with the floor; without one the water is all open. */
+  readonly mist?: LandMistUniforms;
 }
 
 export interface WaterSurfaceFrame {
@@ -120,6 +123,8 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
     uPillarCount: { value: 0 }, uPillarPos: { value: v4(PILLAR_CAP) }, uPillarShape: { value: v4(PILLAR_CAP) },
     uContactCount: { value: 0 }, uContactA: { value: v4(CONTACT_CAP) },
     uContactB: { value: Array.from({ length: CONTACT_CAP }, () => new THREE.Vector2()) },
+    // The land's sea mist (GW13) by reference, so one lift reaches the floor and the water together; off by default.
+    ...(options.mist ?? NO_MIST.uniforms),
   };
   bodies.forEach((body, i) => { shared.uBasins.value[i]!.set(body.x, body.z, body.radiusX, body.radiusZ); shared.uBasinLevels.value[i] = body.level; });
   // A blank 1×1 stands in for the target until the first pass, so the sampler is always bound to a real texture.

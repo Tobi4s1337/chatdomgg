@@ -2,6 +2,7 @@ import { hashString, rng } from './noise';
 import { GRAND_REGION, type GrandCharacter, type GrandLandSeed } from './types';
 import type { GenesisTier, GenesisBiome } from '../genesis/contracts';
 import type { GrandPaletteStyle, StoneFamily, GrassSeason } from './palette';
+import { worldGroves, type GrandLandform } from './world';
 
 /**
  * The authored macro layout. Fully procedural macro land reads as noise soup; a composed island reads as a
@@ -42,6 +43,12 @@ export interface GrandPlan {
   readonly heroTrees: number;
   readonly treeTarget: number;
   readonly style: GrandPaletteStyle;
+  /** `grand-land-2` only: the world's large form. Absent on a `grand-land-1` plan, which keeps its exact bytes. */
+  readonly landform?: GrandLandform;
+  /** Highland: the land rises behind the town toward +v, `height` cells between v/radiusV = from and to. */
+  readonly plateau?: { readonly height: number; readonly from: number; readonly to: number };
+  /** Lake country: more basins beside the mere, carved the same way. */
+  readonly meres?: readonly { readonly u: number; readonly v: number; readonly radius: number; readonly depth: number }[];
 }
 
 const SIZES: Record<GenesisTier, number> = { hamlet: 1280, village: 1280, town: 1536, city: 1536, capital: 1792 };
@@ -110,7 +117,7 @@ export function planGrandLand(seed: GrandLandSeed): GrandPlan {
   if (biome === 'meadow') { groves.cherry = 0.3; groves.lime = 0.9; }
   if (biome === 'coastal') { groves.pine = 0.6; groves.willow = 0.18; }
   const heroCount = 1 + Math.floor(r() * 2) + (biome === 'woodland' ? 1 : 0);
-  return {
+  const plan: GrandPlan = {
     size, height: 384, seaLevel, seed: base, rotation: between(0, Math.PI * 2), mirror: r() < 0.5 ? 1 : -1,
     radiusU, radiusV, harmonics, bay, cliffCoast, islets, spines, jag: character === 'mountain-pass' ? between(24, 30) : between(16, 24),
     hills: biome === 'meadow' ? between(10, 14) : between(13, 20),
@@ -119,6 +126,103 @@ export function planGrandLand(seed: GrandLandSeed): GrandPlan {
     groves, heroTrees: heroCount, treeTarget: Math.round((size * size) / 1536 / 1536 * (biome === 'woodland' ? 5600 : biome === 'meadow' ? 3800 : 4600)),
     style: { stone, grass, hueDrift: between(-1, 1), autumn: between(0.2, 1) },
   };
+  return seed.world ? shapeWorld(plan, seed) : plan;
+}
+
+/**
+ * `grand-land-2`: give the island plan the channel's own large form. It draws from its own random stream, so the
+ * `grand-land-1` plan above (and every land already raised from it) never changes. Every landform keeps what a town
+ * needs: dry gentle ground between a castle rock and a sheltered bay that opens toward -v, and the sea beyond it.
+ */
+function shapeWorld(plan: GrandPlan, seed: GrandLandSeed): GrandPlan {
+  const world = seed.world!;
+  const r = rng(hashString(`grand-land-2/${seed.seedKey}/${world.landform}`));
+  const between = (lo: number, hi: number) => lo + (hi - lo) * r();
+  const { size, seaLevel } = plan;
+  const groves = worldGroves(world, plan.groves);
+  const peakOf = (spines: GrandPlan['spines']) => Math.max(...spines.map(spine => spine.peak));
+  const base: GrandPlan = { ...plan, landform: world.landform, groves };
+  switch (world.landform) {
+    case 'island': return base;
+    case 'cliff-coast': {
+      // Most of the shore stands as a wall of strata over the sea; the town keeps one cove.
+      return { ...base, radiusV: plan.radiusV * 1.08,
+        cliffCoast: { angle: Math.PI / 2 + between(-0.5, 0.5), width: between(1.25, 1.6), height: between(44, 60) },
+        bay: { angle: plan.bay.angle, depth: between(0.14, 0.2), width: between(0.14, 0.19) },
+        seaStacks: plan.seaStacks + 6 + Math.floor(r() * 4) };
+    }
+    case 'mountain-valley': {
+      // A horseshoe of ranges around the town's valley, open to the sea through the bay in front of it.
+      const radiusU = plan.radiusU * 1.04, radiusV = plan.radiusV * 1.24, peak = peakOf(plan.spines);
+      const back = radiusV * between(0.58, 0.68), arm = radiusU * between(0.74, 0.84), width = radiusV * between(0.4, 0.48);
+      const wobble = () => radiusV * between(-0.06, 0.06);
+      const spines: GrandPlan['spines'][number][] = [
+        { points: [[-arm, back + wobble()], [-arm * 0.4, back * 1.08 + wobble()], [arm * 0.35, back + wobble()], [arm, back * 0.94 + wobble()]], width, peak },
+        { points: [[-arm * 1.04, back * 0.9], [-arm * 1.02, -radiusV * 0.2 + wobble()], [-arm * 0.9, -radiusV * between(0.62, 0.78)]], width: width * 0.86, peak: peak * between(0.74, 0.88) },
+        { points: [[arm * 1.03, back * 0.86], [arm * 1.0, -radiusV * 0.16 + wobble()], [arm * 0.86, -radiusV * between(0.58, 0.74)]], width: width * 0.82, peak: peak * between(0.7, 0.86) },
+      ];
+      const castleU = plan.castle.u;
+      return { ...base, radiusU, radiusV, spines,
+        bay: { angle: plan.bay.angle, depth: between(0.38, 0.46), width: between(0.18, 0.24) },
+        castle: { ...plan.castle, u: castleU, v: radiusV * between(0.08, 0.18) },
+        town: { ...plan.town, u: castleU + radiusU * between(0.05, 0.12), v: -radiusV * between(0.16, 0.24) },
+        fields: { u: radiusU * between(0.28, 0.4), v: radiusV * between(0.12, 0.26), radius: plan.fields.radius * 0.9 },
+        forest: { ...plan.forest, u: -radiusU * between(0.42, 0.55), v: radiusV * between(0.0, 0.2) },
+        mere: { u: radiusU * between(-0.12, 0.12), v: back * between(0.55, 0.7), radius: size * between(0.035, 0.05), depth: between(8, 12) } };
+    }
+    case 'river-delta': {
+      // Low country running out into a wide shallow bay, broken into islands where the rivers reach the sea.
+      const spines = plan.spines.map(spine => ({ ...spine, peak: spine.peak * between(0.55, 0.66),
+        points: spine.points.map(([u, v]) => [u, v * 1.18] as const) }));
+      const bay = { angle: plan.bay.angle, depth: between(0.4, 0.48), width: between(0.4, 0.5) };
+      const islets: GrandPlan['islets'][number][] = [...plan.islets];
+      // Small islands with channels between them, not one new shore: each keeps clear of the others.
+      const count = 8 + Math.floor(r() * 4), delta: { u: number; v: number; r: number }[] = [];
+      for (let attempt = 0; attempt < 120 && delta.length < count; attempt++) {
+        const a = bay.angle + between(-0.9, 0.9) * bay.width, rho = 1 - bay.depth * between(-0.15, 0.8), radius = size * between(0.007, 0.013);
+        const u = Math.cos(a) * plan.radiusU * rho, v = Math.sin(a) * plan.radiusV * rho;
+        if (delta.every(other => Math.hypot(u - other.u, v - other.v) > (radius + other.r) * 1.9)) delta.push({ u, v, r: radius });
+      }
+      for (const islet of delta) islets.push({ ...islet, h: between(2, 5) });
+      // Snow only on the few highest crowns: the snowline keeps the island's height while the ranges sink.
+      const peak = peakOf(plan.spines);
+      return { ...base, spines, bay, islets, hills: between(6, 9), jag: plan.jag * 0.8,
+        town: { ...plan.town, level: seaLevel + between(5, 7) },
+        fields: { ...plan.fields, radius: plan.fields.radius * 1.3 },
+        mere: { ...plan.mere, radius: plan.mere.radius * 1.15 },
+        snowline: seaLevel + peak * between(0.74, 0.8), treeline: seaLevel + peak * between(0.56, 0.62) };
+    }
+    case 'lake-country': {
+      // Rolling wooded hills holding a chain of lakes; the mere is the largest of them.
+      const spines = plan.spines.map(spine => ({ ...spine, peak: spine.peak * between(0.8, 0.9) }));
+      const mere = { ...plan.mere, radius: plan.mere.radius * 1.25 };
+      const meres: { u: number; v: number; radius: number; depth: number }[] = [];
+      const want = 3 + Math.floor(r() * 2);
+      const clear = (u: number, v: number, radius: number) => {
+        const away = (pu: number, pv: number, reach: number) => Math.hypot(u - pu, v - pv) > reach + radius;
+        return away(plan.town.u, plan.town.v, Math.max(plan.town.ru, plan.town.rv) * 1.5)
+          && away(plan.castle.u, plan.castle.v, plan.castle.radius * 2.6)
+          && away(plan.fields.u, plan.fields.v, plan.fields.radius * 1.1)
+          && away(mere.u, mere.v, mere.radius * 1.6)
+          && meres.every(other => away(other.u, other.v, other.radius + size * 0.06));
+      };
+      for (let attempt = 0; attempt < 200 && meres.length < want; attempt++) {
+        const u = plan.radiusU * between(-0.72, 0.72), v = plan.radiusV * between(-0.55, 0.62), radius = size * between(0.026, 0.042);
+        if (Math.hypot(u / plan.radiusU, v / plan.radiusV) < 0.78 && clear(u, v, radius)) meres.push({ u, v, radius, depth: between(7, 11) });
+      }
+      return { ...base, spines, mere, meres, hills: between(18, 24) };
+    }
+    case 'highland': {
+      // The land climbs behind the town onto a high moor under taller ranges.
+      const plateau = { height: between(18, 26), from: between(-0.2, -0.08), to: between(0.25, 0.4) };
+      const lift = Math.min(1.1, (370 - seaLevel - plateau.height) / 1.6 / peakOf(plan.spines));
+      const spines = plan.spines.map(spine => ({ ...spine, peak: spine.peak * lift }));
+      if (spines.length < 2) spines.push({ points: [[plan.radiusU * 0.25, plan.radiusV * 0.32], [plan.radiusU * 0.6, plan.radiusV * 0.42], [plan.radiusU * 0.92, plan.radiusV * 0.18]], width: plan.radiusV * 0.4, peak: peakOf(spines) * between(0.62, 0.74) });
+      const peak = peakOf(spines);
+      return { ...base, spines, plateau, hills: between(16, 22),
+        snowline: seaLevel + plateau.height + peak * between(0.6, 0.66), treeline: seaLevel + plateau.height + peak * between(0.38, 0.46) };
+    }
+  }
 }
 
 /** World column → island frame. */

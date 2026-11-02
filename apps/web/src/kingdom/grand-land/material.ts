@@ -3,6 +3,7 @@ import { createVoxelMaterial, type VoxelRenderState } from '@chatdom/render';
 import type { MaterialRegistry, VoxelMaterial } from '@chatdom/shared';
 import type { BoundsXZ } from '../../../../../packages/world/src/settlement/types';
 import { GRAND_QUAD_VERTEX } from '../../../../../packages/render/src/grand/terrain-material';
+import { LAND_MIST_GLSL, type LandMistUniforms } from '../../../../../packages/render/src/grand/mist';
 import { GrandKind, type GrandMaterial } from '../../../../../packages/world/src/grand/palette';
 
 import { HOSTED_PAVING } from './palette';
@@ -59,15 +60,21 @@ const NO_USE = [1e9, 1e9, 1, 1] as const;
 /** No town: every term below is the identity. */
 const NO_TOWN = [1e9, -1e9, 1e9, -1e9] as const;
 
-export function hostedFragment(native: string): string {
+/** The kingdom's fog term: the sea mist (GW13) lies on the land under it, so distance still hazes the mist itself. */
+const NATIVE_FOG = 'colour=mix(colour,fogColour,min(.86,fogAmount));';
+const HOSTED_MIST = 'vec4 hostedMist=landMist(vWorld);colour=mix(colour,hostedMist.rgb,hostedMist.a);';
+
+export function hostedFragment(native: string, mist = false): string {
   if (native.split(NATIVE_FACING).length !== 2) throw new Error('The hosted grand floor expects one native facing term');
   if (native.split(NATIVE_GRASS).length !== 2) throw new Error('The hosted grand floor expects one native grass term');
   if (native.split(NATIVE_AO).length !== 2) throw new Error('The hosted grand floor expects one native occlusion term');
   const main = native.indexOf('void main');
   if (main < 0) throw new Error('The hosted grand floor expects a fragment entry point');
-  return `${native.slice(0, main)}uniform vec4 uHostedTown;uniform vec4 uTownUseRect;uniform vec4 uTownUseLook[16];uniform sampler2D uTownUse;\n${native.slice(main)}`
+  if (mist && native.split(NATIVE_FOG).length !== 2) throw new Error('The hosted grand floor expects one native fog term for its mist');
+  const hosted = `${native.slice(0, main)}uniform vec4 uHostedTown;uniform vec4 uTownUseRect;uniform vec4 uTownUseLook[16];uniform sampler2D uTownUse;\n${mist ? `${LAND_MIST_GLSL}\n` : ''}${native.slice(main)}`
     .replace(NATIVE_FACING, HOSTED_FACING).replace(NATIVE_AO, HOSTED_AO)
     .replace(NATIVE_GRASS, `${NATIVE_GRASS}\n      ${HOSTED_USE}\n      ${HOSTED_NIGHT_GRASS}\n      ${HOSTED_TURF}`);
+  return mist ? hosted.replace(NATIVE_FOG, `${HOSTED_MIST}\n      ${NATIVE_FOG}`) : hosted;
 }
 
 const surfaces: Readonly<Record<number, VoxelMaterial['surface']>> = {
@@ -140,7 +147,8 @@ export interface HostedGrandMaterial {
  * Packed quads keep their real half-metre vertices. The existing kingdom owns every light and the grade.
  * `town` is the installed physical region in world metres, whose lawns are graded in half-metre steps.
  */
-export function createHostedGrandMaterial(palette: readonly GrandMaterial[], native: VoxelRenderState, town?: BoundsXZ, use?: TownUseMask): HostedGrandMaterial {
+/** `mist`: the land's sea mist, for a kingdom on its own world; a pinned land without one draws no mist at all. */
+export function createHostedGrandMaterial(palette: readonly GrandMaterial[], native: VoxelRenderState, town?: BoundsXZ, use?: TownUseMask, mist?: LandMistUniforms): HostedGrandMaterial {
   const bounds = town ? [town.minX, town.maxX, town.minZ, town.maxZ] : NO_TOWN;
   if (bounds.some(value => !Number.isFinite(value)) || (town && (town.minX >= town.maxX || town.minZ >= town.maxZ)))
     throw new Error('The hosted grand floor needs a finite installed region');
@@ -149,6 +157,7 @@ export function createHostedGrandMaterial(palette: readonly GrandMaterial[], nat
     uHostedTown: { value: new THREE.Vector4(...bounds) } };
   let townUse = useTexture(use);
   Object.assign(uniforms, { uTownUse: { value: townUse.texture }, uTownUseRect: { value: townUse.rect }, uTownUseLook: { value: townUse.look } });
+  if (mist) Object.assign(uniforms, mist);
   const vertex = GRAND_QUAD_VERTEX
     .replace('uniform mat4 modelMatrix, viewMatrix, projectionMatrix;', '')
     .replace('in vec3 position;', '')
@@ -157,7 +166,7 @@ export function createHostedGrandMaterial(palette: readonly GrandMaterial[], nat
     .replace('out vec3 vWorld;', 'out float vSky; out float vLodFade; out vec3 vWorld;')
     .replace('vWorld = world.xyz;', 'vWorld = world.xyz; vSky = 1.; vLodFade = uGrandLodFade;');
   const material = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, uniforms, vertexShader: vertex,
-    fragmentShader: hostedFragment(native.material.fragmentShader), defines: { ...native.material.defines }, alphaToCoverage: true });
+    fragmentShader: hostedFragment(native.material.fragmentShader, !!mist), defines: { ...native.material.defines }, alphaToCoverage: true });
   // uTerrain selects the native floor light response only. The packed vertex deliberately does not
   // sample uTerrainHeight: flattening to the old visual grid would destroy the grand cliffs and exact floor.
   const bound = new WeakSet<THREE.Mesh>();
