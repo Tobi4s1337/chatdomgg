@@ -13,7 +13,7 @@ const job = { id: 10, kind: 'blueprint', blueprint, revision: 4, materials: [mat
 class ControlledWorker implements VoxelWorkerAdapter {
   onmessage: VoxelWorkerAdapter['onmessage'] = null;
   onerror: VoxelWorkerAdapter['onerror'] = null;
-  onmessageerror: VoxelWorkerAdapter['onmessageerror'] = null;
+  onmessageerror: ((event: MessageEvent) => void) | null = null;
   jobs: VoxelJob[] = [];
   terminated = false;
   postMessage(input: VoxelJob): void { this.jobs.push(structuredClone(input)); }
