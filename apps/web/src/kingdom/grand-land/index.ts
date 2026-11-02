@@ -1,15 +1,15 @@
 import * as THREE from 'three';
 import type { SettlementPlan } from '@chatdom/world';
+import type { RealmFoundedManifest } from '@chatdom/shared/realm';
 import { createQuadGeometry } from '../../../../../packages/render/src/grand/quad-geometry';
-import { landMaterials } from '../../../../../packages/world/src/grand/kits';
 import type { GrandMaterial } from '../../../../../packages/world/src/grand/palette';
-import { GRAND_LEVELS, GRAND_REGION, type GrandLand, type GrandLandSeed } from '../../../../../packages/world/src/grand/types';
-import type { SeatedKingdom } from '../../../../../packages/world/src/grand/kingdom';
+import { GRAND_LEVELS, GRAND_REGION, type GrandLandSeed } from '../../../../../packages/world/src/grand/types';
 import { balanceLevels, chooseLevel, type LodState } from '../../grand/lod';
-import { HOSTED_GRAND_COMPILER, installedVisualHeight, regionTouchesPhysical } from './prepare';
-import { HOSTED_RESULT_BYTES, type HostedMesh, type HostedReply, type HostedRequest } from './protocol';
+import { HOSTED_GRAND_COMPILER, BAKED_REGION_QUAD_BYTES, type BakedMetadata, type BakedRegionRef, type BakedRegionMesh } from '../../../../../packages/world/src/grand/baked/types';
+import { bakedNativeWater, bakedVisualHeight } from '../../../../../packages/world/src/grand/baked/surface';
+import { openBakedLand, type BakedLandSource } from './baked-client';
 import type { HostedGrandMaterial } from './material';
-import { grandLandRecipeHash, type GrandLandRecipe } from '../../../../../packages/world/src/grand/recipe';
+import type { GrandLandRecipe } from '../../../../../packages/world/src/grand/recipe';
 import { canonicalSceneJson, sha256Hex, utf8 } from '../../../../../packages/world/src/founded-world/codec';
 export { createHostedGrandMaterial, hostedPalette } from './material';
 
@@ -23,14 +23,17 @@ export interface HostedGrandIdentity {
   readonly recipeHash: string;
   readonly seed: GrandLandSeed;
   readonly planRevision: string;
-  readonly region: SeatedKingdom['identity']['region'];
-  readonly seat: SeatedKingdom['seat']['offset'];
+  readonly region: BakedMetadata['physicalRegion'];
+  readonly seat: BakedMetadata['seat']['offset'];
   readonly provenance: 'pinned-adoption-recipe';
 }
 export interface HostedGrandStats {
   phase: 'meshing' | 'ready' | 'failed' | 'disposed';
   regions: number; covered: number; exactRegions: number; residentBytes: number;
   queued: number; busy: number; resultBytes: number; installs: number; revision: number;
+  readonly generatedColumns: 0; readonly workers: 0;
+  networkBytes: number; cacheBytes: number; verifiedRawBytes: number; completedBlobs: number;
+  cacheHits: number; cacheCorruptions: number; activeRequests: number; queuedRequests: number; pendingCompressedBytes: number;
 }
 export interface HostedGrandLand {
   /** All installed physical ground and first visible background coverage has actually installed. */
@@ -53,6 +56,7 @@ export interface HostedGrandOptions {
   readonly plan: SettlementPlan;
   readonly kingdomId: string;
   readonly recipe: GrandLandRecipe;
+  readonly receipt: RealmFoundedManifest;
   readonly signal?: AbortSignal;
   readonly materialFactory: (palette: readonly GrandMaterial[]) => HostedGrandMaterial;
   readonly register?: (mesh: THREE.Mesh) => (() => void) | void;
@@ -63,13 +67,13 @@ export interface HostedGrandOptions {
 interface RegionMesh { readonly group: THREE.Group; readonly level: number; readonly bytes: number;
   readonly cleanups: (() => void)[]; lastUsed: number }
 interface Region { readonly rx: number; readonly rz: number; readonly box: THREE.Box3; readonly exact: boolean;
-  readonly neighbours: number[]; readonly meshes: Map<number, RegionMesh>; readonly pending: Map<number, number>;
+  readonly refs: ReadonlyMap<number, BakedRegionRef>; readonly neighbours: number[]; readonly meshes: Map<number, RegionMesh>; readonly pending: Map<number, number>;
   readonly lod: LodState; desired: number; shown: RegionMesh | null; visible: boolean; required: boolean }
 interface Job { readonly region: Region; readonly level: number; readonly id: number }
-interface Install { readonly reply: HostedMesh; readonly region: Region; readonly mesh: RegionMesh; face: number; from: number }
+interface Install { readonly reply: BakedRegionMesh; readonly region: Region; readonly mesh: RegionMesh; face: number; from: number }
 
 /**
- * Host the grand source/mesher inside the native kingdom's renderer. This owner has no camera, lighting,
+ * Host the baked grand meshes inside the native kingdom's renderer. This owner has no camera, lighting,
  * town, post stack or animation loop. The scene calls update from its one existing RAF, including loading.
  */
 export async function prepareHostedGrandLand(options: HostedGrandOptions): Promise<HostedGrandLand> {
@@ -77,17 +81,18 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
   if (options.signal?.aborted) throw new DOMException('The kingdom closed', 'AbortError');
   const recipe = options.recipe, seed = recipe.seed;
   if (seed.kingdomId !== options.kingdomId) throw new Error('The land recipe belongs to another kingdom');
-  const recipeHash = await grandLandRecipeHash(recipe);
+  if (options.receipt.kingdomId !== options.kingdomId) throw new Error('The founded receipt belongs to another kingdom');
+  const [recipeHash, sourcePlanHash] = await Promise.all([
+    sha256Hex(utf8(canonicalSceneJson(recipe))), sha256Hex(utf8(canonicalSceneJson(plan))),
+  ]);
   if (options.signal?.aborted) throw new DOMException('The kingdom closed', 'AbortError');
-  const workers: Worker[] = [], idle: Worker[] = [];
-  const busy = new Map<Worker, Job>();
+  const controller = new AbortController();
+  const busy = new Map<number, Job>();
+  let source: BakedLandSource | undefined;
   let stopped = false, failed: Error | undefined;
-  let landResolve!: (value: { land: GrandLand; seated: SeatedKingdom }) => void;
-  let landReject!: (error: Error) => void;
-  const landReady = new Promise<{ land: GrandLand; seated: SeatedKingdom }>((resolve, reject) => { landResolve = resolve; landReject = reject; });
   let readyResolve!: () => void, readyReject!: (error: Error) => void;
   const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
-  // A scene may abort between raising the source and receiving its owner. Attach immediately to avoid
+  // A scene may abort between opening the source and receiving its owner. Attach immediately to avoid
   // an unhandled rejected promise while keeping the original promise rejected for its actual consumer.
   void ready.catch(() => undefined);
   const regions: Region[] = [], installs: Install[] = [];
@@ -95,7 +100,9 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
   let material: HostedGrandMaterial | undefined;
   const root = new THREE.Group(); root.name = 'installed-grand-land';
   const stats: HostedGrandStats = { phase: 'meshing', regions: 0, covered: 0, exactRegions: 0,
-    residentBytes: 0, queued: 0, busy: 0, resultBytes: 0, installs: 0, revision: 0 };
+    residentBytes: 0, queued: 0, busy: 0, resultBytes: 0, installs: 0, revision: 0, generatedColumns: 0, workers: 0,
+    networkBytes: 0, cacheBytes: 0, verifiedRawBytes: 0, completedBlobs: 0, cacheHits: 0, cacheCorruptions: 0,
+    activeRequests: 0, queuedRequests: 0, pendingCompressedBytes: 0 };
   function free(mesh: RegionMesh) {
     for (const cleanup of mesh.cleanups) cleanup();
     mesh.group.traverse(object => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });
@@ -105,33 +112,36 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
     if (stopped) return;
     stopped = true;
     options.signal?.removeEventListener('abort', abort);
-    for (const worker of workers) worker.terminate();
+    controller.abort(); source?.dispose();
     for (const item of installs) free(item.mesh);
-    for (const region of regions) for (const mesh of region.meshes.values()) free(mesh);
-    installs.length = 0; busy.clear(); idle.length = 0;
+    for (const region of regions) {
+      for (const mesh of region.meshes.values()) free(mesh);
+      region.meshes.clear(); region.pending.clear(); region.shown = null;
+    }
+    installs.length = 0; busy.clear();
+    stats.busy = 0; stats.resultBytes = 0; stats.queued = 0; stats.covered = 0; stats.residentBytes = 0;
+    stats.activeRequests = 0; stats.queuedRequests = 0; stats.pendingCompressedBytes = 0;
     material?.dispose(); root.removeFromParent();
     stats.phase = failed ? 'failed' : 'disposed';
     const error = failed ?? new DOMException('The kingdom closed', 'AbortError');
-    landReject(error); readyReject(error);
+    readyReject(error);
   }
   function fail(error: Error) {
     if (stopped) return;
-    failed = error; dispose(); options.onError?.(error);
+    failed = error; dispose();
+    try { options.onError?.(error); } catch { /* The owner is already fully torn down. */ }
   }
   function abort() { dispose(); }
   options.signal?.addEventListener('abort', abort, { once: true });
-  const count = Math.min(2, Math.max(1, (navigator.hardwareConcurrency || 4) - 2));
-  function send(worker: Worker, message: HostedRequest) { worker.postMessage(message); }
-  function receive(worker: Worker, reply: HostedReply) {
-    if (stopped) return;
-    if (reply.type === 'error') { fail(new Error(reply.message)); return; }
-    if (reply.type === 'land') { idle.push(worker); landResolve(reply); return; }
-    if (reply.type === 'ready') { idle.push(worker); return; }
-    const job = busy.get(worker); busy.delete(worker); idle.push(worker);
-    if (!job || job.id !== reply.id || job.region.pending.get(reply.level) !== reply.id) return;
+  function receive(job: Job, reply: BakedRegionMesh) {
+    if (stopped || busy.get(job.id) !== job) return;
+    busy.delete(job.id);
+    if (job.region.pending.get(job.level) !== job.id) return;
     const region = job.region;
-    region.pending.delete(reply.level);
-    if (reply.quads.byteLength > HOSTED_RESULT_BYTES) { fail(new Error('Grand terrain exceeded its mesh result budget')); return; }
+    region.pending.delete(job.level);
+    if (reply.level !== job.level || reply.rx !== region.rx || reply.rz !== region.rz)
+      throw new Error('Baked terrain returned a different region');
+    if (reply.quads.byteLength > BAKED_REGION_QUAD_BYTES) throw new Error('Grand terrain exceeded its mesh result budget');
     // An old visible patch remains until every face of its replacement has installed.
     const group = new THREE.Group();
     group.position.set(reply.rx * GRAND_REGION * .5, 0, reply.rz * GRAND_REGION * .5);
@@ -140,43 +150,34 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
     installs.push({ reply, region, mesh, face: 0, from: reply.offsets[0]! });
   }
   try {
-    for (let i = 0; i < count; i++) {
-      const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module', name: `hosted-grand-${i}` });
-      worker.onmessage = (event: MessageEvent<HostedReply>) => receive(worker, event.data);
-      worker.onerror = event => fail(new Error(event.message || 'A kingdom landscape worker stopped'));
-      workers.push(worker);
-    }
-    send(workers[0]!, { type: 'generate', plan, recipe });
-    const { land, seated } = await landReady;
-    if (stopped) throw failed ?? new DOMException('The kingdom closed', 'AbortError');
-    for (const worker of workers.slice(1)) send(worker, { type: 'adopt', land, seated });
+    source = await openBakedLand({ expected: { kingdomId: options.kingdomId,
+      sceneHash: options.receipt.sceneHash, layoutRevision: options.receipt.layoutRevision,
+      collisionRevision: options.receipt.collisionRevision, sourcePlanHash, recipeHash }, signal: controller.signal });
+    if (stopped) { source.dispose(); throw failed ?? new DOMException('The kingdom closed', 'AbortError'); }
+    const { metadata, surface } = source;
     // Recipe identity survives growth; installed geometry still has its own revision-bound digest.
     const parameterHash = await sha256Hex(utf8(canonicalSceneJson({ recipeHash, plan })));
     if (stopped) throw failed ?? new DOMException('The kingdom closed', 'AbortError');
     const identity: HostedGrandIdentity = { compiler: HOSTED_GRAND_COMPILER, parameterHash, recipeHash, seed,
-      planRevision: plan.revision, region: seated.identity.region, seat: seated.seat.offset,
+      planRevision: plan.revision, region: metadata.physicalRegion, seat: metadata.seat.offset,
       provenance: 'pinned-adoption-recipe' };
-    material = options.materialFactory(landMaterials(land));
-    root.position.set(...seated.seat.offset).multiplyScalar(-1);
+    material = options.materialFactory(metadata.palette);
+    root.position.set(...metadata.seat.offset).multiplyScalar(-1);
     options.scene.add(root);
-    const metres = land.size * .5, [ox, oy, oz] = seated.seat.offset;
-    const bounds = new THREE.Box3(new THREE.Vector3(-ox, -oy, -oz), new THREE.Vector3(metres - ox, land.height * .5 - oy, metres - oz));
-    const per = land.size / GRAND_REGION;
-    for (let rz = 0; rz < per; rz++) for (let rx = 0; rx < per; rx++) {
-      let lo = Infinity, hi = 0;
-      for (let z = rz * GRAND_REGION; z < (rz + 1) * GRAND_REGION; z += 4) for (let x = rx * GRAND_REGION; x < (rx + 1) * GRAND_REGION; x += 4) {
-        const i = x + z * land.size; lo = Math.min(lo, land.ground[i]!); hi = Math.max(hi, land.ground[i]!, land.water[i]!);
-      }
-      const box = new THREE.Box3(new THREE.Vector3(rx * GRAND_REGION * .5 - ox, Math.min(lo, land.seaLevel) * .5 - oy, rz * GRAND_REGION * .5 - oz),
-        new THREE.Vector3((rx + 1) * GRAND_REGION * .5 - ox, Math.min(land.height, hi + 96) * .5 - oy, (rz + 1) * GRAND_REGION * .5 - oz));
-      const exact = regionTouchesPhysical(rx, rz, seated);
-      regions.push({ rx, rz, box, exact, neighbours: [], meshes: new Map(), pending: new Map(),
+    const bounds = new THREE.Box3(new THREE.Vector3(...metadata.bounds.min), new THREE.Vector3(...metadata.bounds.max));
+    const per = metadata.size / GRAND_REGION;
+    for (const baked of metadata.regions) {
+      const { rx, rz, exact } = baked;
+      const box = new THREE.Box3(new THREE.Vector3(...baked.bounds.min), new THREE.Vector3(...baked.bounds.max));
+      regions.push({ rx, rz, box, exact, refs: new Map(baked.meshes.map(ref => [ref.level, ref])),
+        neighbours: [], meshes: new Map(), pending: new Map(),
         lod: { shown: null, ideal: exact ? 0 : 3, desired: exact ? 0 : 3, coarsenSince: 0 }, desired: exact ? 0 : 3,
         shown: null, visible: false, required: exact });
     }
+    const regionIndices = new Map(regions.map((region, index) => [region.rx + region.rz * per, index]));
     for (const region of regions) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
       const x = region.rx + dx, z = region.rz + dz;
-      if ((dx || dz) && x >= 0 && z >= 0 && x < per && z < per) region.neighbours.push(x + z * per);
+      if ((dx || dz) && x >= 0 && z >= 0 && x < per && z < per) region.neighbours.push(regionIndices.get(x + z * per)!);
     }
     stats.regions = regions.length; stats.exactRegions = regions.filter(r => r.exact).length;
     const projectionView = new THREE.Matrix4(), frustum = new THREE.Frustum(), nearest = new THREE.Vector3(), size = new THREE.Vector2();
@@ -256,12 +257,18 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
       candidates.sort((a, b) => Number(!a.exact) - Number(!b.exact)
         || Number(!!a.shown) - Number(!!b.shown) || a.box.distanceToPoint(camera.position) - b.box.distanceToPoint(camera.position));
       stats.queued = Math.min(64, candidates.length);
-      let reserved = busy.size * HOSTED_RESULT_BYTES + installs.reduce((sum, item) => sum + item.reply.quads.byteLength, 0);
+      // Every unresolved request reserves the largest legal decoded result. Together with
+      // pending GPU installs this bounds decoded results to 16 MiB, even if replies land together.
+      let reserved = busy.size * BAKED_REGION_QUAD_BYTES + installs.reduce((sum, item) => sum + item.reply.quads.byteLength, 0);
       for (const region of candidates.slice(0, 64)) {
-        if (!idle.length || reserved + HOSTED_RESULT_BYTES > 16 * MiB) break;
-        const worker = idle.pop()!, job: Job = { region, level: region.desired, id: sequence++ };
-        region.pending.set(job.level, job.id); busy.set(worker, job); reserved += HOSTED_RESULT_BYTES;
-        send(worker, { type: 'mesh', id: job.id, level: job.level, rx: region.rx, rz: region.rz });
+        if (busy.size >= 2 || reserved + BAKED_REGION_QUAD_BYTES > 16 * MiB) break;
+        const ref = region.refs.get(region.desired);
+        if (!ref) throw new Error('Baked terrain is missing a required resolution');
+        const job: Job = { region, level: region.desired, id: sequence++ };
+        region.pending.set(job.level, job.id); busy.set(job.id, job); reserved += BAKED_REGION_QUAD_BYTES;
+        void source!.mesh(ref, controller.signal).then(reply => receive(job, reply)).catch(error => {
+          if (!stopped) fail(error instanceof Error ? error : new Error(String(error)));
+        });
       }
       stats.busy = busy.size;
       stats.resultBytes = installs.reduce((sum, item) => sum + item.reply.quads.byteLength, 0);
@@ -269,6 +276,12 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
     function update(now: number) {
       if (stopped) return;
       try {
+        const download = source!.stats;
+        stats.networkBytes = download.networkBytes; stats.cacheBytes = download.cacheBytes;
+        stats.verifiedRawBytes = download.verifiedRawBytes; stats.completedBlobs = download.completedBlobs;
+        stats.cacheHits = download.cacheHits; stats.cacheCorruptions = download.cacheCorruptions;
+        stats.activeRequests = download.activeRequests; stats.queuedRequests = download.queuedRequests;
+        stats.pendingCompressedBytes = download.pendingCompressedBytes;
         install(now);
         if (now - lastSelection > 160) { select(now); lastSelection = now; }
         dispatch();
@@ -286,19 +299,13 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
         if (stats.phase === 'meshing' && complete === required.length) { stats.phase = 'ready'; readyResolve(); }
       } catch (error) { fail(error instanceof Error ? error : new Error(String(error))); }
     }
-    const waterData = new Float32Array(land.ground.length), waterLevels = new Float32Array(land.ground.length);
-    for (let i = 0; i < waterData.length; i++) {
-      waterData[i] = land.ground[i]! * .5 - oy;
-      waterLevels[i] = land.water[i]! > land.ground[i]! ? land.water[i]! * .5 - oy : NaN;
-    }
+    const nativeWater = bakedNativeWater(surface, metadata.seat);
     const owner: HostedGrandLand = { ready, identity, bounds, stats,
       get revision() { return stats.revision; },
-      height: (x, z) => installedVisualHeight(land, seated, x, z),
-      water: { ground: { data: waterData, width: land.size, height: land.size, origin: [-ox, -oz], step: .5 },
-        levels: waterLevels, seaLevel: land.seaLevel * .5 - oy },
+      height: (x, z) => bakedVisualHeight(surface, metadata.seat, x, z),
+      water: { ...nativeWater, ground: { ...nativeWater.ground, origin: [...nativeWater.ground.origin] } },
       update, dispose,
     };
-    update(performance.now());
     return owner;
   } catch (error) { dispose(); throw error; }
 }

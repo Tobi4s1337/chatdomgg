@@ -19,6 +19,8 @@ import { CitizenChatCueSchema, PRESENCE_LEASE_MS } from '@chatdom/shared';
 import { createSimulatedPresence, createHeraldPresence } from './presence-feed';
 import { loadTerrain } from './terrain-client';
 import { grandRecipeFor } from './grand-land/recipes';
+import { foundedLandReceipt } from './grand-land/scene-receipt';
+import type { RealmFoundedManifest } from '@chatdom/shared/realm';
 import { createGrandOverview } from './grand-land/overview';
 import { overviewFrame } from './grand-land/overview-pose';
 import { prepareHostedGrandLand, createHostedGrandMaterial, type HostedGrandLand } from './grand-land';
@@ -94,7 +96,7 @@ export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number;arrivalAgeSeconds?:number}
 export interface PotentialKingdomView {seat?:GenesisSeatContent;plan:SettlementPlan;size:string;style:'hearth'|'tide'|'grove';camera:{eye:Vec3;target:Vec3;fov:number};/** Local SIMULATED lighting only; never crowd presence or a deed. */windowPreview?:KingdomPresenceFrame}
 export interface SceneView {eye:Vec3;target:Vec3;fov:number}
-export interface SceneOptions {readonly mode?:'stream'|'watching';readonly overview?:boolean;readonly places?:readonly PlaceMounter[];/** Read-only isolated history; never hands citizens to the live scene. */replay?:boolean;dockFeed?:DockPresentationConnection;/** Hidden warming scenes must explicitly activate before presenting or witnessing. */dockActive?:boolean;/** Explicit SIMULATED capture fixtures only. */simulatedDockSites?:boolean;initialView?:SceneView;growthFeed?:GrowthSceneFeed;growthCeremonies?:GrowthCeremonyFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
+export interface SceneOptions {readonly mode?:'stream'|'watching';readonly overview?:boolean;readonly places?:readonly PlaceMounter[];/** Read-only isolated history; never hands citizens to the live scene. */replay?:boolean;dockFeed?:DockPresentationConnection;/** Hidden warming scenes must explicitly activate before presenting or witnessing. */dockActive?:boolean;/** Explicit SIMULATED capture fixtures only. */simulatedDockSites?:boolean;initialView?:SceneView;growthFeed?:GrowthSceneFeed;growthCeremonies?:GrowthCeremonyFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;foundedReceipt?:RealmFoundedManifest;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {post?:ReturnType<ReturnType<typeof createPostStack>['diagnostics']>;citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
@@ -733,13 +735,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   tasks.push(dressing.ready);
   tasks.push(shore.prepare());
   if(useGrandLand){
-    canvas.dataset.hostedLand=JSON.stringify({phase:'raising',kingdomId:String(options.founded!.kingdomId)});
-    tasks.push(prepareHostedGrandLand({scene,camera,renderer,plan:layout,kingdomId:String(options.founded!.kingdomId),recipe:grandRecipe!,signal:abort.signal,
+    canvas.dataset.hostedLand=JSON.stringify({phase:'opening',kingdomId:String(options.founded!.kingdomId)});
+    tasks.push(foundedLandReceipt(options.founded!,options.foundedReceipt).then(receipt=>prepareHostedGrandLand({scene,camera,renderer,plan:layout,receipt,kingdomId:String(options.founded!.kingdomId),recipe:grandRecipe!,signal:abort.signal,
       materialFactory:palette=>{const material=createHostedGrandMaterial(palette,ground);sunShadows.bindReceiver(material.material);return material;},
       register:mesh=>sunShadows.register(mesh),
-      onProgress:fraction=>options.onProgress('Raising the wider kingdom',.7+.25*fraction),
+      onProgress:fraction=>options.onProgress('Opening the wider kingdom',.7+.25*fraction),
       onError:error=>failLight(error.message),
-    }).then(async land=>{
+    })).then(async land=>{
       if(disposed){land.dispose();return;}
       grandLand=land;
       if(options.overview){

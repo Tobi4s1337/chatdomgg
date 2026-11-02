@@ -38,7 +38,7 @@ export function createGrandLiveController(hooks: { host(): HTMLElement; onState(
         throw new Error('The adopted kingdom could not be confirmed');
       }
       const plan = connection.scene.plan;
-      return { settings: { founded: connection.scene, kingdomId: selected.kingdomId, realmName: connection.kingdomName,
+      return { settings: { founded: connection.scene, foundedReceipt: connection.manifest, kingdomId: selected.kingdomId, realmName: connection.kingdomName,
         tier: plan.config.tier, seed: plan.config.seed, firstYear: plan.config.firstYear, year: plan.config.year,
         presenceOrigin: 'live' as const, presenceFeed: connection.presenceFeed, growthFeed: connection.growthFeed,
         growthCeremonies: connection.growthCeremonies, forgeFeed: connection.forgeFeed, momentFeed: connection.momentFeed,

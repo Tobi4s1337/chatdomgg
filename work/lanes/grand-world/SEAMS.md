@@ -455,3 +455,48 @@ The external binding implemented here records the existing validated receipt wit
 needs: integrator deployment only after client/route composition is accepted: an ignored durable land directory,
 the bounded offline bake command and the two GET paths above. Do not point the lane bake at live data. The native
 water raster's 75 MiB combined decoded working set and large-world manifest capacity remain explicit open limits.
+
+## GW10 native artifact consumer — 2026-11-02
+
+The preceding unmounted-adapter status is superseded in source. `mountLandRoutes` in realm `land/mount.ts`
+registers the two read-only paths when `REALM_LAND_DIRECTORY` is explicitly set. One additive registration
+line mounts it in realm main; one gateway allowlist line admits only the exact kingdom/hash paths. Vite's
+`CHATDOM_LAND_TARGET` proxy override supports an isolated artifact host. No live configuration or data changed.
+
+`openBakedLand` in kingdom `grand-land/baked-client.ts` accepts a previously verified expected identity:
+`{kingdomId, sceneHash, layoutRevision, collisionRevision, sourcePlanHash, recipeHash}`. It returns immutable
+metadata, a decoded surface, `mesh(ref, signal?)`, factual byte/cache counters and `dispose()`. It verifies
+the canonical binding, metadata identity, compressed and raw hashes and lengths, region membership, palette,
+and vertical bounds. Two decode workers perform hashing/decompression; four requests reserve at most 8 MiB
+of compressed bytes. The native renderer separately reserves at most two mesh downloads / 16 MiB of decoded
+pending meshes, installs them in slices, and retains each old patch until its replacement is complete.
+Initial selection waits for the scene's first update after the owner has positioned its actual camera.
+The adopted native terrain renderer and its decoder worker no longer import a grand generator or mesher.
+Unadopted kingdoms retain their existing land path; the explicit generation bench remains separate.
+
+`SceneOptions.foundedReceipt?: RealmFoundedManifest` carries the original validated byte receipt. Stream and
+the public grand controller now pass their connection's manifest. Entry callers should pass that same receipt
+with `founded`; the compatibility adapter derives a receipt with the existing canonical scene encoder only
+when the original is absent. It does not grant authority or add a root land identity. Preserving the original
+receipt matters for valid scenes whose stored JSON bytes are not the canonical producer encoding.
+
+Persistent storage is optional and contains compressed blobs only, keyed by gzip hash, capped at 64 MiB.
+Every cache read is verified again. Corrupt entries are discarded and fetched once; invalid server bytes
+fail closed. Busy cache locks skip writes; all cache waits are abortable and bounded to 250 ms, with caching
+disabled for that source after a timeout. Cache contention cannot block verified content indefinitely.
+A missing initial binding leaves the existing unavailable gate; a failed revision replacement
+retains the previous valid scene through the existing scene mount. There is no browser-generation fallback.
+
+**Deployment prerequisite:** publish a complete binding for every adopted receipt before exposing it to
+the new native consumer, including growth, Forge revisions, checkpoints and historical/replay receipts.
+Only the recorded live receipt has been baked in this lane's ignored store. Do not deploy this frontend
+checkpoint alone. A Forge-only revision can reuse artifacts only after exact scene-byte receipt validation,
+equal plan hash/layout revision and pinned recipe verification, followed by immutable publication of its
+new binding. A changed plan needs a real offline bake. No URL-derived or caller-asserted identity may create
+a binding. Producer lifecycle hooks, historical coverage and the optional root land identity remain needs
+for integration; this checkpoint does not claim those hooks or mark GW10 complete.
+
+Gather's corrected seam remains the exterior tavern door on both lands, with the existing founded building
+unchanged. The tavern room is never mounted as a kingdom interior. Campfire clearing and its typed scene
+mount remain separate; the real clearing still needs an accepted persisted site. The authored pier proposal
+and its existing old/grand validation are unchanged.

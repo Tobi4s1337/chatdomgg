@@ -125,7 +125,7 @@ export default function StreamView(props: StreamViewProps = {}) {
         connection.dispose();
         throw new Error('The kingdom’s real public watch is unavailable.');
       }
-      return { settings: { founded: connection.scene, kingdomId: connection.manifest.kingdomId, ...(dockConnection ? { dockFeed: dockConnection } : {}),
+      return { settings: { founded: connection.scene, foundedReceipt: connection.manifest, kingdomId: connection.manifest.kingdomId, ...(dockConnection ? { dockFeed: dockConnection } : {}),
         presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, growthFeed: connection.growthFeed, growthCeremonies: connection.growthCeremonies, forgeFeed: connection.forgeFeed, momentFeed: connection.momentFeed, walkerFeed: connection.walkerFeed,
         realmName: connection.kingdomName, source: 'herald' as const }, chatFeed: connection.chatFeed,
         activate: () => { connection.activate(); setKingdomName(connection.kingdomName); }, dispose: connection.dispose };

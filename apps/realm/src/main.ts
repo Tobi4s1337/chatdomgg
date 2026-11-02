@@ -93,6 +93,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); } });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
+  if (process.env.REALM_LAND_DIRECTORY) (await import('./land/mount')).mountLandRoutes(transport.app, process.env.REALM_LAND_DIRECTORY);
   ownRealmShutdown(server, transport, async () => {
     dock.stop();
     try { await evening.stop(); }
