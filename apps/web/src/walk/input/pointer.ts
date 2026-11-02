@@ -1,7 +1,9 @@
 /**
- * Free-cursor camera input (mouse and pen): drag to orbit, wheel to zoom. Nothing here is needed to walk, and a short press
- * stays a click for the interaction owner (under 8 px and under 300 ms). A press that became an orbit drag
- * swallows its trailing click so a camera turn never also opens a door.
+ * Wheel zoom, and drag orbit for a pen. The mouse is always captured while walking (decision 2), so a mouse drag
+ * never orbits; the single exception is a page that cannot capture the mouse at all (a sandboxed embed), where
+ * the walk turns drag back on with `setMouseDrag(true)` rather than leave the person unable to look around.
+ * A short press stays a click for the interaction owner (under 8 px and under 300 ms). A press that became an
+ * orbit drag swallows its trailing click so a camera turn never also opens a door.
  */
 export interface PointerEventLike {
   readonly pointerId: number;
@@ -34,6 +36,8 @@ export interface WalkPointer {
   setEnabled(enabled: boolean): void;
   /** While mouse look holds the pointer, presses never start a drag. Switching either way drops a drag. */
   setLocked(locked: boolean): void;
+  /** Mouse drag orbit, only for a page that can never capture the mouse. Off by default. */
+  setMouseDrag(allowed: boolean): void;
   clear(): void;
   dispose(): void;
 }
@@ -51,7 +55,7 @@ export function wheelPixels(event: WheelEventLike): number {
 
 export function createWalkPointer(surface: PointerSurface, keyboard: EventTarget): WalkPointer {
   let press: { id: number; x: number; y: number; lastX: number; lastY: number; dragging: boolean } | null = null;
-  let orbitX = 0, orbitY = 0, zoom = 0, enabled = true, locked = false, swallowClick = false;
+  let orbitX = 0, orbitY = 0, zoom = 0, enabled = true, locked = false, swallowClick = false, mouseDrag = false;
   const end = () => {
     if (!press) return;
     if (press.dragging) { swallowClick = true; if (surface.hasPointerCapture?.(press.id)) surface.releasePointerCapture?.(press.id); }
@@ -62,7 +66,7 @@ export function createWalkPointer(surface: PointerSurface, keyboard: EventTarget
     const event = raw as unknown as PointerEventLike;
     swallowClick = false;
     // Touch belongs to touch.ts (stick, orbit, pinch); this is mouse and pen.
-    if (!enabled || locked || press || event.pointerType === 'touch' || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    if (!enabled || locked || press || event.pointerType === 'touch' || !event.isPrimary || (event.pointerType === 'mouse' && (event.button !== 0 || !mouseDrag))) return;
     press = { id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY, dragging: false };
   };
   const move = (raw: Event) => {
@@ -104,6 +108,7 @@ export function createWalkPointer(surface: PointerSurface, keyboard: EventTarget
     get dragging() { return press?.dragging ?? false; },
     setEnabled(value) { enabled = value; if (!value) clear(); },
     setLocked(value) { if (value !== locked) { locked = value; end(); orbitX = 0; orbitY = 0; } },
+    setMouseDrag(value) { if (value !== mouseDrag) { mouseDrag = value; if (!value) { end(); orbitX = 0; orbitY = 0; } } },
     clear,
     dispose() {
       clear(); enabled = false;

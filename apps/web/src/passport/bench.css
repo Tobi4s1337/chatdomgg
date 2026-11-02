@@ -12,8 +12,6 @@ main.ppb[data-chrome='off'] { padding-top: 28px; }
 .ppb-title { flex: 1 1 320px; display: grid; gap: 3px; }
 .ppb-eyebrow { color: var(--cd-cream-soft); }
 h1.ppb-h1 { margin: 0; font: 400 var(--cd-type-title)/1.1 var(--cd-face-story); letter-spacing: 0; color: var(--cd-cream); }
-.ppb-sim { margin: 0; font: var(--cd-type-small)/1.35 var(--cd-face-body); color: var(--cd-cream-soft); }
-.ppb-sim b { font: var(--cd-type-small)/1 var(--cd-face-label); letter-spacing: var(--cd-label-tracking); color: #f0b48a; }
 .ppb-picks { flex: 2 1 520px; display: grid; gap: 6px; }
 .ppb-pick { display: flex; flex-wrap: wrap; gap: 6px; }
 .ppb-reading { display: grid; justify-items: center; width: 100%; }

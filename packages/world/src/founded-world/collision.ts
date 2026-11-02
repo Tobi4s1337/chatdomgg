@@ -8,7 +8,26 @@ import { TERRAIN_ART_PRODUCER } from '../terrain-art/types';
 
 /** Changes to sampling/known volume must change this identity before a revision is reused. */
 export const FOUNDED_TERRAIN_VERSION = `founded-terrain:2/${TERRAIN_ART_PRODUCER}` as const;
-export const FOUNDED_PHYSICS_VERSION = `${COLLISION_COMPILER_VERSION}/${FOUNDED_TERRAIN_VERSION}` as const;
+/** The static solids the scene's own placements do not carry (see `FOUNDED_ANVIL_SOLIDS`). */
+export const FOUNDED_STATIC_SOLIDS_VERSION = 'founded-anvil:1' as const;
+export const FOUNDED_PHYSICS_VERSION = `${COLLISION_COMPILER_VERSION}/${FOUNDED_TERRAIN_VERSION}/${FOUNDED_STATIC_SOLIDS_VERSION}` as const;
+
+/**
+ * The Forge anvil is drawn by the kingdom's anvil hero, not by a scene placement (a placement would draw a second,
+ * plain anvil inside the hero), so its solid enters here, where the realm and every walking client compile the same
+ * world. Cells are the hero's 0.0625 m lattice about the anvil (`foundedAnvilPosition` in interactions/founded.ts,
+ * restated in `foundedAnvil` so the compiler stays free of the interaction graph), with the horn toward +X: the stone
+ * block (x -15..9, z -9..9, up to its top course) and the iron above it to the 1.43 m face (x -14..22, z -6..6).
+ * Rows start one cell under the street; the hero's rows are lifted by -0.0075 m so row 22's top is the face.
+ * apps/web/src/walk/solids-cases.ts checks these boxes against the hero's sculpt voxel for voxel.
+ */
+const ANVIL_CELL = .0625, ANVIL_ROW_LIFT = 1.43 - 23 * ANVIL_CELL;
+export const FOUNDED_ANVIL_SOLIDS = [
+  { from: [-15, -1, -9], to: [9, 7, 9] },
+  { from: [-14, 7, -6], to: [22, 23, 6] },
+] as const;
+const ANVIL_ID = 'forge:anvil', ANVIL_ASSET = 'founded:forge-anvil:1';
+const ANVIL_MIN = [-15, -1, -9] as const, ANVIL_SIZE = [37, 24, 18] as const;
 
 /**
  * Same 16m chunk footprint and half-metre cell-centre sampling as kingdom/terrain-worker.ts. Its render halos
@@ -74,8 +93,26 @@ export function primeFoundedTerrain(plan: SettlementPlan, heights: Float32Array)
 
 /** Compile already validated, receipt-matched public geometry on either end of walking. */
 export function compileFoundedScene(scene: RealmFoundedScene): CollisionWorld {
-  return compileCollisionWorld({ revision: scene.collisionRevision, materials: scene.materials, assets: scene.assets,
-    placements: scene.placements, terrain: sampleFoundedTerrain(scene.plan) });
+  const anvil = foundedAnvil(scene);
+  return compileCollisionWorld({ revision: scene.collisionRevision, materials: scene.materials,
+    assets: anvil ? [...scene.assets, anvil.asset] : scene.assets,
+    placements: anvil ? [...scene.placements, anvil.placement] : scene.placements, terrain: sampleFoundedTerrain(scene.plan) });
+}
+
+/** The anvil as one collision-only asset and placement; null only if the scene has no solid material at all. */
+function foundedAnvil(scene: RealmFoundedScene) {
+  const material = scene.materials.materials.find(m => m.solid)?.id;
+  if (material === undefined) return null;
+  if (scene.placements.some(p => p.id === ANVIL_ID) || scene.assets.some(a => a.assetHash === ANVIL_ASSET)) {
+    throw new Error('The founded scene already names the Forge anvil; it is a compiled solid, not a placement.');
+  }
+  const at: Vec3 = [0, scene.plan.market.elevation, 8], local = (v: readonly number[]) => v.map((n, i) => n - ANVIL_MIN[i]!) as unknown as Vec3;
+  return {
+    asset: { assetHash: ANVIL_ASSET, blueprint: { lattice: 'avatar' as const, size: ANVIL_SIZE as unknown as Vec3,
+      boxes: FOUNDED_ANVIL_SOLIDS.map(box => ({ from: local(box.from), to: local(box.to), material })) } },
+    placement: { id: ANVIL_ID, assetHash: ANVIL_ASSET, rotation: 0,
+      position: [at[0] + ANVIL_MIN[0] * ANVIL_CELL, at[1] + ANVIL_MIN[1] * ANVIL_CELL + ANVIL_ROW_LIFT, at[2] + ANVIL_MIN[2] * ANVIL_CELL] as Vec3 },
+  };
 }
 
 /** Physical ground under one location. A caller still must check support and body clearance in the compiled world. */

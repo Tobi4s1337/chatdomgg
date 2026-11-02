@@ -81,12 +81,17 @@ describe('the share composition', () => {
     expect(html).not.toMatch(/text-overflow|line-clamp/);
   });
 
-  it('says SIMULATED with one corner chip when the book is simulated, and not otherwise', () => {
-    expect(composePassportShare(few).html).toContain('<b>SIMULATED</b>');
-    expect(composePassportShare(few).alt).toContain('SIMULATED');
+  it('prints no staged label, chip or sentence, whether the book is illustrative or live', () => {
     const live: VisiblePassportView = { ...few, origin: 'live' };
-    expect(composePassportShare(live).html).not.toContain('SIMULATED');
-    expect(composePassportShare(live).alt).not.toContain('SIMULATED');
+    for (const book of [few, live]) {
+      const share = composePassportShare(book);
+      expect(share.html).not.toContain('SIMULATED');
+      expect(share.html).not.toContain('class="sim"');
+      expect(share.alt).not.toContain('SIMULATED');
+    }
+    // The picture and its words are the same for an illustrative book and a live one.
+    expect(composePassportShare(few).html).toBe(composePassportShare(live).html);
+    expect(composePassportShare(few).alt).toBe(composePassportShare(live).alt);
   });
 
   it('names a road’s start only when the book or the card already shows that kingdom', () => {

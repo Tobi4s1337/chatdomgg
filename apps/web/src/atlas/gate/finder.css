@@ -1,0 +1,103 @@
+/*
+ * The Raid Gate's finder: one carved walnut board with a parchment sheet, in the same kit as the cartouche and the
+ * cards. It is read on stream, so it is sized by the viewport (large at 1920×1080) and set in the kit's faces; on a
+ * phone it is a bottom sheet with thumb-sized rows. The map stays the largest shape.
+ */
+.atlas .atlas-finder.cd-plate {
+  position: absolute;
+  z-index: 6;
+  top: clamp(14px, 2.2vh, 28px);
+  right: clamp(14px, 1.6vw, 32px);
+  bottom: clamp(14px, 2.2vh, 28px);
+  display: flex;
+  flex-direction: column;
+  width: clamp(330px, 25vw, 500px);
+  max-height: calc(100% - 2 * clamp(14px, 2.2vh, 28px));
+  padding: clamp(12px, 1.1vw, 18px);
+  color: var(--cd-cream);
+  border: 1px solid var(--cd-wood-edge);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 9px 9px, #f4dc9d 0 1px, #ad8247 1.5px 2.5px, #4f341b 3px, transparent 3.5px),
+    radial-gradient(circle at calc(100% - 9px) 9px, #f4dc9d 0 1px, #ad8247 1.5px 2.5px, #4f341b 3px, transparent 3.5px),
+    radial-gradient(circle at 9px calc(100% - 9px), #efda9d 0 1px, #ad8247 1.5px 2.5px, #4f341b 3px, transparent 3.5px),
+    radial-gradient(circle at calc(100% - 9px) calc(100% - 9px), #efda9d 0 1px, #ad8247 1.5px 2.5px, #4f341b 3px, transparent 3.5px),
+    repeating-linear-gradient(96deg, #ffe2b00a 0 2px, transparent 2px 11px, #1a0c0412 11px 12px, transparent 12px 19px),
+    linear-gradient(170deg, var(--cd-wood-hi), var(--cd-wood) 42%, var(--cd-wood-lo));
+  box-shadow: inset 0 1px #ffe5b766, inset 0 0 0 3px #301d1038, inset 0 0 0 4px #dbb77842,
+    0 1px 0 #eed6a666, 0 5px 0 #2f2016b8, 0 14px 28px #34231660;
+  animation: atlas-finder-open 260ms cubic-bezier(.2, .8, .2, 1) both;
+}
+@keyframes atlas-finder-open { from { opacity: 0; transform: translateX(18px); } }
+
+.atlas .atlas-finder-head { position: relative; padding: 2px 44px 10px 4px; }
+.atlas .atlas-finder-eyebrow { margin: 0 0 4px; color: var(--cd-brass-hi); font-size: clamp(12px, .78vw, 15px); }
+.atlas .atlas-finder-title { margin: 0; color: var(--cd-cream); font: 400 clamp(22px, 1.55vw, 31px)/1.08 var(--cd-face-story); text-shadow: 0 1px #24160d; }
+.atlas .atlas-finder-close {
+  position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; cursor: pointer;
+  color: var(--cd-brass-hi); border: 1px solid #2b1a10; border-radius: 4px;
+  background: linear-gradient(175deg, var(--cd-wood-hi), var(--cd-wood-lo)); box-shadow: inset 0 1px #ffe4b44d, 0 1px 0 #d6af7055;
+}
+.atlas .atlas-finder-close svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+
+.atlas .atlas-finder-sheet {
+  display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; color: var(--cd-ink); border: 1px solid #2c1b10; border-radius: 4px;
+  background: radial-gradient(ellipse at 28% 0, var(--cd-parch-hi), transparent 78%), linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 2px #f9efd8, inset 0 2px 6px #6e4b2933;
+}
+.atlas .atlas-finder-search {
+  display: flex; align-items: center; gap: 10px; margin: 12px 12px 4px; padding: 0 12px; min-height: clamp(46px, 3.1vw, 56px);
+  border: 1px solid #8f6b3f; border-radius: 3px; background: #fbf3df; box-shadow: inset 0 1px 3px #6e4b2933;
+}
+.atlas .atlas-finder-search:focus-within { outline: 2px solid var(--cd-brass-lo); outline-offset: 2px; }
+.atlas .atlas-finder-search svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--cd-ink-soft); stroke-width: 1.7; stroke-linecap: round; }
+.atlas .atlas-finder-search input {
+  flex: 1 1 auto; min-width: 0; height: 100%; padding: 0; color: var(--cd-ink); border: 0; outline: 0; background: transparent;
+  font: italic 400 clamp(17px, 1.05vw, 21px)/1 var(--cd-face-story); appearance: none;
+}
+.atlas .atlas-finder-search input::placeholder { color: #8c7154; }
+.atlas .atlas-finder-search input::-webkit-search-cancel-button { appearance: none; }
+
+.atlas .atlas-finder-scroll { flex: 1 1 auto; min-height: 0; padding: 4px 12px 10px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #9b7a50 transparent; }
+.atlas .atlas-finder-group { margin-top: 12px; }
+.atlas .atlas-finder-group h3 { margin: 0 0 6px; padding-bottom: 4px; color: #6b4b2b; font-size: clamp(12px, .8vw, 16px); border-bottom: 1px solid #b89463; }
+.atlas .atlas-finder-group ul { margin: 0; padding: 0; list-style: none; }
+.atlas .atlas-finder-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: clamp(54px, 3.5vw, 66px); margin: 0; padding: 6px 8px; text-align: left; cursor: pointer;
+  color: var(--cd-ink); border: 1px solid transparent; border-left: 3px solid transparent; border-radius: 3px; background: transparent; touch-action: manipulation;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.atlas .atlas-finder-row:hover:not(:disabled), .atlas .atlas-finder-row:focus-visible { background: #9b744922; border-left-color: var(--cd-brass-lo); }
+.atlas .atlas-finder-row:focus-visible { outline: 2px solid var(--cd-brass-lo); outline-offset: 1px; box-shadow: none; }
+.atlas .atlas-finder-row[aria-pressed='true'] { border-color: #8c3a24; border-left-color: #8c3a24; background: #b5523a1c; }
+.atlas .atlas-finder-row:disabled { cursor: default; opacity: .62; }
+.atlas .atlas-finder-row .atlas-face-seal[data-atlas-face-size='compact'] { width: clamp(36px, 2.4vw, 46px); height: clamp(36px, 2.4vw, 46px); }
+.atlas .atlas-finder-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.atlas .atlas-finder-name { overflow: hidden; font: 400 clamp(18px, 1.15vw, 23px)/1.1 var(--cd-face-story); white-space: nowrap; text-overflow: ellipsis; }
+.atlas .atlas-finder-line { overflow: hidden; color: var(--cd-ink-soft); font: 400 clamp(13px, .82vw, 16px)/1.25 var(--cd-face-body); white-space: nowrap; text-overflow: ellipsis; }
+.atlas .atlas-finder-air { flex: none; width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f08a6c, #d9472b 55%, #9e2f1b); box-shadow: 0 0 0 2px #f6e3c2, 0 0 0 3px #b0412988; }
+.atlas .atlas-finder-chosen { flex: none; padding: 4px 8px; color: #fbe9d0; border-radius: 3px; background: radial-gradient(ellipse at 32% 20%, #ba6650, #923e2d 45%, #6e2e22); box-shadow: inset 0 1px #f0b08a80, 0 1px 2px #43241b66; animation: atlas-finder-stamp 110ms ease-out both; }
+@keyframes atlas-finder-stamp { from { transform: scale(1.35) rotate(-6deg); opacity: 0; } }
+.atlas .atlas-finder-empty, .atlas .atlas-finder-wait { margin: 2px 0 6px; color: var(--cd-ink-soft); font: italic 400 clamp(14px, .86vw, 17px)/1.35 var(--cd-face-story); }
+.atlas .atlas-finder-foot { margin: 0; padding: 8px 14px 10px; color: var(--cd-ink-soft); font: 400 clamp(12px, .74vw, 14px)/1.2 var(--cd-face-body); border-top: 1px solid #c4a375; }
+
+.atlas[data-layout='phone'] .atlas-finder.cd-plate {
+  top: auto; right: 0; bottom: 0; left: 0; width: auto; max-height: 62%; padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  border-radius: 12px 12px 0 0; animation-name: atlas-finder-rise;
+}
+@keyframes atlas-finder-rise { from { opacity: 0; transform: translateY(24px); } }
+.atlas[data-layout='phone'] .atlas-finder-title { font-size: 22px; }
+.atlas[data-layout='phone'] .atlas-finder-row { min-height: 58px; }
+.atlas[data-layout='phone'] .atlas-finder-name { font-size: 19px; }
+.atlas[data-layout='phone'] .atlas-finder-line { font-size: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas .atlas-finder.cd-plate, .atlas .atlas-finder-chosen { animation: none; }
+}
+
+/* The gate's source without a holding: its pencil flag is named in the map's own lettering. */
+.atlas .atlas-gate-source {
+  position: absolute; z-index: 2; pointer-events: none; white-space: nowrap; color: var(--cd-ink);
+  font: italic 400 clamp(15px, .95vw, 19px)/1 var(--cd-face-story);
+  text-shadow: 0 0 2px #f4ead2, 0 0 4px #f4ead2, 0 0 6px #f4ead2cc;
+}

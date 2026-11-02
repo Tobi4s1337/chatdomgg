@@ -1,5 +1,6 @@
+// @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BASE, clone, FakeService, ID_A, ID_B, makeChunk, makeNames, makeWorld, publish, sha } from './fixtures.test-support';
+import { BASE, clone, FakeService, ID_A, ID_B, makeChunk, makeEdition, makeNames, makeWorld, publish, sha } from './fixtures.test-support';
 import {
   fetchChunk, fetchNames, fetchPointer, fetchWorld, PreviewError, READ_TIMEOUT_MS, sha256Hex, validateChunk, validateNames,
   validatePointer, validateWorld, worldUrl, type PreviewPointer, type PreviewWorld, type ServedNames,
@@ -220,6 +221,113 @@ describe('validateChunk', () => {
     const error = caught(() => validateChunk(chunk, world, region));
     expect(error.reason).toBe<Reason>('invalid');
     expect(error.message.startsWith(path)).toBe(true);
+  });
+});
+
+describe('an edition publication', () => {
+  type Mutable = Record<string, unknown> & PreviewWorld;
+  function refusesEdition(mutate: (world: Mutable) => void, path: string, rehearsal = false): void {
+    const world = clone(makeEdition({ rehearsal })) as Mutable;
+    mutate(world);
+    const error = caught(() => validateWorld(world));
+    expect(error.reason).toBe<Reason>('invalid');
+    expect(error.message.startsWith(path), error.message).toBe(true);
+  }
+
+  it('accepts an edition night, a rehearsal and Edition 0, unchanged and after a JSON round trip', () => {
+    for (const world of [makeEdition(), makeEdition({ rehearsal: true }), makeEdition({ label: 'Edition 0' })]) {
+      expect(validateWorld(world)).toBe(world);
+      expect(() => validateWorld(JSON.parse(publish(world).worldText) as unknown)).not.toThrow();
+    }
+  });
+
+  it('accepts an edition without a hamlet count or founding counts, and holdings whose average left their tier', () => {
+    const world = makeEdition();
+    delete world.counts.hamlet;
+    delete world.head.founded;
+    // A city whose audience fell to 300 is still a city: an edition draws the tier its land was granted at.
+    world.head.average[1] = 300;
+    expect(() => validateWorld(world)).not.toThrow();
+  });
+
+  it.each<[string, (w: Mutable) => void, string]>([
+    ['the preview label', (w) => { (w as { label: string }).label = 'Survey preview · land awaiting founding'; }, 'world.label'],
+    ['an unknown label', (w) => { (w as { label: string }).label = 'Edition II'; }, 'world.label'],
+    ['a label other than its founding’s', (w) => { (w as { label: string }).label = 'Edition 0'; }, 'world.label'],
+    ['an edition ID of another edition', (w) => { (w.founding as { edition: string }).edition = 'ed-0'; }, 'world.founding.label'],
+    ['an unknown edition ID', (w) => { (w.founding as { edition: string }).edition = 'ed-2'; }, 'world.founding.edition'],
+    ['a founding that is not founded', (w) => { (w as { founding: unknown }).founding = { status: 'not-founded', edition0EligibleAt: 1, editionIEligibleAt: 2 }; }, 'world.founding'],
+    ['a founding with an unknown key', (w) => { (w.founding as unknown as Record<string, unknown>).signature = 'x'; }, 'world.founding.signature'],
+    ['a founding without its ledger', (w) => { delete (w.founding as unknown as Partial<Record<string, unknown>>).ledger; }, 'world.founding.ledger'],
+    ['a founding without its night', (w) => { delete (w.founding as unknown as Partial<Record<string, unknown>>).night; }, 'world.founding.night'],
+    ['a founding with an unknown key in its ledger', (w) => { (w.founding as unknown as { ledger: Record<string, unknown> }).ledger.tail = 'x'; }, 'world.founding.ledger.tail'],
+    ['a founding with an unknown key in its night', (w) => { (w.founding as unknown as { night: Record<string, unknown> }).night.sweeps = 3; }, 'world.founding.night.sweeps'],
+    ['a night of another form', (w) => { (w.founding as { night: { revision: string } }).night.revision = ID_A; }, 'world.founding.night.revision'],
+    ['a rehearsal flag given as text', (w) => { (w.founding as unknown as Record<string, unknown>).rehearsal = 'false'; }, 'world.founding.rehearsal'],
+    ['a world hash that is not one', (w) => { (w.founding as { worldHash: string }).worldHash = 'ed-1'; }, 'world.founding.worldHash'],
+    ['a fractional ledger count', (w) => { (w.founding as { ledger: { lines: number } }).ledger.lines = 1.5; }, 'world.founding.ledger.lines'],
+    ['a hamlet in the head (hamlets arrive per region)', (w) => { w.head.tier[2] = 4; }, 'world.head.tier[2]'],
+    ['more founding holdings in the head than it holds', (w) => { w.head.founded = w.head.ids.length + 1; }, 'world.head.founded'],
+    ['a negative founding count', (w) => { w.head.founded = -1; }, 'world.head.founded'],
+    ['a fractional hamlet count', (w) => { w.counts.hamlet = 2.5; }, 'world.counts.hamlet'],
+  ])('refuses an edition with %s', (_, mutate, path) => refusesEdition(mutate, path));
+
+  it.each<[string, (w: Mutable) => void, string]>([
+    ['a founded founding', (w) => { (w as { founding: unknown }).founding = clone(makeEdition().founding); }, 'world.founding'],
+    ['a hamlet count', (w) => { w.counts.hamlet = 0; }, 'world.counts.hamlet'],
+    ['a founding-holding count', (w) => { w.head.founded = 3; }, 'world.head.founded'],
+    ['an edition label', (w) => { (w as { label: string }).label = 'Edition I'; }, 'world.label'],
+  ])('refuses a survey preview with %s', (_, mutate, path) => refusesWorld(mutate, path));
+
+  it('takes hamlets and founding counts in an edition’s chunks, and nothing past the file’s length', () => {
+    const world = makeEdition();
+    const chunk = makeChunk(world, 0);
+    expect(chunk.settlers.tier).toContain(4);
+    expect(validateChunk(chunk, world, 0)).toBe(chunk);
+    const over = clone(chunk);
+    over.settlers.founded = over.settlers.ids.length + 1;
+    expect(caught(() => validateChunk(over, world, 0)).message.startsWith('chunk.settlers.founded')).toBe(true);
+    const all = clone(chunk);
+    all.settlers.founded = all.settlers.ids.length;
+    expect(() => validateChunk(all, world, 0)).not.toThrow();
+  });
+
+  it('refuses a hamlet or a founding count in a survey preview’s chunk', () => {
+    const world = makeWorld();
+    const hamlet = clone(makeChunk(world, 0));
+    hamlet.settlers.tier[1] = 4;
+    expect(caught(() => validateChunk(hamlet, world, 0)).message.startsWith('chunk.settlers.tier[1]')).toBe(true);
+    const founded = clone(makeChunk(world, 0));
+    founded.settlers.founded = 1;
+    expect(caught(() => validateChunk(founded, world, 0)).message.startsWith('chunk.settlers.founded')).toBe(true);
+  });
+
+  it('reads the edition named on the pointer, and refuses one of the wrong shape', () => {
+    const pointer = publish(makeEdition()).pointer;
+    expect(validatePointer(pointer).edition).toEqual({ id: 'ed-1', label: 'Edition I', foundedAt: makeEdition().founding.foundedAt, worldHash: 'a1'.repeat(32), address: 'b2'.repeat(32) });
+    const cases: [string, (e: Record<string, unknown>) => void, string][] = [
+      ['a label of another edition', (e) => { e.label = 'Edition 0'; }, 'pointer.edition.label'],
+      ['an unknown edition', (e) => { e.id = 'ed-2'; }, 'pointer.edition.id'],
+      ['an unknown key', (e) => { e.rehearsal = true; }, 'pointer.edition.rehearsal'],
+      ['a missing address', (e) => { delete e.address; }, 'pointer.edition.address'],
+      ['a short world hash', (e) => { e.worldHash = 'a'.repeat(63); }, 'pointer.edition.worldHash'],
+    ];
+    for (const [what, mutate, path] of cases) {
+      const value = clone(pointer) as unknown as { edition: Record<string, unknown> };
+      mutate(value.edition);
+      expect(caught(() => validatePointer(value)).message.startsWith(path), what).toBe(true);
+    }
+    expect(caught(() => validatePointer({ ...clone(pointer), edition: null })).message.startsWith('pointer.edition')).toBe(true);
+  });
+
+  it('fetches an edition night through the same routes as a survey preview', async () => {
+    const published = publish(makeEdition());
+    const service = new FakeService().publish(published);
+    const pointer = await fetchPointer(service.source);
+    const world = await fetchWorld(service.source, pointer);
+    expect(world.status).toBe('edition');
+    expect((await fetchChunk(service.source, world, 1)).settlers.founded).toBe(3);
+    expect(service.urls()).toEqual([`${BASE}/v1/preview`, worldUrl(service.source, world.id), `${BASE}/v1/preview/${world.id}/region-1.json`]);
   });
 });
 

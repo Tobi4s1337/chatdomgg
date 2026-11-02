@@ -1,5 +1,6 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { formatCount, formatDay, formatDayRange, formatSpan, scaleBar, sweepCadence, TIER_NAMES, watchUrl } from './format';
+import { formatCount, formatDay, formatDayRange, formatSpan, scaleBar, sweepCadence, tierBand, TIER_NAMES, watchUrl } from './format';
 
 const at = (iso: string) => Date.parse(iso);
 
@@ -142,6 +143,13 @@ describe('formatCount and TIER_NAMES', () => {
   });
 
   it('names tiers in rank order', () => {
-    expect(TIER_NAMES).toEqual(['Capital', 'City', 'Town', 'Village']);
+    expect(TIER_NAMES).toEqual(['Capital', 'City', 'Town', 'Village', 'Hamlet']);
+  });
+
+  it('writes each tier’s band of average viewers, a hamlet’s below the village floor', () => {
+    const minAverage = { capital: 5000, city: 500, town: 50, village: 25 };
+    expect([0, 1, 2, 3, 4].map(rank => tierBand(minAverage, rank))).toEqual([
+      '5,000+ average viewers', '500+ average viewers', '50+ average viewers', '25+ average viewers', 'under 25 average viewers',
+    ]);
   });
 });

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { DISTANCE_SCALE } from '../map/camera';
 import { caravanCount, caravanLayout, columnTail, MARCHER_SPACING_PX } from './caravan';
@@ -84,7 +85,7 @@ describe('the journey camera', () => {
 
 describe('the ends of a road', () => {
   const settler = (over: Partial<Settler> = {}): Settler => ({ index: 0, ordinal: 0, id: '41254337', login: 'pinkkittyrose', name: 'PinkKittyRose', freshUntil: 0, withheld: false,
-    tier: 'town', tierRank: 2, x: 12, y: -8, average: 140, game: null, region: 3, realm: 1, realmName: 'the Crossroads', ...over });
+    tier: 'town', tierRank: 2, foundingHolding: true, x: 12, y: -8, average: 140, game: null, region: 3, realm: 1, realmName: 'the Crossroads', ...over });
 
   it('rides to a holding whose name the survey is not serving just now, unnamed, for the caller to name', () => {
     const end = roadHolding(settler({ name: null, login: null }), 'raided');

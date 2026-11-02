@@ -15,7 +15,6 @@
 .rg-welcome-scene svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .rg-welcome-seal { overflow: visible; filter: drop-shadow(0 0 10px #ffc4704d) drop-shadow(0 3px 2px #0b0c18aa); }
 .rg-welcome-seal > * { display: block; margin: 3px auto 0; }
-.rg-welcome-chip { position: absolute; right: 18px; bottom: 14px; margin: 0; display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px; border: 1px solid #d0b58160; background: #20243acc; color: #f2d8b3; font: 10px/1 Alegreya, Georgia, serif; letter-spacing: .16em; }
 
 .rg-w-ground { fill: #1c1a26; }
 .rg-w-bloom, .rg-w-haze { mix-blend-mode: screen; }

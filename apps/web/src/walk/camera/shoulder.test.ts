@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { WALK_BODY, type CollisionWorld, type SolidBox } from '@chatdom/shared/realm';
-import { createShoulderRig, shoulderPose, SHOULDER, type Vec3 } from './shoulder';
+import { createShoulderRig, fovScaleFor, framingFor, shoulderPose, SHOULDER, type Vec3 } from './shoulder';
 
 const SIZES = [{ width: 1440, height: 900 }, { width: 390, height: 844 }] as const;
 function pixel(camera: THREE.PerspectiveCamera, point: Vec3, width: number, height: number) {
@@ -66,28 +66,56 @@ describe('the shoulder view', () => {
     expect(rig.view.pitch).toBeLessThan(SHOULDER.pitch);
   });
 
-  it('wheels continuously into the head and back out, with no stuck minimum', () => {
+  it('wheels continuously down to the closest shoulder view and back out, never into the skull', () => {
     const camera = new THREE.PerspectiveCamera(43, 1, .15, 2200);
     const rig = createShoulderRig(0), feet: Vec3 = [0, 0, 0];
     let previous = rig.apply(camera, feet, 1.6).eye;
     let largestJump = 0;
-    for (let n = 0; n < 400 && rig.view.distance > 0; n++) {
+    for (let n = 0; n < 400; n++) {
       rig.zoom(-12); rig.update(1 / 60, null, 0, false);
       const pose = rig.apply(camera, feet, 1.6);
       largestJump = Math.max(largestJump, Math.hypot(pose.eye[0] - previous[0], pose.eye[1] - previous[1], pose.eye[2] - previous[2]));
       previous = pose.eye;
     }
-    expect(rig.view.distance).toBe(0);
+    expect(rig.view.distance).toBeCloseTo(SHOULDER.minThirdDistance, 6);
     expect(largestJump).toBeLessThan(.2);
-    const inside = rig.apply(camera, feet, 1.6);
-    expect(inside.eye).toEqual([0, SHOULDER.eyeHeight, 0]);
-    expect([inside.shift, inside.selfOpacity, camera.filmOffset]).toEqual([0, 0, 0]);
-    // Every frame applies, as the controller does: the citizen comes back with the boom.
     for (let n = 0; n < 200; n++) { rig.zoom(24); rig.update(1 / 60, null, 0, false); rig.apply(camera, feet, 1.6); }
     const out = rig.apply(camera, feet, 1.6);
     expect(rig.view.distance).toBe(SHOULDER.maxDistance);
     expect(out.selfOpacity).toBe(1);
     expect(camera.filmOffset).toBeGreaterThan(0);
+  });
+
+  it('swings the boom smoothly into first person on V and back out to the same shoulder view', () => {
+    const camera = new THREE.PerspectiveCamera(43, 1, .15, 2200);
+    const rig = createShoulderRig(0), feet: Vec3 = [0, 0, 0];
+    rig.update(1 / 60, null, 0, false);
+    let previous = rig.apply(camera, feet, 1.6).eye, largestJump = 0;
+    rig.setPerson('first');
+    for (let n = 0; n < 60; n++) {
+      rig.update(1 / 60, null, 0, false);
+      const pose = rig.apply(camera, feet, 1.6);
+      largestJump = Math.max(largestJump, Math.hypot(pose.eye[0] - previous[0], pose.eye[1] - previous[1], pose.eye[2] - previous[2]));
+      previous = pose.eye;
+    }
+    // About 6.5 m covered in .42 s with an eased start and end: no single frame pops.
+    expect(largestJump).toBeLessThan(.45);
+    const inside = rig.apply(camera, feet, 1.6);
+    expect(rig.person).toBe('first');
+    expect(rig.view.distance).toBe(0);
+    expect(inside.eye).toEqual([0, SHOULDER.eyeHeight, 0]);
+    expect([inside.shift, inside.selfOpacity, camera.filmOffset]).toEqual([0, 0, 0]);
+    rig.zoom(-500); // the wheel does not move first person
+    rig.setPerson('third');
+    for (let n = 0; n < 60; n++) { rig.update(1 / 60, null, 0, false); rig.apply(camera, feet, 1.6); }
+    expect(rig.view.distance).toBeCloseTo(SHOULDER.distance, 6);
+    expect(rig.apply(camera, feet, 1.6).selfOpacity).toBe(1);
+  });
+
+  it('scales every framing by the field-of-view setting, with 74° horizontal as today’s lens', () => {
+    expect(fovScaleFor(74)).toBeCloseTo(1, 2);
+    expect(framingFor(1.6, fovScaleFor(90)).fov).toBeGreaterThan(framingFor(1.6).fov);
+    expect(framingFor(1.6, fovScaleFor(55)).fov).toBeLessThan(framingFor(1.6).fov);
   });
 
   it('keeps the wheel’s wish apart from what is drawn while it eases', () => {
@@ -224,5 +252,30 @@ describe('the shoulder view', () => {
     rig.apply(camera, [0, 0, 0], 1.6, backed(1.4));
     expect(camera.view?.enabled ?? false).toBe(false);
     expect(camera.projectionMatrix.elements).toEqual(clean.elements);
+  });
+});
+
+describe('a place\'s camera limits', () => {
+  it('shortens the boom and eases the pitch into the room\'s range, and lifts both on leaving', () => {
+    const rig = createShoulderRig(0);
+    rig.zoom(1e6);
+    for (let i = 0; i < 120; i++) rig.update(1 / 60, null, 0, false);
+    const far = rig.desiredDistance;
+    expect(far).toBeGreaterThan(5);
+    rig.setLimits({ maxDistance: 2.5, minPitch: .3, maxPitch: .6 });
+    expect(rig.desiredDistance).toBeCloseTo(2.5, 9);
+    rig.update(1 / 60, null, 0, false);
+    const firstStep = rig.view.pitch;
+    expect(firstStep).toBeGreaterThan(SHOULDER.pitch);
+    expect(firstStep).toBeLessThan(.3);
+    for (let i = 0; i < 180; i++) rig.update(1 / 60, null, 0, false);
+    expect(rig.view.pitch).toBeCloseTo(.3, 3);
+    // Looking up past the range is held at its edge; looking back down moves freely.
+    rig.orbit(0, -900, 900);
+    expect(rig.view.pitch).toBeGreaterThanOrEqual(.3 - 1e-3);
+    rig.setLimits(null);
+    expect(rig.desiredDistance).toBeCloseTo(far, 9);
+    rig.setLimits({ maxDistance: -1, minPitch: 0, maxPitch: 1 });
+    expect(rig.desiredDistance).toBeCloseTo(far, 9);
   });
 });

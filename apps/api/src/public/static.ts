@@ -55,7 +55,7 @@ export async function indexBuild(root: string): Promise<Map<string, StaticFile>>
       path: file.path, size: file.size, type: TYPES[extname(file.path).toLowerCase()] ?? 'application/octet-stream',
       etag: `"${file.size.toString(36)}-${Math.floor(file.mtimeMs).toString(36)}"`,
       // Vite names every emitted asset with a content hash; only those may be cached forever.
-      immutable: /^\/(?:assets|door\/assets)\//.test(url) && /[-.][A-Za-z0-9_-]{8,}\.[a-z0-9]+$/.test(url),
+      immutable: /^\/(?:assets|site\/assets)\//.test(url) && /[-.][A-Za-z0-9_-]{8,}\.[a-z0-9]+$/.test(url),
       encodings,
     });
   }

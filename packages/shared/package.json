@@ -9,7 +9,8 @@
     "./world-fixtures": "./src/world-fixtures.ts",
     "./realm": "./src/realm/index.ts",
     "./passport": "./src/passport.ts",
-    "./twitch-moments": "./src/twitch-moments.ts"
+    "./twitch-moments": "./src/twitch-moments.ts",
+    "./passport/live": "./src/passport-live.ts"
   },
   "dependencies": {
     "zod": "4.6.7",

@@ -1,0 +1,577 @@
+--- a/packages/ui/package.json
++++ b/packages/ui/package.json
+@@ -7,7 +7,8 @@
+     ".": "./src/index.ts",
+     "./kit.css": "./src/kit.css",
+     "./passport": "./src/passport/index.ts",
+-    "./growth-card": "./src/growth-card/index.ts"
++    "./growth-card": "./src/growth-card/index.ts",
++    "./passport/live": "./src/passport/live.ts"
+   },
+   "dependencies": {
+     "solid-js": "1.9.18"
+--- a/packages/ui/src/passport/Book.tsx
++++ b/packages/ui/src/passport/Book.tsx
+@@ -1,7 +1,6 @@
+ import '../kit.css';
+ import './passport.css';
+ import { createEffect, createMemo, createSignal, For, Match, on, Show, Switch, type JSX } from 'solid-js';
+-import { ProvenanceSeal } from '../ProvenanceSeal';
+ import { CrestArms } from './Arms';
+ import { PassportStampMark } from './Stamp';
+ import { folio, initialOf, isoDay, longDate, monthSpan } from './format';
+@@ -105,7 +104,6 @@
+     for (const bond of s.bonds.items) if (bond.with.kind === 'kingdom') known.set(bond.with.kingdom.kingdomId, bond.with.kingdom.name);
+     return known;
+   });
+-  const simulated = () => props.book.origin === 'simulated';
+   const section = () => sectionOfView(current());
+ 
+   return <section class={`pp-book cd-kit${props.class ? ` ${props.class}` : ''}`} data-layout={layout()} data-view={current()?.kind}
+@@ -118,7 +116,7 @@
+     </Show>
+     <div class="pp-stage" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={() => { swipe = null; }}>
+       <Show when={current()?.kind === 'leaves' ? current() as { kind: 'leaves'; leaves: readonly Leaf[] } : undefined} fallback={
+-        <Cover book={props.book} simulated={simulated()} onOpen={() => go(1)} />
++        <Cover book={props.book} onOpen={() => go(1)} />
+       }>{open => <div class="pp-case">
+         <div class="pp-spread" data-count={open().leaves.length}>
+           <For each={open().leaves}>{leaf => <Page leaf={leaf} total={leaves().length} names={names()} asOf={props.book.asOf}
+@@ -142,9 +140,6 @@
+       <button type="button" class="pp-turn" data-dir="next" aria-disabled={at() >= views().length - 1 ? 'true' : undefined} onClick={() => go(at() + 1)}
+         aria-label={at() === 0 ? 'Open the passport' : 'Turn the page'}><TurnGlyph dir="next" /></button>
+     </div>
+-    <Show when={simulated() && current()?.kind === 'leaves'}>
+-      <ProvenanceSeal class="pp-provenance" state="simulated" detail="an illustrative passport" />
+-    </Show>
+   </section>;
+ }
+ 
+@@ -169,7 +164,7 @@
+ }
+ 
+ /** The closed book: blind-tooled leather, the word PASSPORT in worn gilt, the holder's name tooled beneath. */
+-function Cover(props: { book: VisiblePassportView; simulated: boolean; onOpen: () => void }): JSX.Element {
++function Cover(props: { book: VisiblePassportView; onOpen: () => void }): JSX.Element {
+   return <div class="pp-cover-wrap">
+     <button type="button" class="pp-cover" onClick={() => props.onOpen()} aria-label={`Open the passport of ${props.book.holder.name}`}>
+       <span class="pp-cover-tooling" aria-hidden="true" />
+@@ -179,7 +174,6 @@
+       <span class="pp-cover-name" dir="auto">{props.book.holder.name}</span>
+       <span class="pp-cover-open" aria-hidden="true">Open the book</span>
+     </button>
+-    <Show when={props.simulated}><ProvenanceSeal class="pp-provenance pp-provenance-cover" state="simulated" detail="an illustrative passport" /></Show>
+   </div>;
+ }
+ 
+--- a/packages/ui/src/passport/Reading.tsx
++++ b/packages/ui/src/passport/Reading.tsx
+@@ -1,7 +1,6 @@
+ import '../kit.css';
+ import './passport.css';
+ import { createRenderEffect, createSignal, Match, onCleanup, Show, Switch, type Accessor, type JSX } from 'solid-js';
+-import { ProvenanceSeal } from '../ProvenanceSeal';
+ import { CoverEmblem, PassportBook, type PassportBookProps } from './Book';
+ import type { BookLayout, PageDensity } from './pages';
+ import {
+@@ -37,8 +36,8 @@
+     <Match when={visible()}>{read => <PassportBook book={read().book} shelf={read().shelf} layout={props.layout ?? 'spread'}
+       {...(props.density ? { density: props.density } : {})} {...(props.initialView === undefined ? {} : { initialView: props.initialView })} {...(props.places ? { places: props.places } : {})}
+       {...(props.onMore ? { onMore: props.onMore } : {})} {...(props.onTurn ? { onTurn: props.onTurn } : {})} {...(props.class ? { class: props.class } : {})} />}</Match>
+-    <Match when={props.state.kind === 'hidden' ? props.state : undefined}>{hidden =>
+-      <ClosedPassport state="private" layout={props.layout ?? 'spread'} simulated={hidden().origin === 'simulated'} class={props.class} />}</Match>
++    <Match when={props.state.kind === 'hidden'}>
++      <ClosedPassport state="private" layout={props.layout ?? 'spread'} class={props.class} /></Match>
+     <Match when={props.state.kind === 'unavailable'}>
+       <ClosedPassport state="unavailable" layout={props.layout ?? 'spread'} class={props.class} onRetry={props.onRetry} />
+     </Match>
+@@ -52,7 +51,7 @@
+   unavailable: { label: 'A passport that could not be read', note: 'This passport could not be read just now' },
+ } as const;
+ 
+-function ClosedPassport(props: { state: keyof typeof CLOSED_WORDS; layout: BookLayout; simulated?: boolean; class?: string | undefined; onRetry?: (() => void) | undefined }): JSX.Element {
++function ClosedPassport(props: { state: keyof typeof CLOSED_WORDS; layout: BookLayout; class?: string | undefined; onRetry?: (() => void) | undefined }): JSX.Element {
+   const words = () => CLOSED_WORDS[props.state];
+   return <section class={`pp-book cd-kit${props.class ? ` ${props.class}` : ''}`} data-layout={props.layout} data-view="closed" data-state={props.state}
+     aria-roledescription="passport" aria-label={words().label} aria-busy={props.state === 'pending' ? 'true' : undefined}>
+@@ -70,7 +69,6 @@
+       </div>
+       <Show when={props.state === 'unavailable' && props.onRetry}>{retry =>
+         <button type="button" class="pp-more-action pp-retry" onClick={() => retry()()}>Try again</button>}</Show>
+-      <Show when={props.simulated}><ProvenanceSeal class="pp-provenance pp-provenance-cover" state="simulated" detail="an illustrative passport" /></Show>
+     </div>
+   </section>;
+ }
+--- /dev/null
++++ b/packages/ui/src/passport/live.ts
+@@ -0,0 +1,9 @@
++/** Shared book and reading without the bench-only fixture exports. Validate the wire before use. */
++export { PassportBook, type PassportBookProps } from './Book';
++export { PassportReading, createPassportReading, type PassportReadingProps } from './Reading';
++export { ChargeMark, CrestArms } from './Arms';
++export { createPassportSession, followDisclosure, newerDisclosure, continuesBook,
++  type PassportDisclosureView, type PassportPageReplyView, type PassportReadState, type PassportReplyView,
++  type PassportRequestView, type PassportSession, type PassportTransport } from './session';
++export type * from './types';
++export type { BookLayout, PageDensity, PassportShelf } from './pages';
+--- a/packages/shared/package.json
++++ b/packages/shared/package.json
+@@ -9,7 +9,8 @@
+     "./world-fixtures": "./src/world-fixtures.ts",
+     "./realm": "./src/realm/index.ts",
+     "./passport": "./src/passport.ts",
+-    "./twitch-moments": "./src/twitch-moments.ts"
++    "./twitch-moments": "./src/twitch-moments.ts",
++    "./passport/live": "./src/passport-live.ts"
+   },
+   "dependencies": {
+     "zod": "4.6.7",
+--- a/packages/shared/src/passport.ts
++++ b/packages/shared/src/passport.ts
+@@ -1,75 +1,5 @@
+ import { z } from 'zod';
+-import { DisplayNameSchema, EpochMsSchema, KingdomIdSchema, PersonIdSchema, Sha256Schema, TokenSchema } from './identity';
+-
+-/** Public read projection of witnessed travel; never a travel command or a second ledger. */
+-const Ink = z.string().regex(/^#[a-fA-F0-9]{6}$/);
+-export const PassportCrestSchema = z.strictObject({
+-  key: TokenSchema,
+-  shape: z.enum(['heater', 'round', 'swallowtail']),
+-  charge: z.enum(['oak', 'star', 'wave', 'mountain']),
+-  colours: z.array(Ink).min(2).max(4),
+-  /** Approved public artwork, resolved by the host. Null uses the actual supplied heraldic grammar. */
+-  assetHash: Sha256Schema.nullable(),
+-});
+-export const PassportKingdomSchema = z.strictObject({ kingdomId: KingdomIdSchema, name: DisplayNameSchema, crest: PassportCrestSchema });
+-const Person = z.strictObject({ personId: PersonIdSchema, name: DisplayNameSchema });
+-export const PassportRoadSchema = z.strictObject({ id: TokenSchema, from: KingdomIdSchema, to: KingdomIdSchema })
+-  .refine(road => road.from !== road.to, 'A road connects two kingdoms');
+-export const PassportGiftSchema = z.strictObject({
+-  id: TokenSchema, name: DisplayNameSchema, direction: z.enum(['left', 'brought-back']),
+-  /** An actual accepted gift/keepsake record, not an offer, promise or paid reward. */
+-  keepsakeId: TokenSchema.nullable(),
+-});
+-const StampFields = { id: TokenSchema, at: EpochMsSchema, kingdom: PassportKingdomSchema, gifts: z.array(PassportGiftSchema).max(8) };
+-export const PassportStampSchema = z.discriminatedUnion('kind', [
+-  z.strictObject({ ...StampFields, kind: z.literal('visit') }),
+-  z.strictObject({ ...StampFields, kind: z.literal('raid'), raidId: TokenSchema, road: PassportRoadSchema, leader: Person.nullable() }),
+-]).superRefine((stamp, context) => {
+-  if (stamp.kind === 'raid' && stamp.road.to !== stamp.kingdom.kingdomId) context.addIssue({ code: 'custom', path: ['road'], message: 'The stamp must name the road’s destination' });
+-  if (new Set(stamp.gifts.map(gift => gift.id)).size !== stamp.gifts.length) context.addIssue({ code: 'custom', path: ['gifts'], message: 'Duplicate gift' });
+-});
+-export const PassportVisitSchema = z.strictObject({ kingdom: PassportKingdomSchema, firstAt: EpochMsSchema, lastAt: EpochMsSchema })
+-  .refine(visit => visit.firstAt <= visit.lastAt, 'Visit dates are ordered');
+-export const PassportBondSchema = z.strictObject({
+-  id: TokenSchema, since: EpochMsSchema,
+-  with: z.discriminatedUnion('kind', [
+-    z.strictObject({ kind: z.literal('kingdom'), kingdom: PassportKingdomSchema }),
+-    z.strictObject({ kind: z.literal('citizen'), person: Person }),
+-  ]),
+-  /** Authored display label for an actual relationship record; never a computed affinity score. */
+-  name: DisplayNameSchema,
+-});
+-export const PassportKeepsakeSchema = z.strictObject({
+-  id: TokenSchema, name: DisplayNameSchema, earnedAt: EpochMsSchema, kingdom: PassportKingdomSchema,
+-  artHash: Sha256Schema.nullable(),
+-});
+-const Cursor = z.string().min(1).max(256).nullable();
+-const page = <S extends z.ZodType>(schema: S) => z.strictObject({ items: z.array(schema).max(50), nextCursor: Cursor });
+-const unique = <T>(items: readonly T[], key: (item: T) => string) => new Set(items.map(key)).size === items.length;
+-/** Hidden is deliberately a different payload: no history, holder, counts, cursors or revision side-channel. */
+-export const PassportBookSchema = z.discriminatedUnion('visibility', [
+-  z.strictObject({ version: z.literal(1), origin: z.enum(['live', 'simulated']), visibility: z.literal('hidden') }),
+-  z.strictObject({
+-    version: z.literal(1), origin: z.enum(['live', 'simulated']), visibility: z.literal('visible'),
+-    holder: Person, revision: TokenSchema, asOf: EpochMsSchema,
+-    stamps: page(PassportStampSchema), kingdoms: page(PassportVisitSchema),
+-    bonds: page(PassportBondSchema), keepsakes: page(PassportKeepsakeSchema),
+-  }).superRefine((book, context) => {
+-    for (const [collection, valid] of [
+-      ['stamps', unique(book.stamps.items, stamp => stamp.id)],
+-      ['kingdoms', unique(book.kingdoms.items, visit => visit.kingdom.kingdomId)],
+-      ['bonds', unique(book.bonds.items, bond => bond.id)],
+-      ['keepsakes', unique(book.keepsakes.items, keepsake => keepsake.id)],
+-    ] as const) if (!valid) context.addIssue({ code: 'custom', path: [collection], message: 'Duplicate passport record' });
+-    if (book.stamps.items.some(stamp => stamp.at > book.asOf)
+-      || book.kingdoms.items.some(visit => visit.lastAt > book.asOf)
+-      || book.bonds.items.some(bond => bond.since > book.asOf)
+-      || book.keepsakes.items.some(keepsake => keepsake.earnedAt > book.asOf)) {
+-      context.addIssue({ code: 'custom', message: 'Passport contains a future record' });
+-    }
+-  }),
+-]);
++import { makePassportBookSchema } from './passport-core';
++export * from './passport-core';
++export const PassportBookSchema = makePassportBookSchema(z.enum(['live', 'simulated']));
+ export type PassportBook = z.infer<typeof PassportBookSchema>;
+-export type PassportStamp = z.infer<typeof PassportStampSchema>;
+-export type PassportKingdom = z.infer<typeof PassportKingdomSchema>;
+-export type PassportCrest = z.infer<typeof PassportCrestSchema>;
+--- /dev/null
++++ b/packages/shared/src/passport-core.ts
+@@ -0,0 +1,75 @@
++import { z } from 'zod';
++import { DisplayNameSchema, EpochMsSchema, KingdomIdSchema, PersonIdSchema, Sha256Schema, TokenSchema } from './identity';
++
++/** Public read projection of witnessed travel; never a travel command or a second ledger. */
++const Ink = z.string().regex(/^#[a-fA-F0-9]{6}$/);
++export const PassportCrestSchema = z.strictObject({
++  key: TokenSchema,
++  shape: z.enum(['heater', 'round', 'swallowtail']),
++  charge: z.enum(['oak', 'star', 'wave', 'mountain']),
++  colours: z.array(Ink).min(2).max(4),
++  /** Approved public artwork, resolved by the host. Null uses the actual supplied heraldic grammar. */
++  assetHash: Sha256Schema.nullable(),
++});
++export const PassportKingdomSchema = z.strictObject({ kingdomId: KingdomIdSchema, name: DisplayNameSchema, crest: PassportCrestSchema });
++const Person = z.strictObject({ personId: PersonIdSchema, name: DisplayNameSchema });
++export const PassportRoadSchema = z.strictObject({ id: TokenSchema, from: KingdomIdSchema, to: KingdomIdSchema })
++  .refine(road => road.from !== road.to, 'A road connects two kingdoms');
++export const PassportGiftSchema = z.strictObject({
++  id: TokenSchema, name: DisplayNameSchema, direction: z.enum(['left', 'brought-back']),
++  /** An actual accepted gift/keepsake record, not an offer, promise or paid reward. */
++  keepsakeId: TokenSchema.nullable(),
++});
++const StampFields = { id: TokenSchema, at: EpochMsSchema, kingdom: PassportKingdomSchema, gifts: z.array(PassportGiftSchema).max(8) };
++export const PassportStampSchema = z.discriminatedUnion('kind', [
++  z.strictObject({ ...StampFields, kind: z.literal('visit') }),
++  z.strictObject({ ...StampFields, kind: z.literal('raid'), raidId: TokenSchema, road: PassportRoadSchema, leader: Person.nullable() }),
++]).superRefine((stamp, context) => {
++  if (stamp.kind === 'raid' && stamp.road.to !== stamp.kingdom.kingdomId) context.addIssue({ code: 'custom', path: ['road'], message: 'The stamp must name the road’s destination' });
++  if (new Set(stamp.gifts.map(gift => gift.id)).size !== stamp.gifts.length) context.addIssue({ code: 'custom', path: ['gifts'], message: 'Duplicate gift' });
++});
++export const PassportVisitSchema = z.strictObject({ kingdom: PassportKingdomSchema, firstAt: EpochMsSchema, lastAt: EpochMsSchema })
++  .refine(visit => visit.firstAt <= visit.lastAt, 'Visit dates are ordered');
++export const PassportBondSchema = z.strictObject({
++  id: TokenSchema, since: EpochMsSchema,
++  with: z.discriminatedUnion('kind', [
++    z.strictObject({ kind: z.literal('kingdom'), kingdom: PassportKingdomSchema }),
++    z.strictObject({ kind: z.literal('citizen'), person: Person }),
++  ]),
++  /** Authored display label for an actual relationship record; never a computed affinity score. */
++  name: DisplayNameSchema,
++});
++export const PassportKeepsakeSchema = z.strictObject({
++  id: TokenSchema, name: DisplayNameSchema, earnedAt: EpochMsSchema, kingdom: PassportKingdomSchema,
++  artHash: Sha256Schema.nullable(),
++});
++const Cursor = z.string().min(1).max(256).nullable();
++const page = <S extends z.ZodType>(schema: S) => z.strictObject({ items: z.array(schema).max(50), nextCursor: Cursor });
++const unique = <T>(items: readonly T[], key: (item: T) => string) => new Set(items.map(key)).size === items.length;
++/** Hidden is deliberately a different payload: no history, holder, counts, cursors or revision side-channel. */
++export const makePassportBookSchema = <S extends z.ZodType<string>>(origin: S) => z.discriminatedUnion('visibility', [
++  z.strictObject({ version: z.literal(1), origin: origin, visibility: z.literal('hidden') }),
++  z.strictObject({
++    version: z.literal(1), origin: origin, visibility: z.literal('visible'),
++    holder: Person, revision: TokenSchema, asOf: EpochMsSchema,
++    stamps: page(PassportStampSchema), kingdoms: page(PassportVisitSchema),
++    bonds: page(PassportBondSchema), keepsakes: page(PassportKeepsakeSchema),
++  }).superRefine((book, context) => {
++    for (const [collection, valid] of [
++      ['stamps', unique(book.stamps.items, stamp => stamp.id)],
++      ['kingdoms', unique(book.kingdoms.items, visit => visit.kingdom.kingdomId)],
++      ['bonds', unique(book.bonds.items, bond => bond.id)],
++      ['keepsakes', unique(book.keepsakes.items, keepsake => keepsake.id)],
++    ] as const) if (!valid) context.addIssue({ code: 'custom', path: [collection], message: 'Duplicate passport record' });
++    if (book.stamps.items.some(stamp => stamp.at > book.asOf)
++      || book.kingdoms.items.some(visit => visit.lastAt > book.asOf)
++      || book.bonds.items.some(bond => bond.since > book.asOf)
++      || book.keepsakes.items.some(keepsake => keepsake.earnedAt > book.asOf)) {
++      context.addIssue({ code: 'custom', message: 'Passport contains a future record' });
++    }
++  }),
++]);
++
++export type PassportStamp = z.infer<typeof PassportStampSchema>;
++export type PassportKingdom = z.infer<typeof PassportKingdomSchema>;
++export type PassportCrest = z.infer<typeof PassportCrestSchema>;
+--- /dev/null
++++ b/packages/shared/src/passport-live.ts
+@@ -0,0 +1,5 @@
++import { z } from 'zod';
++import { makePassportBookSchema } from './passport-core';
++export * from './passport-core';
++export const LivePassportBookSchema = makePassportBookSchema(z.literal('live'));
++export type LivePassportBook = z.infer<typeof LivePassportBookSchema>;
+--- a/apps/api/src/passport/contracts.ts
++++ b/apps/api/src/passport/contracts.ts
+@@ -1,133 +1,10 @@
+-/**
+- * The passport's read boundary (spec 45). Browser-safe: it imports the frozen `@chatdom/shared/passport` schemas and
+- * nothing from the server, so the reader a surface uses on a reply is the same reader the server checks its own
+- * reply with before sending.
+- *
+- * Two reads exist and nothing else: the book (holder, revision, as-of and the first page of each collection, or the
+- * hidden variant) and one further page of one collection, read against the book's revision. A page reply carries the
+- * revision it belongs to, so a surface never stitches pages of two different snapshots together.
+- */
+-import {
+-  PassportBondSchema, PassportBookSchema, PassportKeepsakeSchema, PassportStampSchema, PassportVisitSchema,
+-  type PassportBook,
+-} from '@chatdom/shared/passport';
+-
+-export type { PassportBook };
+-export type VisiblePassportBook = Extract<PassportBook, { visibility: 'visible' }>;
+-export type HiddenPassportBook = Extract<PassportBook, { visibility: 'hidden' }>;
+-
+-export const PASSPORT_COLLECTIONS = ['stamps', 'kingdoms', 'bonds', 'keepsakes'] as const;
+-export type PassportCollection = (typeof PASSPORT_COLLECTIONS)[number];
+-export type PassportItem<K extends PassportCollection> = VisiblePassportBook[K]['items'][number];
+-export interface PassportPageOf<K extends PassportCollection> { readonly items: readonly PassportItem<K>[]; readonly nextCursor: string | null }
+-
+-export const PASSPORT_LIMITS = Object.freeze({
+-  /** Records in one page of one collection (frozen schema). */
+-  page: 50,
+-  /** Opaque cursor length (frozen schema). */
+-  cursor: 256,
+-  /** Book revision token length (shared `TokenSchema`). */
+-  revision: 128,
+-});
+-
+-export type PassportRequest =
+-  | Readonly<{ op: 'book' }>
+-  | Readonly<{ op: 'page'; collection: PassportCollection; cursor: string; revision: string }>;
+-
+-export type PassportDenial = 'stale' | 'unavailable' | 'invalid';
+-export type PassportPageReply = { [K in PassportCollection]: Readonly<{ kind: 'page'; collection: K; revision: string; page: PassportPageOf<K> }> }[PassportCollection];
+-export type PassportReply =
+-  | Readonly<{ kind: 'book'; book: PassportBook }>
+-  | PassportPageReply
+-  | Readonly<{ kind: 'denied'; code: PassportDenial }>;
+-
+-const ITEM_SCHEMA = { stamps: PassportStampSchema, kingdoms: PassportVisitSchema, bonds: PassportBondSchema, keepsakes: PassportKeepsakeSchema } as const;
+-/** The identity of a record inside its collection, the same keys the frozen book checks for duplicates. */
+-export const RECORD_KEY: { readonly [K in PassportCollection]: (item: PassportItem<K>) => string } = {
+-  stamps: stamp => stamp.id,
+-  kingdoms: visit => visit.kingdom.kingdomId,
+-  bonds: bond => bond.id,
+-  keepsakes: keepsake => keepsake.id,
+-};
+-/** The newest moment a record speaks of, which can never be later than the book's as-of. */
+-export const RECORD_TIME: { readonly [K in PassportCollection]: (item: PassportItem<K>) => number } = {
+-  stamps: stamp => stamp.at,
+-  kingdoms: visit => visit.lastAt,
+-  bonds: bond => bond.since,
+-  keepsakes: keepsake => keepsake.earnedAt,
+-};
+-const DENIALS: readonly PassportDenial[] = ['stale', 'unavailable', 'invalid'];
+-
+-type Fields = Readonly<Record<string, unknown>>;
+-function fields(value: unknown, keys: readonly string[]): Fields | undefined {
+-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+-  const prototype = Object.getPrototypeOf(value);
+-  if (prototype !== Object.prototype && prototype !== null) return undefined;
+-  const own = Object.keys(value);
+-  if (own.length !== keys.length || !keys.every(key => Object.prototype.hasOwnProperty.call(value, key))) return undefined;
+-  return value as Fields;
+-}
+-
+-export const isPassportCollection = (value: unknown): value is PassportCollection => (PASSPORT_COLLECTIONS as readonly unknown[]).includes(value);
+-const isCursor = (value: unknown): value is string => typeof value === 'string' && value.length >= 1 && value.length <= PASSPORT_LIMITS.cursor;
+-const isRevision = (value: unknown): value is string =>
+-  typeof value === 'string' && value.length <= PASSPORT_LIMITS.revision && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(value);
+-
+-/** The only way a passport read enters the server. Unknown ops, extra keys and subject fields are refused. */
+-export function readPassportRequest(value: unknown): PassportRequest | undefined {
+-  const op = typeof value === 'object' && value !== null ? (value as { op?: unknown }).op : undefined;
+-  if (op === 'book') return fields(value, ['op']) ? { op } : undefined;
+-  if (op !== 'page') return undefined;
+-  const f = fields(value, ['op', 'collection', 'cursor', 'revision']);
+-  if (!f || !isPassportCollection(f.collection) || !isCursor(f.cursor) || !isRevision(f.revision)) return undefined;
+-  return { op, collection: f.collection, cursor: f.cursor, revision: f.revision };
+-}
+-
+-/** A whole book through the frozen schema; anything it refuses is not a passport. */
++import { PassportBookSchema, type PassportBook } from '@chatdom/shared/passport';
++import { readPassportReplyWith, type PassportReply } from './contracts-core';
++export * from './contracts-core';
+ export function readPassportBook(value: unknown): PassportBook | undefined {
+   const parsed = PassportBookSchema.safeParse(value);
+   return parsed.success ? parsed.data : undefined;
+ }
+-
+-/** One further page of one collection: each record through its frozen schema, bounded and without duplicates. */
+-export function readPassportPage<K extends PassportCollection>(collection: K, value: unknown): PassportPageOf<K> | undefined {
+-  const f = fields(value, ['items', 'nextCursor']);
+-  if (!f || !Array.isArray(f.items) || f.items.length > PASSPORT_LIMITS.page) return undefined;
+-  if (f.nextCursor !== null && !isCursor(f.nextCursor)) return undefined;
+-  const schema = ITEM_SCHEMA[collection];
+-  const items: PassportItem<K>[] = [];
+-  for (const item of f.items) {
+-    const parsed = schema.safeParse(item);
+-    if (!parsed.success) return undefined;
+-    items.push(parsed.data as PassportItem<K>);
+-  }
+-  const key = RECORD_KEY[collection] as (item: PassportItem<K>) => string;
+-  if (new Set(items.map(key)).size !== items.length) return undefined;
+-  // A page that ends its collection must say so with a null cursor; an empty page that claims more is a loop.
+-  if (items.length === 0 && f.nextCursor !== null) return undefined;
+-  return { items, nextCursor: f.nextCursor as string | null };
+-}
+-
+-/** Re-reads a reply from any transport. Used by the server before sending and by every surface after receiving. */
+ export function readPassportReply(value: unknown): PassportReply | undefined {
+-  const kind = typeof value === 'object' && value !== null ? (value as { kind?: unknown }).kind : undefined;
+-  if (kind === 'denied') {
+-    const f = fields(value, ['kind', 'code']);
+-    return f && DENIALS.includes(f.code as PassportDenial) ? { kind, code: f.code as PassportDenial } : undefined;
+-  }
+-  if (kind === 'book') {
+-    const f = fields(value, ['kind', 'book']);
+-    const book = f && readPassportBook(f.book);
+-    return book ? { kind, book } : undefined;
+-  }
+-  if (kind === 'page') {
+-    const f = fields(value, ['kind', 'collection', 'revision', 'page']);
+-    if (!f || !isPassportCollection(f.collection) || !isRevision(f.revision)) return undefined;
+-    const page = readPassportPage(f.collection, f.page);
+-    return page ? { kind, collection: f.collection, revision: f.revision, page } as PassportPageReply : undefined;
+-  }
+-  return undefined;
++  return readPassportReplyWith(value, readPassportBook);
+ }
+-
+-/** The hidden variant: no holder, revision, as-of, counts, cursors or history, whatever the source held. */
+-export const hiddenPassport = (origin: PassportBook['origin']): HiddenPassportBook => ({ version: 1, origin, visibility: 'hidden' });
+--- /dev/null
++++ b/apps/api/src/passport/contracts-core.ts
+@@ -0,0 +1,127 @@
++/**
++ * The passport's read boundary (spec 45). Browser-safe: it imports the frozen `@chatdom/shared/passport` schemas and
++ * nothing from the server, so the reader a surface uses on a reply is the same reader the server checks its own
++ * reply with before sending.
++ *
++ * Two reads exist and nothing else: the book (holder, revision, as-of and the first page of each collection, or the
++ * hidden variant) and one further page of one collection, read against the book's revision. A page reply carries the
++ * revision it belongs to, so a surface never stitches pages of two different snapshots together.
++ */
++import {
++  PassportBondSchema, PassportKeepsakeSchema, PassportStampSchema, PassportVisitSchema,
++} from '@chatdom/shared/passport/live';
++import type { PassportBook } from '@chatdom/shared/passport';
++
++export type { PassportBook };
++export type VisiblePassportBook = Extract<PassportBook, { visibility: 'visible' }>;
++export type HiddenPassportBook = Extract<PassportBook, { visibility: 'hidden' }>;
++
++export const PASSPORT_COLLECTIONS = ['stamps', 'kingdoms', 'bonds', 'keepsakes'] as const;
++export type PassportCollection = (typeof PASSPORT_COLLECTIONS)[number];
++export type PassportItem<K extends PassportCollection> = VisiblePassportBook[K]['items'][number];
++export interface PassportPageOf<K extends PassportCollection> { readonly items: readonly PassportItem<K>[]; readonly nextCursor: string | null }
++
++export const PASSPORT_LIMITS = Object.freeze({
++  /** Records in one page of one collection (frozen schema). */
++  page: 50,
++  /** Opaque cursor length (frozen schema). */
++  cursor: 256,
++  /** Book revision token length (shared `TokenSchema`). */
++  revision: 128,
++});
++
++export type PassportRequest =
++  | Readonly<{ op: 'book' }>
++  | Readonly<{ op: 'page'; collection: PassportCollection; cursor: string; revision: string }>;
++
++export type PassportDenial = 'stale' | 'unavailable' | 'invalid';
++export type PassportPageReply = { [K in PassportCollection]: Readonly<{ kind: 'page'; collection: K; revision: string; page: PassportPageOf<K> }> }[PassportCollection];
++export type PassportReply =
++  | Readonly<{ kind: 'book'; book: PassportBook }>
++  | PassportPageReply
++  | Readonly<{ kind: 'denied'; code: PassportDenial }>;
++
++const ITEM_SCHEMA = { stamps: PassportStampSchema, kingdoms: PassportVisitSchema, bonds: PassportBondSchema, keepsakes: PassportKeepsakeSchema } as const;
++/** The identity of a record inside its collection, the same keys the frozen book checks for duplicates. */
++export const RECORD_KEY: { readonly [K in PassportCollection]: (item: PassportItem<K>) => string } = {
++  stamps: stamp => stamp.id,
++  kingdoms: visit => visit.kingdom.kingdomId,
++  bonds: bond => bond.id,
++  keepsakes: keepsake => keepsake.id,
++};
++/** The newest moment a record speaks of, which can never be later than the book's as-of. */
++export const RECORD_TIME: { readonly [K in PassportCollection]: (item: PassportItem<K>) => number } = {
++  stamps: stamp => stamp.at,
++  kingdoms: visit => visit.lastAt,
++  bonds: bond => bond.since,
++  keepsakes: keepsake => keepsake.earnedAt,
++};
++const DENIALS: readonly PassportDenial[] = ['stale', 'unavailable', 'invalid'];
++
++type Fields = Readonly<Record<string, unknown>>;
++function fields(value: unknown, keys: readonly string[]): Fields | undefined {
++  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
++  const prototype = Object.getPrototypeOf(value);
++  if (prototype !== Object.prototype && prototype !== null) return undefined;
++  const own = Object.keys(value);
++  if (own.length !== keys.length || !keys.every(key => Object.prototype.hasOwnProperty.call(value, key))) return undefined;
++  return value as Fields;
++}
++
++export const isPassportCollection = (value: unknown): value is PassportCollection => (PASSPORT_COLLECTIONS as readonly unknown[]).includes(value);
++const isCursor = (value: unknown): value is string => typeof value === 'string' && value.length >= 1 && value.length <= PASSPORT_LIMITS.cursor;
++const isRevision = (value: unknown): value is string =>
++  typeof value === 'string' && value.length <= PASSPORT_LIMITS.revision && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(value);
++
++/** The only way a passport read enters the server. Unknown ops, extra keys and subject fields are refused. */
++export function readPassportRequest(value: unknown): PassportRequest | undefined {
++  const op = typeof value === 'object' && value !== null ? (value as { op?: unknown }).op : undefined;
++  if (op === 'book') return fields(value, ['op']) ? { op } : undefined;
++  if (op !== 'page') return undefined;
++  const f = fields(value, ['op', 'collection', 'cursor', 'revision']);
++  if (!f || !isPassportCollection(f.collection) || !isCursor(f.cursor) || !isRevision(f.revision)) return undefined;
++  return { op, collection: f.collection, cursor: f.cursor, revision: f.revision };
++}
++
++/** One further page of one collection: each record through its frozen schema, bounded and without duplicates. */
++export function readPassportPage<K extends PassportCollection>(collection: K, value: unknown): PassportPageOf<K> | undefined {
++  const f = fields(value, ['items', 'nextCursor']);
++  if (!f || !Array.isArray(f.items) || f.items.length > PASSPORT_LIMITS.page) return undefined;
++  if (f.nextCursor !== null && !isCursor(f.nextCursor)) return undefined;
++  const schema = ITEM_SCHEMA[collection];
++  const items: PassportItem<K>[] = [];
++  for (const item of f.items) {
++    const parsed = schema.safeParse(item);
++    if (!parsed.success) return undefined;
++    items.push(parsed.data as PassportItem<K>);
++  }
++  const key = RECORD_KEY[collection] as (item: PassportItem<K>) => string;
++  if (new Set(items.map(key)).size !== items.length) return undefined;
++  // A page that ends its collection must say so with a null cursor; an empty page that claims more is a loop.
++  if (items.length === 0 && f.nextCursor !== null) return undefined;
++  return { items, nextCursor: f.nextCursor as string | null };
++}
++
++/** Re-reads a reply from any transport. Used by the server before sending and by every surface after receiving. */
++export function readPassportReplyWith(value: unknown, readBook: (value: unknown) => PassportBook | undefined): PassportReply | undefined {
++  const kind = typeof value === 'object' && value !== null ? (value as { kind?: unknown }).kind : undefined;
++  if (kind === 'denied') {
++    const f = fields(value, ['kind', 'code']);
++    return f && DENIALS.includes(f.code as PassportDenial) ? { kind, code: f.code as PassportDenial } : undefined;
++  }
++  if (kind === 'book') {
++    const f = fields(value, ['kind', 'book']);
++    const book = f && readBook(f.book);
++    return book ? { kind, book } : undefined;
++  }
++  if (kind === 'page') {
++    const f = fields(value, ['kind', 'collection', 'revision', 'page']);
++    if (!f || !isPassportCollection(f.collection) || !isRevision(f.revision)) return undefined;
++    const page = readPassportPage(f.collection, f.page);
++    return page ? { kind, collection: f.collection, revision: f.revision, page } as PassportPageReply : undefined;
++  }
++  return undefined;
++}
++
++/** The hidden variant: no holder, revision, as-of, counts, cursors or history, whatever the source held. */
++export const hiddenPassport = (origin: PassportBook['origin']): HiddenPassportBook => ({ version: 1, origin, visibility: 'hidden' });
+--- /dev/null
++++ b/apps/api/src/passport/live-contracts.ts
+@@ -0,0 +1,9 @@
++import { LivePassportBookSchema, type LivePassportBook } from '@chatdom/shared/passport/live';
++import { readPassportReplyWith, type PassportReply } from './contracts-core';
++/** The live surface accepts only a live book; all other reply validation is shared. */
++export function readLivePassportReply(value: unknown): PassportReply | undefined {
++  return readPassportReplyWith(value, (book): LivePassportBook | undefined => {
++    const parsed = LivePassportBookSchema.safeParse(book);
++    return parsed.success ? parsed.data : undefined;
++  });
++}

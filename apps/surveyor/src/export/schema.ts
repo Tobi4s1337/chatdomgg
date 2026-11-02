@@ -54,12 +54,18 @@ export const ChannelObservationSchema = z.strictObject({
   stream: ChannelStreamSchema.nullable(),
   categories: z.array(z.strictObject({ gameId: GameIdSchema, minutes: Minutes })).max(512),
   avatarUrl: AvatarUrlSchema.nullable(),
-  /** When login/display name/avatar were last confirmed by the source (facts refresh or a live sweep). */
+  /** Original avatar refresh time; absent in older revisions whose merged name clock cannot prove image freshness. */
+  avatarFactsAt: EpochMsSchema.nullable().optional(),
+  /** When login/display name were last confirmed (facts refresh or a live sweep); the avatar has its own clock. */
   factsAt: EpochMsSchema,
   /** The source could no longer find the channel on Twitch (deleted or banned). */
   goneAt: EpochMsSchema.nullable(),
   /** The source collects no content labels; unknown is never upgraded to general. */
   contentClassification: z.literal('unknown'),
+}).superRefine((channel, ctx) => {
+  if (channel.avatarFactsAt === undefined) return; // Retained older revisions have no separate avatar clock.
+  if ((channel.avatarUrl === null) !== (channel.avatarFactsAt === null)) ctx.addIssue({ code: 'custom', message: 'An avatar and its original refresh time travel together.' });
+  if (channel.avatarFactsAt !== null && channel.avatarFactsAt > channel.factsAt) ctx.addIssue({ code: 'custom', message: 'The avatar clock cannot follow the combined name clock.' });
 });
 export type ChannelObservation = z.infer<typeof ChannelObservationSchema>;
 

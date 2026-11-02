@@ -136,10 +136,9 @@ export default function PassportBench(): JSX.Element {
         <div class="ppb-title">
           <p class="cd-label ppb-eyebrow">Chatdom · passport bench</p>
           <h1 class="ppb-h1">The raid passport</h1>
-          <p class="ppb-sim"><b>SIMULATED</b> invented citizens, kingdoms and authorities, read through the passport reader. No live travel.</p>
         </div>
         <div class="ppb-picks">
-          <div class="ppb-pick" role="group" aria-label="Choose a SIMULATED book">
+          <div class="ppb-pick" role="group" aria-label="Choose a book">
             <For each={PASSPORT_FIXTURE_NAMES}>{name => <button type="button" class="ppb-chip" aria-pressed={fixture() === name}
               onClick={() => setFixture(name)}>{PASSPORT_FIXTURE_TITLES[name]}</button>}</For>
           </div>

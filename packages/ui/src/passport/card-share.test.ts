@@ -123,14 +123,12 @@ describe('the citizen share picture', () => {
     expect(share.alt).toContain('no journeys in it yet');
   });
 
-  it('says SIMULATED with one corner chip when the card or the book is simulated, and not otherwise', () => {
-    const live = composeCitizenShare(card());
-    expect(live.html).not.toContain('SIMULATED');
-    expect(live.alt).not.toContain('SIMULATED');
-    for (const simulated of [card({ origin: 'simulated' }), card({ passport: { hidden: false, book: few } }), card({ origin: 'simulated', passport: { hidden: true } })]) {
-      const share = composeCitizenShare(simulated);
-      expect(share.html.match(/<b>SIMULATED<\/b>/g)).toHaveLength(1);
-      expect(share.alt).toContain('SIMULATED');
+  it('prints no staged label, chip or sentence, whether the card or its book is illustrative or live', () => {
+    for (const shown of [card(), card({ origin: 'simulated' }), card({ passport: { hidden: false, book: few } }), card({ origin: 'simulated', passport: { hidden: true } })]) {
+      const share = composeCitizenShare(shown);
+      expect(share.html).not.toContain('SIMULATED');
+      expect(share.html).not.toContain('class="sim"');
+      expect(share.alt).not.toContain('SIMULATED');
     }
   });
 

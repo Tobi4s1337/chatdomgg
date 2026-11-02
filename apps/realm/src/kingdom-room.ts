@@ -1,16 +1,19 @@
-import { ClientState, Room, ServerError, type Client } from '@colyseus/core';
-import { KingdomIdSchema } from '@chatdom/shared';
+import { ClientState, CloseCode, Room, ServerError, type Client } from '@colyseus/core';
+import { KingdomIdSchema, encodeRaidGuestVisualMark, parseRaidGuestVisualMark } from '@chatdom/shared';
 import { KingdomRoomState, WalkerSchema, WalkInputSchema, RealmJoinSchema, RealmIntentSchema, kingdomRoomId,
-  sanitizeRealmWalkInput, type RealmPrincipal, type RealmReceipt } from '@chatdom/shared/realm';
+  sanitizeRealmWalkInput, WALK_BODY, type RealmPrincipal, type RealmReceipt } from '@chatdom/shared/realm';
 import { stepPlayer, bodyStuck, embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmRoomHandle, RealmRoomServices } from './ports';
+import { tavernReturnsFor } from './games/return';
 import { RealmSeats, RealmSeatRefusedError, REALM_SESSION_CHECK_MS } from './auth/seats';
 import { RealmDistricts } from './limits/districts';
+import { attachRealmRoomChannels } from './room-channels';
 
 /** Colyseus's own join-time full-state send (pinned core 0.18.23), reused to rebaseline one decoder on a crossing. */
 type FullStateSender = { sendFullState(client: Client): void };
 import { REALM_ROOM_LIMITS as LIMITS, within } from './limits';
 import type { RealmRoomObserver } from './diagnostics';
+import { portalArrivalsFor } from './portals/arrivals';
 
 const UNOBSERVED: RealmRoomObserver = { inputDepth() {}, actionStarted() {}, actionRefused() {}, closed() {} };
 /** Colyseus closes a sender past `maxMessagesPerSecond` (and the room ends invalid input) with this code. */
@@ -50,8 +53,9 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
     }
     async onCreate(options: { kingdomId: string }) {
       const kingdomId = KingdomIdSchema.parse(options.kingdomId);
-      this.handle = await services.open(kingdomId);
+      // Known before the open: after a slow open, Colyseus has refused a late room id ("can only be overridden upon room creation").
       this.roomId = kingdomRoomId(kingdomId);
+      this.handle = await services.open(kingdomId);
       this.state.kingdomId = kingdomId; this.state.writerEpoch = this.handle.writerEpoch;
       this.state.origin = this.handle.origin; this.state.layoutRevision = this.handle.layoutRevision;
       this.state.collisionRevision = this.handle.world.revision; this.state.factSequence = this.handle.sequence;
@@ -81,6 +85,10 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         presentWalker: (id, presentation) => {
           const walker = this.state.walkers.get(id);
           if (this.accepting && walker) { walker.homeSlot = presentation.homeSlot; walker.look = presentation.look; }
+        },
+        presentRaidGuest: (id, mark) => {
+          const walker = this.state.walkers.get(id);
+          if (this.accepting && walker) walker.raidGuest = encodeRaidGuestVisualMark(mark, Date.now());
         },
         allowWalking: (id, allowed) => { this.walking.set(id,allowed); if(!allowed)this.inputs.get(id).clear(); },
         adoptWorld: (world, layoutRevision, positions) => {
@@ -145,6 +153,13 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
           } else answer({ version: 1, id, status: 'unavailable', message: 'The kingdom could not confirm this request. Reconnect to check its result.' });
         });
       });
+      this.unbind.push(attachRealmRoomChannels(services.channels ?? [], {
+        kingdomId, origin: this.handle.origin, auth: services.auth, active: () => this.accepting,
+        receive: (type, listener) => this.onMessage(type, listener), clients: () => this.clients,
+        client: id => this.clients.getById(id), seat: person => this.control.get(person), held: id => this.seats.held(id),
+        pose: id => { const p = this.state.walkers.get(id); return p ? { position: [p.x,p.y,p.z], yaw: p.yaw, grounded: p.grounded, collisionRevision: p.collisionRevision } : null; },
+        world: () => this.world, end: (id, reason) => this.seats.end(id, reason),
+      }).dispose);
       this.setFixedTimestep(ctx => {
         if(!this.accepting)return;
         for (const [sid, p] of this.state.walkers) {
@@ -166,29 +181,67 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       this.clock.setInterval(()=>this.seats.check(),REALM_SESSION_CHECK_MS);
       this.initialized = true;
     }
-    async onJoin(client: Client<{ auth: RealmPrincipal }>) {
+    async onJoin(client: Client<{ auth: RealmPrincipal }>, options?: unknown) {
       const auth = client.auth;
       if (!this.accepting) throw new ServerError(503,'The kingdom writer is unavailable');
       if (!auth || auth.kingdomId !== this.state.kingdomId || auth.origin !== this.state.origin) throw new ServerError(403, 'Wrong kingdom entry');
       if (!await services.auth.current(auth,Date.now()) || !this.accepting) throw new ServerError(403,'Entry expired');
-      const previous = this.seats.seatOf(auth.personId), carried = previous ? this.state.walkers.get(previous) : undefined;
       // A second tab may arrive mid-jump or after a collision revision: carry only a safe standing pose.
-      const resume = carried && carried.collisionRevision === this.world.revision
-        && [carried.x, carried.y, carried.z].every(Number.isFinite)
-        && !embeddedSolids(carried, this.world).length && supported(carried, this.world) ? carried : undefined;
-      const position = resume ? [resume.x, resume.y, resume.z] as const : this.handle.spawn(auth), body = {x:position[0],y:position[1],z:position[2]};
+      const carriedPose = () => {
+        const previous = this.seats.seatOf(auth.personId), carried = previous ? this.state.walkers.get(previous) : undefined;
+        return carried && carried.collisionRevision === this.world.revision
+          && [carried.x, carried.y, carried.z].every(Number.isFinite)
+          && !embeddedSolids(carried, this.world).length && supported(carried, this.world) ? carried : undefined;
+      };
+      let preparation: Awaited<ReturnType<NonNullable<RealmRoomServices['prepareSpawn']>>> = null;
+      if (!carriedPose() && services.prepareSpawn) {
+        const world = this.world, layoutRevision = this.state.layoutRevision, writerEpoch = this.state.writerEpoch;
+        try { preparation = await services.prepareSpawn(auth, { world, layoutRevision, writerEpoch }); }
+        catch { throw new ServerError(503, 'The kingdom gate could not admit you. Open the kingdom again to enter.'); }
+        if (!await services.auth.current(auth, Date.now()) || auth.expiresAt <= Date.now() || client.auth !== auth
+          || client.state === ClientState.LEAVING || client.state === ClientState.CLOSED || !this.accepting) throw new ServerError(403, 'Entry expired');
+        if (this.world !== world || this.world.revision !== world.revision || this.state.layoutRevision !== layoutRevision
+          || this.state.writerEpoch !== writerEpoch) throw new ServerError(503, 'The kingdom gate changed. Try entering again.');
+      }
+      // No awaits below: re-read both this person's current seat and every actual walker before choosing a gap.
+      const previous = this.seats.seatOf(auth.personId), resume = carriedPose();
+      // Back through a door (play's: named on the join, bound to a leave at that door) or just out of the tavern
+      // (gather's record of the leave): the server's own feet outside it, facing out, or the gate as always. Both
+      // records are spent by this arrival, so neither stays open for a later one.
+      const door = resume ? undefined : this.doorArrival(auth, options);
+      const tavern = resume ? null : tavernReturnsFor(services)?.arrival(auth.kingdomId, auth.personId, this.world, Date.now(), this.state.walkers.values()) ?? null;
+      const back = door ?? tavern;
+      let position: readonly [number, number, number];
+      if (resume) position = [resume.x, resume.y, resume.z];
+      else if (back) position = back.feet;
+      else if (preparation) {
+        if (!Number.isFinite(preparation.expiresAt) || preparation.expiresAt <= Date.now() || !preparation.current()
+          || preparation.positions.length > 128) throw new ServerError(503, 'The kingdom gate changed. Try entering again.');
+        const free = preparation.positions.find(candidate => candidate.length === 3 && candidate.every(Number.isFinite)
+          && !embeddedSolids({ x: candidate[0], y: candidate[1], z: candidate[2] }, this.world).length
+          && supported({ x: candidate[0], y: candidate[1], z: candidate[2] }, this.world)
+          && [...this.state.walkers].every(([id, p]) => id === previous || Math.abs(p.x - candidate[0]) >= WALK_BODY.radius * 2 + .05
+            || Math.abs(p.z - candidate[2]) >= WALK_BODY.radius * 2 + .05 || Math.abs(p.y - candidate[1]) >= WALK_BODY.height));
+        if (!free) throw new ServerError(503, 'The kingdom gate has no safe arrival yet');
+        position = free;
+      } else position = this.handle.spawn(auth);
+      const body = {x:position[0],y:position[1],z:position[2]};
       if (!position.every(Number.isFinite) || embeddedSolids(body,this.world).length || !supported(body,this.world)) throw new ServerError(503,'The kingdom gate has no safe arrival yet');
+      const admittedAt = Date.now();
+      if (!this.accepting || auth.expiresAt <= admittedAt || client.auth !== auth
+        || client.state === ClientState.LEAVING || client.state === ClientState.CLOSED) throw new ServerError(403, 'Entry expired');
+      if (preparation && !resume && (preparation.expiresAt <= admittedAt || !preparation.current())) throw new ServerError(503, 'The kingdom gate changed. Try entering again.');
       const replacedPrincipal = previous ? this.viewers.get(previous)?.auth : undefined;
       const replaced = this.seats.seat(auth, client.sessionId);
       if (replaced) this.removeWalker(replaced, replacedPrincipal);
       const walker = new WalkerSchema({ name: auth.publicName, look: auth.look, district: '', x: position[0], y: position[1], z: position[2],
-        vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
+        vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? back?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
       this.state.walkers.set(client.sessionId, walker);
       // Attached to state first, then shared: Colyseus sends this socket the full state of its view after the join.
       client.view = this.districts.enter(client.sessionId, walker);
       this.viewers.set(client.sessionId, client);
       this.control.set(auth.personId, client.sessionId);
-      this.handle.lifecycle('join',auth,client.sessionId,Date.now());
+      this.handle.lifecycle('join',auth,client.sessionId,admittedAt);
     }
     async onDrop(client: Client<{ auth: RealmPrincipal }>, code?: number) {
       observer.closed('drop', code);
@@ -224,7 +277,19 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
     }
     onLeave(client: Client<{ auth: RealmPrincipal }>, code?: number) {
       observer.closed('leave', code);
+      // Only the person's own current walker leaving on purpose counts as walking out, from where it stood (a second tab
+      // replacing it, a dropped socket whose grace ran out or a seat the server ended does not).
+      const leaving = client.auth && code === CloseCode.CONSENTED && this.control.get(client.auth.personId) === client.sessionId ? this.state.walkers.get(client.sessionId) : undefined;
+      if (client.auth && leaving) portalArrivalsFor(services)?.departed(this.handle.kingdomId, client.auth.personId, [leaving.x, leaving.y, leaving.z]);
       this.removeWalker(client.sessionId, client.auth);
+    }
+    private doorArrival(auth: RealmPrincipal, options: unknown) {
+      const arrive = RealmJoinSchema.safeParse(options).data?.arrive, arrivals = portalArrivalsFor(services);
+      if (!arrive || !arrivals) return undefined;
+      const found = arrivals.arrival(this.handle.kingdomId, auth.personId, arrive.portal, this.world);
+      if (!found) return undefined;
+      const body = { x: found.feet[0], y: found.feet[1], z: found.feet[2] };
+      return !embeddedSolids(body, this.world).length && supported(body, this.world) ? found : undefined;
     }
     private removeWalker(id: string, principal?: RealmPrincipal) {
       if (principal && this.state.walkers.has(id)) this.handle.lifecycle('leave',principal,id,Date.now());
@@ -250,11 +315,17 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         // A joining or reconnecting socket gets this view's full state when it acknowledges the join.
         if (client.state === ClientState.JOINED) (this as unknown as FullStateSender).sendFullState(client);
       }
+      const sampledAt = Date.now();
       this.handle.publishWalkers?.({
         version: 1, kingdomId: this.handle.kingdomId, origin: this.handle.origin, writerEpoch: this.handle.writerEpoch,
-        layoutRevision: this.state.layoutRevision, collisionRevision: this.state.collisionRevision, sampledAt: Date.now(),
-        walkers: [...this.state.walkers].map(([id, p]) => ({ id, name: p.name, look: p.look, homeSlot: p.homeSlot,
-          x: p.x, y: p.y, z: p.z, yaw: p.yaw, distance: p.distance, speed: Math.hypot(p.vx, p.vz), placement: p.placement })),
+        layoutRevision: this.state.layoutRevision, collisionRevision: this.state.collisionRevision, sampledAt,
+        walkers: [...this.state.walkers].map(([id, p]) => {
+          const raidGuest = parseRaidGuestVisualMark(p.raidGuest, sampledAt);
+          if (!raidGuest && p.raidGuest) p.raidGuest = '';
+          return { id, name: p.name, look: p.look, homeSlot: p.homeSlot,
+            x: p.x, y: p.y, z: p.z, yaw: p.yaw, distance: p.distance, speed: Math.hypot(p.vx, p.vz), placement: p.placement,
+            ...(raidGuest ? { raidGuest } : {}) };
+        }),
       });
     }
     async onDispose() { this.initialized = false; this.accepting = false; this.districts.dispose(); this.seats?.dispose(); for (const unbind of this.unbind) unbind(); await this.handle?.dispose(); }

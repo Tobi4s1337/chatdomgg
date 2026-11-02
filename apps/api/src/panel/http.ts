@@ -1,0 +1,234 @@
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { setTimeout as delay } from 'node:timers/promises';
+import { createPanelHttp as createReader, type PanelHttpOptions } from '../public/panel/http';
+import { extensionKey } from '../public/panel/token';
+import { createTwitchUsers, type TwitchUsers } from '../public/panel/twitch-users';
+import { verifyViewerToken } from './token';
+import { PanelPictures, parsePaintedWindows, validWebp } from './pictures';
+import { createPanelGifts, type PanelGiftRoute } from './gifts';
+import { createPanelConfiguration } from './configuration';
+import { createPanelConfigurationPublisher } from './configuration-publisher';
+import { createPanelBroadcaster } from './broadcast';
+
+interface PanelServices {
+  realmOrigin: string;
+  panelSecret: string | null;
+  painterSecret: string | null;
+  pictures: PanelPictures;
+  users: TwitchUsers;
+  fetch?: typeof fetch;
+  gifts?: ReturnType<typeof createPanelGifts>;
+  configuration?: ReturnType<typeof createPanelConfiguration>;
+  configurationPublisher?: ReturnType<typeof createPanelConfigurationPublisher>;
+  broadcast?: ReturnType<typeof createPanelBroadcaster>;
+}
+const PREFIX = '/api/panel/v1/';
+const ID = /^[1-9][0-9]{0,31}$/;
+const HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff' };
+const hash = (value: string) => createHash('sha256').update(value).digest();
+const matches = (actual: string | undefined, secret: string | null) => Boolean(secret && secret.length >= 32 && actual?.startsWith('Bearer ') && timingSafeEqual(hash(actual.slice(7)), hash(secret)));
+
+/** Wrap the existing reading and passport authority; identities and channels only come from verified Extension JWTs. */
+export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServices) {
+  const env = process.env;
+  const services: PanelServices = supplied ?? {
+    realmOrigin: env.PUBLIC_REALM_TARGET ?? env.CHATDOM_REALM_TARGET ?? 'http://127.0.0.1:5173',
+    panelSecret: env.REALM_INGRESS_PANEL_SECRET ?? null, painterSecret: env.PANEL_PAINTER_SECRET ?? null,
+    pictures: new PanelPictures(env.PANEL_STILL_DIRECTORY ?? '/tmp/chatdom-panel-stills'),
+    users: createTwitchUsers(env.TWITCH_CLIENT_ID && env.TWITCH_CLIENT_SECRET ? { clientId: env.TWITCH_CLIENT_ID, clientSecret: env.TWITCH_CLIENT_SECRET } : null),
+  };
+  const fetcher = services.fetch ?? fetch;
+  let key: Uint8Array | null = null;
+  try { key = options.extension?.clientId ? extensionKey(options.extension.secret) : null; } catch { /* Health names incomplete setup without a stack trace. */ }
+  const reader = createReader({ ...options, extension: key ? options.extension : null });
+  const allowed = new Set([...(options.extension ? [`https://${options.extension.clientId}.ext-twitch.tv`] : []), ...(options.extraOrigins ?? [])]);
+  const realm = async (path: string, body: unknown): Promise<Record<string, unknown>> => {
+    if (!services.panelSecret || services.panelSecret.length < 32) throw new Error('REALM_INGRESS_PANEL_SECRET');
+    const response = await fetcher(new URL(path, services.realmOrigin), {
+      method: 'POST', headers: { authorization: `Bearer ${services.panelSecret}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) throw new Error('realm unavailable');
+    return response.json() as Promise<Record<string, unknown>>;
+  };
+  const webhookSecret = env.PANEL_BITS_EVENTSUB_SECRET ?? (key ? createHmac('sha256', key).update('chatdom:extension-bits:v1').digest('hex') : undefined);
+  const gifts = services.gifts ?? createPanelGifts({ extensionId: options.extension?.clientId ?? '', extensionSecret: options.extension?.secret ?? '',
+    ...(env.TWITCH_EXTENSION_CLIENT_SECRET ? { extensionClientSecret: env.TWITCH_EXTENSION_CLIENT_SECRET } : {}),
+    ...(webhookSecret ? { webhookSecret } : {}), realm });
+  const configuration = services.configuration ?? createPanelConfiguration({ extensionId: options.extension?.clientId ?? '', extensionSecret: options.extension?.secret ?? '', realm });
+  const configurationEnabled = !supplied && options.origin === 'live' && env.PANEL_DISABLE_CONFIGURATION !== '1' && Boolean(services.panelSecret);
+  const configurationPublisher = services.configurationPublisher ?? createPanelConfigurationPublisher({
+    extensionId: options.extension?.clientId ?? '', extensionSecret: options.extension?.secret ?? '',
+    ownerId: env.TWITCH_EXTENSION_OWNER_ID ?? '', enabled: configurationEnabled, realm,
+  });
+  const broadcastEnabled = !supplied && options.origin === 'live' && env.PANEL_DISABLE_BROADCAST !== '1' && services.panelSecret && options.extension;
+  const broadcast = services.broadcast ?? createPanelBroadcaster({ ...(broadcastEnabled ? { extensionId: options.extension!.clientId, extensionSecret: options.extension!.secret } : {}), ...(env.TWITCH_EXTENSION_OWNER_ID ? { ownerId: env.TWITCH_EXTENSION_OWNER_ID } : {}),
+    read: channelId => realm('/internal/realm/panel/kingdom', { kingdomId: channelId }) });
+  // Supplied services are an explicitly owned test/embedding composition; the production door owns its worker.
+  const stopGifts = supplied ? () => {} : gifts.startReconciliation();
+  if (!supplied) broadcast.start();
+  if (!supplied) configurationPublisher.start();
+  const handler = async (request: IncomingMessage, response: ServerResponse, pathname: string): Promise<void> => {
+    if (pathname === `${PREFIX}bits-webhook`) {
+      if (request.method !== 'POST' || request.headers.origin) { response.writeHead(403, HEADERS).end(); return; }
+      const chunks: Buffer[] = []; let size = 0;
+      for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 64 * 1024) { response.writeHead(413, HEADERS).end(); return; } chunks.push(chunk); }
+      const headers = Object.fromEntries(Object.entries(request.headers).map(([name, value]) => [name, typeof value === 'string' ? value : undefined]));
+      const answer = await gifts.webhook(Buffer.concat(chunks), headers);
+      response.writeHead(answer.http, { ...HEADERS, 'content-type': answer.contentType === 'text/plain' ? 'text/plain; charset=utf-8' : HEADERS['content-type'] })
+        .end(answer.contentType === 'text/plain' ? String(answer.body) : JSON.stringify(answer.body)); return;
+    }
+    if ([`${PREFIX}reading`, `${PREFIX}passport`].includes(pathname)) {
+      if (key && request.method !== 'OPTIONS') { try { await verifyViewerToken(request.headers.authorization ?? null, key); } catch { response.writeHead(401, HEADERS).end(JSON.stringify({ version: 1, status: 'unauthenticated' })); return; } }
+      return reader(request, response, pathname);
+    }
+    const origin = request.headers.origin;
+    const cors = typeof origin === 'string' && allowed.has(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : { vary: 'Origin' };
+    const send = (status: number, body: unknown) => { if (!response.destroyed) response.writeHead(status, { ...HEADERS, ...cors }).end(JSON.stringify(body)); };
+    if (request.method === 'OPTIONS') {
+      if (!origin || !allowed.has(origin)) { send(403, { status: 'refused' }); return; }
+      response.writeHead(204, { ...cors, 'access-control-allow-methods': 'GET, POST', 'access-control-allow-headers': 'authorization, content-type, accept', 'access-control-max-age': '600' }).end(); return;
+    }
+    if (pathname === `${PREFIX}stills`) {
+      if (request.method !== 'POST' || origin || !matches(request.headers.authorization, services.painterSecret)) { send(401, { status: 'refused' }); return; }
+      const channel = request.headers['x-chatdom-kingdom-id'], revision = request.headers['x-chatdom-revision'], at = Number(request.headers['x-chatdom-captured-at']);
+      const kind = request.headers['x-chatdom-picture-kind'] === 'sketch' ? 'sketch' : 'realm';
+      const windows = parsePaintedWindows(request.headers['x-chatdom-windows']);
+      if (!windows || (kind === 'sketch' && windows.length)) { send(400, { status: 'refused' }); return; }
+      if (typeof channel !== 'string' || !ID.test(channel) || typeof revision !== 'string' || !/^[\w:.-]{1,200}$/.test(revision)
+        || !Number.isSafeInteger(at) || at < Date.now() - 3_600_000 || at > Date.now() + 5_000 || request.headers['content-type'] !== 'image/webp') { send(400, { status: 'refused' }); return; }
+      const chunks: Buffer[] = []; let size = 0;
+      for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 60 * 1024) { send(413, { status: 'refused' }); return; } chunks.push(chunk); }
+      const bytes = Buffer.concat(chunks);
+      if (!validWebp(bytes)) { send(400, { status: 'refused' }); return; }
+      try { const stored = await services.pictures.put(channel, bytes, { capturedAt: at, revision, kind, windows }); send(stored ? 201 : 409, { version: 1, status: stored ? 'stored' : 'superseded' }); }
+      catch { send(503, { version: 1, status: 'unavailable' }); }
+      return;
+    }
+    if (typeof origin === 'string' && !allowed.has(origin)) { send(403, { version: 1, status: 'refused' }); return; }
+    if (pathname === `${PREFIX}health`) {
+      if (request.method !== 'GET') { send(405, { version: 1, status: 'refused' }); return; }
+      const missing = [!options.extension?.clientId && 'TWITCH_EXTENSION_CLIENT_ID', !key && 'TWITCH_EXTENSION_SECRET',
+        (!services.panelSecret || services.panelSecret.length < 32) && 'REALM_INGRESS_PANEL_SECRET'].filter((value): value is string => !!value);
+      const externalMissing = [...missing, !(env.TWITCH_EXTENSION_OWNER_ID && ID.test(env.TWITCH_EXTENSION_OWNER_ID)) && 'TWITCH_EXTENSION_OWNER_ID'].filter((value): value is string => !!value);
+      send(missing.length ? 503 : 200, { version: 1, status: missing.length ? 'unavailable' : 'ready', missing,
+        broadcast: env.PANEL_DISABLE_BROADCAST === '1' || options.origin !== 'live' ? { status: 'disabled', missing: [] } : { status: externalMissing.length ? 'unavailable' : 'configured', missing: externalMissing },
+        configuration: env.PANEL_DISABLE_CONFIGURATION === '1' || options.origin !== 'live' ? { status: 'disabled', missing: [] } : { status: externalMissing.length ? 'unavailable' : 'configured', missing: externalMissing },
+        gifts: gifts.needs().length ? { status: 'unavailable', missing: gifts.needs() } : { status: 'configured', missing: [] } }); return;
+    }
+    if (pathname === `${PREFIX}configuration` || pathname === `${PREFIX}configure` || pathname === `${PREFIX}configuration-sync`) {
+      if (request.method !== 'POST') { send(405, { version: 1, status: 'refused' }); return; }
+      if (!key) { send(503, { version: 1, status: 'unavailable', message: 'TWITCH_EXTENSION_CLIENT_ID and TWITCH_EXTENSION_SECRET are required.' }); return; }
+      const chunks: Buffer[] = []; let size = 0;
+      for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 8 * 1024) { send(413, { version: 1, status: 'refused' }); return; } chunks.push(chunk); }
+      try {
+        const route = pathname.endsWith('/configuration-sync') ? 'configuration-sync' : pathname.endsWith('/configure') ? 'configure' : 'configuration';
+        const answer = await configuration.handle(route, request.headers.authorization ?? null,
+          JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'));
+        send(answer.http, answer.body);
+      } catch { send(400, { version: 1, status: 'refused' }); }
+      return;
+    }
+    const giftRoute = (['gifts', 'gift-intent', 'gift-receipt', 'gift-status', 'gift-cancel', 'gift-resolve', 'gift-choices'] as const).find(name => pathname === PREFIX + name);
+    if (!giftRoute && !['kingdom', 'light', 'presence', 'pledge', 'picture', 'privacy', 'quiet', 'forget'].some(name => pathname === PREFIX + name)) { send(404, { status: 'refused' }); return; }
+    if (request.method !== (pathname === `${PREFIX}picture` ? 'GET' : 'POST')) { send(405, { status: 'refused' }); return; }
+    if (!key) { send(503, { version: 1, status: 'unavailable', message: 'TWITCH_EXTENSION_CLIENT_ID and TWITCH_EXTENSION_SECRET are required.' }); return; }
+    let viewer;
+    try { viewer = await verifyViewerToken(request.headers.authorization ?? null, key); }
+    catch { send(401, { version: 1, status: 'unauthenticated' }); return; }
+    if (giftRoute) {
+      if (viewer.kind !== 'shared') { send(403, { version: 1, status: 'refused' }); return; }
+      const chunks: Buffer[] = []; let size = 0;
+      for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 28 * 1024) { send(413, { version: 1, status: 'refused' }); return; } chunks.push(chunk); }
+      try { const answer = await gifts.handle(giftRoute as PanelGiftRoute, viewer, JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); send(answer.http, answer.body); }
+      catch { send(400, { version: 1, status: 'refused' }); }
+      return;
+    }
+    if (pathname === `${PREFIX}picture`) {
+      const painting = await services.pictures.read(viewer.channelId);
+      if (!painting) { send(404, { status: 'unavailable' }); return; }
+      // The revision lets the panel pair these bytes with the lit windows listed in the kingdom reply.
+      response.writeHead(200, { ...cors, 'content-type': 'image/webp', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+        'x-chatdom-revision': painting.revision, 'access-control-expose-headers': 'x-chatdom-revision' }).end(painting.bytes); return;
+    }
+    const chunks: Buffer[] = []; let size = 0;
+    for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 2048) { send(413, { status: 'refused' }); return; } chunks.push(chunk); }
+    let observe = true;
+    let privacyBody: { quiet: boolean } | { confirm: true } | Record<string, never> = {};
+    try {
+      const body: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+      if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error();
+      const entries = Object.entries(body);
+      const lightBody = pathname === `${PREFIX}light` && entries.length === 1 && entries[0]![0] === 'observe' && typeof entries[0]![1] === 'boolean';
+      const quietBody = pathname === `${PREFIX}quiet` && entries.length === 1 && entries[0]![0] === 'quiet' && typeof entries[0]![1] === 'boolean';
+      const forgetBody = pathname === `${PREFIX}forget` && entries.length === 1 && entries[0]![0] === 'confirm' && entries[0]![1] === true;
+      if (entries.length ? !lightBody && !quietBody && !forgetBody : pathname === `${PREFIX}quiet` || pathname === `${PREFIX}forget`) throw new Error();
+      if (quietBody) privacyBody = { quiet: entries[0]![1] as boolean };
+      if (forgetBody) privacyBody = { confirm: true };
+      if ('observe' in body) observe = body.observe as boolean;
+    }
+    catch { send(400, { version: 1, status: 'refused' }); return; }
+    try {
+      if (pathname === `${PREFIX}kingdom`) {
+        const state = await realm('/internal/realm/panel/kingdom', { kingdomId: viewer.channelId });
+        broadcast.touch(viewer.channelId, state);
+        const stored = await services.pictures.read(viewer.channelId);
+        const picture = stored ? { capturedAt: stored.capturedAt, revision: stored.revision, kind: stored.kind, windows: stored.windows ?? [] } : null;
+        // Only a committed public fact is projected; no interpretation of private observations or rejected words.
+        const fact = state.moment as { body?: { kind?: string }; occurredAt?: number } | null;
+        const words: Record<string, string> = { raid: 'Raiders at the gate', fireworks: 'Fireworks overhead', feast: 'A feast in the hall', battle: 'The kingdom stands together', bell: 'The bell rings', parade: 'A parade crosses the square', train: 'The Hype Train arrives' };
+        const event = state.publicEvent as { type?: string; at?: number } | null;
+        const gift = state.giftMoment as { line?: string; committedAt?: number } | null;
+        const moment = gift && typeof gift.line === 'string' && typeof gift.committedAt === 'number' && gift.committedAt >= (event?.at ?? 0)
+          ? gift.line : event?.type === 'home' ? 'A home is raised' : event?.type === 'forge' ? 'New work leaves the Forge' : fact?.body?.kind ? words[fact.body.kind] ?? null : null;
+        // Unclaimed land is named for its streamer, from Twitch's public profile of the channel in the token.
+        const streamer = state.status === 'unfounded' ? (await services.users.person(viewer.channelId).catch(() => null))?.displayName ?? null : null;
+        send(200, { version: 1, status: state.status, stream: state.stream ?? 'resting', lights: state.lights ?? null, moment, picture, pledges: state.pledges ?? null,
+          ...(streamer ? { streamer } : {}),
+          ...(state.settings ? { settings: state.settings, settingsRevision: state.settingsRevision } : {}) }); return;
+      }
+      if (viewer.kind !== 'shared') { send(403, { version: 1, status: 'refused' }); return; }
+      if (['privacy', 'quiet', 'forget'].some(name => pathname === PREFIX + name)) {
+        const name = pathname.slice(PREFIX.length);
+        // A linked viewer can only read or change their own privacy; no Helix lookup is necessary.
+        const answer = await realm(`/internal/realm/panel/${name}`, { ...privacyBody, kingdomId: viewer.channelId, personId: viewer.personId });
+        send(200, answer); return;
+      }
+      if (pathname === `${PREFIX}pledge`) {
+        send(200, await realm('/internal/realm/panel/pledge', { kingdomId: viewer.channelId, personId: viewer.personId })); return;
+      }
+      const person = await services.users.person(viewer.personId);
+      if (!person) { send(503, { version: 1, status: 'unavailable', message: 'Twitch has not told us your name just now.' }); return; }
+      let claim: Record<string, unknown>;
+      if (pathname === `${PREFIX}presence`) {
+        const reading = await options.authority.reading(viewer);
+        const kind = reading.viewer.kind;
+        if (!['citizen', 'guest', 'monarch'].includes(kind)) { send(403, { version: 1, status: 'refused' }); return; }
+        const prior = await realm('/internal/realm/panel/presence', { kingdomId: viewer.channelId, personId: viewer.personId });
+        if (prior.held === true) { send(200, { version: 1, status: 'held', lit: false }); return; }
+        // After "Forget me" the panel sends nothing on this person's behalf until they take their place again.
+        if (prior.forgotten === true) { send(200, { version: 1, status: 'forgotten', lit: false, renewal: prior.renewal === 'applied' ? 'applied' : 'pending' }); return; }
+        claim = { version: 1, status: kind === 'citizen' ? 'deed' : kind === 'monarch' ? 'castle' : 'guest' };
+      } else claim = await realm('/internal/realm/panel/claim', { kingdomId: viewer.channelId, personId: viewer.personId, name: person.displayName });
+      if (!['deed', 'guest', 'castle'].includes(String(claim.status))) { send(200, { ...claim, lit: false }); return; }
+      if (pathname === `${PREFIX}light`) {
+        // A forget hold the realm could not lift with this tap: the home is theirs again, the window stays dark.
+        const after = await realm('/internal/realm/panel/presence', { kingdomId: viewer.channelId, personId: viewer.personId });
+        if (after.forgotten === true) { send(200, { ...claim, lit: false, forgotten: true, renewal: after.renewal === 'applied' ? 'applied' : 'pending' }); return; }
+      }
+      const state = await realm('/internal/realm/panel/kingdom', { kingdomId: viewer.channelId });
+      if (state.stream !== 'live' || !observe) { send(200, { ...claim, ...(pathname.endsWith('/presence') ? { status: 'accepted' } : {}), lit: false, stream: state.stream ?? 'resting' }); return; }
+      await realm('/internal/realm/ingress', { version: 1, observation: {
+        version: 1, id: `panel-${randomUUID()}`, kingdomId: viewer.channelId, observedAt: Date.now(), origin: options.origin,
+        kind: 'observe', source: 'panel', coverage: 'activity', people: [{ personId: viewer.personId, disclosure: 'named', displayName: person.displayName }],
+      } });
+      let presence: Record<string, unknown> = {};
+      const deadline = Date.now() + 3500;
+      do { presence = await realm('/internal/realm/panel/presence', { kingdomId: viewer.channelId, personId: viewer.personId }); if (presence.lit === true || presence.held === true) break; await delay(50); } while (Date.now() < deadline && !response.destroyed);
+      send(200, { ...claim, ...(pathname.endsWith('/presence') ? { status: 'accepted' } : {}), lit: presence.lit === true, stream: presence.stream ?? 'live',
+        ...(presence.lit === true && Number.isSafeInteger(presence.slot) ? { slot: presence.slot } : {}) });
+    } catch { send(503, { version: 1, status: 'unavailable', message: 'The kingdom is out of reach. Try again shortly.' }); }
+  };
+  return Object.assign(handler, { dispose: () => { stopGifts(); broadcast.dispose(); configurationPublisher.dispose(); } });
+}

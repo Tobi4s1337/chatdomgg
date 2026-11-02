@@ -111,8 +111,8 @@ async function main() {
   renderNav(state);
   const dragonView = state.view === 'dragon-close' || state.view === 'dragon-square';
   element('title').textContent = VIEW_TITLES[state.view];
-  const heatCaption = state.heat > 0 ? `SIMULATED heat ${state.heat}${state.shaping ? ', shaping' : ''} at ${state.time} s` : 'cold iron';
-  element('caption').textContent = `${STYLE_NAMES[state.style]} · ${String(state.hour).padStart(2, '0')}:00 · ${dragonView ? 'smoke SIMULATED · a forged piece, no owner' : heatCaption} · lit windows SIMULATED`;
+  const heatCaption = state.heat > 0 ? `heat preview ${state.heat}${state.shaping ? ', shaping' : ''} at ${state.time} s` : 'cold iron';
+  element('caption').textContent = `${STYLE_NAMES[state.style]} · ${String(state.hour).padStart(2, '0')}:00 · ${dragonView ? 'smoke preview · a forged piece, no owner' : heatCaption} · lit windows preview`;
   const host = element<HTMLDivElement>('stage');
   const grade = getEnvironment(state.hour);
   document.body.style.background = `linear-gradient(180deg, ${grade.zenith} 0%, ${grade.horizon} 78%, ${grade.fog} 100%)`;

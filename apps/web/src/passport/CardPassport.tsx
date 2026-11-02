@@ -41,7 +41,7 @@ export interface CardPassportProps {
   readonly owner?: CardPassportOwner;
   /** Where the spread's picture is served. Without it there is no share shelf: nothing pretends to share. */
   readonly share?: CardPassportShare;
-  /** The whole surface is SIMULATED (a bench), whatever the book says. */
+  /** Private-fixture provenance retained for host compatibility; never rendered as a label. */
   readonly simulated?: boolean;
   /** 0 is the closed cover; the card page opens the book on its flyleaf (1) by default. */
   readonly initialView?: number;
@@ -81,7 +81,6 @@ function CardReading(props: CardPassportProps): JSX.Element {
   });
   const layout = (): BookLayout => (width() === 0 || width() >= SPREAD_FROM ? 'spread' : 'page');
   const book = createMemo(() => (state().kind === 'visible' ? (state() as Extract<PassportReadState, { kind: 'visible' }>).book : undefined));
-  const simulated = createMemo(() => props.simulated === true || book()?.origin === 'simulated' || (state().kind === 'hidden' && (state() as { origin?: string }).origin === 'simulated'));
   const beside = () => !!props.share && !!book() && width() >= BESIDE_FROM;
   // The width the open book actually gets: the section, less the shelf beside it and the thumb tabs on its fore-edge.
   const bookWidth = () => width() - (beside() ? SHELF + GAP : 0) - TABS;
@@ -107,9 +106,6 @@ function CardReading(props: CardPassportProps): JSX.Element {
         {shelf => <ShareShelf share={shelf.share} book={shelf.book} />}
       </Show>
     </div>
-    <Show when={simulated()}>
-      <span class="cpc-chip" role="note" aria-label="Simulated: an illustrative passport, not a live one">Simulated</span>
-    </Show>
   </section>;
 }
 

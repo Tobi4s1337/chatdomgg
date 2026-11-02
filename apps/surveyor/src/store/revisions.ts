@@ -188,6 +188,13 @@ export function pruneRevisions(dataDir: string, keep: number): string[] {
   }).sort((a, b) => b.asOf - a.asOf || (a.revision < b.revision ? 1 : -1));
   const keepSet = new Set(dated.slice(0, keep).map((entry) => entry.revision));
   if (current) keepSet.add(current);
+  // The night the map is drawn from keeps its revision: search and cards read that revision's register.
+  try {
+    const published = JSON.parse(readFileSync(join(dataDir, 'editions', 'published.json'), 'utf8')) as { revision?: unknown };
+    if (typeof published.revision === 'string') keepSet.add(published.revision);
+  } catch {
+    // No edition is published.
+  }
   const pruned: string[] = [];
   for (const { revision } of dated) {
     if (keepSet.has(revision)) continue;

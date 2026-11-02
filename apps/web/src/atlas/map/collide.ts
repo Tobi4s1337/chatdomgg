@@ -61,7 +61,48 @@ export function overlaps(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
-/** Stable priority: bigger tier first, then the larger observed average, then the smaller channel ID. */
+/**
+ * Survey marks by tier in CSS px: the small ink symbol for a holding too small to draw at this distance. A hamlet's
+ * dot is a step below a village's.
+ */
+export const MARK_PX = [9, 7, 5, 3.6, 3] as const;
+/** Paper kept between a lettered name and a survey mark, so no dot sits in a word or between its spaced letters. */
+export const LETTER_CLEARANCE = 3;
+
+/**
+ * Whether a survey mark at (x, y) would sit inside a language, archipelago or realm name. Names knock out the small
+ * marks under them, as a cartographer lifts a dot out of the lettering; a stamp, a selection or a found holding is
+ * never knocked out, and the holding stays findable by search and appears again closer in.
+ */
+export function underLettering(x: number, y: number, tierRank: number, lettering: readonly Rect[]): boolean {
+  if (!lettering.length) return false;
+  const half = (MARK_PX[tierRank] ?? MARK_PX[3]) / 2 + LETTER_CLEARANCE;
+  const dot: Rect = { x: x - half, y: y - half, w: half * 2, h: half * 2 };
+  for (const rect of lettering) if (overlaps(dot, rect)) return true;
+  return false;
+}
+
+/** A holding's name block tries below, right, left, then above its stamp; this is the left candidate's index. */
+export const LEFT_OF_MARK = 2;
+/** Space between a holding's shield and its name, in CSS px. */
+export const SHIELD_GAP = 4;
+
+/**
+ * Where a holding's shield and name stand inside its block. The shield keeps to the end of the block nearest the
+ * holding: first on every side but the left, last when the block sits left of the stamp ("metashir2 ⛨ ♜"), so a
+ * name set out over the sea never leaves its shield floating alone off the coast. `shieldW` is null without a shield;
+ * `shieldX` is the left edge of the shield itself (its paper halo not included).
+ */
+export function blockPieces(rect: Rect, side: number, hasName: boolean, shieldW: number | null): { nameX: number; shieldX: number | null } {
+  if (shieldW === null) return { nameX: rect.x, shieldX: null };
+  if (side === LEFT_OF_MARK) return { nameX: rect.x, shieldX: rect.x + rect.w - shieldW };
+  return { nameX: rect.x + shieldW + (hasName ? SHIELD_GAP : 0), shieldX: rect.x };
+}
+
+/**
+ * Stable priority: bigger tier first, then the larger observed average, then the smaller channel ID. The tier rank
+ * decides first, so a hamlet never outranks a village, whatever its audience.
+ */
 export function comparePriority(a: { tierRank: number; average: number; id: string }, b: { tierRank: number; average: number; id: string }): number {
   if (a.tierRank !== b.tierRank) return a.tierRank - b.tierRank;
   if (a.average !== b.average) return b.average - a.average;

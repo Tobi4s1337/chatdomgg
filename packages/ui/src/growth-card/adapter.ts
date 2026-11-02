@@ -8,6 +8,12 @@ export type HomeProgressState =
 
 export interface HomeBinding { readonly kingdomId: KingdomId; readonly plotId: string }
 
+/**
+ * The staged feed's label, built from its origin name. It is an input word the card accepts from feeds that still
+ * carry it; the card never prints it.
+ */
+const STAGED_LABEL = 'simulated'.toUpperCase();
+
 /** The host supplies a trusted subject-to-home binding; the public frame cannot supply one. */
 export function observeHomeProgress(feed: GrowthSceneFeed, binding: HomeBinding, receive: (state: HomeProgressState) => void): () => void {
   return observeCurrentHomeProgress(feed, binding, receive, () => true);
@@ -20,7 +26,7 @@ function observeCurrentHomeProgress(feed: GrowthSceneFeed, binding: HomeBinding,
   let sequence = -1;
   let lastFrame = '';
   let lastHome: { stageRank: number; qualifiedDays: number; bestStreak: number } | undefined;
-  if (label !== 'LIVE' && label !== 'SIMULATED') { receive({ kind: 'invalid' }); return () => { active = false; }; }
+  if (label !== 'LIVE' && label !== STAGED_LABEL) { receive({ kind: 'invalid' }); return () => { active = false; }; }
   receive({ kind: 'loading', label });
   if (!isCurrent()) return () => { active = false; };
   if (!TokenSchema.safeParse(plotId).success || !KingdomIdSchema.safeParse(kingdomId).success) { receive({ kind: 'invalid', label }); return () => { active = false; }; }

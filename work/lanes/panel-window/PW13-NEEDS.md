@@ -1,0 +1,15 @@
+# PW13 owner requests
+
+PW13 remains unticked. No production deployment, extension console action or Twitch write was performed.
+
+needs: raid-show Apply `PW13-NEEDS.patch` to `apps/herald/src/auth/grants.ts`. It limits first connection to Tech §7.2's six Tier 1 scopes. The patch passes `patch --dry-run -p1`; it is deliberately unapplied here. Main/front-door must provide the actual founding OAuth entry and its connection result before Config can offer a truthful “Found your kingdom” link. No public founding mutation or usable entry currently exists; a guessed link is not a substitute.
+
+needs: main/front-door Review and apply `PW13-PASSPORT-NEEDS.patch`, followed by `PW13-PASSPORT-PANEL.patch`. The exact unapplied owner patch adds a strict live-only shared schema/reader and UI entry, preserves general exports and reuses the book layout. The companion switches panel imports and tests. Both dry-run cleanly. The isolated full candidate passes 52 focused checks, strict types and the strengthened zip guard, including all fonts/textures in the mobile byte budget; see `PW13-PASSPORT-PATCH.md`. The actual worktree stays building with its existing imports and still fails the shared simulation-string guard until owner application.
+
+needs: main Resolve the extension-owner identity bootstrap: Twitch's external PubSub JWT requires `user_id` to identify the extension owner, while `channel_id` identifies the receiving channel. Neither the Extension Secret nor Client ID contains that numeric identity. The current API explicitly names `TWITCH_EXTENSION_OWNER_ID` in health and disables publishing without it; this is an extra public setting and the original two-value promise remains unmet. Provide a trusted owner-metadata bootstrap or approve this explicit setting in the switch-on contract. Never infer the owner from a target channel. See https://dev.twitch.tv/docs/extensions/building/#signing-the-jwt.
+
+Resolved in this checkpoint: Configuration Service publication is server-owned and durable. The browser no longer writes Helper configuration. Fresh claims, deployment generations, a shared request quota, GET verification and periodic audits recover across failures and late stale PUTs. The realm remains the purchase authority. This provides eventual convergence after delayed requests settle; it does not claim atomic writes across Twitch and Postgres. See `PW13-CONTRACT.md` and `PW13-NOTES.md` for demonstrated scope and operational limits.
+
+needs: main/grand-world Existing production capability/dispatch/effect requests in `PW12-NEEDS.md` and `.patch` remain. Configuration and registered SKUs cannot fabricate effect readiness. Local browser proof uses an explicit test-only atomic dispatch; no production gift is enabled by that test.
+
+needs: capture Once GPU Chrome reconnects, run the complete `--wait 30 --max 10` batch documented in `PW13-NOTES.md` and inspect every image. A busy shared lease is not a PW11 blocker. Hosted Test and the real C04 purchase remain unrun; Tobias's numbered checklist is `HOSTED-TEST.md`.

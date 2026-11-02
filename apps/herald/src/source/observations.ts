@@ -9,7 +9,8 @@ import {
  * has room for message text, fragments, badges, colours or avatars.
  */
 export type Observation =
-  | { readonly kind: 'chat'; readonly messageId: string; readonly at: number; readonly author: { readonly id: string; readonly displayName: string } }
+  | { readonly kind: 'chat'; readonly messageId: string; readonly at: number; readonly providerAt?: number;
+    readonly author: { readonly id: string; readonly displayName: string } }
   | { readonly kind: 'chatters'; readonly sweepId: string; readonly at: number; readonly complete: boolean; readonly ids: readonly string[] }
   | { readonly kind: 'stream'; readonly at: number; readonly live: true; readonly streamId: string }
   | { readonly kind: 'stream'; readonly at: number; readonly live: false }
@@ -45,7 +46,8 @@ export function toPresenceInput(observation: Observation, kingdomId: KingdomId, 
       const personId = PersonIdSchema.parse(observation.author.id);
       const displayName = publicDisplayName(observation.author.displayName);
       const person: PresencePerson = displayName === null ? { personId, disclosure: 'anonymous' } : { personId, disclosure: 'named', displayName };
-      input = { ...common, id: token('chat', observation.messageId), kind: 'observe', source: 'chat', coverage: 'activity', people: [person] };
+      input = { ...common, id: token('chat', observation.messageId), kind: 'observe', source: 'chat', coverage: 'activity', people: [person],
+        ...(observation.providerAt !== undefined && observation.providerAt !== observation.at ? { providerAt: observation.providerAt } : {}) };
       break;
     }
     case 'chatters': {

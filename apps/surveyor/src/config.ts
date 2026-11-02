@@ -75,6 +75,22 @@ export function liveConfigFrom(env: Env): LiveConfig {
   };
 }
 
+/** The private road ingest's listener: only when ATLAS_INGEST_PORT is set, on loopback unless told otherwise. */
+export interface IngestConfig {
+  host: string;
+  port: number;
+  token: string | null;
+}
+
+export function ingestConfigFrom(env: Env): IngestConfig | null {
+  if (!env.ATLAS_INGEST_PORT?.trim()) return null;
+  return {
+    host: env.ATLAS_INGEST_HOST?.trim() || '127.0.0.1',
+    port: intFrom(env, 'ATLAS_INGEST_PORT', 0, 1, 65_535),
+    token: env.ATLAS_INGEST_TOKEN?.trim() || null,
+  };
+}
+
 export function serveConfigFrom(env: Env): ServeConfig {
   return {
     dataDir: dataDirFrom(env),

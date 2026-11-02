@@ -4,7 +4,8 @@
  * panel never names a person in the body and never treats a Twitch ID as one. Every answer crosses the passport
  * boundary reader, so a refused reply reaches the session as `undefined` (unavailable, never an empty book).
  */
-import { readPassportReply, type PassportReply } from '../../../api/src/passport/contracts';
+import type { PassportReply } from '../../../api/src/passport/contracts';
+import { readLivePassportReply } from '../../../api/src/passport/live-contracts';
 import type { PassportReplyView, PassportRequestView, PassportTransport } from '@chatdom/ui/passport';
 
 /** Replies are a book's first pages or one page of ≤50 records; anything far larger is not a passport. */
@@ -42,6 +43,6 @@ export function passportExtensionTransport(endpoint: PanelPassportEndpoint): Pas
     if (text.length > PANEL_PASSPORT_REPLY_LIMIT) return undefined;
     let body: unknown;
     try { body = JSON.parse(text); } catch { return undefined; }
-    return view(readPassportReply(body));
+    return view(readLivePassportReply(body));
   };
 }

@@ -1,4 +1,4 @@
-// Starts chatdom.io: one process on one port serving the front door, the web app, sign-in, the panel's backend
+// Starts chatdom.io: one process on one port serving the site, the web app, sign-in, the panel's backend
 // and the realm (HTTP and its WebSocket), with the realm supervised as a child on loopback.
 //
 //   node scripts/public/start.mjs [--no-migrate]
@@ -16,7 +16,7 @@ import { parseEnv } from 'node:util';
 
 const root = resolve(import.meta.dirname, '../..');
 const server = join(root, 'apps/api/dist/public.mjs');
-for (const built of [server, join(root, 'apps/web/dist/index.html'), join(root, 'apps/web/dist/door/index.html')]) {
+for (const built of [server, join(root, 'apps/web/dist/index.html'), join(root, 'apps/web/dist/site/index.html')]) {
   if (!existsSync(built)) { console.error(`Not built yet (${built.slice(root.length + 1)} is missing). Run: node scripts/public/build.mjs`); process.exit(1); }
 }
 

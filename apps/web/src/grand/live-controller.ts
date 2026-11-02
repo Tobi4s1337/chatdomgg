@@ -62,7 +62,9 @@ export function createGrandLiveController(hooks: { host(): HTMLElement; onState(
       if (!scene || !firstView) return;
       firstView = false;
       const value = (key: string) => { const raw = params.get(key); return raw !== null && raw.trim() && Number.isFinite(Number(raw)) ? Number(raw) : null; };
-      scene.overview?.orbit(value('yaw'), value('pitch'), value('dist'));
+      // yaw and pitch are degrees in the URL, as on /-/grand-bench and the story page's hero; the lens takes radians.
+      const degrees = (v: number | null) => v === null ? null : v * Math.PI / 180;
+      scene.overview?.orbit(degrees(value('yaw')), degrees(value('pitch')), value('dist'));
     },
   });
   const debug = { stats: () => ({ ...mount.scene?.debug, phase: state.phase, land: mount.scene?.inspect().land ?? null }),

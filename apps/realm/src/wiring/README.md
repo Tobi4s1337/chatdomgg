@@ -48,11 +48,22 @@ Unknown writes remain errors requiring recovery; they never become inferred refu
 shared with the trusted coordinator. It creates mode-0600 files under a mode-0700 newly created directory, syncs
 the file, atomically links each immutable key/run file, and syncs the directory before returning. Matching retries
 are idempotent; changed retries fail. Receipts hash the stored audit. No HTTP/browser audit writer is provided.
-Approved records require the current Codex policy and two registered independent judges at each of the words and
-rendered-result gates; malformed/incomplete/held/refused records yield no receipt. Refusal/hold/cold audits store
-only bounded outcome metadata, stripping provider records. No words, names, people, original message IDs or home
+Approved records require the current policy at independent words and rendered-result gates. Each gate keeps
+one complete confident primary safety read, or the two registered independent reads actually made;
+malformed/incomplete/held/refused safety records yield no receipt. Safety disagreement
+holds; quality never vetoes. Image records retain actual bounded quality reads and their deterministically
+recomputed score with the policy version. Refusal/hold/cold audits store only bounded outcome metadata and
+validated quality summaries, stripping arbitrary provider records. No words, names, people, original message IDs or home
 geometry enter this store. Registered policy questions are imported from the pure Codex policy module to prevent
 drift; this does not import or invoke providers.
+The approval binds the exact selected draft and full home digest. The realm supplies both expected hashes
+before commit; a title, plaque, plan or host substitution has no receipt. Quiet retries retain only the selected
+result's full evidence, with discarded outcome/quality summaries kept privately. Normal runs above five calls
+cannot authorize; explicitly softened runs have an absolute seven-call ceiling.
+New records additionally bind the registered kit ID and revision, and exact-record reads require that same pair.
+Legacy digest-only files remain immutable and authorize revision one only, with owned-home/family and current-kit
+fit checks still applied. They do not independently identify their historical family. A registered revision-two
+preview cannot commit while the current kit is one, even if a caller supplies an otherwise successful approval.
 
 Focused evidence: `pnpm exec vitest run apps/realm/src/wiring`, `pnpm exec eslint apps/realm/src/wiring`,
 `pnpm typecheck`. The command-port tests use the actual `DurableKingdom` registry/queue and reducer with an
@@ -62,3 +73,11 @@ replies. They do not claim a real Postgres coordinator run or a real model-appro
 or servers are needed for this private adapter. Main owns full verification and host capture.
 The focused Postgres regression `cancellation after the final fence` additionally exercises the real SQL rollback
 after fact/ledger/design/outbox writes and finalFence await, then retries the same command successfully.
+
+Policy v6 image evidence also retains finite detail-match values and their validity status. The verifier
+reproduces their conservative aggregate; a malformed value is explicitly unclear, never invented as met.
+This remains private quality evidence and cannot veto safety. Words carry no image detail fields.
+Stale pending approvals fail closed. Exact committed retries reconstruct the command with its stored approval
+receipt and ask the repository to verify the whole original command digest; they do not read stale evidence
+as new approval. A lookup alone cannot match a changed candidate. Missing retained parts, payload conflicts,
+and uncertain replay responses remain held, while status can independently recover the attempt outcome.

@@ -94,6 +94,8 @@ export default function StreamView(props: StreamViewProps = {}) {
   const director = createDirector(plan(), {
     motive: (view: Shot) => {
       if (view === 'hero') return true;
+      // The pier shot has its subject whenever the kingdom has a pier standing.
+      if (view === 'pier') return !!mount.scene?.pierShot();
       const subject = fresh() ? mount.scene?.subject() : undefined;
       // A close window needs its light; the street needs someone in it.
       return view === 'window' ? !!subject?.homeLit : !!subject;

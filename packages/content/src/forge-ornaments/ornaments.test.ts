@@ -6,8 +6,8 @@ const ids: ForgeOrnament[] = ['sleeping-fox', 'sunflower', 'scallop-shell', 'sho
 const families: StyleKey[] = ['hearth', 'tide', 'grove'];
 
 describe('Forge ornaments', () => {
-  for (const id of ids) for (const family of families) it(`${id} in ${family} is bounded and connected to its mount`, () => {
-    const model = createForgeOrnament(id, family);
+  for (const revision of [1, 2]) for (const id of ids) for (const family of families) it(`${id} in ${family} (revision ${revision}) is bounded and connected to its mount`, () => {
+    const model = createForgeOrnament(id, family, revision);
     const cells = new Set<string>();
     const key = (x:number,y:number,z:number) => `${x},${y},${z}`;
     for (const {from, to} of model.boxes) {

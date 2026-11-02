@@ -1,4 +1,4 @@
-import { createServer, type Server, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { SourceFrame, SourceHealth, SourceListener } from './source';
 
@@ -32,6 +32,11 @@ export interface PresenceServerOptions {
   /** A subscriber whose socket stays backed up this long is disconnected; it reconnects to a fresh snapshot. */
   readonly stallMs?: number;
   readonly keepaliveMs?: number;
+  /**
+   * Private routes served on the same loopback port, by exact path (the raid authority's). Each owns its methods,
+   * authentication and replies; everything else keeps the presence server's read-only behaviour.
+   */
+  readonly routes?: ReadonlyMap<string, (request: IncomingMessage, response: ServerResponse) => Promise<void>>;
 }
 
 export interface PresenceServer {
@@ -67,6 +72,14 @@ export async function startPresenceServer(options: PresenceServerOptions): Promi
 
   const server: Server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    const route = options.routes?.get(url.pathname);
+    if (route) {
+      void route(request, response).catch(() => {
+        if (!response.headersSent) plain(response, 500, { error: 'internal' });
+        else response.destroy();
+      });
+      return;
+    }
     if (request.method !== 'GET' && request.method !== 'HEAD') return plain(response, 405, { error: 'method_not_allowed' });
     if (url.pathname === HEALTH_PATH) {
       return plain(response, 200, { service: 'herald', subscribers: clients.size, server: counters, source: options.host().health() });

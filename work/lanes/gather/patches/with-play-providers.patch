@@ -1,0 +1,8 @@
+--- a/apps/web/src/play/providers.ts
++++ b/apps/web/src/play/providers.ts
+@@ -3,4 +3,5 @@
+  * adds exactly one side-effect import of its own slot module here, for example `import '../forge/play-slot';`,
+  * and nothing else. The HUD imports this file, so every provider has registered before the ledger first opens.
+  */
++import '../tavern/register';
+ export {};

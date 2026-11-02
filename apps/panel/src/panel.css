@@ -1,10 +1,10 @@
 /* The Chatdom panel: walnut, worn brass, parchment and ink. Every class is prefixed
    so the same view can be mounted inside the web app without inheriting its page. */
 
-@font-face { font-family: 'IM Fell English'; font-style: normal; font-weight: 400; font-display: block; src: url('../../web/src/atlas/assets/fonts/im-fell-english-regular.woff2') format('woff2'); }
-@font-face { font-family: 'IM Fell English SC'; font-style: normal; font-weight: 400; font-display: block; src: url('../../web/src/atlas/assets/fonts/im-fell-english-sc.woff2') format('woff2'); }
-@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400 900; font-display: block; src: url('../../web/src/atlas/assets/fonts/alegreya-roman-latin.woff2') format('woff2'); }
-@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 400 900; font-display: block; src: url('../../web/src/atlas/assets/fonts/alegreya-italic-latin.woff2') format('woff2'); }
+@font-face { font-family: 'IM Fell English'; font-style: normal; font-weight: 400; font-display: block; src: url('../../../packages/ui/src/fonts/im-fell-english-regular.woff2') format('woff2'); }
+@font-face { font-family: 'IM Fell English SC'; font-style: normal; font-weight: 400; font-display: block; src: url('../../../packages/ui/src/fonts/im-fell-english-sc.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400 900; font-display: block; src: url('../../../packages/ui/src/fonts/alegreya-roman-latin.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 400 900; font-display: block; src: url('../../../packages/ui/src/fonts/alegreya-italic-latin.woff2') format('woff2'); }
 
 html.cp-document, html.cp-document body { margin: 0; height: 100%; overflow: hidden; background: #1c130d; }
 html.cp-config-document, html.cp-config-document body { height: auto; min-height: 100%; overflow: auto; }

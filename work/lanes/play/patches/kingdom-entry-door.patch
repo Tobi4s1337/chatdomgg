@@ -1,0 +1,305 @@
+diff --git a/apps/web/src/kingdom-entry/index.tsx b/apps/web/src/kingdom-entry/index.tsx
+index c39de849..e71ab51f 100644
+--- a/apps/web/src/kingdom-entry/index.tsx
++++ b/apps/web/src/kingdom-entry/index.tsx
+@@ -2,10 +2,13 @@ import { createSignal, onCleanup, onMount, Show } from 'solid-js';
+ import { render } from 'solid-js/web';
+ import Kingdom from '../kingdom';
+ import { RealmEntryError, realmEntryFailureMessage, realmSignInUrl } from '../realm/adapters/entry';
+-import type { KingdomEntryConnection, KingdomEntrySource } from './types';
++import type { KingdomEntryArrival, KingdomEntryConnection, KingdomEntrySource } from './types';
+ import './entry.css';
+ 
+-export type { KingdomEntryConnection, KingdomEntrySource } from './types';
++export type { KingdomEntryArrival, KingdomEntryConnection, KingdomEntrySource } from './types';
++
++/** How long a door waits for the room to confirm the leave before saying so (play then tries again). */
++const DOOR_LEAVE_MS = 8_000;
+ 
+ /** The source establishes entry; this component owns its lifetime and the drawn kingdom. */
+ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
+@@ -28,16 +31,17 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
+     setNotice(undefined);
+   }
+ 
+-  async function open(sceneRevision = false) {
++  /** Resolves true once this opening holds the kingdom; false when it was refused, replaced or closed. */
++  async function open(sceneRevision = false, arrival?: KingdomEntryArrival): Promise<boolean> {
+     release(sceneRevision);
+-    if (closed) return;
++    if (closed) return false;
+     const current = generation, controller = new AbortController();
+     request = controller;
+     setState('opening');
+     setMessage(undefined);
+     try {
+-      const next = await props.open(controller.signal);
+-      if (closed || current !== generation || controller.signal.aborted) { next.dispose(); return; }
++      const next = await props.open(controller.signal, arrival);
++      if (closed || current !== generation || controller.signal.aborted) { next.dispose(); return false; }
+       connection = next;
+       unmount = render(() => <Kingdom founded={next.scene} presenceFeed={next.presenceFeed} {...(next.chatFeed ? { chatFeed: next.chatFeed } : {})}
+         {...(next.growthFeed ? { growthFeed: next.growthFeed } : {})}
+@@ -47,18 +51,38 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
+           manifest: next.manifest, onSceneNeeded: () => {
+             // Finish the current scene frame before disposing its renderer and controller.
+             queueMicrotask(() => { if (!closed && current === generation) void open(true); });
+-          } }} />, host);
++          }, ...(next.entry && next.endpoint ? { portal: {
++            entry: next.entry, endpoint: next.endpoint, title: next.kingdomName,
++            // Safe to repeat: resolves once the room has really let you go, rejects only while it may still hold you.
++            leave: () => leaveRoom(next),
++            rejoin: async ({ portal }) => { if (!await open(false, { portal })) throw new Error(message() ?? 'The way back is not open yet.'); },
++          } } : {}) }} />, host);
+       setNotice(next.notice);
+       setState('connected');
++      return true;
+     } catch (error) {
+-      if (closed || current !== generation) return;
++      if (closed || current !== generation) return false;
+       release();
+       const unauthenticated = error instanceof RealmEntryError && error.status === 'unauthenticated';
+       setMessage(realmEntryFailureMessage(error));
+       setState(unauthenticated ? 'unauthenticated' : 'refused');
++      return false;
+     }
+   }
+ 
++  /** Walking through a door: stop the walk and close this connection, then wait for the room to confirm it. */
++  async function leaveRoom(through: KingdomEntryConnection) {
++    const room = through.client.room;
++    const gone = new Promise<void>((resolve, reject) => {
++      if (!room.connection.isOpen) { resolve(); return; }
++      const left = () => { clearTimeout(timer); resolve(); };
++      const timer = setTimeout(() => { room.onLeave.remove(left); reject(new Error('The kingdom has not let you go yet.')); }, DOOR_LEAVE_MS);
++      room.onLeave.once(left);
++    });
++    if (connection === through) release();
++    await gone;
++  }
++
+   onMount(() => { void open(); });
+   onCleanup(() => { closed = true; release(); });
+ 
+diff --git a/apps/web/src/kingdom-entry/live.ts b/apps/web/src/kingdom-entry/live.ts
+index 4c808140..b0c34b4e 100644
+--- a/apps/web/src/kingdom-entry/live.ts
++++ b/apps/web/src/kingdom-entry/live.ts
+@@ -2,7 +2,7 @@ import { KingdomIdSchema, type KingdomId } from '@chatdom/shared';
+ import { REALM_FOUNDED_ROUTES, RealmFoundedManifestSchema } from '@chatdom/shared/realm';
+ import { compileFoundedScene } from '@chatdom/world/founded-collision';
+ import { decodeFoundedScene, FOUNDED_SCENE_LIMITS } from '@chatdom/world/founded-scene';
+-import { connectRealm } from '../realm/client';
++import { connectRealm, type RealmEntry } from '../realm/client';
+ import { openRealmApiSession, RealmEntryError, realmEntryFailureMessage, readRealmJson, type RealmFetch } from '../realm/adapters/entry';
+ import { createRoomChatFeed } from '../realm/adapters/chat';
+ import { createRealmForgeFeed } from '../realm/adapters/forge-feed';
+@@ -10,7 +10,7 @@ import { observeRealm, observedRoom, type RealmObserver } from '../realm/adapter
+ import { createRoomMomentFeed } from '../realm/adapters/moments';
+ import { createRoomPresenceFeed } from '../realm/adapters/presence';
+ import { createRoomGrowthFeed } from '../realm/adapters/growth';
+-import type { KingdomEntrySource } from './types';
++import type { KingdomEntryArrival, KingdomEntrySource } from './types';
+ 
+ export interface LiveKingdomEntryOptions {
+   readonly kingdomId: KingdomId;
+@@ -32,7 +32,7 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions):
+   if (!kingdomName || kingdomName.length > 80) throw new RealmEntryError('unavailable', 'The kingdom’s approved name is not available yet.');
+   if (origin === 'simulated' && !options.notice?.includes('SIMULATED')) throw new RealmEntryError('refused', 'This rehearsal must be labelled SIMULATED.');
+   const forgeFeed = createRealmForgeFeed();
+-  const open: KingdomEntrySource = async signal => {
++  const open = async (signal: AbortSignal, arrival?: KingdomEntryArrival) => {
+     let step = 'reading your sign-in';
+     try {
+     signal.throwIfAborted();
+@@ -57,7 +57,8 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions):
+     const collision = compileFoundedScene(scene);
+     signal.throwIfAborted();
+     step = 'joining the live kingdom';
+-    const client = await connectRealm(options.endpoint ?? `${location.origin}/realm-data`, session.entry, collision, options.storage ?? sessionStorage);
++    const endpoint = options.endpoint ?? `${location.origin}/realm-data`;
++    const client = await connectRealm(endpoint, arrivingAt(session.entry, arrival), collision, options.storage ?? sessionStorage);
+     if (signal.aborted) { client.dispose(); signal.throwIfAborted(); }
+     const state = client.room.state;
+     if (state.kingdomId !== kingdomId || state.origin !== origin || state.layoutRevision !== manifest.layoutRevision
+@@ -84,18 +85,40 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions):
+     try { await readyCheckpoint(observer, signal); signal.throwIfAborted(); }
+     catch (error) { dispose(); throw error; }
+     return { scene, manifest, collision, client, presenceFeed: createRoomPresenceFeed(observer, origin), growthFeed: createRoomGrowthFeed(observer, origin), chatFeed, forgeFeed, momentFeed: createRoomMomentFeed(observer, origin),
+-      kingdomName, ...(options.notice ? { notice: options.notice } : {}), dispose };
++      kingdomName, ...(options.notice ? { notice: options.notice } : {}), entry: doorEntry(kingdomId, session.entry.resumeScope, fetcher), endpoint, dispose };
+     } catch (error) {
+       if (signal.aborted || error instanceof RealmEntryError) throw error;
+       throw new RealmEntryError('unavailable', `Could not finish ${step}: ${realmEntryFailureMessage(error)}`);
+     }
+   };
+-  return async signal => {
+-    try { return await open(signal); }
++  return async (signal, arrival) => {
++    try { return await open(signal, arrival); }
+     catch (error) { forgeFeed.unavailable(); throw error; }
+   };
+ }
+ 
++/** The first fresh join names the door you came back through; any later fresh join (after a drop) is plain. */
++function arrivingAt(entry: RealmEntry, arrival: KingdomEntryArrival | undefined): RealmEntry {
++  if (!arrival) return entry;
++  let pending: KingdomEntryArrival | undefined = arrival;
++  return { kingdomId: entry.kingdomId, resumeScope: entry.resumeScope, async ticket() {
++    const join = await entry.ticket(), arrive = pending; pending = undefined;
++    return arrive ? { ...join, arrive: { portal: arrive.portal } } : join;
++  } };
++}
++
++/**
++ * The entry a door's room uses. The session's own entry asks for tickets under this connection's abort signal, which
++ * ends as the kingdom is left on the way through the door, so each ticket here reads the session afresh.
++ */
++function doorEntry(kingdomId: KingdomId, resumeScope: string, fetcher: RealmFetch): RealmEntry {
++  return { kingdomId, resumeScope, async ticket() {
++    const session = await openRealmApiSession(kingdomId, fetcher);
++    if (session.status !== 'authenticated') throw new RealmEntryError('unauthenticated', 'Your visit has ended. Sign in with Twitch again.');
++    return session.entry.ticket();
++  } };
++}
++
+ async function boundedBytes(response: Response, limit: number): Promise<Uint8Array> {
+   if (Number(response.headers.get('Content-Length')) > limit) throw new Error('The founded scene exceeds its byte bound.');
+   if (!response.body) throw new Error('The founded scene has no bytes.');
+diff --git a/apps/web/src/kingdom-entry/types.ts b/apps/web/src/kingdom-entry/types.ts
+index 0cc1eb38..151cd608 100644
+--- a/apps/web/src/kingdom-entry/types.ts
++++ b/apps/web/src/kingdom-entry/types.ts
+@@ -2,7 +2,7 @@ import type { GrowthSceneFeed, PresenceFeed } from '@chatdom/shared';
+ import type { TwitchMomentFeed } from '@chatdom/shared/twitch-moments';
+ import type { CollisionWorld, RealmFoundedManifest } from '@chatdom/shared/realm';
+ import type { RealmFoundedScene } from '@chatdom/world';
+-import type { RealmClient, RealmCollision } from '../realm/client';
++import type { RealmClient, RealmCollision, RealmEntry } from '../realm/client';
+ import type { RealmChatFeed } from '../realm/adapters/chat';
+ import type { RealmForgeFeed } from '../realm/adapters/forge-feed';
+ 
+@@ -19,8 +19,17 @@ export interface KingdomEntryConnection {
+   readonly momentFeed?: TwitchMomentFeed;
+   readonly kingdomName: string;
+   readonly notice?: string;
++  /**
++   * The way through doors into rooms of their own (the tavern): an entry that asks the session for a fresh ticket each
++   * time, never bound to this connection's lifetime, and the realm transport. Absent where doors do not open.
++   */
++  readonly entry?: RealmEntry;
++  readonly endpoint?: string;
+   dispose(reason?: 'scene-revision'): void;
+ }
+ 
++/** Coming back through a door: the first join names it, and the realm decides where you stand. */
++export interface KingdomEntryArrival { readonly portal: string }
++
+ /** Returns one coherent scene/room bundle, or rejects without granting entry. */
+-export type KingdomEntrySource = (signal: AbortSignal) => Promise<KingdomEntryConnection>;
++export type KingdomEntrySource = (signal: AbortSignal, arrival?: KingdomEntryArrival) => Promise<KingdomEntryConnection>;
+diff --git a/apps/web/src/main.tsx b/apps/web/src/main.tsx
+index 9b7e0567..68370187 100644
+--- a/apps/web/src/main.tsx
++++ b/apps/web/src/main.tsx
+@@ -55,8 +55,8 @@ if (window.location.pathname === '/dock' || window.location.pathname === '/dock/
+   ]);
+   const query = new URLSearchParams(location.search);
+   let checkedLiveSource: KingdomEntrySource | undefined;
+-  const live: KingdomEntrySource = async signal => {
+-    if (checkedLiveSource) return checkedLiveSource(signal);
++  const live: KingdomEntrySource = async (signal, arrival) => {
++    if (checkedLiveSource) return checkedLiveSource(signal, arrival);
+     const kingdom = KingdomIdSchema.safeParse(query.get('kingdom'));
+     if (!kingdom.success) throw new RealmEntryError('refused', 'Choose a kingdom to visit from the Atlas.');
+     const response = await fetch(REALM_ENTRY_ROUTE.replace(':kingdomId', encodeURIComponent(kingdom.data)), {
+@@ -74,7 +74,7 @@ if (window.location.pathname === '/dock' || window.location.pathname === '/dock/
+     }
+     checkedLiveSource = createLiveKingdomEntrySource({ kingdomId: kingdom.data, kingdomName: info.data.name,
+       endpoint: `${location.origin}/live-realm-data` });
+-    return checkedLiveSource(signal);
++    return checkedLiveSource(signal, arrival);
+   };
+   render(() => <KingdomEntry open={query.get('source') === 'simulated' ? openSimulatedKingdomEntry : live} />, root);
+ } else {
+diff --git a/apps/web/src/kingdom-entry/door-entry.test.ts b/apps/web/src/kingdom-entry/door-entry.test.ts
+new file mode 100644
+index 00000000..efbe4263
+--- /dev/null
++++ b/apps/web/src/kingdom-entry/door-entry.test.ts
+@@ -0,0 +1,75 @@
++import { readFile } from 'node:fs/promises';
++import { describe, expect, it, vi } from 'vitest';
++import { REALM_AUTH_ROUTES, type RealmFoundedManifest } from '@chatdom/shared/realm';
++import { connectRealm } from '../realm/client';
++import { createLiveKingdomEntrySource } from './live';
++
++// The way through a door (play SEAMS B1b): the connection lends the walk an entry and a transport, and coming back
++// names the door on the first join only.
++vi.mock('../realm/client', () => ({ connectRealm: vi.fn() }));
++const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
++const artifact = new URL('../../../realm/src/founded/artifacts/', import.meta.url);
++const storage = { getItem: () => null, setItem: () => {}, removeItem: () => {}, clear: () => {}, key: () => null, length: 0 } as Storage;
++const channel = () => Object.assign(() => {}, { remove: () => {} });
++
++async function fixture() {
++  const manifest = JSON.parse(await readFile(new URL('simulated-town.manifest.json', artifact), 'utf8')) as RealmFoundedManifest;
++  const bytes = await readFile(new URL('simulated-town.scene.json', artifact));
++  const session = { version: 1, status: 'authenticated', expiresAt: Date.now() + 60_000, resumeScope: 'opaque-door-scope', csrfToken: 'c'.repeat(40) };
++  const calls: { path: string; signal: AbortSignal | undefined }[] = [];
++  let tickets = 0;
++  const fetcher = async (path: string, init?: RequestInit) => {
++    calls.push({ path, signal: init?.signal ?? undefined });
++    if (init?.signal?.aborted) throw new DOMException('aborted', 'AbortError');
++    if (path === REALM_AUTH_ROUTES.session) return json(session);
++    if (path === REALM_AUTH_ROUTES.ticket) return json({ version: 1, status: 'issued', expiresAt: Date.now() + 30_000,
++      join: { kingdomId: manifest.kingdomId, ticket: `ticket-${++tickets}`.padEnd(16, '-'), protocol: 1 } });
++    if (path.includes('/scenes/')) return new Response(new Uint8Array(bytes));
++    return json(manifest);
++  };
++  const room = {
++    state: { ...manifest, writerEpoch: 'writer-1' }, onDrop: channel(), onLeave: channel(), onReconnect: channel(),
++    onMessage(type: string, callback: (value: unknown) => void) {
++      if (type === 'bootstrap') queueMicrotask(() => callback({ ...manifest, version: 1, writerEpoch: 'writer-1', throughSequence: 1, throughCursor: 1, current: [] }));
++      return () => {};
++    },
++    send() {},
++  };
++  vi.mocked(connectRealm).mockReset();
++  vi.mocked(connectRealm).mockResolvedValue({ room, dispose: vi.fn() } as never);
++  const source = createLiveKingdomEntrySource({ kingdomId: manifest.kingdomId, kingdomName: 'Willowmere', origin: 'simulated', notice: 'SIMULATED rehearsal',
++    endpoint: 'https://chatdom.test/realm-data', storage, fetcher });
++  return { manifest, source, calls };
++}
++
++describe('the kingdom entry at a door', () => {
++  it('names the door on the first fresh join only, and joins plainly without one', async () => {
++    const { manifest, source } = await fixture();
++    await source(new AbortController().signal, { portal: `tavern:${manifest.kingdomId}:door` });
++    const entry = vi.mocked(connectRealm).mock.calls.at(-1)![1];
++    expect(vi.mocked(connectRealm).mock.calls.at(-1)![0]).toBe('https://chatdom.test/realm-data');
++    expect(entry.resumeScope).toBe('opaque-door-scope');
++    const first = await entry.ticket(), again = await entry.ticket();
++    expect(first.arrive).toEqual({ portal: `tavern:${manifest.kingdomId}:door` });
++    expect(first.ticket).not.toBe(again.ticket);
++    // A drop and a fresh join later is the gate's business, not the door's.
++    expect(again.arrive).toBeUndefined();
++    await source(new AbortController().signal);
++    expect((await vi.mocked(connectRealm).mock.calls.at(-1)![1].ticket()).arrive).toBeUndefined();
++  }, 30_000);
++
++  it('lends the walk an entry that outlives the connection it came with', async () => {
++    const { manifest, source, calls } = await fixture();
++    const controller = new AbortController(), connection = await source(controller.signal);
++    expect(connection.endpoint).toBe('https://chatdom.test/realm-data');
++    // Going through the door ends this connection and its signal; the room behind the door still gets a ticket.
++    controller.abort();
++    const before = calls.length, join = await connection.entry!.ticket();
++    expect(join.kingdomId).toBe(manifest.kingdomId);
++    expect(join.arrive).toBeUndefined();
++    const asked = calls.slice(before);
++    expect(asked.map(call => call.path)).toEqual([REALM_AUTH_ROUTES.session, REALM_AUTH_ROUTES.ticket]);
++    expect(asked.every(call => !call.signal?.aborted)).toBe(true);
++    expect(connection.entry!.resumeScope).toBe('opaque-door-scope');
++  }, 30_000);
++});

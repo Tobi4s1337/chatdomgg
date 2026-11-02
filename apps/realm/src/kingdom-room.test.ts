@@ -47,6 +47,32 @@ it('holds patch publication while authority opens slowly, then joins through the
     await joined?.leave();await server.gracefullyShutdown(false);
   }
 });
+it('disposes the opened authority once when room creation fails after the open, so the next join can create it',async()=>{
+  const probe=createNetServer();await new Promise<void>(resolve=>probe.listen(0,'127.0.0.1',resolve));
+  const address=probe.address();if(!address||typeof address==='string')throw new Error('No test port');
+  await new Promise<void>(resolve=>probe.close(()=>resolve()));
+  const base=referenceServices();
+  let opens=0,disposed=0;
+  const services:RealmRoomServices={auth:base.auth,open:async id=>{
+    const handle=await base.open(id);
+    if(++opens>1)return handle;
+    return {...handle,bindRoom:()=>{throw new Error('binding failed');},dispose:async()=>{disposed++;await handle.dispose();}};
+  }};
+  const {server}=createRealmServer(services);
+  await server.listen(address.port,'127.0.0.1');
+  let room:Room<KingdomRoomState>|undefined;
+  try{
+    const client=new Client(`http://127.0.0.1:${address.port}`);
+    await expect(client.joinOrCreate<KingdomRoomState>('kingdom',base.issue(),KingdomRoomState)).rejects.toBeTruthy();
+    expect(disposed).toBe(1);
+    room=await client.joinOrCreate<KingdomRoomState>('kingdom',base.issue(),KingdomRoomState);
+    await waitFor(()=>!!room!.state.walkers.get(room!.sessionId));
+    expect(room.roomId).toBe('k:999000001');
+    expect(opens).toBe(2);
+  }finally{
+    await room?.leave();await server.gracefullyShutdown(false);
+  }
+});
 it('three real SDK clients share movement and reload without reusing a single-use entry ticket',async()=>{
   const probe=createNetServer();await new Promise<void>(resolve=>probe.listen(0,'127.0.0.1',resolve));
   const address=probe.address();if(!address||typeof address==='string')throw new Error('No test port');

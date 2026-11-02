@@ -6,12 +6,14 @@ import './growth-card.css';
 const stageName = (stage: string) => stage.charAt(0).toUpperCase() + stage.slice(1).replaceAll('-', ' ');
 const days = (count: number) => `${count} ${count === 1 ? 'day' : 'days'}`;
 
-/** A card inset; its caller owns the subject and subscription lifecycle. */
+/**
+ * A card inset; its caller owns the subject and subscription lifecycle. A staged feed renders exactly like a live one:
+ * the card prints no feed label, so its host shows it only where the progress is real.
+ */
 export function HomeProgress(props: { state: HomeProgressState }): JSX.Element {
   return <section class="gc-card" aria-label="Home progress">
     <div class="gc-paper">
       <header class="gc-heading"><div><p class="gc-kicker">A place to come home to</p><h2>Home growth</h2></div><span class="gc-mark" aria-hidden="true">✦</span></header>
-      <Show when={props.state.label === 'SIMULATED'}><p class="gc-simulated">SIMULATED</p></Show>
       <Show when={props.state.kind === 'ready' ? props.state : undefined} fallback={
         <p class="gc-message" role="status">{props.state.kind === 'loading' ? 'Gathering home progress…' : props.state.kind === 'invalid' ? 'Home progress could not be verified.' : props.state.kind === 'empty' ? 'No home progress in this snapshot.' : 'Home progress is unavailable.'}</p>
       }>{ready => <>

@@ -1,0 +1,93 @@
+--- a/apps/realm/src/main.ts
++++ b/apps/realm/src/main.ts
+@@ -94 +94,2 @@
+-  const panel = new RealmPanelService({ gifts: new RealmPanelGifts({ db: pool, services: boot.services, origin }), db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded });
++  const panelGifts = new RealmPanelGifts({ db: pool, services: boot.services, origin });
++  const panel = new RealmPanelService({ gifts: panelGifts, db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded });
+@@ -97 +98 @@
+-  mountRealmWatchRoutes(transport.app, boot);
++  mountRealmWatchRoutes(transport.app, { ...boot, gifts: panelGifts });
+--- a/apps/realm/src/bootstrap/watch.ts
++++ b/apps/realm/src/bootstrap/watch.ts
+@@ -6,0 +7 @@
++import type { RealmPanelGifts } from '../ingress/panel/gifts';
+@@ -19,0 +21 @@
++  readonly gifts?: Pick<RealmPanelGifts, 'feed'>;
+@@ -29,0 +32,2 @@
++    let giftTimer: ReturnType<typeof setInterval> | undefined;
++    let giftSequence = 0, readingGifts = false;
+@@ -36,0 +41 @@
++      if (giftTimer) clearInterval(giftTimer);
+@@ -131,0 +137,19 @@
++      if (input.gifts) {
++        const readGifts = async () => {
++          if (ended || blocked || readingGifts) return;
++          readingGifts = true;
++          try {
++            const page = await input.gifts!.feed(parsed.data, giftSequence);
++            if (ended || blocked || !kingdom.current) return;
++            // This transport skeleton carries no credit names until the owner supplies revocation updates.
++            const facts = page.facts.map(fact => ({ ...fact, credit: null }));
++            if (facts.length && send('panel-gifts', { version: 1, throughSequence: page.throughSequence, facts })) {
++              giftSequence = page.throughSequence;
++            }
++          } catch { close('gift-feed-unavailable'); }
++          finally { readingGifts = false; }
++        };
++        giftTimer = setInterval(() => { void readGifts(); }, 1000);
++        giftTimer.unref?.();
++        void readGifts();
++      }
+--- /dev/null
++++ b/apps/web/src/realm/adapters/panel-gift-wire.ts
+@@ -0,0 +1,25 @@
++import { z } from 'zod';
++import { KingdomIdSchema, EpochMsSchema, TokenSchema } from '@chatdom/shared';
++import type { PanelGiftFact } from '../../../../../packages/shared/src/panel';
++
++const Integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
++const Fact = z.strictObject({
++  version: z.literal(1), type: z.literal('panel.gift'), id: TokenSchema,
++  kingdomId: KingdomIdSchema, giftId: z.string().regex(/^[a-z0-9]{1,64}$/),
++  sequence: Integer.min(1), effectVersion: Integer.min(1), committedAt: EpochMsSchema, endsAt: EpochMsSchema,
++  credit: z.strictObject({ name: z.string().min(1).max(64), slot: Integer.nullable() }).nullable(),
++  target: z.strictObject({ plotId: TokenSchema, slot: Integer }).nullable(), line: z.string().min(1).max(160),
++}).refine(fact => fact.endsAt >= fact.committedAt && fact.endsAt - fact.committedAt <= 86_400_000);
++const Page = z.strictObject({ version: z.literal(1), throughSequence: Integer, facts: z.array(Fact).max(64) });
++export interface PanelGiftPage { readonly version: 1; readonly throughSequence: number; readonly facts: readonly PanelGiftFact[] }
++
++/** A separate gift sequence: never reinterpret this as TwitchMomentFact or a domain sequence. */
++export function readPanelGiftPage(raw: unknown, kingdomId: string): PanelGiftPage {
++  const page = Page.parse(raw);
++  let previous = 0;
++  for (const fact of page.facts) {
++    if (fact.kingdomId !== kingdomId || fact.sequence <= previous || fact.sequence > page.throughSequence) throw new Error('Invalid gift page.');
++    previous = fact.sequence;
++  }
++  return page;
++}
+--- a/apps/web/src/realm/adapters/watch.ts
++++ b/apps/web/src/realm/adapters/watch.ts
+@@ -3,0 +4 @@
++import { readPanelGiftPage, type PanelGiftPage } from './panel-gift-wire';
+@@ -24,0 +26,2 @@
++  /** Owner must restore current decorations and animate only newly witnessed facts. */
++  onGiftPage?: (page: PanelGiftPage) => void;
+@@ -67 +70 @@
+-      const limit = type === 'walkers' ? REALM_WALKER_FRAME_MAX_BYTES : 8_000_000;
++      const limit = type === 'walkers' ? REALM_WALKER_FRAME_MAX_BYTES : type === 'panel-gifts' ? 262_144 : 8_000_000;
+@@ -109,0 +113,4 @@
++    });
++    listen('panel-gifts', raw => {
++      if (!current) throw new Error('Gift page preceded its kingdom checkpoint.');
++      options.onGiftPage?.(readPanelGiftPage(raw, kingdomId));
+--- a/apps/web/src/kingdom-entry/spectator.ts
++++ b/apps/web/src/kingdom-entry/spectator.ts
+@@ -8,0 +9 @@
++import type { PanelGiftPage } from '../realm/adapters/panel-gift-wire';
+@@ -16 +17 @@
+-export function createRealmSpectatorSource(options: { kingdomId: KingdomId; fetcher?: RealmFetch; source?: (path: string) => WatchEventSource }) {
++export function createRealmSpectatorSource(options: { kingdomId: KingdomId; fetcher?: RealmFetch; source?: (path: string) => WatchEventSource; onGiftPage?: (page: PanelGiftPage) => void }) {
+@@ -24 +25 @@
+-      ...(options.source ? { source: options.source } : {}) });
++      ...(options.source ? { source: options.source } : {}), ...(options.onGiftPage ? { onGiftPage: options.onGiftPage } : {}) });

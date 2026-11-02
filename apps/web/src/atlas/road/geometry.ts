@@ -36,14 +36,15 @@ const unit = (seed: number, salt: number) => (roadSeed(`${seed}:${salt}`) % 10_0
  * Plan the road from `from` to `to`. Its bend is a gentle arc to one side (chosen by the pair, never by direction,
  * so the road back is the same road), with a low wobble of a surveyor's hand along it. Sea lanes arc further.
  */
-export function planRoad(from: RoadEnd, to: RoadEnd, key: string, sea = false): RoadPath {
+export function planRoad(from: RoadEnd, to: RoadEnd, key: string, sea = false, samples = ROAD_SAMPLES): RoadPath {
+  const count = Math.max(8, Math.min(400, Math.round(samples)));
   const seed = roadSeed(key);
   const dx = to.x - from.x, dy = to.y - from.y;
   const distance = Math.hypot(dx, dy);
-  const points = new Float64Array(ROAD_SAMPLES * 2);
-  const lengths = new Float64Array(ROAD_SAMPLES);
+  const points = new Float64Array(count * 2);
+  const lengths = new Float64Array(count);
   if (distance < 1e-6) {
-    for (let i = 0; i < ROAD_SAMPLES; i++) { points[i * 2] = from.x; points[i * 2 + 1] = from.y; }
+    for (let i = 0; i < count; i++) { points[i * 2] = from.x; points[i * 2 + 1] = from.y; }
     return { points, lengths, total: 0, sea };
   }
   const nx = -dy / distance, ny = dx / distance;
@@ -55,8 +56,8 @@ export function planRoad(from: RoadEnd, to: RoadEnd, key: string, sea = false): 
   const c2 = { x: from.x + dx * 0.72 + nx * bend * (1.4 - lean), y: from.y + dy * 0.72 + ny * bend * (1.4 - lean) };
   const wobble = sea ? 0 : distance * 0.012;
   const phase = unit(seed, 4) * Math.PI * 2;
-  for (let i = 0; i < ROAD_SAMPLES; i++) {
-    const t = i / (ROAD_SAMPLES - 1);
+  for (let i = 0; i < count; i++) {
+    const t = i / (count - 1);
     const u = 1 - t;
     const bx = u * u * u * from.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * to.x;
     const by = u * u * u * from.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * to.y;
@@ -66,7 +67,7 @@ export function planRoad(from: RoadEnd, to: RoadEnd, key: string, sea = false): 
     points[i * 2 + 1] = by + ny * w;
   }
   let total = 0;
-  for (let i = 1; i < ROAD_SAMPLES; i++) {
+  for (let i = 1; i < count; i++) {
     total += Math.hypot(points[i * 2]! - points[i * 2 - 2]!, points[i * 2 + 1]! - points[i * 2 - 1]!);
     lengths[i] = total;
   }

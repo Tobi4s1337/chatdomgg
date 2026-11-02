@@ -1,14 +1,15 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { geographyOf, type GeoRealm } from '../data/model';
 import { makeWorld } from '../data/fixtures.test-support';
 import { DISTANCE_SCALE, MAX_SCALE } from './camera';
 import {
-  clusterLabelFade, clusterLabelPx, labelledRealms, MARKED_TIERS, markedTiers, REALM_LABEL_FROM, realmLabelFade, realmLabelPx, realmLines, regionLabelFade,
-  STAMP_SCALE, stampPx, stampVisible,
+  clusterLabelFade, clusterLabelPx, labelledRealms, MARK_ALPHA, MARKED_TIERS, markedTiers, REALM_LABEL_FROM, realmLabelFade, realmLabelPx, realmLines, regionLabelFade,
+  STAMP_ALPHA, STAMP_GROUPS, STAMP_SCALE, stampPx, stampVisible,
 } from './overlay';
 import { decorBand, DECOR_SPACING } from './pyramid';
 
-const HOLDING_RADIUS = [6, 3.4, 1.8, 1.25] as const; // world units, as in a real survey preview
+const HOLDING_RADIUS = [6, 3.4, 1.8, 1.25, 0.5] as const; // world units, as in a real edition (the hamlet's is the lattice's)
 
 describe('stampPx', () => {
   it('draws a holding about its own diameter wide, within each tier’s limits', () => {
@@ -20,7 +21,7 @@ describe('stampPx', () => {
   });
 
   it('grows with the zoom and never shrinks', () => {
-    for (let tier = 0; tier < 4; tier++) {
+    for (let tier = 0; tier < 5; tier++) {
       let previous = 0;
       for (let scale = 0.05; scale <= MAX_SCALE; scale *= 1.05) {
         const px = stampPx(tier, HOLDING_RADIUS[tier]!, scale);
@@ -32,16 +33,40 @@ describe('stampPx', () => {
 
   it('never draws a smaller tier larger than a bigger one at the same zoom', () => {
     for (let scale = 0.05; scale <= MAX_SCALE; scale *= 1.05) {
-      for (let tier = 1; tier < 4; tier++) {
+      for (let tier = 1; tier < 5; tier++) {
         expect(stampPx(tier, HOLDING_RADIUS[tier]!, scale)).toBeLessThanOrEqual(stampPx(tier - 1, HOLDING_RADIUS[tier - 1]!, scale));
       }
     }
   });
 });
 
+describe('the hamlet', () => {
+  it('draws a village’s stamp in a village’s zoom band, one step smaller and quieter', () => {
+    expect(STAMP_GROUPS).toEqual(['capital', 'city', 'town', 'village', 'village']);
+    for (let scale = 0.05; scale <= MAX_SCALE; scale *= 1.03) expect(stampVisible(4, scale)).toBe(stampVisible(3, scale));
+    expect(stampPx(4, 0.5, DISTANCE_SCALE.kingdom)).toBe(12);
+    expect(stampPx(4, 0.5, MAX_SCALE)).toBeCloseTo(42, 9);
+    // Even at a village's own radius a hamlet's stamp is never larger, and its limits sit a step below.
+    for (let scale = 0.05; scale <= MAX_SCALE; scale *= 1.05) expect(stampPx(4, 1.25, scale)).toBeLessThanOrEqual(stampPx(3, 1.25, scale));
+    expect(stampPx(4, 1.25, 0.05)).toBeLessThan(stampPx(3, 1.25, 0.05));
+    expect(stampPx(4, 1.25, MAX_SCALE)).toBeLessThan(stampPx(3, 1.25, MAX_SCALE));
+    expect(STAMP_ALPHA[4]).toBeLessThan(STAMP_ALPHA[3]);
+    expect(MARK_ALPHA[4]).toBeLessThan(MARK_ALPHA[3]);
+    expect(STAMP_ALPHA.slice(0, 4)).toEqual([1, 1, 1, 1]);
+    expect(MARK_ALPHA.slice(0, 4)).toEqual([1, 1, 1, 0.75]);
+  });
+
+  it('is marked wherever a village is, and never where a village is not', () => {
+    for (let scale = 0.05; scale <= MAX_SCALE; scale *= 1.01) {
+      const marked = markedTiers(scale);
+      expect(4 < marked, `scale ${scale}`).toBe(3 < marked);
+    }
+  });
+});
+
 describe('stampVisible', () => {
   it('shows capitals always and each smaller tier from its distance on', () => {
-    expect(STAMP_SCALE).toEqual([0, DISTANCE_SCALE.continent, DISTANCE_SCALE.realm, DISTANCE_SCALE.kingdom]);
+    expect(STAMP_SCALE).toEqual([0, DISTANCE_SCALE.continent, DISTANCE_SCALE.realm, DISTANCE_SCALE.kingdom, DISTANCE_SCALE.kingdom]);
     expect(stampVisible(0, 0.05)).toBe(true);
     expect(stampVisible(1, DISTANCE_SCALE.continent - 1e-9)).toBe(false);
     expect(stampVisible(1, DISTANCE_SCALE.continent)).toBe(true);
@@ -64,14 +89,16 @@ describe('markedTiers', () => {
     expect(MARKED_TIERS).toHaveLength(DECOR_SPACING.length);
     for (let i = 1; i < MARKED_TIERS.length; i++) expect(MARKED_TIERS[i]).toBeGreaterThanOrEqual(MARKED_TIERS[i - 1]!);
     expect(markedTiers(0.05)).toBe(1);
-    expect(markedTiers(MAX_SCALE)).toBe(4);
+    // Every tier rank, hamlets included, wherever villages are marked.
+    expect(markedTiers(MAX_SCALE)).toBe(5);
+    for (const marked of MARKED_TIERS) expect(marked > 3).toBe(marked > 4);
   });
 
   it('marks on paper every tier whose stamp is drawn, so decor is kept clear of it', () => {
     for (let scale = 0.05; scale <= MAX_SCALE; scale *= 1.01) {
       const marked = markedTiers(scale);
       expect(marked).toBe(MARKED_TIERS[decorBand(scale)]);
-      for (let tier = 0; tier < 4; tier++) if (stampVisible(tier, scale)) expect(tier, `scale ${scale}`).toBeLessThan(marked);
+      for (let tier = 0; tier < 5; tier++) if (stampVisible(tier, scale)) expect(tier, `scale ${scale}`).toBeLessThan(marked);
     }
   });
 });

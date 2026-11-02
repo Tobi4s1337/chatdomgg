@@ -7,15 +7,17 @@ import { createVoxelMaterial } from '@chatdom/render';
 import { MATERIALS } from '@chatdom/content';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import { createKingdomCitizens } from './citizen-scene';
-import { createObservedWalkerTrack, walkerSlots } from './observed-walkers';
+import { createObservedWalkers, createObservedWalkerTrack, walkerSlots } from './observed-walkers';
+import type { InteractionRegistry } from '@chatdom/world/interactions';
 import { createRealmWatch, type WatchEventSource } from '../realm/adapters/watch';
 
-const renderer = vi.hoisted(() => ({ update: vi.fn(), dispose: vi.fn() }));
+const renderer = vi.hoisted(() => ({ update: vi.fn(), dispose: vi.fn(), heads: new Map(), grips: new Map() }));
+const created = vi.hoisted(() => ({ count: 0 }));
 vi.mock('../citizens', () => ({ createDefaultCitizenLooks: () => ['hearth', 'tide', 'grove', 'clay', 'sun', 'dusk'].map(id => ({ id, parts: [] })),
-  createCitizenRenderer: async () => renderer }));
+  createCitizenRenderer: async () => { created.count++; return renderer; } }));
 afterEach(() => vi.useRealTimers());
 
-it('one witnessed slot takes over body, shadow, speech and camera feet while motion and windows survive; stale and revised watch poses disappear', async () => {
+it('one witnessed slot is the only body; chat-only people stay light while windows survive; stale and revised watch poses disappear', async () => {
   vi.useFakeTimers();
   const kingdomId = KingdomIdSchema.parse('129634568'), epoch = 'presence-1', at = Date.now();
   const manifest = { version: 1 as const, kingdomId, origin: 'live' as const, layoutRevision: 'streets-1', collisionRevision: 1, sceneHash: 'a'.repeat(64) };
@@ -52,28 +54,24 @@ it('one witnessed slot takes over body, shadow, speech and camera feet while mot
   crowd.applyFrame(frame);
   const camera = new THREE.PerspectiveCamera(60, 1440 / 900, .1, 1000);
   camera.position.set(0, 3, 10); camera.lookAt(0, 1, 0); camera.updateMatrixWorld();
-  const motion = crowd.update(at, 45, camera);
-  expect(renderer.update.mock.lastCall?.[0]).toEqual([expect.objectContaining({ look: 'dusk' })]);
-  // An older replay frame may omit a look. It must retain the last supplied recipe in this presence epoch.
-  crowd.applyFrame({ ...frame, sequence: 2, asOf: at, windows: frame.windows.map(({ slot, present, publicName, since }) => ({ slot, present, publicName, since })) });
+  // Chatting without walking: no body is ever meshed or drawn for them. They are their window.
   crowd.update(at, 45, camera);
+  expect(created.count).toBe(0);
+  expect(renderer.update).not.toHaveBeenCalled();
+  expect(crowd.subject(slot)).toMatchObject({ opacity: 0, homeLit: true });
   const light = crowd.lightFrame(at);
-  expect(renderer.update.mock.lastCall?.[0]).toEqual([expect.objectContaining({ look: 'dusk' })]);
+  expect(light?.windows[0]).toMatchObject({ slot, present: true, since: at - 45_000 });
+  crowd.applyFrame({ ...frame, sequence: 2, asOf: at, windows: frame.windows.map(({ slot, present, publicName, since }) => ({ slot, present, publicName, since })) });
   expect(crowd.receiveChat({ version: 1, id: 'heard-once', kingdomId, origin: 'live', epoch, slot,
     asOf: at, expiresAt: at + 9000, parts: [{ kind: 'text', text: 'Here I am.' }] })).toBe(true);
-  expect(crowd.update(at, 45, camera, undefined, feet)).toEqual(motion);
-  expect(renderer.update.mock.lastCall?.[0]).toEqual([]);
-  expect(scene.children.find(child => child instanceof THREE.InstancedMesh)).toHaveProperty('count', 0);
-  expect(crowd.subject(slot)?.position).toEqual([0, 0, 0]);
-  expect(crowd.lightFrame(at)).toEqual(light);
-  // Speech follows the actual rendered head, never an inferred standing-height offset.
+  // Walking: the witnessed walker is the body, and the camera's subject is at their feet. The window stays lit.
+  crowd.update(at, 45, camera, undefined, feet);
+  expect(renderer.update).not.toHaveBeenCalled();
+  expect(scene.children.filter(child => child instanceof THREE.InstancedMesh).every(mesh => (mesh as THREE.InstancedMesh).count === 0)).toBe(true);
+  expect(crowd.subject(slot)).toMatchObject({ position: [0, 0, 0], opacity: 1 });
+  expect(crowd.lightFrame(at)?.windows[0]).toMatchObject({ slot, present: true, since: at - 45_000 });
+  // The host's 80 ms speech path is quiet; the per-frame bus carries the line on the walker's own label.
   expect(crowd.speechLabels(camera, 1440, 900, at)).toEqual([]);
-  const head = new THREE.Vector3(0, 2.05, 0), heads = new Map([[self.id, head]]);
-  const point = head.clone().project(camera);
-  expect(crowd.speechLabels(camera, 1440, 900, at, new Set(), heads)).toEqual([{ slot, name: 'Juniper', distance: head.distanceTo(camera.position),
-    x: (point.x + 1) * 720, y: (1 - point.y) * 450, parts: [{ kind: 'text', text: 'Here I am.' }] }]);
-  heads.clear();
-  expect(crowd.speechLabels(camera, 1440, 900, at, new Set(), heads)).toEqual([]);
   const interpolation = createObservedWalkerTrack(manifest);
   interpolation.receive(sample(at, 0), 0); interpolation.receive(sample(at + 200, 2), 200);
   expect(interpolation.sample(300)[0]?.x).toBe(.5); // 250 ms delay; no extrapolation.
@@ -85,7 +83,7 @@ it('one witnessed slot takes over body, shadow, speech and camera feet while mot
   source.emit('walkers', sample(at + 400, 0)); // An expired frame cannot be made fresh by redelivery.
   expect(track.sample(performance.now())).toEqual([]);
   crowd.update(at, 45, camera, undefined, walkerSlots(track.sample(performance.now())));
-  expect(renderer.update.mock.lastCall?.[0]).toHaveLength(1);
+  expect(crowd.subject(slot)).toMatchObject({ opacity: 0 });
   source.emit('walkers', sample(at + 2400, 4));
   expect(track.sample(performance.now())).toHaveLength(1);
   source.emit('revision', { layoutRevision: 'streets-2', collisionRevision: 2 });
@@ -97,4 +95,31 @@ it('one witnessed slot takes over body, shadow, speech and camera feet while mot
   expect(track.sample(performance.now())).toHaveLength(1);
   watch.dispose(); expect(track.sample(performance.now())).toEqual([]);
   off(); crowd.dispose(); clay.dispose();
-});
+}, 30_000);
+
+it('draws the nearest 64 walkers in full and the rest as simple figures, never dropping anyone', async () => {
+  const kingdomId = KingdomIdSchema.parse('129634568');
+  const manifest = { kingdomId, origin: 'live' as const, layoutRevision: 'streets-1', collisionRevision: 1 };
+  let receive: ((frame: RealmWalkerFrame) => void) | undefined;
+  const feed = { subscribe(next: (frame: RealmWalkerFrame) => void) { receive = next; return () => { receive = undefined; }; } };
+  const scene = new THREE.Scene(), material = createVoxelMaterial(MATERIALS, 'avatar');
+  const camera = new THREE.PerspectiveCamera(60, 1.6, .1, 1000); camera.position.set(0, 2, 0); camera.lookAt(0, 1, 10); camera.updateMatrixWorld();
+  const canvas = { clientWidth: 1440, clientHeight: 900 } as HTMLCanvasElement;
+  renderer.update.mockClear();
+  const observed = await createObservedWalkers(scene, camera, canvas, {} as VoxelWorkerPool, material, manifest, feed, { get: () => undefined } as unknown as InteractionRegistry);
+  const walkers = Array.from({ length: 90 }, (_, i) => ({ id: `w${String(i).padStart(2, '0')}`, name: `Walker ${i}`, homeSlot: i, look: 'tide',
+    x: 0, y: 0, z: 2 + i * .5, yaw: 0, distance: i, speed: 1, placement: 0 }));
+  receive!({ version: 1, kingdomId, origin: 'live', layoutRevision: 'streets-1', collisionRevision: 1, writerEpoch: 'writer-1', sampledAt: 1, walkers });
+  const now = performance.now();
+  observed.frame(now); observed.draw(now);
+  const full = renderer.update.mock.lastCall![0] as { id: string }[];
+  expect(full.map(sample => sample.id)).toEqual(walkers.slice(0, 64).map(walker => walker.id));
+  const figures = scene.getObjectByName('walker-figures') as THREE.InstancedMesh;
+  expect(figures.count).toBe(0); // simple figures ease in from nothing
+  observed.frame(now + 100); observed.draw(now + 100);
+  expect(figures.count).toBe(26);
+  // Far walkers still have a head for their name and bubble.
+  expect(observed.labels().map(label => label.id)).toContain('w66');
+  observed.dispose(); material.dispose();
+  expect(scene.getObjectByName('walker-figures')).toBeUndefined();
+}, 30_000);

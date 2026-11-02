@@ -3,20 +3,20 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { KingdomIdSchema, type KingdomId } from '../../../../packages/shared/src/identity';
 import { migrateRealmSchema } from '../../../realm/src/persistence/migrate';
+import { assertRealmSchema } from '../../../realm/src/persistence/schema';
 import { sha256 } from '../realm-auth/secrets';
 import { SIMULATED_OIDC_PATH } from '../realm-auth/simulated-provider';
 import { readGateReply, type GateReply } from './contracts';
 import type { LiveChannels, RaidGrants, TargetDirectory, WriteConsent } from './policy';
-import migrationSql from './realm-migration.sql?raw';
 import { createRaidGateService, type RaidGateService } from './service';
 import { createRealmSessionAuthenticator, gateKingdomFromPath } from './session';
 
 /**
  * The Raid Gate against real Postgres, in a random `realm_test_*` schema that is dropped afterwards. Sessions,
  * persons, kingdoms and deeds are realm-auth's and the realm's own tables; the gate's tables come from
- * `realm-migration.sql`, applied here until main registers it. Live state, grants, consent and the destination
+ * the registered realm migration. Live state, grants, consent and the destination
  * directory are SIMULATED ports. Nothing reaches Twitch.
- *   REALM_DATABASE_TESTS=1 node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run apps/api/src/raid-gate/postgres.integration.test.ts
+ *   REALM_DATABASE_TESTS=1 node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --no-fsModuleCache apps/api/src/raid-gate/postgres.integration.test.ts
  */
 const ORIGIN = 'http://localhost:5190';
 const COOKIE = 'chatdom_session';
@@ -102,11 +102,10 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('Raid Gate on Postgres 
   beforeAll(async () => {
     if (!process.env.DATABASE_URL) throw new Error('REALM_DATABASE_TESTS=1 needs DATABASE_URL; load it with --env-file-if-exists=.env');
     admin = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
-    expect(await migrateRealmSchema(admin, schema)).toContain('0003_realm_allocation');
+    expect(await migrateRealmSchema(admin, schema)).toContain('0011_realm_raid_gate');
+    expect(await migrateRealmSchema(admin, schema)).toEqual([]);
     pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 8, options: `-c search_path="${schema}"` });
-    // Until main registers the file as 0009_realm_raid_gate, the realm migrator does not know these tables.
-    const registered = (await pool.query<{ present: boolean }>("select to_regclass('realm_raid_gate_actions') is not null as present")).rows[0]!.present;
-    if (!registered) await pool.query(migrationSql);
+    await assertRealmSchema(pool);
     await found(SOURCE);
     await found(MIRA);
     for (const id of [MONARCH, ...WALKERS]) handles.set(id, await person(id));

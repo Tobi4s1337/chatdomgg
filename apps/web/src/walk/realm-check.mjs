@@ -1,7 +1,7 @@
 // The realm client's movement boundary in two real browsers: fixed-step staging on slow frames, one jump per
 // press, a published collision revision, a room placement, and every PLAYER_FIELDS field against the room's own.
-// It runs the actual KingdomRoom (uWS, SIMULATED reference services, memory only) in this process so it can publish
-// a revision like an authority, and the SIMULATED court page from a vite dev server. It is a diagnostic of the
+// It runs the actual KingdomRoom (uWS, dev reference services, memory only) in this process so it can publish
+// a revision like an authority, and the dev court page from a vite dev server. It is a diagnostic of the
 // Predict/revision boundary, not kingdom acceptance: that is `capture.mjs` on the kingdom's own walk entry.
 // Usage: node apps/web/src/walk/realm-check.mjs [--realm-port 5188] [--web-port 5189] [--out shots/walk/wc06]
 import { chromium } from '@playwright/test';
@@ -24,7 +24,7 @@ const WALL_X = 4.5, RADIUS = .28, FACE = WALL_X - RADIUS;
 const LAUNCH = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox',
   // The court page asks for the realm on 5191; this check's own room listens elsewhere.
   `--host-rules=MAP 127.0.0.1:5191 127.0.0.1:${realmPort}`];
-const log = { started: new Date().toISOString(), realm: `127.0.0.1:${realmPort} (SIMULATED reference services, memory only)`, page: '', steps: {} };
+const log = { started: new Date().toISOString(), realm: `127.0.0.1:${realmPort} (dev reference services, memory only)`, page: '', steps: {} };
 const problems = [];
 const check = (ok, message) => { if (!ok) throw new Error(message); };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));

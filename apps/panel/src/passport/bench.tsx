@@ -56,7 +56,7 @@ function Bench(): JSX.Element {
   return <main class="cppb">
     <div class="cppb-frame" data-closed={closed() ? 'true' : undefined}>
       <Show when={!closed()} fallback={<button type="button" class="cppb-reopen" onClick={() => setClosed(false)}>Open the passport again</button>}>
-        <PanelPassport transport={transport} places={places} simulated initialView={initialView} onClose={() => setClosed(true)}
+        <PanelPassport transport={transport} places={places} initialView={initialView} onClose={() => setClosed(true)}
           onState={next => settled(next.kind)} />
       </Show>
     </div>

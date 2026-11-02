@@ -173,7 +173,7 @@ streamer for 30 s, on stream.
 | Goals | `channel.goal.*` | A great banner woven in the plaza, a stripe for each step; a goal never fills a wonder (`chatdom/Twitch.md` §7) |
 | Poll | `channel.poll.*` | A royal decree, and the winning option gets built |
 | Prediction | `channel.prediction.*` | An odds board in the Tavern; the outcome lights up on the table |
-| Incoming raid | `channel.raid` | A caravan under the raider's banner, with a tribute forged in their colours |
+| Incoming raid | `channel.raid` | A caravan under the raider's banner and colours, carrying lanterns and cloth |
 | Shared Chat | `channel.shared_chat.*` | A bridge to the other kingdom that both chats walk across |
 | Shoutout | `channel.shoutout.create` | The crier announces it, and a signpost to that kingdom appears |
 | Ad break | `channel.ad_break.begin` | The kingdom holds its breath: vote windows freeze and the director holds a calm wide shot. Nobody is paid for watching ads |
@@ -215,8 +215,8 @@ raids we observe are ours to draw.
 
 **The map uses real data** (`Atlas.md` §10): as much real Surveyor data as there is, labelled with its date:
 live kingdoms blooming in vermilion wash on a day map, with their pennants, and real raid roads.
-The Atlas has no night. A moment the real data lacks, such as a raid train, may be simulated on the real map and
-is labelled SIMULATED.
+The Atlas has no night. Staged moments, such as a raid train, stay on private `/-/` benches with internal
+`simulated` provenance and no visible simulation chip. They never enter the real map or its roads feed.
 
 ## 8. Chronicles: the director as a product
 
@@ -364,3 +364,7 @@ Every community is asked one question: **who will build the most epic kingdom?**
 
 **Exception to record.** The building doc allows arbitrary geometry only as charter Monuments. This opens free
 voxels on your own plot, within a budget and behind the publish check.
+
+## Decided on 2026-11-02
+
+- **2026-11-02 — Founder raid-show decisions 25 and 45.** Incoming caravans carry banners, lanterns and cloth; there is no raid tribute. Staged fixtures stay on private `/-/` benches, retain internal simulated provenance and never enter live feeds. No visible SIMULATED chip is required or shown.

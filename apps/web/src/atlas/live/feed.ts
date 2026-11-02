@@ -3,6 +3,7 @@ import {
   type AtlasAlignment, type AtlasDab, type AtlasManifest,
 } from '@chatdom/shared';
 import type { PreviewSource, PreviewWorld } from '../data/preview';
+import { validateCaravan, type CaravanRaid } from '../data/roads';
 
 /**
  * The live layer's transport (Spec 01 R11). It reads one land's live pointer, then the three artifacts its manifest
@@ -61,6 +62,11 @@ export interface FeedOptions {
   openStream?: ((url: string) => EventSourceLike) | null;
   setTimer?: (run: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
+  /**
+   * A fresh witnessed raid the stream announced at the moment it was stored. Announced once and never replayed: a
+   * reconnect or a reload hears only raids stored after it. A malformed event is dropped without a word.
+   */
+  onRaid?: (raid: CaravanRaid) => void;
 }
 
 export const RECONCILE_MS = 60_000;
@@ -193,6 +199,16 @@ export class LiveFeed {
             this.refused = 'corrupt';
             this.emit();
           }
+        });
+        stream.addEventListener('raid', (event) => {
+          if (this.controller.signal.aborted || !this.options.onRaid) return;
+          let raid: CaravanRaid;
+          try {
+            raid = validateCaravan(JSON.parse(event.data) as unknown);
+          } catch {
+            return;
+          }
+          this.options.onRaid(raid);
         });
         stream.onopen = () => {
           this.transport = 'streaming';

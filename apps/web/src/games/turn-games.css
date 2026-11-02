@@ -1,0 +1,38 @@
+.gather-turn-hud { box-sizing: border-box; }
+.gather-turn-heading { display: flex; align-items: center; justify-content: center; position: relative; min-height: 22px; }
+.gather-turn-heading p { margin: 0; color: var(--cd-brass-hi); }
+.gather-turn-clock { position: absolute; right: 0; color: var(--cd-cream); font: 21px/1 var(--cd-face-story); font-variant-numeric: tabular-nums; }
+.gather-turn-clock small { font: 12px var(--cd-face-body); color: var(--cd-cream-soft); }
+.gather-turn-hud .gather-turn-message { margin: 4px 0 7px; font-size: 17px; line-height: 1.2; }
+.gather-turn-hud .gather-turn-rules { margin: 7px 0 0; font-size: 13px; line-height: 1.2; color: var(--cd-cream-soft); }
+.gather-stone-columns { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.gather-stone-columns .cd-crest { min-width: 0; padding: 0; font: 19px var(--cd-face-story); }
+.gather-stone-columns .is-selected { border-color: var(--cd-brass-hi); box-shadow: inset 0 0 0 1px var(--cd-brass-hi), inset 0 -3px 0 #25170d55; color: var(--cd-cream); }
+.gather-turn-keys { margin: 6px 0 0; font-size: 12px; color: var(--cd-cream-soft); }
+.gather-turn-key { margin-left: 3px; }
+.gather-turn-hud button:disabled { opacity: .5; cursor: not-allowed; }
+.gather-dice-scores { display: flex; justify-content: center; gap: 4px; }
+.gather-dice-player { flex: 1 1 0; min-width: 0; padding: 4px 5px; border: 1px solid transparent; border-radius: 4px; background: var(--cd-wood-well); }
+.gather-dice-player.is-current { border-color: var(--cd-brass); }
+.gather-dice-player.is-own span { color: var(--cd-brass-hi); }
+.gather-dice-player span { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+.gather-dice-player strong { display: block; font: 21px/1 var(--cd-face-story); font-variant-numeric: tabular-nums; }
+.gather-dice-play { display: flex; gap: 6px; align-items: center; margin-top: 7px; }
+.gather-die { box-sizing: border-box; width: 36px; height: 36px; flex: 0 0 36px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 5px; border: 1px solid var(--cd-brass); border-radius: 5px; background: var(--cd-cream); box-shadow: inset 0 -3px 0 #a78b61, 0 2px 4px #25170d66; }
+.gather-die i { display: block; border-radius: 50%; }
+.gather-die .is-pip { background: var(--cd-wood-well); box-shadow: inset 0 1px 1px #25170d99; }
+.gather-dice-pot { min-width: 48px; display: grid; text-align: left; }
+.gather-dice-pot small { color: var(--cd-cream-soft); font-size: 11px; line-height: 1; }
+.gather-dice-pot strong { font: 22px/1 var(--cd-face-story); }
+.gather-dice-play .cd-crest { min-width: 0; padding: 5px; }
+.gather-turn-hud .gather-turn-start { min-height: 44px; margin: 7px auto 0; padding: 4px 18px; }
+.gather-turn-hud .gather-game-leave { display: block; margin: 0 auto; }
+@media (max-width: 600px), (pointer: coarse) {
+  .gather-turn-hud { padding-top: 8px; padding-bottom: 0; }
+  .gather-turn-hud .gather-turn-message { margin: 2px 0 5px; }
+  .gather-turn-hud .gather-turn-rules { margin-top: 5px; }
+  .gather-turn-hud .gather-game-leave { min-height: 38px; padding: 5px 12px; }
+}
+@media (pointer: coarse) {
+  .gather-turn-keys, .gather-turn-key { display: none; }
+}

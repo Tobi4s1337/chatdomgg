@@ -7,10 +7,10 @@ import { PANEL_PASSPORT_REPLY_LIMIT, PanelPassportUnauthorized, passportExtensio
 
 const URL = 'https://ebs.chatdom.example/passport';
 
-/** A backend double that answers through the real reader for a SIMULATED holder, and records what it was sent. */
+/** Test-only authorities use a live card and origin before the real reader constructs its reply. */
 function backend(options: { status?: number; body?: (json: unknown) => string } = {}) {
   const sim = simulatedPassportAuthorities('many', { signedIn: true, travelsHidden: false });
-  const reader = createPassportReader(sim.ports);
+  const reader = createPassportReader({ ...sim.ports, origin: 'live', card: async (...args) => { const source = await sim.ports.card(...args); return { ...source, document: { ...source.document, origin: 'live' } }; } });
   const seen: { url: string; init: RequestInit }[] = [];
   const fetchDouble: typeof fetch = async (input, init = {}) => {
     seen.push({ url: String(input), init });
@@ -64,6 +64,14 @@ describe('the panel reads the passport from the Extension backend', () => {
       const session = createPassportSession(transport);
       session.open();
       expect(await settle(session.state, state => state.kind !== 'pending')).toEqual({ kind: 'unavailable', cause: 'malformed' });
+    }
+  });
+
+  it('refuses non-live and unknown wire books rather than converting them', async () => {
+    for (const origin of ['simulated', 'unknown']) {
+      const server = backend({ body: () => JSON.stringify({ kind: 'book', book: { version: 1, origin, visibility: 'hidden' } }) });
+      const transport = passportExtensionTransport({ url: URL, token: () => 'token', fetch: server.fetch });
+      expect(await transport({ op: 'book' }, new AbortController().signal)).toBeUndefined();
     }
   });
 

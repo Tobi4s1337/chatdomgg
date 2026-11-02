@@ -1,0 +1,145 @@
+/* The map's fittings use the shared carved-kit palette and type. The map stays the largest shape. */
+.atlas .atlas-cartouche.cd-plate {
+  --cartouche-pad-x: 14px;
+  --cartouche-pad-bottom: 13px;
+  width: 360px;
+  padding: 12px 14px 13px;
+  color: var(--cd-cream);
+  text-align: left;
+  border: 1px solid var(--cd-wood-edge);
+  border-radius: 10px 10px 8px 8px;
+  background:
+    radial-gradient(circle at 8px 8px, #f4dc9d 0 1px, #ad8247 1.5px 2.5px, #4f341b 3px, transparent 3.5px),
+    radial-gradient(circle at calc(100% - 8px) 8px, #f4dc9d 0 1px, #ad8247 1.5px 2.5px, #4f341b 3px, transparent 3.5px),
+    radial-gradient(circle at 8px calc(100% - 8px), #efda9d 0 1px, #ad8247 1.5px 2.5px, #4f341b 3px, transparent 3.5px),
+    radial-gradient(circle at calc(100% - 8px) calc(100% - 8px), #efda9d 0 1px, #ad8247 1.5px 2.5px, #4f341b 3px, transparent 3.5px),
+    repeating-linear-gradient(96deg, #ffe2b00a 0 2px, transparent 2px 11px, #1a0c0412 11px 12px, transparent 12px 19px),
+    linear-gradient(170deg, var(--cd-wood-hi), var(--cd-wood) 42%, var(--cd-wood-lo));
+  box-shadow: inset 0 1px #ffe5b766, inset 0 0 0 3px #301d1038, inset 0 0 0 4px #dbb77842,
+    0 1px 0 #eed6a666, 0 5px 0 #2f2016b8, 0 12px 24px #34231650;
+}
+.atlas .atlas-cartouche-heading { display: flex; flex-wrap: wrap; align-items: center; column-gap: 7px; row-gap: 0; min-width: 0; }
+.atlas .atlas-cartouche-ornament { width: 24px; height: 24px; flex: none; color: var(--cd-brass); filter: drop-shadow(0 1px #2a170b); }
+.atlas .atlas-cartouche-ornament svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1; }
+.atlas .atlas-cartouche-ornament .atlas-cartouche-needle { fill: #e5c78b; stroke: #553b20; stroke-width: .8; }
+.atlas .atlas-cartouche .atlas-title { flex: 0 0 auto; min-width: 0; margin: 0 !important; font: 400 20px/1 var(--cd-face-story); color: var(--cd-cream); white-space: nowrap; text-shadow: 0 1px #24160d; }
+.atlas .atlas-cartouche .atlas-title span { color: var(--cd-brass-hi); }
+.atlas .atlas-cartouche-search { position: relative; }
+.atlas .atlas-cartouche .atlas-search { margin: 9px 0 0; padding: 0; border: 0; }
+.atlas .atlas-cartouche .atlas-search-field { height: 42px; border: 1px solid #332015; border-radius: 3px; color: var(--cd-ink);
+  background: radial-gradient(ellipse at 25% 0, var(--cd-parch-hi), transparent 80%), linear-gradient(170deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 1px 4px #6e4b2933, 0 1px #e3b77355; }
+.atlas .atlas-cartouche .atlas-search-field:focus-within { border-color: #62431f; outline: 2px solid var(--cd-brass-hi); outline-offset: 2px; box-shadow: inset 0 1px 4px #6e4b2933; }
+.atlas .atlas-cartouche .atlas-search-panel { top: calc(100% + 13px); border: 4px solid var(--cd-wood-lo); border-radius: 5px;
+  box-shadow: inset 0 0 0 1px #dfbc8059, 0 1px 0 var(--cd-brass-lo), 0 8px 20px #34231655; }
+.atlas .atlas-cartouche .atlas-search-result[aria-selected='true'] { border-left-color: var(--cd-brass-lo); background: #9b744922; }
+.atlas .atlas-search-result { touch-action: manipulation; }
+.atlas .atlas-search-result[data-atlas-press='true'] .atlas-face-seal, .atlas .atlas-search-result:active .atlas-face-seal { transform: scale(.94); filter: brightness(.96); }
+
+/* The key is a compact rail; its line of explanation opens only while a glyph is inspected. */
+.atlas .atlas-key { left: 20px; bottom: 20px; width: auto; max-width: calc(100% - 40px); padding: 6px; border: 1px solid var(--cd-wood-edge); border-radius: 8px;
+  background: repeating-linear-gradient(95deg, #ffe1ab08 0 2px, transparent 2px 10px, #1a0c0410 10px 11px, transparent 11px 18px), linear-gradient(165deg, var(--cd-wood-hi), var(--cd-wood-lo));
+  box-shadow: inset 0 1px #ffe4b45c, inset 0 0 0 3px #2a180e38, inset 0 0 0 4px #d5ac6b38, 0 3px 0 #342012aa, 0 8px 18px #3423163a; }
+.atlas[data-layout='laptop'] .atlas-key { max-height: none; overflow: visible; }
+.atlas[data-layout='laptop'] .atlas-key-toggle { display: none; }
+.atlas .atlas-key-body { padding: 0; }
+.atlas .atlas-key-legend { position: relative; }
+.atlas .atlas-key-glyphs { display: flex; gap: 3px; }
+.atlas .atlas-key-glyph-button { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 4px; flex: none; border: 1px solid #352014; border-radius: 4px;
+  color: var(--cd-ink); cursor: pointer; touch-action: manipulation;
+  background: radial-gradient(ellipse at 30% 10%, var(--cd-parch-hi), transparent 85%), linear-gradient(165deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 1px #fff8e16b, inset 0 -2px #98713d24, 0 1px 0 #dfbe8652; transition: transform 100ms, box-shadow 100ms, filter 100ms; }
+.atlas .atlas-key-glyph-button:hover { filter: brightness(1.04); box-shadow: inset 0 1px #fff8e199, inset 0 -2px #98713d24, 0 2px 0 #1d100b80; }
+.atlas .atlas-key-glyph-button:active, .atlas .atlas-key-glyph-button[aria-pressed='true'] { transform: translateY(1px); filter: brightness(.94); box-shadow: inset 0 1px 3px #54381755; }
+.atlas .atlas-key-glyph { display: block; width: 30px; height: 30px; fill: none; stroke: var(--cd-ink); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.atlas .atlas-key-glyph .atlas-key-pigment { fill: #be3c27; fill-opacity: .36; stroke: none; }
+.atlas .atlas-key-glyph .atlas-key-pennant { fill: #b93b28; fill-opacity: .5; stroke: #6c3321; stroke-width: 1; }
+.atlas .atlas-key-glyph .atlas-key-brass { stroke: #936421; stroke-width: 1.7; }
+.atlas .atlas-key-glyph .atlas-key-pencil { stroke: #796c5c; stroke-dasharray: 2.8 2; }
+.atlas .atlas-key-hint { position: absolute; left: 0; bottom: calc(100% + 10px); width: max-content; max-width: min(260px, calc(100vw - 40px)); padding: 8px 11px; border: 1px solid #8d704b; border-radius: 3px;
+  color: var(--cd-ink); background: var(--cd-parch-hi); box-shadow: inset 0 0 0 2px #f9eed9, 0 4px 9px #34231635; font: 400 14px/1.25 var(--cd-face-body); }
+
+/* Brass focus wire remains visible on both parchment and the dark walnut fittings. */
+.atlas .atlas-key-glyph-button:focus-visible, .atlas .atlas-controls button:focus-visible, .atlas .atlas-key-toggle:focus-visible,
+.atlas .atlas-card button:focus-visible, .atlas .atlas-card a:focus-visible { outline: 2px solid var(--cd-brass-hi); outline-offset: 2px; box-shadow: 0 0 0 4px #4b301c; }
+.atlas .atlas-controls { padding: 5px; border: 1px solid #3b2417; border-radius: 7px; background: linear-gradient(160deg, var(--cd-wood-hi), var(--cd-wood-lo));
+  box-shadow: inset 0 1px #ffe1af5c, inset 0 0 0 3px #25170e40, 0 3px 0 #342012a0, 0 7px 15px #34231635; }
+.atlas .atlas-controls button { color: var(--cd-cream); }
+.atlas .atlas-controls svg { stroke: var(--cd-brass-hi); filter: drop-shadow(0 1px #352014); }
+.atlas .atlas-controls button:hover:not(:disabled) { background: #f4dc9d1c; }
+.atlas .atlas-controls button:active:not(:disabled) { background: #2b1b1066; transform: translateY(1px); }
+.atlas .atlas-controls button + button, .atlas .atlas-ladder, .atlas .atlas-ladder + button { border-color: #d3ad6c38; }
+.atlas .atlas-ladder::before { background: #e0c18b88; }
+.atlas .atlas-notch span { background: var(--cd-brass-hi); }
+.atlas .atlas-notch[aria-pressed='true'] span { background: var(--cd-brass-hi); box-shadow: 0 0 0 1.5px var(--cd-wood), 0 0 0 2.5px var(--cd-brass); }
+
+/* The card remains paper, now held in a timber frame like the title. */
+.atlas .atlas-card { border: 6px solid var(--cd-wood-lo); border-radius: 6px; background: radial-gradient(ellipse at 30% 0, var(--cd-parch-hi), transparent 80%), linear-gradient(170deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #b28b544d, 0 0 0 1px #c39b5d, 0 4px 0 #32201499, 0 14px 30px #34231655; }
+.atlas .atlas-watch, .atlas .atlas-button { border: 1px solid #2b1a10; border-radius: 4px; color: var(--cd-cream) !important;
+  background: linear-gradient(175deg, var(--cd-wood-hi), var(--cd-wood) 44%, var(--cd-wood-lo));
+  box-shadow: inset 0 1px #ffe1b05c, inset 0 0 0 3px #c49a5633, 0 2px 0 #24160dcc; }
+.atlas .atlas-watch:hover, .atlas .atlas-button:hover { background: linear-gradient(175deg, #906647, #694629 44%, #48301e); }
+.atlas .atlas-watch:active, .atlas .atlas-button:active { transform: translateY(1px); box-shadow: inset 0 1px 3px #24160d88; }
+
+.atlas[data-layout='phone'] .atlas-cartouche.cd-plate { top: 10px; left: 10px; right: 10px; width: auto; padding: 9px 12px 11px; --cartouche-pad-x: 12px; --cartouche-pad-bottom: 11px; }
+.atlas[data-layout='phone'] .atlas-cartouche .atlas-title { font-size: 20px; }
+.atlas[data-layout='phone'] .atlas-cartouche-ornament { width: 24px; height: 24px; }
+.atlas[data-layout='phone'] .atlas-cartouche .atlas-search { margin: 7px 0 0; padding: 0; }
+.atlas[data-layout='phone'] .atlas-key { left: 10px; bottom: 10px; width: auto; padding: 3px; }
+.atlas[data-layout='phone'] .atlas-key-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 70px; min-height: 44px; padding: 0 14px; color: var(--cd-cream); cursor: pointer; border: 1px solid #2d1c10; border-radius: 4px;
+  background: linear-gradient(175deg, var(--cd-wood-hi), var(--cd-wood-lo)); box-shadow: inset 0 1px #ffe4b44d, 0 1px 0 #d6af7055; }
+.atlas[data-layout='phone'] .atlas-key[data-open='true'] { left: 0; right: 0; bottom: 0; max-width: none; max-height: 70%; padding: 8px 12px calc(14px + env(safe-area-inset-bottom)); overflow: visible; border-radius: 12px 12px 0 0; }
+.atlas[data-layout='phone'] .atlas-key[data-open='true'] .atlas-key-toggle { min-height: 40px; margin-bottom: 8px; }
+.atlas[data-layout='phone'] .atlas-key[data-open='true'] .atlas-key-body { padding: 0; }
+.atlas[data-layout='phone'] .atlas-key-glyphs { justify-content: space-around; gap: 4px; }
+.atlas[data-layout='phone'] .atlas-key-legend { padding-bottom: 42px; }
+.atlas[data-layout='phone'] .atlas-key-hint { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; width: 100%; max-width: none; height: 34px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.atlas[data-layout='phone'] .atlas-card { border-bottom: 0; border-radius: 9px 9px 0 0; }
+
+@media (forced-colors: active) {
+  .atlas .atlas-key-glyph-button:focus-visible, .atlas .atlas-controls button:focus-visible, .atlas .atlas-key-toggle:focus-visible { outline-color: Highlight; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .atlas .atlas-key-glyph-button { transition: none; }
+}
+
+/* A shutter swings on its far edge and a wax matrix presses in the first tenth of a second. */
+.atlas .atlas-card { transform-origin: right 35%; animation: atlas-carved-shutter 220ms cubic-bezier(.2,.65,.2,1) both; }
+@keyframes atlas-carved-shutter {
+  from { opacity: .55; transform: perspective(800px) rotateY(-4deg) translateX(7px); }
+  to { opacity: 1; transform: perspective(800px) rotateY(0) translateX(0); }
+}
+.atlas .atlas-card-head .atlas-face-seal { transform-origin: 50% 50%; animation: atlas-wax-press 180ms cubic-bezier(.22,.7,.25,1) both; }
+@keyframes atlas-wax-press {
+  0% { transform: scale(1.12); filter: brightness(1.12); }
+  20% { transform: scale(.96); filter: brightness(.96); }
+  68% { transform: scale(1.025); filter: brightness(1); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+.atlas[data-layout='phone'] .atlas-key[data-open='true'] { transform-origin: bottom center; animation: atlas-key-unfold 190ms cubic-bezier(.2,.65,.2,1) both; }
+@keyframes atlas-key-unfold { from { transform: translateY(15px) scaleY(.94); opacity: .7; } to { transform: translateY(0) scaleY(1); opacity: 1; } }
+.atlas[data-layout='phone'] .atlas-card { animation: atlas-sheet-in 220ms cubic-bezier(.2,.65,.2,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .atlas .atlas-card, .atlas[data-layout='phone'] .atlas-card, .atlas .atlas-card-head .atlas-face-seal, .atlas[data-layout='phone'] .atlas-key[data-open='true'] { animation: none; }
+}
+.atlas button:focus-visible, .atlas a:focus-visible { outline: 2px solid var(--cd-brass-hi); outline-offset: 2px; box-shadow: 0 0 0 4px #4b301c; }
+.atlas .atlas-map:focus-visible::after { border-color: var(--cd-brass-hi); outline-color: var(--cd-wood-lo); }
+@media (forced-colors: active) {
+  .atlas button:focus-visible, .atlas a:focus-visible { outline-color: Highlight; }
+  .atlas .atlas-map:focus-visible::after { border-color: Highlight; outline-color: Canvas; }
+}
+.atlas .atlas-button-quiet { color: var(--cd-ink) !important; border: 1px solid #92703f; background: var(--cd-parch-hi); box-shadow: inset 0 0 0 2px #f9efd8, 0 1px 0 #6b492e55; }
+.atlas .atlas-button-quiet:hover { background: #f6e6c3; }
+.atlas .atlas-button-quiet:active { box-shadow: inset 0 1px 3px #70512f55; }
+
+/* Holding cards keep their identity and doors in view as the register scrolls. */
+.atlas .atlas-card-with-actions { display: flex; flex-direction: column; overflow: hidden; }
+.atlas .atlas-card-with-actions .atlas-card-head { flex: none; }
+.atlas .atlas-card-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--ink-faint) transparent; }
+.atlas .atlas-card-footer { flex: none; padding-top: 10px; }
+.atlas .atlas-card-footer .atlas-door { margin-top: 0; }
+.atlas .atlas-card-footer .atlas-card-actions { display: grid; grid-template-columns: 1fr 1fr; margin-top: 8px; }
+.atlas .atlas-card-footer .atlas-share { min-width: 0; }
+.atlas .atlas-card-footer .atlas-watch, .atlas .atlas-card-footer .atlas-button { min-width: 0; }
+.atlas .atlas-card-footer .atlas-card-actions .atlas-watch, .atlas .atlas-card-footer .atlas-card-actions .atlas-button { padding-inline: 8px; font-size: 14px; gap: 5px; }

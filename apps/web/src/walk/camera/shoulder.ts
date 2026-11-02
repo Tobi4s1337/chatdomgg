@@ -40,6 +40,16 @@ export const SHOULDER = {
   orbitPitch: 1.7,
   /** Zoom parameter per wheel pixel; distance is maxDistance × z², so the last metre is finely controlled. */
   wheelZoom: .0007,
+  /**
+   * The wheel's closest third-person boom. First person is its own view (V, or the ledger), reached by an eased
+   * swing of the boom rather than by wheeling into the skull.
+   */
+  minThirdDistance: .9,
+  /** Seconds for the boom to swing between first and third person; reduced motion takes the short one. */
+  viewSwing: .42,
+  viewSwingReduced: .12,
+  /** The field-of-view setting that draws today's accepted lens (50° vertical landscape); others scale from it. */
+  defaultHorizontalFov: 74,
   /** Auto-follow waits this long after a manual orbit, then swings gently behind the walk. */
   followDelay: 1.5,
   followRate: .85,
@@ -94,11 +104,22 @@ export function smoothstep(edge0: number, edge1: number, x: number): number {
 }
 
 /** Framing for an aspect ratio, blended between portrait and landscape so a rotating phone never jumps. */
-export function framingFor(aspect: number): { fov: number; screenX: number; screenY: number } {
+export function framingFor(aspect: number, fovScale = 1): { fov: number; screenX: number; screenY: number } {
   const t = smoothstep(.75, 1.2, Number.isFinite(aspect) && aspect > 0 ? aspect : 1);
   const lerp = (a: number, b: number) => a + (b - a) * t;
   const { portrait: p, landscape: l } = SHOULDER;
-  return { fov: lerp(p.fov, l.fov), screenX: lerp(p.screenX, l.screenX), screenY: lerp(p.screenY, l.screenY) };
+  const scale = Number.isFinite(fovScale) && fovScale > 0 ? fovScale : 1;
+  return { fov: Math.min(120, lerp(p.fov, l.fov) * scale), screenX: lerp(p.screenX, l.screenX), screenY: lerp(p.screenY, l.screenY) };
+}
+
+/**
+ * The field-of-view setting is horizontal degrees on a 16:10 landscape screen (what players compare between games);
+ * the framings are vertical. The default, 74° horizontal, draws today's accepted lens exactly.
+ */
+export function fovScaleFor(horizontalDegrees: number): number {
+  if (!Number.isFinite(horizontalDegrees)) return 1;
+  const vertical = (degrees: number) => 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(degrees) / 2) / 1.6);
+  return vertical(horizontalDegrees) / vertical(SHOULDER.defaultHorizontalFov);
 }
 
 /**
@@ -114,8 +135,8 @@ export function selfFade(eyeToHead: number, pulledIn = 0): number {
 }
 
 /** Pure camera placement for feet at `feet`, the given view and aspect. */
-export function shoulderPose(feet: Vec3, view: ShoulderView, aspect: number): ShoulderPose {
-  const frame = framingFor(aspect);
+export function shoulderPose(feet: Vec3, view: ShoulderView, aspect: number, fovScale = 1): ShoulderPose {
+  const frame = framingFor(aspect, fovScale);
   const d = Math.max(0, view.distance);
   const tan = Math.tan(THREE.MathUtils.degToRad(frame.fov) / 2);
   const sinPitch = Math.sin(view.pitch), cosPitch = Math.cos(view.pitch);
@@ -151,8 +172,18 @@ export interface ShoulderRig {
   readonly idle: number;
   /** Drag in CSS pixels against a viewport of `viewportHeight` CSS pixels. */
   orbit(dx: number, dy: number, viewportHeight: number): void;
-  /** Wheel pixels; positive pulls back, negative leans in down to first person. */
+  /** Wheel pixels; positive pulls back, negative leans in, down to the closest third-person boom. */
   zoom(pixels: number): void;
+  /** The person's view: third person on the boom, or first person at the eyes. The boom swings between them. */
+  readonly person: 'third' | 'first';
+  setPerson(person: 'third' | 'first', options?: { readonly instant?: boolean; readonly reducedMotion?: boolean }): void;
+  /** Scale of every framing's field of view (see fovScaleFor). */
+  setFovScale(scale: number): void;
+  /**
+   * A place's camera limits (a low tavern room): the boom never reaches past `maxDistance` and the pitch eases into
+   * `[minPitch, maxPitch]` (radians below the horizon). Null lifts them; the wheel's own wish returns, eased.
+   */
+  setLimits(limits: { readonly maxDistance: number; readonly minPitch: number; readonly maxPitch: number } | null): void;
   /** Advance presentation easing and auto-follow behind `travelHeading` while moving at `speed` m/s. */
   update(dt: number, travelHeading: number | null, speed: number, holding: boolean): void;
   /**
@@ -169,12 +200,19 @@ export interface ShoulderRig {
 
 export function createShoulderRig(heading = 0): ShoulderRig {
   let yaw = wrapAngle(heading), pitch: number = SHOULDER.pitch, zoomT = Math.sqrt(SHOULDER.distance / SHOULDER.maxDistance);
+  const minZoomT = Math.sqrt(SHOULDER.minThirdDistance / SHOULDER.maxDistance);
+  // 0 is third person, 1 first; `swing` eases between them so V never pops the camera.
+  let person: 'third' | 'first' = 'third', swing = 0, swingFrom = 0, swingAt = 1, swingSeconds: number = SHOULDER.viewSwing, fovScale = 1;
+  const swingEase = () => { const t = Math.max(0, Math.min(1, swingAt)); return swingFrom + ((person === 'first' ? 1 : 0) - swingFrom) * t * t * (3 - 2 * t); };
   let distance: number = SHOULDER.distance, idle = Infinity, followY: number | null = null, lastStep = 0;
   // `drawn` is the boom on screen; `tracking` means it follows the zoom directly (no solid in the way last frame).
   let drawn: number = SHOULDER.distance, tracking = true, clearance: number | null = null;
   // The citizen's opacity as last drawn; null takes the next frame's value as it is (entry, handback).
   let shown: number | null = null;
-  const desired = () => SHOULDER.maxDistance * zoomT * zoomT;
+  let limits: { readonly maxDistance: number; readonly minPitch: number; readonly maxPitch: number } | null = null;
+  const desired = () => Math.min(limits?.maxDistance ?? Infinity, SHOULDER.maxDistance * zoomT * zoomT) * (1 - swing);
+  const pitchRange = (): readonly [number, number] => limits
+    ? [Math.max(SHOULDER.minPitch, limits.minPitch), Math.min(SHOULDER.maxPitch, limits.maxPitch)] : [SHOULDER.minPitch, SHOULDER.maxPitch];
   const look = new THREE.Vector3();
   return {
     get view() { return { yaw, pitch, distance: drawn }; },
@@ -187,17 +225,42 @@ export function createShoulderRig(heading = 0): ShoulderRig {
       if (!Number.isFinite(dx) || !Number.isFinite(dy) || (!dx && !dy)) return;
       // Dragging right turns the view right; dragging up looks up.
       yaw = wrapAngle(yaw - dx / h * SHOULDER.orbitYaw);
-      pitch = Math.max(SHOULDER.minPitch, Math.min(SHOULDER.maxPitch, pitch + dy / h * SHOULDER.orbitPitch));
+      const [low, high] = pitchRange();
+      // Inside a place's range the hand moves freely; outside it (just walked in) it may only move back toward it.
+      const next = pitch + dy / h * SHOULDER.orbitPitch;
+      pitch = Math.max(Math.min(low, pitch), Math.min(Math.max(high, pitch), next));
+      pitch = Math.max(SHOULDER.minPitch, Math.min(SHOULDER.maxPitch, pitch));
       idle = 0;
     },
     zoom(pixels) {
-      if (!Number.isFinite(pixels) || !pixels) return;
-      zoomT = Math.max(0, Math.min(1, zoomT + pixels * SHOULDER.wheelZoom));
+      if (!Number.isFinite(pixels) || !pixels || person === 'first') return;
+      zoomT = Math.max(minZoomT, Math.min(1, zoomT + pixels * SHOULDER.wheelZoom));
+    },
+    get person() { return person; },
+    setPerson(next, options) {
+      if (next !== 'first' && next !== 'third') return;
+      if (next === person && !options?.instant) return;
+      swingFrom = swing; person = next; swingAt = 0;
+      swingSeconds = options?.reducedMotion ? SHOULDER.viewSwingReduced : SHOULDER.viewSwing;
+      if (options?.instant) { swingAt = 1; swing = person === 'first' ? 1 : 0; distance = desired(); drawn = distance; tracking = true; shown = null; }
+    },
+    setFovScale(scale) { if (Number.isFinite(scale) && scale > 0) fovScale = scale; },
+    setLimits(next) {
+      if (next && (!(next.maxDistance > 0) || !Number.isFinite(next.minPitch) || !Number.isFinite(next.maxPitch) || next.minPitch > next.maxPitch)) next = null;
+      limits = next ? { maxDistance: next.maxDistance, minPitch: next.minPitch, maxPitch: next.maxPitch } : null;
     },
     update(dt, travelHeading, speed, holding) {
       const step = Number.isFinite(dt) ? Math.max(0, Math.min(.1, dt)) : 0;
       lastStep = step;
       if (holding) idle = 0; else idle += step;
+      if (swingAt < 1) {
+        // The swing is the boom's own ease: the distance follows it directly so the two never fight.
+        swingAt = Math.min(1, swingAt + step / swingSeconds);
+        swing = swingEase();
+        distance = desired();
+      }
+      const [low, high] = pitchRange();
+      if (pitch < low || pitch > high) pitch += (Math.max(low, Math.min(high, pitch)) - pitch) * (1 - Math.exp(-SHOULDER.distanceRate * step));
       const target = desired();
       distance += (target - distance) * (1 - Math.exp(-SHOULDER.distanceRate * step));
       if (Math.abs(target - distance) < 1e-4) distance = target;
@@ -223,7 +286,7 @@ export function createShoulderRig(heading = 0): ShoulderRig {
         // camera.zoom narrows the drawn frustum; the footprint uses the narrowed angle.
         const zoom = camera.zoom || 1;
         const point = (d: number, y: number): BoomPoint => {
-          const p = shoulderPose([feet[0], y + headOffset, feet[2]], { yaw, pitch, distance: d }, aspect);
+          const p = shoulderPose([feet[0], y + headOffset, feet[2]], { yaw, pitch, distance: d }, aspect, fovScale);
           const fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(p.fov) / 2) / zoom));
           return { distance: d, eye: p.eye, footprint: nearFootprint(p.direction, fov, aspect, p.shift, camera.near) };
         };
@@ -244,7 +307,7 @@ export function createShoulderRig(heading = 0): ShoulderRig {
         if (limit - drawn < 1e-3) drawn = limit;
       }
       tracking = drawn >= distance - 1e-9;
-      const pose = shoulderPose([feet[0], followY + headOffset, feet[2]], { yaw, pitch, distance: drawn }, aspect);
+      const pose = shoulderPose([feet[0], followY + headOffset, feet[2]], { yaw, pitch, distance: drawn }, aspect, fovScale);
       camera.position.set(...pose.eye);
       camera.up.set(0, 1, 0);
       camera.lookAt(look.set(pose.eye[0] + pose.direction[0], pose.eye[1] + pose.direction[1], pose.eye[2] + pose.direction[2]));
@@ -267,7 +330,7 @@ export function createShoulderRig(heading = 0): ShoulderRig {
     },
     reset(value) {
       yaw = wrapAngle(value); pitch = SHOULDER.pitch; idle = Infinity; followY = null;
-      zoomT = Math.sqrt(SHOULDER.distance / SHOULDER.maxDistance); distance = SHOULDER.distance;
+      zoomT = Math.sqrt(SHOULDER.distance / SHOULDER.maxDistance); swingAt = 1; swing = person === 'first' ? 1 : 0; distance = desired();
       drawn = distance; tracking = true; clearance = null; shown = null;
     },
     // The next apply still sweeps the boom, so a camera handed back in a tight spot is pulled in on its first frame.
