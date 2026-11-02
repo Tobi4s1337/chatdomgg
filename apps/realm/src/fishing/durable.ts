@@ -13,6 +13,7 @@ import { createPostgresFishingAdmission } from './entry';
 import { createFishingInstallationReader } from './installation';
 import { createPostgresRodRack, isEquippedWillowRod, WILLOW_ROD_ID } from './rod';
 import type { FishingSpecies } from './species';
+import type { RealmPier } from './pier';
 
 export interface DurableFishingChannelOptions {
   readonly pool: Pool; readonly origin: 'live' | 'simulated'; readonly store: ItemStore; readonly items: RealmItems;
@@ -29,6 +30,8 @@ export interface DurableFishingChannelOptions {
   readonly seed?: () => number;
   readonly makeId?: () => string;
   readonly schedule?: FishingRoomChannelOptions['schedule'];
+  /** The kingdom's pier beyond the room: personal Almanac marks and the public feed. */
+  readonly pier?: Pick<RealmPier, 'marks' | 'announce'>;
 }
 
 interface RodFact {
@@ -80,7 +83,9 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
         facts.set(owner, { itemId: item.id, walkerId: from.walkerId, principal: from.principal, until: now() + 2000, present: from.present, token });
         return item;
       };
-      const casts = createFishingCasts({ kingdomId: room.kingdomId, clock: now, species: options.species, installation,
+      // This kingdom's own water: the same view rolls the bite and audits the catch.
+      const species = options.species.forKingdom(room.kingdomId);
+      const casts = createFishingCasts({ kingdomId: room.kingdomId, clock: now, species, installation,
         makeId: options.makeId ?? randomUUID, seed: options.seed ?? (() => randomBytes(4).readUInt32LE()),
         seat(personId) {
           const from = live() ? room.person(personId) : null, fact = facts.get(personId);
@@ -98,7 +103,7 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
       const where = options.where?.(room.kingdomId) ?? 'the pier';
       const authority = () => live() ? retained : null;
       const writer = createPostgresFishingCatchWriter({ kingdomId: room.kingdomId, origin: room.origin,
-        store: options.store, items: options.items, catalogue: options.catalogue, species: options.species, where,
+        store: options.store, items: options.items, catalogue: options.catalogue, species, where,
         authority, candidate: personId => casts.candidate(personId), finish: (personId, castId) => casts.finish(personId, castId),
         async admit(from, tx) {
           const admission = await admit(from, tx);
@@ -114,6 +119,15 @@ export function createDurableFishingChannel(options: DurableFishingChannelOption
         store: options.store, items: options.items, where, authority, installation, admit, now });
       return {
         casts, now, installation, takeRod,
+        ...(options.pier ? {
+          marks: async (from: RealmChannelSender) => live() && from.present() ? options.pier!.marks(room.kingdomId, from.principal.personId) : [],
+          announce: (kept: Parameters<NonNullable<ReturnType<FishingRoomChannelOptions['bind']>['announce']>>[0]) => {
+            void options.pier!.announce(room.kingdomId, { id: kept.catch.id, ownerId: kept.catch.ownerId,
+              name: kept.item.story.by?.name ?? null, fish: { speciesId: kept.catch.speciesId, lengthMm: kept.catch.fish.lengthMm,
+                weightG: kept.catch.fish.weightG }, kingdomFirst: kept.catch.kingdomFirst, keepsake: kept.keepsake?.number ?? null,
+              at: kept.catch.caughtAt }).catch(() => { /* The stream misses one tag; the catch is kept. */ });
+          },
+        } : {}),
         keep: (from, castId) => writer.keep(from, castId),
         async refreshRod(from, itemId) {
           if (!live() || !await from.current() || !live() || !from.present()) { forget(from); return null; }

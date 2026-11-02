@@ -6,6 +6,56 @@ and keeps going on its fallback. Every ask below has a fallback; pier uses it un
 both. Section 1 is what pier provides; sections 2 to 4 are what pier asks for; section 5 is the small realm hooks pier
 writes itself; section 6 lists the other lanes that touch this one.
 
+## PI11 the Almanac and `!fish` from chat — 2 November 2026
+
+What landed, in this lane's scope plus the hooks listed in the PRD:
+
+- **28 fish** (`packages/content/src/fish/`): the twelve PI10 fish plus four still-water, four sunlit/cold, four sea
+  fish and four legends (`legends.ts`: Stormcrown Sturgeon, Goldscale Emperor, Moonwake Ray, Frostking Char). Each has
+  lore, a riddle for its unknown page, conditions, sizes and a fight. `FishSpecies` gains two optional fields in
+  `packages/shared/src/fishing.ts`: `legend: true` (always rare; a chat line can never hold it) and `share` (0–1: the
+  share of kingdoms whose water holds the fish, fixed per kingdom by `kingdomHoldsFish`). Fourteen lake fish have no
+  share, so every kingdom's lake pier can catch at least fourteen; the shared ones make each kingdom's Almanac differ.
+  The realm reads one kingdom's water with `fishingSpecies.forKingdom(kingdomId)`.
+- **Mounts** (`packages/content/src/keepsakes/`): one numbered keepsake per species, `keepsake:mount.<slug>`, an oak
+  plaque with the real fish model on a brass peg. A rare catch or a kingdom's first of a species grants its mount in
+  the same transaction as the fish (`fishing:mount:1:<castId>` grant key), numbered gaplessly by the item service's
+  `realm_item_numbers`; it goes on the shelf, or the bag once the shelf holds 64. `pier.kept` carries `keepsake`.
+- **`!fish`** (`apps/realm/src/fishing/chat.ts`, `pier.ts`): the 5b hook below is applied. A chatter with a lit window
+  who types `!fish` (first word, any case) gets a float in their window's light colour off the head; the realm plays
+  the bite and a scripted steady-hand fight itself (`chatFight`: lands about nine in ten; the proof replays like a
+  walker's), and `createPostgresChatCatchWriter` keeps fish, mount and catch record in one fenced transaction
+  (`via: 'chat'`, the approved name on the record). One line per person, 45 s rest after a line ends, at most 8 chat
+  floats; the 9th hears one honest "pier is full" beat (once per person per 30 s). A legend takes the float and
+  breaks the line. A deleted message pulls its float; a timeout or ban clears that person's line and hides their name
+  from the pier's public pages from then on (`realm_pier_hidden_names`, migration `0017d`); a chat clear clears every
+  chat line. A catch already being written stays the person's, without the name on stream.
+- **Public reads** (`apps/realm/src/fishing/routes.ts`): `GET /api/realm/pier/almanac/:id` (JSON, `max-age=5`) and
+  `GET /api/realm/pier/watch/:id` (SSE `event: pier`, `PierFeedEvent`; at most 64 watchers, keepalive 15 s, a stalled
+  watcher is closed after 10 s). Walker catches are announced on the same feed. No person ids anywhere; a moderated
+  person's name is null. The proxy line and the `routes.ts` allowlist line are applied (section 4); front-door may
+  add `/api/realm/pier/almanac/1001` and `/api/realm/pier/watch/1001` to its `routes.test.ts` list (pier does not
+  edit that test).
+- **Your own marks**: `pier.marks` on the fishing channel answers your species, counts, best, first time and whether
+  you hold the kingdom's first. `pier.state` gains the optional `almanac` lectern position.
+- **The book** (`apps/web/src/almanac/`): `mountAlmanac` draws the Almanac with plates from the real voxel renders,
+  silhouettes and riddles for unknown fish, the wax seal for a kingdom's first, your own pencilled marks and paper
+  sound. Play opens it three ways through the slots it already has: a `Read the Almanac` world prompt at the lectern
+  (`pier.state.almanac`), an `Almanac` ledger page (order 35, for walkers with their marks and for watchers without),
+  and the public page `/almanac?kingdom=<id>` (one `lanePaths` entry in `apps/web/src/main.tsx`). An open book
+  rewrites itself when you keep a fish.
+- **Composition** (`apps/realm/src/main.ts`): `createRealmPier` beside the fishing channel, `chatCommands` passed to
+  `RealmEveningBridge` only while `REALM_PIER_FISHING=1`, `mountPierRoutes`, and disposal on shutdown.
+
+Decisions:
+
+1. Chat fishers have no session. Admission is the lit window Herald proved (the bridge's `speechHost`), and the
+   writer still fences the kingdom's writer lease. The chat fight is the realm's own, so the catch carries the same
+   replayable proof the 0017c constraints check.
+2. Old founded plans carry no biome, so per-kingdom variety comes from `share` rather than from guessing a biome.
+3. A clear-by-person cleanup is taken as moderation (Herald sends no reason), and the name stays hidden. Lifting it
+   when a person is restored is in the backlog.
+
 ## PI10 physical pier checkpoint — 2 November 2026
 
 The fallback site is now implemented in `apps/realm/src/fishing/site.ts`. It reads only the adopted plan's
@@ -808,7 +858,7 @@ readonly chatCommands?: {
 ```
 
 `apps/realm/src/evening/**` belongs to main and the integrator; pier writes exactly these lines and nothing else there.
-If the integrator would rather apply them, pier writes `needs: integrator chat command hook` with this patch.
+Applied in PI11 (2 November): nine added lines and one changed line in `bridge.ts`.
 
 ### 5c. The pier placement (`apps/realm/src/founded/scene.ts`)
 

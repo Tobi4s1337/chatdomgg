@@ -20,6 +20,8 @@ export interface StagedPierOptions {
   readonly kingdomId: string;
   readonly site: FishingPierSite;
   readonly rack: Vec3;
+  /** Where the staged Almanac lectern stands. */
+  readonly almanac?: Vec3;
   readonly revision: number;
   readonly sample: FishingWaterSampler;
   readonly where: string;
@@ -58,7 +60,8 @@ export function createStagedPier(options: StagedPierOptions) {
     person: personId => senders.get(personId) ?? null,
     world: () => { throw new Error('The staged pier has no collision world.'); },
   };
-  const installation = { site: options.site, revision: options.revision, rack: options.rack, sample: options.sample, biome: null };
+  const installation = { site: options.site, revision: options.revision, rack: options.rack, sample: options.sample, biome: null,
+    ...(options.almanac ? { almanac: options.almanac } : {}) };
   const records = new Map<string, ItemRecord>(), firsts = new Set<string>(), personal = new Set<string>();
   let seedIndex = 0;
   const makeRecord = (owner: string, defId: string, place: ItemRecord['place'], storied: boolean, story: ItemRecord['story'],
@@ -109,7 +112,7 @@ export function createStagedPier(options: StagedPierOptions) {
             collisionRevision: candidate.collisionRevision,
             proof: { version: 1, castSeed: candidate.castSeed, fightSeed: candidate.fightSeed, inputs: candidate.inputs, result: candidate.result } };
           casts.finish(owner, castId);
-          return { status: 'kept', catch: record, item, replayed: false };
+          return { status: 'kept', catch: record, item, keepsake: null, replayed: false };
         },
         onRodChange: () => () => {},
         dispose: () => casts.dispose(),

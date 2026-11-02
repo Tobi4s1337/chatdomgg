@@ -1,0 +1,220 @@
+/* Chat's floats at the pier, on the overlay: a name over each light on the water, and the cards that tell a stream what
+   came out of it. Carved wood, parchment, brass and wax from the kit; a legend's card is lacquer and gold leaf. Sized
+   from the picture itself (container units), so a 1920x1080 broadcast reads from across the room and a phone stays small.
+   Card motion is written by the view each frame (--e arrival, --y stack offset, --stamp the seal), never by timers. */
+
+.pier-chat {
+  position: absolute; inset: 0; z-index: 3; overflow: hidden; pointer-events: none; container-type: size; contain: layout style;
+  color: var(--cd-ink); font: 400 max(12px, 1.62cqmin)/1.25 var(--cd-face-body); font-synthesis: none;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+.pier-chat[data-compact='true'] { font-size: 11.5px; }
+.pier-chat *, .pier-chat *::before, .pier-chat *::after { box-sizing: border-box; }
+.pier-chat p { margin: 0; }
+.pier-chat-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- A name over each light: their colour, on the stream's dark pill ---------- */
+.pier-chat-names { position: absolute; inset: 0; }
+.pier-chat-name {
+  position: absolute; left: 0; top: 0; translate: -50% -100%; will-change: transform;
+  display: flex; align-items: center; gap: .42em; max-width: 14em; padding: .3em .72em .32em .5em; white-space: nowrap;
+  color: var(--lamp, #ffd9a0); font: 600 .9em/1.1 var(--cd-face-body); letter-spacing: .01em;
+  text-shadow: 0 0 .5em color-mix(in srgb, var(--lamp, #ffd9a0) 45%, transparent), 0 1px 0 #000c;
+  background: linear-gradient(180deg, #2e2016f2, #1d140df2); border-radius: 999px;
+  box-shadow: inset 0 0 0 1px #c69a5c80, inset 0 1px 0 #ffe1b42e, 0 .2em .55em #0a0814a6;
+  transition: opacity .35s ease;
+}
+.pier-chat-name::after {
+  content: ''; position: absolute; left: 50%; bottom: -.28em; width: .5em; height: .5em; margin-left: -.25em; transform: rotate(45deg);
+  background: #1d140d; box-shadow: 1px 1px 0 #c69a5c80;
+}
+.pier-chat-name[data-off='true'] { opacity: 0; visibility: hidden; transition: none; }
+.pier-chat-name-bead {
+  flex: none; width: .55em; height: .55em; border-radius: 50%;
+  background: radial-gradient(circle at 40% 38%, #fffaf0 0 18%, var(--lamp, #ffd9a0) 55%, color-mix(in srgb, var(--lamp, #ffd9a0) 55%, #4a2208) 100%);
+  box-shadow: 0 0 .5em var(--lamp, #ffd9a0), 0 0 0 1px #00000080;
+}
+.pier-chat-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pier-chat[data-compact='true'] .pier-chat-name { font-size: 12px; max-width: 150px; }
+
+/* ---------- The stack: top-left on a stream, bottom-centre on a phone ---------- */
+.pier-chat-cards { position: absolute; left: 2.6cqmin; top: 3.2cqmin; width: min(30em, 44cqw); }
+.pier-chat[data-compact='true'] .pier-chat-cards {
+  left: 50%; top: auto; translate: -50% 0; width: min(360px, calc(100cqw - 24px));
+  bottom: calc(var(--pier-chat-dock, 20px) + env(safe-area-inset-bottom, 0px));
+}
+.pier-chat-card {
+  position: absolute; left: 0; top: 0; width: 100%;
+  opacity: clamp(0, calc(var(--e, 0) * 1.6), 1);
+  transform: translate(calc((1 - var(--e, 0)) * -2.4em), var(--y, 0px)) rotate(calc((1 - var(--e, 0)) * -2.6deg));
+  transform-origin: 0 0; filter: drop-shadow(0 .35em .6em #0a081499);
+}
+.pier-chat[data-compact='true'] .pier-chat-card {
+  top: auto; bottom: 0; transform-origin: 50% 100%;
+  transform: translate(0, calc(var(--y, 0px) * -1 + (1 - var(--e, 0)) * 1.4em)) scale(calc(.94 + var(--e, 0) * .06));
+}
+.pier-chat-card[data-kind='full'] { width: auto; max-width: 100%; }
+.pier-chat[data-compact='true'] .pier-chat-card[data-kind='full'] { left: 50%; translate: -50% 0; width: max-content; }
+
+/* ---------- The board: carved wood with brass nails, holding a parchment inlay ---------- */
+.pier-chat-board {
+  position: relative; padding: .44em; border-radius: .48em .6em .52em .5em;
+  background:
+    radial-gradient(circle at .6em .6em, var(--cd-brass-hi) 0 .07em, var(--cd-brass) .1em .17em, var(--cd-brass-lo) .21em, transparent .25em),
+    radial-gradient(circle at calc(100% - .6em) .6em, var(--cd-brass-hi) 0 .07em, var(--cd-brass) .1em .17em, var(--cd-brass-lo) .21em, transparent .25em),
+    radial-gradient(circle at .6em calc(100% - .6em), var(--cd-brass-hi) 0 .07em, var(--cd-brass) .1em .17em, var(--cd-brass-lo) .21em, transparent .25em),
+    radial-gradient(circle at calc(100% - .6em) calc(100% - .6em), var(--cd-brass-hi) 0 .07em, var(--cd-brass) .1em .17em, var(--cd-brass-lo) .21em, transparent .25em),
+    repeating-linear-gradient(91deg, #ffdcae08 0 2px, transparent 2px 9px, #1a0c0414 9px 10px, transparent 10px 17px),
+    repeating-linear-gradient(88deg, transparent 0 31px, #ffdcae0d 31px 33px, transparent 33px 57px),
+    linear-gradient(176deg, var(--cd-wood-hi), var(--cd-wood) 42%, var(--cd-wood-lo));
+  box-shadow: inset 0 1px 0 #ffdcae33, inset 0 -2px 0 #00000059, 0 0 0 1px var(--cd-wood-edge);
+}
+.pier-chat-paper {
+  position: relative; display: flex; align-items: center; gap: .85em; padding: .72em 1.1em .8em .78em;
+  clip-path: polygon(0.0% 0.5%, 7.1% 0.2%, 14.3% 0.9%, 21.4% 0.1%, 28.6% 0.8%, 35.7% 0.5%, 42.9% 0.1%, 50.0% 0.7%, 57.1% 0.1%, 64.3% 0.6%, 71.4% 0.1%, 78.6% 0.1%, 85.7% 0.6%, 92.9% 1.2%, 99.9% 0.0%, 99.8% 16.7%, 99.4% 33.3%, 99.1% 50.0%, 99.5% 66.7%, 99.6% 83.3%, 100.0% 98.4%, 92.9% 99.9%, 85.7% 98.6%, 78.6% 99.5%, 71.4% 99.8%, 64.3% 99.8%, 57.1% 99.5%, 50.0% 98.7%, 42.9% 99.7%, 35.7% 99.1%, 28.6% 99.0%, 21.4% 99.4%, 14.3% 99.1%, 7.1% 99.9%, 0.1% 100.0%, 0.2% 83.3%, 0.6% 66.7%, 0.4% 50.0%, 0.3% 33.3%, 0.5% 16.7%);
+  background:
+    repeating-linear-gradient(17deg, #8a5a3008 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(-71deg, #8a5a3006 0 1px, transparent 1px 7px),
+    radial-gradient(ellipse at 24% 14%, var(--cd-parch-hi), transparent 68%),
+    radial-gradient(ellipse at 100% 100%, #d9bd8a, transparent 60%),
+    linear-gradient(174deg, #f7ecd2, var(--cd-parch) 42%, #e6d1a6);
+  box-shadow: inset 0 0 1.6em #b98c4f40;
+}
+/* Candlelight on the paper after dark: the overlay belongs to the hour. */
+.pier-chat-paper::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 8% 50%, #ffb35a1f, transparent 55%); }
+
+/* The fish's own picture, in a small print window. */
+.pier-chat-print {
+  z-index: 1;
+  position: relative; flex: none; width: 5.5em; height: 5.5em; border-radius: .35em; overflow: hidden;
+  background: radial-gradient(circle at 50% 42%, #fffaf0, #efdfbd 62%, #dcc396);
+  box-shadow: inset 0 0 0 1px #8a5a3059, inset 0 .15em .45em #6b452238, 0 1px 0 #fff6e0b3;
+}
+.pier-chat-print[data-portrait='none'] { display: none; }
+.pier-chat-portrait { position: absolute; inset: 0; display: block; width: 100% !important; height: 100% !important; object-fit: contain; }
+.pier-chat-print[data-portrait='pending'] .pier-chat-portrait { opacity: 0; }
+.pier-chat-print[data-portrait='drawn'] .pier-chat-portrait { opacity: 1; transition: opacity .3s ease; }
+
+.pier-chat-words { position: relative; z-index: 1; flex: 1 1 auto; min-width: 0; }
+.pier-chat-line { color: var(--cd-ink-soft); font: italic 1.14em/1.12 var(--cd-face-body); text-wrap: balance; overflow-wrap: anywhere; }
+.pier-chat-who { font-style: normal; font-weight: 700; color: var(--cd-ink); }
+.pier-chat-lamp {
+  display: inline-block; width: .74em; height: .74em; margin: 0 .38em .05em 0; border-radius: 50%; vertical-align: middle;
+  background: radial-gradient(circle at 38% 34%, #fffaf0 0 10%, var(--lamp, #ffd9a0) 34% 74%, color-mix(in srgb, var(--lamp, #ffd9a0) 75%, #5a2a00) 100%);
+  box-shadow: 0 0 0 .09em #5b3b27, 0 0 .55em color-mix(in srgb, var(--lamp, #ffd9a0) 80%, transparent);
+}
+.pier-chat-subject { display: block; margin-top: .04em; color: var(--cd-ink); font: normal 1.82em/1.02 var(--cd-face-story); letter-spacing: -.005em; text-wrap: balance; }
+.pier-chat-measure { margin-top: .3em !important; color: var(--cd-ink); font: 700 1.14em/1.1 var(--cd-face-body); font-variant-numeric: lining-nums tabular-nums; letter-spacing: .01em; }
+
+/* Honours: the kingdom's red wax, and the brass plate of a numbered mount. Both press in a beat after the card lands. */
+.pier-chat-honours { display: flex; flex-wrap: wrap; align-items: center; gap: .45em .9em; margin-top: .5em; }
+.pier-chat-first { display: inline-flex; align-items: center; gap: .3em; color: var(--cd-ink-alarm); font: 1.02em/1 var(--cd-face-label); letter-spacing: .05em; white-space: nowrap; }
+.pier-chat-first-words { opacity: calc(.1 + var(--stamp, 1) * .9); }
+.pier-chat-wax {
+  flex: none; width: 2.25em; height: 2.25em; margin: -.35em 0 -.35em -.2em; overflow: visible;
+  opacity: clamp(0, calc(var(--stamp, 1) * 3), 1); transform: rotate(-7deg) scale(calc(1.8 - var(--stamp, 1) * .8));
+  filter: drop-shadow(0 .06em .05em #4a0d0599);
+}
+.pier-chat-wax-pool { fill: #9a2c1f; stroke: #5a140b; stroke-width: .8; }
+.pier-chat-wax-face { fill: #b23b28; }
+.pier-chat-wax-rim { fill: none; stroke: #6e1a0f; stroke-width: 1.5; }
+.pier-chat-wax-ring { fill: none; stroke: #d36a52; stroke-width: .7; stroke-dasharray: 1.2 1.6; opacity: .8; }
+.pier-chat-wax-crown { fill: #d9705a; stroke: #6e1a0f; stroke-width: .9; stroke-linejoin: round; }
+.pier-chat-wax-band { stroke: #6e1a0f; stroke-width: 1.4; stroke-linecap: round; }
+.pier-chat-wax-gem { fill: #f0a08a; stroke: #6e1a0f; stroke-width: .5; }
+.pier-chat-wax-shine { fill: none; stroke: #ffd9c470; stroke-width: 1.6; stroke-linecap: round; }
+.pier-chat-mount {
+  display: inline-block; padding: .3em .85em .32em; border-radius: .2em; white-space: nowrap;
+  color: #2e1d0d; font: .98em/1 var(--cd-face-label); letter-spacing: .09em; text-shadow: 0 1px 0 #ffeec080;
+  background:
+    radial-gradient(circle at .38em 50%, #5c3f19 0 .07em, #f4dc9d .09em .12em, #7c5a2a .15em, transparent .18em),
+    radial-gradient(circle at calc(100% - .38em) 50%, #5c3f19 0 .07em, #f4dc9d .09em .12em, #7c5a2a .15em, transparent .18em),
+    linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 52%, #a8803f 80%, var(--cd-brass-lo));
+  box-shadow: inset 0 1px 0 #fff4d199, inset 0 -1px 0 #5c3f1999, 0 0 0 1px #5c3f19, 0 .12em .2em #3a281266;
+  opacity: clamp(0, calc(var(--stamp, 1) * 2), 1); transform: translateY(calc((1 - var(--stamp, 1)) * -.35em));
+}
+
+/* ---------- A legend: lacquer and gold leaf, the one that got away ---------- */
+.pier-chat-card[data-kind='legend'] .pier-chat-board {
+  background:
+    radial-gradient(circle at .6em .6em, #fff1c2 0 .07em, #e2b866 .1em .17em, #8a6224 .21em, transparent .25em),
+    radial-gradient(circle at calc(100% - .6em) .6em, #fff1c2 0 .07em, #e2b866 .1em .17em, #8a6224 .21em, transparent .25em),
+    radial-gradient(circle at .6em calc(100% - .6em), #fff1c2 0 .07em, #e2b866 .1em .17em, #8a6224 .21em, transparent .25em),
+    radial-gradient(circle at calc(100% - .6em) calc(100% - .6em), #fff1c2 0 .07em, #e2b866 .1em .17em, #8a6224 .21em, transparent .25em),
+    repeating-linear-gradient(91deg, #ffdcae06 0 2px, transparent 2px 9px, #00000018 9px 10px, transparent 10px 17px),
+    linear-gradient(176deg, #3a2a22, #251a14 45%, #170f0b);
+  box-shadow: inset 0 1px 0 #ffe7b02e, 0 0 0 1px #0d0806, 0 0 1.6em #d9a24a40;
+}
+.pier-chat-lacquer {
+  position: relative; display: flex; align-items: center; gap: .9em; padding: .85em 1.15em .9em .85em; border-radius: .22em;
+  background:
+    radial-gradient(ellipse at 18% -10%, #43345a, transparent 62%),
+    radial-gradient(ellipse at 96% 120%, #18394aaa, transparent 58%),
+    linear-gradient(170deg, #241a2e, #120e19);
+  box-shadow: inset 0 0 0 1px #f2cf7a, inset 0 0 0 3px #120e19, inset 0 0 0 4px #b9842f99, inset 0 0 2.2em #000000b3;
+}
+.pier-chat-card[data-kind='legend'] .pier-chat-print {
+  width: 5.2em; height: 5.2em; border-radius: 50%;
+  background: radial-gradient(circle at 50% 45%, #2f5566, #13222c 72%);
+  box-shadow: inset 0 0 0 1px #f2cf7a99, inset 0 0 1.2em #000000b3, 0 0 .9em #f2cf7a33;
+}
+/* Only its shape is known: a dark fish under gold light. */
+.pier-chat-card[data-kind='legend'] .pier-chat-portrait { filter: brightness(0) drop-shadow(0 0 .12em #f6dc95) drop-shadow(0 0 .4em #f2cf7a80); transform: scale(1.1); }
+.pier-chat-card[data-kind='legend'] .pier-chat-line { color: #e9d9b8; font-style: normal; }
+.pier-chat-card[data-kind='legend'] .pier-chat-lead,
+.pier-chat-card[data-kind='legend'] .pier-chat-subject,
+.pier-chat-moral {
+  background: linear-gradient(180deg, #fff3cc 8%, #f6d37e 42%, #c48d34 64%, #f2d48c 86%) 0 0 / 100% 1lh;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 1px 0 #000000a6) drop-shadow(0 0 .35em #f2cf7a38);
+}
+.pier-chat-card[data-kind='legend'] .pier-chat-lead { display: inline; font: normal 1.82em/1.04 var(--cd-face-story); }
+.pier-chat-card[data-kind='legend'] .pier-chat-subject { display: inline; font-size: 1.82em; }
+.pier-chat-card[data-kind='legend'] .pier-chat-tail { display: block; margin-top: .14em; color: #efe0c2; font: italic 1.12em/1.15 var(--cd-face-body); }
+.pier-chat-gild-rule {
+  position: relative; display: block; height: .7em; margin: .42em 0 .32em;
+  background: linear-gradient(90deg, transparent, #c48d34 12%, #f6dc95 50%, #c48d34 88%, transparent) center / 100% 1px no-repeat;
+}
+.pier-chat-gild-rule::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: .42em; height: .42em; transform: translate(-50%, -50%) rotate(45deg);
+  background: linear-gradient(135deg, #fff3cc, #d9a24a 60%, #8a6224); box-shadow: 0 0 0 2px #120e19, 0 0 .4em #f2cf7a80;
+}
+.pier-chat-moral { display: block; font: italic 1.16em/1.2 var(--cd-face-story); letter-spacing: .01em; }
+
+/* ---------- The honest slip: the pier is full ---------- */
+.pier-chat-card[data-kind='full'] .pier-chat-board {
+  display: inline-flex; align-items: center; gap: .55em; padding: .48em 1.05em .5em .62em; border-radius: .22em .3em .25em .28em;
+  background:
+    linear-gradient(90deg, #8a5a3012, transparent 1.2em),
+    radial-gradient(ellipse at 28% 18%, var(--cd-parch-hi), transparent 72%),
+    linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #8a5a3040, inset 0 -1px 0 #8a5a3033, 0 0 0 1px #3d271899;
+}
+.pier-chat-full { max-width: 24em; color: var(--cd-ink); font: italic 1.04em/1.25 var(--cd-face-body); text-wrap: balance; }
+.pier-chat-glyph { flex: none; width: 1.3em; height: 1.75em; overflow: visible; }
+.pier-chat-glyph-water { fill: none; stroke: #4c6f7a; stroke-width: 1.4; stroke-linecap: round; }
+.pier-chat-glyph-tip { stroke: #a5321f; stroke-width: 2.4; stroke-linecap: round; }
+.pier-chat-glyph-body { fill: #8a5a30; stroke: var(--cd-ink); stroke-width: 1.1; }
+.pier-chat-glyph-band { stroke: var(--cd-cream); stroke-width: 2; }
+
+/* ---------- A phone: the same cards, smaller ---------- */
+.pier-chat[data-compact='true'] .pier-chat-board { padding: .36em; }
+.pier-chat[data-compact='true'] .pier-chat-paper,
+.pier-chat[data-compact='true'] .pier-chat-lacquer { gap: .7em; padding: .62em .85em .66em .62em; }
+.pier-chat[data-compact='true'] .pier-chat-print { width: 4.6em; height: 4.6em; }
+.pier-chat[data-compact='true'] .pier-chat-line { font-size: 1.16em; }
+.pier-chat[data-compact='true'] .pier-chat-subject,
+.pier-chat[data-compact='true'] .pier-chat-card[data-kind='legend'] .pier-chat-lead { font-size: 1.7em; }
+.pier-chat[data-compact='true'] .pier-chat-card[data-kind='full'] .pier-chat-board { padding: .45em .85em .46em .55em; }
+.pier-chat[data-compact='true'] .pier-chat-full { max-width: calc(100cqw - 90px); font-size: 1.12em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pier-chat-card { transform: translate(0, var(--y, 0px)); }
+  .pier-chat[data-compact='true'] .pier-chat-card { transform: translate(0, calc(var(--y, 0px) * -1)); }
+  .pier-chat-wax { transform: rotate(-7deg); }
+  .pier-chat-mount { transform: none; }
+}
+@media (forced-colors: active) {
+  .pier-chat-board, .pier-chat-name { border: 1px solid CanvasText; }
+  .pier-chat-card[data-kind='legend'] .pier-chat-lead, .pier-chat-card[data-kind='legend'] .pier-chat-subject, .pier-chat-moral { color: CanvasText; background: none; }
+}

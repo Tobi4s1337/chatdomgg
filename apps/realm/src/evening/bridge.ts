@@ -23,6 +23,11 @@ export interface RealmEveningOptions {
   readonly providers?: ForgeProviders;
   /** Authenticated normalized Herald evidence only. A failed prerequisite leaves it for the sender to retry. */
   readonly beforeObservation?: (input: PresenceInput) => Promise<void>;
+  /** Chat commands a feature claims once the chatter has a lit window (pier's `!fish`). True means no speech bubble. */
+  readonly chatCommands?: {
+    chat(input: RealmHeraldChat, kingdom: DurableKingdom, slot: number): boolean;
+    cleanup(kingdomId: KingdomId, filter: { readonly messageIds?: readonly string[]; readonly personId?: string }): void;
+  };
 }
 
 type Application = ReturnType<typeof createKingdomForgeApplication>;
@@ -173,6 +178,8 @@ export class RealmEveningBridge {
     }
     if ('chatCleanup' in input) {
       const cleanup = input.chatCleanup;
+      this.options.chatCommands?.cleanup(cleanup.kingdomId, cleanup.type === 'remove' ? { messageIds: cleanup.messageIds }
+        : cleanup.personId === undefined ? {} : { personId: cleanup.personId });
       this.sweepSpeech();
       if (cleanup.type === 'remove') {
         const ids = cleanup.messageIds.map(id => this.speechId(cleanup.kingdomId, id));
@@ -253,7 +260,8 @@ export class RealmEveningBridge {
     this.speechWaiting++;
     try {
       while (!this.stopped && performance.now() < until && input.expiresAt > clock()) {
-        if (this.speechHost(input.personId, input)) return this.chat(input);
+        const host = this.speechHost(input.personId, input);
+        if (host) return this.options.chatCommands?.chat(input, host.kingdom, host.slot) || this.chat(input);
         await new Promise<void>(resolve => setTimeout(resolve, 25));
       }
       return false;

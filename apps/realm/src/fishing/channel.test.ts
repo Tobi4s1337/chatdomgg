@@ -150,7 +150,7 @@ it('publishes catch success only after the writer confirms it, with private evid
   expect(f.publicMessages.some(message => message.type === 'pier.caught')).toBe(false);
   const candidate = f.casts().candidate(owner)!;
   const item = { ...rod(), defId: fish.id, branch: 'gathered' as const, place: 'bag' as const, slot: null };
-  finish({ status: 'kept', replayed: false, item, catch: { version: 1, id: castId, kingdomId, origin: 'simulated', ownerId: owner, speciesId: fish.id,
+  finish({ status: 'kept', replayed: false, item, keepsake: null, catch: { version: 1, id: castId, kingdomId, origin: 'simulated', ownerId: owner, speciesId: fish.id,
     itemId: item.id, grantKey: 'private grant', caughtAt: candidate.at, personalFirst: true, kingdomFirst: true, rarity: 'common', fish: candidate.fish,
     environment: candidate.environment, float: candidate.float, anchor: candidate.anchor, collisionRevision: 7,
     proof: { version: 1, castSeed: candidate.castSeed, fightSeed: candidate.fightSeed, inputs: candidate.inputs, result: candidate.result } } });
@@ -194,7 +194,7 @@ it('does not transfer an in-flight keep to a replacement seat; explicit retry re
   });
   const castId = await land(f), candidate = f.casts().candidate(owner)!;
   const item = { ...rod(), defId: fish.id, branch: 'gathered' as const, place: 'bag' as const, slot: null };
-  committed = { status: 'kept', replayed: false, item, catch: { version: 1, id: castId, kingdomId, origin: 'simulated', ownerId: owner, speciesId: fish.id,
+  committed = { status: 'kept', replayed: false, item, keepsake: null, catch: { version: 1, id: castId, kingdomId, origin: 'simulated', ownerId: owner, speciesId: fish.id,
     itemId: item.id, grantKey: 'private grant', caughtAt: candidate.at, personalFirst: true, kingdomFirst: true, rarity: 'common', fish: candidate.fish,
     environment: candidate.environment, float: candidate.float, anchor: candidate.anchor, collisionRevision: 7,
     proof: { version: 1, castSeed: candidate.castSeed, fightSeed: candidate.fightSeed, inputs: candidate.inputs, result: candidate.result } } };
@@ -266,7 +266,7 @@ it('does not resurrect an unequipped rod when a background refresh returns late'
 function keptResult(f: ReturnType<typeof fixture>, castId: string, replayed = false): FishingCatchResult {
   const candidate = f.casts().candidate(owner)!;
   const item = { ...rod(), defId: fish.id, branch: 'gathered' as const, place: 'bag' as const, slot: null };
-  return { status: 'kept', replayed, item, catch: { version: 1, id: castId, kingdomId, origin: 'simulated', ownerId: owner, speciesId: fish.id,
+  return { status: 'kept', replayed, item, keepsake: null, catch: { version: 1, id: castId, kingdomId, origin: 'simulated', ownerId: owner, speciesId: fish.id,
     itemId: item.id, grantKey: 'private grant', caughtAt: candidate.at, personalFirst: false, kingdomFirst: false, rarity: 'common', fish: candidate.fish,
     environment: candidate.environment, float: candidate.float, anchor: candidate.anchor, collisionRevision: 7,
     proof: { version: 1, castSeed: candidate.castSeed, fightSeed: candidate.fightSeed, inputs: candidate.inputs, result: candidate.result } } };

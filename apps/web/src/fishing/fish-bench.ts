@@ -9,7 +9,7 @@ import type { PierBench, PierBenchWindow } from './bench';
 export function fishSheet(query: URLSearchParams): readonly { id: string; name: string }[] {
   const group = query.get('group') ?? '0';
   if (group === 'rod') return [{ id: 'tool:rod.willow', name: 'Willow Rod' }];
-  if (!/^[0-2]$/.test(group)) throw new Error('Choose fish sheet 0, 1, 2 or rod.');
+  if (!/^[0-6]$/.test(group)) throw new Error('Choose fish sheet 0 to 6, or rod.');
   return FISH_SPECIES.slice(Number(group) * 4, Number(group) * 4 + 4);
 }
 

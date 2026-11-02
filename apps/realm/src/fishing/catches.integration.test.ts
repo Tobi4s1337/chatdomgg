@@ -8,7 +8,8 @@ import { createPostgresItemStore, postgresItemClient } from '../items/postgres';
 import { createPostgresFishingAdmission } from './entry';
 import { createPostgresFishingCatchWriter } from './catches';
 import { createFishingSpecies } from './species';
-import { common, definition, freshKingdom, pierTestPool, rare, retained, sender, wonCast } from './catch-test-fixtures';
+import { fishMountId } from '../../../../packages/content/src/keepsakes';
+import { common, definition, definitions, freshKingdom, pierTestPool, rare, retained, sender, wonCast } from './catch-test-fixtures';
 
 const enabled = process.env.REALM_DATABASE_TESTS === '1';
 let pool: Pool;
@@ -30,7 +31,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
     const kingdomId = freshKingdom(); let hold = await retained(pool, kingdomId);
     try {
       const owner = await sender(pool, kingdomId), cast = wonCast(kingdomId, owner.personId), store = createPostgresItemStore({ pool });
-      const catalogue = createItemCatalogue([definition(common)]), species = createFishingSpecies([common]);
+      const catalogue = createItemCatalogue(definitions(common)), species = createFishingSpecies([common]);
       const items = createRealmItems({ store, catalogue, clock: Date.now });
       const options = { kingdomId, origin: 'simulated' as const, store, items, catalogue, species, where: 'Willowmere pier', authority: () => hold.kingdom,
         candidate: cast.casts.candidate, finish: cast.casts.finish,
@@ -54,8 +55,10 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
       const newStore = createPostgresItemStore({ pool }), newItems = createRealmItems({ store: newStore, catalogue, clock: Date.now });
       const restarted = createPostgresFishingCatchWriter({ ...options, store: newStore, items: newItems, authority: () => hold.kingdom, candidate: () => null });
       expect(await restarted.keep(owner.from, cast.id)).toMatchObject({ status: 'kept', replayed: true, item: { id: result.item.id }, catch: { id: result.catch.id } });
-      expect((await newItems.list(owner.personId, kingdomId))).toHaveLength(1);
-      expect((await items.list(owner.personId, kingdomId))).toHaveLength(1);
+      // The kingdom's first of a species also brings its numbered mount: one fish, one mount, never twice.
+      expect((await newItems.list(owner.personId, kingdomId)).map(item => item.defId).sort()).toEqual([common.id, fishMountId(common.id)].sort());
+      expect((await items.list(owner.personId, kingdomId)).map(item => item.defId).sort()).toEqual([common.id, fishMountId(common.id)].sort());
+      expect(result.keepsake).toMatchObject({ defId: fishMountId(common.id), number: 1 });
       expect((await pool.query('SELECT id FROM realm_fishing_catches WHERE kingdom_id=$1', [kingdomId])).rowCount).toBe(1);
       await expect(pool.query('UPDATE realm_fishing_catches SET record=record WHERE kingdom_id=$1 AND id=$2', [kingdomId, cast.id])).rejects.toThrow();
       await expect(pool.query('DELETE FROM realm_fishing_catches WHERE kingdom_id=$1 AND id=$2', [kingdomId, cast.id])).rejects.toThrow();
@@ -65,7 +68,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
   it('protects the first, stacks later common catches, and keeps rare fish separate', async () => {
     const kingdomId = freshKingdom(), hold = await retained(pool, kingdomId);
     try {
-      const owner = await sender(pool, kingdomId), store = createPostgresItemStore({ pool }), catalogue = createItemCatalogue([definition(common), definition(rare)]);
+      const owner = await sender(pool, kingdomId), store = createPostgresItemStore({ pool }), catalogue = createItemCatalogue(definitions(common, rare));
       const items = createRealmItems({ store, catalogue, clock: Date.now });
       const admit = createPostgresFishingAdmission({ pool, origin: 'simulated', readiness: { held: () => null } });
       const keep = async (fish: typeof common) => {
@@ -102,7 +105,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
         if (pids.length === 2) twoClients();
         return client;
       } };
-      const store = createPostgresItemStore({ pool: database }), catalogue = createItemCatalogue([definition(common)]), items = createRealmItems({ store, catalogue, clock: Date.now });
+      const store = createPostgresItemStore({ pool: database }), catalogue = createItemCatalogue(definitions(common)), items = createRealmItems({ store, catalogue, clock: Date.now });
       const actualAdmission = createPostgresFishingAdmission({ pool: racePool, origin: 'simulated', readiness: { held: () => null } });
       let first = true;
       const admit: typeof actualAdmission = async (from, tx) => {
@@ -142,7 +145,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
     const kingdomId = freshKingdom(), hold = await retained(pool, kingdomId);
     try {
       const owner = await sender(pool, kingdomId), cast = wonCast(kingdomId, owner.personId), store = createPostgresItemStore({ pool });
-      const catalogue = createItemCatalogue([definition(common)]), items = createRealmItems({ store, catalogue, clock: Date.now }), changed = vi.fn();
+      const catalogue = createItemCatalogue(definitions(common)), items = createRealmItems({ store, catalogue, clock: Date.now }), changed = vi.fn();
       items.onChange(changed);
       const transaction = store.transaction.bind(store);
       store.transaction = (kingdom, work) => transaction(kingdom, tx => {
@@ -177,13 +180,13 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
           return typeof value === 'function' ? value.bind(target) : value;
         } });
       } };
-      const store = createPostgresItemStore({ pool: failingPool }), catalogue = createItemCatalogue([definition(common)]), items = createRealmItems({ store, catalogue, clock: Date.now });
+      const store = createPostgresItemStore({ pool: failingPool }), catalogue = createItemCatalogue(definitions(common)), items = createRealmItems({ store, catalogue, clock: Date.now });
       const writer = createPostgresFishingCatchWriter({ kingdomId, origin: 'simulated', store, items, catalogue, species: createFishingSpecies([common]), where: 'pier',
         authority: () => hold.kingdom, candidate: cast.casts.candidate, finish: cast.casts.finish,
         admit: createPostgresFishingAdmission({ pool, origin: 'simulated', readiness: { held: () => null } }) });
       expect(await writer.keep(owner.from, cast.id)).toMatchObject({ status: 'uncertain', castId: cast.id });
       expect(await writer.keep(owner.from, cast.id)).toMatchObject({ status: 'kept', replayed: true });
-      expect((await items.list(owner.personId, kingdomId))).toHaveLength(1);
+      expect((await items.list(owner.personId, kingdomId)).filter(item => item.defId === common.id)).toHaveLength(1);
       expect((await pool.query('SELECT id FROM realm_fishing_catches WHERE kingdom_id=$1', [kingdomId])).rowCount).toBe(1);
     } finally { await hold.release(); }
   }, 30_000);
@@ -192,7 +195,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
     const kingdomId = freshKingdom(), hold = await retained(pool, kingdomId);
     try {
       const owner = await sender(pool, kingdomId), cast = wonCast(kingdomId, owner.personId), store = createPostgresItemStore({ pool });
-      const catalogue = createItemCatalogue([definition(common)]), items = createRealmItems({ store, catalogue, clock: Date.now }), changed = vi.fn();
+      const catalogue = createItemCatalogue(definitions(common)), items = createRealmItems({ store, catalogue, clock: Date.now }), changed = vi.fn();
       items.onChange(changed);
       const transaction = store.transaction.bind(store);
       store.transaction = (kingdom, work) => transaction(kingdom, tx => {
@@ -220,7 +223,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
     const kingdomId = freshKingdom(), hold = await retained(pool, kingdomId);
     try {
       const owner = await sender(pool, kingdomId), cast = wonCast(kingdomId, owner.personId), store = createPostgresItemStore({ pool });
-      const catalogue = createItemCatalogue([definition(common)]), items = createRealmItems({ store, catalogue, clock: Date.now });
+      const catalogue = createItemCatalogue(definitions(common)), items = createRealmItems({ store, catalogue, clock: Date.now });
       const admission = createPostgresFishingAdmission({ pool, origin: 'simulated', readiness: { held: () => null } });
       let enter!: () => void, resume!: () => void, first = true, catchPid = 0;
       const locked = new Promise<void>(resolve => { enter = resolve; }), gate = new Promise<void>(resolve => { resume = resolve; });
@@ -274,7 +277,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
         tx.saveReceipt = async value => { await receipt(value); if (phase === 'receipt') throw new Error('injected receipt write fault'); };
         return work(tx);
       });
-      const catalogue = createItemCatalogue([definition(common)]), items = createRealmItems({ store, catalogue, clock: Date.now }), changed = vi.fn();
+      const catalogue = createItemCatalogue(definitions(common)), items = createRealmItems({ store, catalogue, clock: Date.now }), changed = vi.fn();
       items.onChange(changed);
       const writer = createPostgresFishingCatchWriter({ kingdomId, origin: 'simulated', store, items, catalogue, species: createFishingSpecies([common]), where: 'pier',
         authority: () => hold.kingdom, candidate: cast.casts.candidate, finish: cast.casts.finish,
@@ -293,7 +296,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
     const kingdomId = freshKingdom(), hold = await retained(pool, kingdomId);
     try {
       const owner = await sender(pool, kingdomId), cast = wonCast(kingdomId, owner.personId), store = createPostgresItemStore({ pool });
-      const catalogue = createItemCatalogue([definition(common)]), items = createRealmItems({ store, catalogue, clock: Date.now });
+      const catalogue = createItemCatalogue(definitions(common)), items = createRealmItems({ store, catalogue, clock: Date.now });
       const writer = createPostgresFishingCatchWriter({ kingdomId, origin: 'simulated', store, items, catalogue, species: createFishingSpecies([common]), where: 'pier',
         authority: () => hold.kingdom, candidate: cast.casts.candidate, finish: cast.casts.finish,
         admit: createPostgresFishingAdmission({ pool, origin: 'simulated', readiness: { held: () => null } }) });
@@ -311,7 +314,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
       const owner = await sender(pool, kingdomId), cast = wonCast(kingdomId, owner.personId), store = createPostgresItemStore({ pool });
       const transaction = store.transaction.bind(store);
       store.transaction = (kingdom, work) => transaction(kingdom, async tx => { const result = await work(tx); cast.disconnect(); return result; });
-      const catalogue = createItemCatalogue([definition(common)]), items = createRealmItems({ store, catalogue, clock: Date.now }), changed = vi.fn();
+      const catalogue = createItemCatalogue(definitions(common)), items = createRealmItems({ store, catalogue, clock: Date.now }), changed = vi.fn();
       items.onChange(changed);
       const writer = createPostgresFishingCatchWriter({ kingdomId, origin: 'simulated', store, items, catalogue, species: createFishingSpecies([common]), where: 'pier',
         authority: () => hold.kingdom, candidate: cast.casts.candidate, finish: cast.casts.finish,
@@ -328,7 +331,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
     const kingdomId = freshKingdom(), hold = await retained(pool, kingdomId);
     try {
       const owner = await sender(pool, kingdomId), cast = wonCast(kingdomId, owner.personId), store = createPostgresItemStore({ pool });
-      const catalogue = createItemCatalogue([definition(common)]), items = createRealmItems({ store, catalogue, clock: Date.now });
+      const catalogue = createItemCatalogue(definitions(common)), items = createRealmItems({ store, catalogue, clock: Date.now });
       await items.forgetName(owner.personId);
       const writer = createPostgresFishingCatchWriter({ kingdomId, origin: 'simulated', store, items, catalogue, species: createFishingSpecies([common]), where: 'pier',
         authority: () => hold.kingdom, candidate: cast.casts.candidate, finish: cast.casts.finish,
@@ -342,7 +345,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
     const kingdomId = freshKingdom(), hold = await retained(pool, kingdomId);
     try {
       const owner = await sender(pool, kingdomId), store = createPostgresItemStore({ pool });
-      const catalogue = createItemCatalogue([definition(common)]), items = createRealmItems({ store, catalogue, clock: Date.now });
+      const catalogue = createItemCatalogue(definitions(common)), items = createRealmItems({ store, catalogue, clock: Date.now });
       const admit = createPostgresFishingAdmission({ pool, origin: 'simulated', readiness: { held: () => null } });
       const first = wonCast(kingdomId, owner.personId), second = wonCast(kingdomId, owner.personId);
       const writer = (cast: typeof first) => createPostgresFishingCatchWriter({ kingdomId, origin: 'simulated', store, items, catalogue,
@@ -353,7 +356,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
       expect(result.item.storied).toBe(false);
       expect(await items.release(owner.personId, result.item.id, 1, result.item.revision)).toMatchObject({ ok: true, item: { place: 'spent', count: 0 } });
       expect(await secondWriter.keep(owner.from, second.id)).toMatchObject({ status: 'kept', replayed: true, item: { id: result.item.id, place: 'spent', count: 0 } });
-      expect(await items.list(owner.personId, kingdomId)).toHaveLength(1);
+      expect((await items.list(owner.personId, kingdomId)).filter(item => item.defId === common.id)).toHaveLength(1);
     } finally { await hold.release(); }
   }, 30_000);
 
@@ -370,7 +373,7 @@ describe.runIf(enabled)('fishing catch ledger on isolated Postgres', () => {
         const client = await pool.connect();
         catchPid = Number((await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid); started(); return client;
       } };
-      const store = createPostgresItemStore({ pool: database }), catalogue = createItemCatalogue([definition(common)]), items = createRealmItems({ store, catalogue, clock: Date.now });
+      const store = createPostgresItemStore({ pool: database }), catalogue = createItemCatalogue(definitions(common)), items = createRealmItems({ store, catalogue, clock: Date.now });
       const writer = createPostgresFishingCatchWriter({ kingdomId, origin: 'simulated', store, items, catalogue, species: createFishingSpecies([common]), where: 'pier',
         authority: () => hold.kingdom, candidate: cast.casts.candidate, finish: cast.casts.finish,
         admit: createPostgresFishingAdmission({ pool, origin: 'simulated', readiness: { held: () => null } }) });
