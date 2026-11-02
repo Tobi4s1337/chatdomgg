@@ -163,3 +163,53 @@ service wish proof remain to be built in this namespace, with data under `/tmp/c
 `needs: intake` — the exact coordinated 240→493 patch for the existing Herald/run contracts and Herald guards
 is written in [fw10-panel-contract.md](fw10-panel-contract.md#exact-integration-needs). Current intake rejects
 longer text before posting; it never truncates a wish. The frozen overlong fixture remains unsupported.
+
+## 9. Preserve the kit that made a piece (FW10)
+
+`forgeStyleKit(family, revision?)` now registers revisions **1** and **2**. The default remains **1**. Revision
+one reproduces the committed geometry, including version-two plans. Revision two gives version-two lanterns
+a framed glass chamber and moves their glow anchor into it; the sleeping fox gains a clearer muzzle, ears and curled tail. Other shapes retain their geometry. Unknown
+revisions fail closed. Review fixtures select revision two explicitly; they are not a product rollout.
+
+`findForgeSockets(home, profile, kitRevision = 1)` also resolves the saved revision. Revision two surveys the
+complete authored lantern envelope, including every registered motif and family, so a neighboring gable cannot
+intersect the raised ornament. Revision one's socket positions and geometry remain unchanged. Future vocabulary
+changes must preserve the envelope membership and socket outputs of every already-persisted revision.
+
+The owned browser Forge scene uses each attachment's saved kit and socket revision. Local restore/refit does
+the same. New authority work captures one trusted kit across result rendering, approval binding and final
+assembly. A result receipt must not approve another kit revision; legacy digest-only receipts may authorize
+revision one only. Commit fit checks still require the current kit, so a preview cannot opt into publishing
+revision two while the default is one.
+
+`needs: main` — before changing `CURRENT_FORGE_STYLE_KIT_REVISION` to 2, update both core-owned reconstruction
+paths and demonstrate native growth of a home carrying mixed revision-one and revision-two attachments. This
+lane does not edit those files.
+
+In `apps/realm/src/founded/scene.ts`, replace the shared current socket list with per-part resolution. Compute
+`fingerprint` from `Object.keys(home.attachments).length`, independently of a current socket list. Inside the
+loop, before selecting the socket:
+
+```ts
+const kit = forgeStyleKit(part.family, part.kitRevision);
+if (kit.id !== part.kitId) fail(`part ${id} names an unregistered kit`);
+const sockets = findForgeSockets(blueprint, profile, kit.revision);
+```
+
+Keep the existing socket origin, host fingerprint, profile and fit guards. Remove the later current-kit lookup.
+
+In `apps/realm/src/growth/native.ts`, remove the shared current `kit` and `sockets`. Keep the attachment's
+owner/family/slot/kingdom/profile checks, removing only their comparison against the shared current kit. After
+those checks, resolve each part's persisted kit and survey:
+
+```ts
+const kit = forgeStyleKit(home.family, part.attachment.kitRevision);
+if (part.attachment.kitId !== kit.id) return { kind: 'held', reason: 'unsafe-part' };
+const sockets = findForgeSockets(target.blueprint, 'street-home', kit.revision);
+```
+
+Unknown revisions remain an unsafe-part hold through the existing catch. Retain the fitted-slot uniqueness
+and canonical fit guards. Then change only the exported current revision in `packages/forge/src/plan.ts`.
+Do not relabel old attachments, overwrite their plans, or let a revision-one approval authorize revision two.
+Old and new pieces must reconstruct their own geometry and sockets through snapshots, arrival, reload,
+displacement/refit and growth.

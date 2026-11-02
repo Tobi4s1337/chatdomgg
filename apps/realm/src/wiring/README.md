@@ -60,6 +60,10 @@ The approval binds the exact selected draft and full home digest. The realm supp
 before commit; a title, plaque, plan or host substitution has no receipt. Quiet retries retain only the selected
 result's full evidence, with discarded outcome/quality summaries kept privately. Normal runs above five calls
 cannot authorize; explicitly softened runs have an absolute seven-call ceiling.
+New records additionally bind the registered kit ID and revision, and exact-record reads require that same pair.
+Legacy digest-only files remain immutable and authorize revision one only, with owned-home/family and current-kit
+fit checks still applied. They do not independently identify their historical family. A registered revision-two
+preview cannot commit while the current kit is one, even if a caller supplies an otherwise successful approval.
 
 Focused evidence: `pnpm exec vitest run apps/realm/src/wiring`, `pnpm exec eslint apps/realm/src/wiring`,
 `pnpm typecheck`. The command-port tests use the actual `DurableKingdom` registry/queue and reducer with an

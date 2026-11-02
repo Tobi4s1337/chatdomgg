@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { ForgeDraftSchema, ForgeRunRequestSchema, type ForgeRunEvent, type ForgeDraft } from '@chatdom/shared';
+import { ForgeDraftSchema, ForgeRunRequestSchema, ForgeStyleKitSchema, type ForgeRunEvent, type ForgeDraft, type ForgeStyleKit } from '@chatdom/shared';
 import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
 import { renderForgeContactSheet } from './contact-sheet';
 import { createForgeCallBudget, ForgeCallBudgetError, type ForgeCallBudget, type ForgeProviders, type JudgeVerdict, type ForgeDraftCandidate } from './providers';
@@ -17,7 +17,7 @@ export interface ForgeRunRecord {
   selection?: ForgeRunSelection;
 }
 /** Supplied by trusted server identity, never by a browser or model plan. */
-export interface ForgeRunContext { readonly safetyIdentifier: string }
+export interface ForgeRunContext { readonly safetyIdentifier: string; readonly styleKit?: ForgeStyleKit }
 interface Candidate { draft: ForgeDraft; interpretation: ForgeDraftCandidate['interpretation']; shared: ForgeDraftCandidate['shared']; verdict: number; attempt: number }
 const quality = (verdict: JudgeVerdict) => verdict.quality?.score ?? 0;
 const goodQuality = (verdict: JudgeVerdict) => quality(verdict) >= 0.72
@@ -37,6 +37,10 @@ export async function runForge(input: unknown, providers: ForgeProviders, emit: 
   };
   const safetyIdentifier = context?.safetyIdentifier ?? createHash('sha256').update('chatdom-local-development-citizen').digest('hex');
   if (!/^[a-zA-Z0-9_-]{16,128}$/.test(safetyIdentifier)) throw new Error('Invalid trusted Forge identity.');
+  const styleKit = ForgeStyleKitSchema.parse(context?.styleKit ?? forgeStyleKit(request.family));
+  const registeredKit = forgeStyleKit(request.family, styleKit.revision);
+  if (styleKit.family !== request.family || styleKit.id !== registeredKit.id || styleKit.styleId !== registeredKit.styleId)
+    throw new Error('The trusted Forge style kit does not match this home.');
   const abort = () => signal?.throwIfAborted();
   const persist = async () => { entry.modelCalls = budget.calls; await record(structuredClone(entry)); };
   const stop = async (outcome: 'hold' | 'refuse' | 'cold', message: string) => {
@@ -64,7 +68,7 @@ export async function runForge(input: unknown, providers: ForgeProviders, emit: 
     const words = await providers.judgeWords({ words: request.words, safetyIdentifier, budget, ...(signal ? { signal } : {}) });
     verdicts.push(words); abort();
     if (words.outcome !== 'pass') { await stop(words.outcome, words.reason); return; }
-    const sockets = findForgeSockets(request.home, request.hostProfile);
+    const sockets = findForgeSockets(request.home, request.hostProfile, styleKit.revision);
     if (!sockets.length) { await stop('hold', FORGE_WAIT_MESSAGES.noSlot); return; }
     for (let attempt = 1; attempt <= 2; attempt++) {
       abort();
@@ -87,7 +91,7 @@ export async function runForge(input: unknown, providers: ForgeProviders, emit: 
       try {
         const socket = sockets.find(socket => socket.kind === draft.plan.kind);
         if (!socket) throw new Error('No matching socket.');
-        const assembled = assembleForge(draft.plan, forgeStyleKit(request.family), socket);
+        const assembled = assembleForge(draft.plan, styleKit, socket);
         checkForge(assembled, request.home, request.hostProfile);
         sheet = renderForgeContactSheet(assembled.blueprint, { home: request.home, origin: socket.origin });
       } catch {

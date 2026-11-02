@@ -217,7 +217,7 @@ export function renderForgeContactSheet(input: VoxelBlueprint, context?: ForgeCo
   if (writes > MAX_RASTER_WRITES) throw new RangeError('Forge contact sheet exceeds the raster work budget.');
   const asset = rasterizeBlueprint(blueprint);
   const [min, max] = solidBounds(asset);
-  const height = context ? 944 : HEIGHT;
+  const height = context ? 1260 : HEIGHT;
   const pixels = canvas(WIDTH, height);
   if (context) {
     const placed = placedAsset(asset, context, MAX_RASTER_WRITES - writes);
@@ -226,7 +226,11 @@ export function renderForgeContactSheet(input: VoxelBlueprint, context?: ForgeCo
     paste(pixels, renderView(asset, min, max, HERO, 360, 306, true), 360, 306, 12, 28);
     label(pixels, 'PIECE FRONT', 400, 10);
     paste(pixels, renderView(asset, min, max, VIEWS[1]!, 360, 306, true), 360, 306, 396, 28);
-    label(pixels, 'ON HOME', 16, 350);
+    label(pixels, 'PIECE LEFT', 16, 350);
+    paste(pixels, renderView(asset, min, max, VIEWS[3]!, 360, 280, true), 360, 280, 12, 370);
+    label(pixels, 'PIECE RIGHT', 400, 350);
+    paste(pixels, renderView(asset, min, max, VIEWS[4]!, 360, 280, true), 360, 280, 396, 370);
+    label(pixels, 'ON HOME', 16, 666);
     // Look from the side of the home carrying the piece, including front-wall sockets.
     const [homeMin, homeMax] = solidBounds(rasterizeBlueprint(context.home));
     const sx = context.origin[0] + (min[0] + max[0]) / 2 < (homeMin[0] + homeMax[0]) / 2 ? -1 : 1;
@@ -235,13 +239,13 @@ export function renderForgeContactSheet(input: VoxelBlueprint, context?: ForgeCo
     const homeView: View = wallHeight
       ? { name: 'ON HOME', right: [1, 0, 0], up: [0, 0.98, -0.2], camera: [0, 0.2, 0.98] }
       : { name: 'ON HOME', right: [sz * a, 0, -sx * a], up: [-sx * b, 2 * b, -sz * b], camera: [sx * c, c, sz * c] };
-    paste(pixels, renderView(placed, placedMin, placedMax, homeView, 736, 420, true), 736, 420, 16, 370);
+    paste(pixels, renderView(placed, placedMin, placedMax, homeView, 736, 420, true), 736, 420, 16, 686);
     // Keep the diagnostic angles, plus the underside: a larger front view must not hide other marks.
     const diagnostics: readonly View[] = [...VIEWS, { name: 'BOTTOM', right: [1, 0, 0], up: [0, 0, 1], camera: [0, -1, 0] }];
     for (const [i, view] of diagnostics.entries()) {
       const x = i * 108;
-      label(pixels, view.name, x + 8, 806);
-      paste(pixels, renderView(asset, min, max, view, 108, 112, true), 108, 112, x, 824);
+      label(pixels, view.name, x + 8, 1122);
+      paste(pixels, renderView(asset, min, max, view, 108, 112, true), 108, 112, x, 1140);
     }
   } else {
     for (const [i, view] of VIEWS.entries()) {

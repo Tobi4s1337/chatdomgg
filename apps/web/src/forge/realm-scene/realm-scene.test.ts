@@ -21,6 +21,72 @@ vi.mock('../ritual-view', () => ({ createForgeRitualView: (scene: THREE.Scene) =
 } }));
 
 describe('room-fed Forge scene', () => {
+  it('reconstructs mixed revision lanterns from their recorded kits in one room', async () => {
+    const blueprint = createHearthHome('house', 0);
+    const home = { slot: 7, blueprint, position: [31, 2, -17] as const, yaw: Math.PI / 2 };
+    const plan = { version: 2, kind: 'lantern', motif: 'crescent-moon', finish: 'native', accent: 'none' } as const;
+    const expected = [1, 2].map(revision => assembleForge(plan, forgeStyleKit('hearth', revision),
+      findForgeSockets(blueprint, 'street-home', revision).find(s => s.kind === plan.kind)!));
+    expect(expected[0]!.blueprint.boxes).not.toEqual(expected[1]!.blueprint.boxes);
+    const attachments: CommittedForgeAttachment[] = expected.map((result, index) => ({
+      version: 1, id: `lantern-revision-${index + 1}`, runId: `run-revision-${index + 1}`, kingdomId: KingdomIdSchema.parse('123456'),
+      slot: home.slot, hostId: blueprint.id, hostFingerprint: homeFingerprint(blueprint), socketId: result.socket.id, origin: result.socket.origin,
+      kitId: result.kit.id, kitRevision: result.kit.revision, family: 'hearth', draft: { plan, title: 'Moon lantern', plaque: 'SIMULATED revision replay' }, committedAt: index + 1,
+      provenance: { source: 'simulated', makerName: 'Juniper', kingdomName: 'SIMULATED', designId: `moon-design-${index + 1}`, firstForgedAt: index + 1 },
+    }));
+    let handlers: ForgeObservationHandlers = {};
+    const settled = vi.fn(), hide = vi.fn();
+    const submit = vi.fn(async (job: VoxelJobInput) => executeVoxelJob({ ...job, id: 1 }));
+    const scene = new THREE.Scene(), material = createVoxelMaterial(MATERIALS, 'build');
+    const adapter = createRealmForgeScene({ scene, camera: new THREE.PerspectiveCamera(50, 1440 / 900, .1, 300), material,
+      pool: { submit } as unknown as VoxelWorkerPool, canvas: { clientWidth: 1440, clientHeight: 900 } as HTMLCanvasElement,
+      anvil: new THREE.Vector3(), home: slot => slot === home.slot ? home : undefined,
+      sound: {} as ReturnType<typeof createKingdomSound>, hideAttachment: hide,
+      feed: { subscribe(next) { handlers = next; return () => {}; }, settled } });
+    try {
+      adapter.update(0, false);
+      for (const attachment of attachments) handlers.committed?.(attachment, attachment.runId);
+      await vi.waitFor(() => expect(scene.getObjectByName(`realm-forge-clone:${attachments[0]!.id}`)).toBeDefined());
+      expect(submit).toHaveBeenCalledTimes(1);
+      expect(submit.mock.calls[0]![0]).toMatchObject({ kind: 'blueprint', blueprint: expected[0]!.blueprint });
+      adapter.update(22000, false);
+      await vi.waitFor(() => expect(scene.getObjectByName(`realm-forge-clone:${attachments[1]!.id}`)).toBeDefined());
+      expect(submit).toHaveBeenCalledTimes(2);
+      expect(submit.mock.calls[1]![0]).toMatchObject({ kind: 'blueprint', blueprint: expected[1]!.blueprint });
+      adapter.update(44000, false);
+      expect(settled.mock.calls).toEqual(attachments.map(attachment => [attachment.id]));
+    } finally { adapter.dispose(); material.dispose(); }
+  });
+
+  it.each([{ kitRevision: 3, kitId: 'hearth-native' }, { kitRevision: 2, kitId: 'hearth-native-native' }])(
+    'rejects an unregistered committed kit without meshing: $kitRevision / $kitId', ({ kitRevision, kitId }) => {
+      const blueprint = createHearthHome('house', 0);
+      const socket = findForgeSockets(blueprint).find(s => s.kind === 'lantern')!;
+      const attachment: CommittedForgeAttachment = {
+        version: 1, id: 'unregistered-lantern', runId: 'unregistered-run', kingdomId: KingdomIdSchema.parse('123456'),
+        slot: 7, hostId: blueprint.id, hostFingerprint: homeFingerprint(blueprint), socketId: socket.id, origin: socket.origin,
+        kitId, kitRevision, family: 'hearth', draft: { plan: { version: 2, kind: 'lantern', motif: 'crescent-moon', finish: 'native', accent: 'none' }, title: 'Moon lantern', plaque: 'SIMULATED invalid kit' }, committedAt: 1,
+        provenance: { source: 'simulated', makerName: 'Juniper', kingdomName: 'SIMULATED', designId: 'invalid-design', firstForgedAt: 1 },
+      };
+      let handlers: ForgeObservationHandlers = {};
+      const submit = vi.fn(), settled = vi.fn(), hide = vi.fn();
+      const scene = new THREE.Scene(), material = createVoxelMaterial(MATERIALS, 'build');
+      const adapter = createRealmForgeScene({ scene, camera: new THREE.PerspectiveCamera(), material,
+        pool: { submit } as unknown as VoxelWorkerPool, canvas: { clientWidth: 1440, clientHeight: 900 } as HTMLCanvasElement,
+        anvil: new THREE.Vector3(), home: () => ({ slot: 7, blueprint, position: [0, 0, 0], yaw: 0 }),
+        sound: {} as ReturnType<typeof createKingdomSound>, hideAttachment: hide,
+        feed: { subscribe(next) { handlers = next; return () => {}; }, settled } });
+      try {
+        handlers.restored?.([attachment]);
+        handlers.committed?.(attachment, attachment.runId);
+        expect(submit).not.toHaveBeenCalled(); expect(settled).not.toHaveBeenCalled();
+        expect(adapter.activeAttachmentId).toBeNull();
+        expect(scene.getObjectByName(`realm-forge-clone:${attachment.id}`)).toBeUndefined();
+        expect(hide.mock.calls).toEqual([[attachment.id, true], [attachment.id, false]]);
+      } finally { adapter.dispose(); material.dispose(); }
+    },
+  );
+
   it('keeps opaque stages candidate-free, uses the actual committed rotated socket, restores without celebration and settles only on landing', async () => {
     const originalBlueprint = createHearthHome('house', 0);
     // The public scene's decoder receives canonically ordered JSON, unlike the authority's factory object.

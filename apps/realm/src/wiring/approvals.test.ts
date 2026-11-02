@@ -47,6 +47,55 @@ it('persists immutable per-run judge evidence across instances with opaque recei
   expect(await reader.approved(input.key, input.runId, { ...input.candidate!, homeDigest: 'f'.repeat(64) })).toBeNull();
 });
 
+it.each([1, 2])('binds revision %i evidence to the exact kit even for identical draft and home digests', async revision => {
+  const { directory, approvals } = await fixture(), legacy = audit();
+  const candidate = { ...legacy.candidate!, kitId: 'hearth-native', kitRevision: revision };
+  const input = { ...legacy, candidate };
+  await approvals.record(input);
+  const reader = new FileForgeApprovals(directory), receipt = await reader.approved(input.key, input.runId, candidate);
+  expect(receipt).toMatch(/^forge-judges-[a-f0-9]{64}$/);
+  expect(await reader.approved(input.key, input.runId, { ...candidate, kitRevision: revision === 1 ? 2 : 1 })).toBeNull();
+  expect(await reader.approved(input.key, input.runId, { ...candidate, kitId: 'tide-native' })).toBeNull();
+  expect(await reader.approved(input.key, input.runId, legacy.candidate!)).toBeNull();
+  expect(await reader.approved(input.key, input.runId)).toBeNull();
+});
+
+it('reads immutable legacy evidence against revision one without upgrading it or rewriting its bytes', async () => {
+  const { directory, approvals } = await fixture(), input = audit();
+  await approvals.record(input);
+  const [file] = await readdir(directory), path = join(directory, file!), bytes = await readFile(path, 'utf8');
+  const reader = new FileForgeApprovals(directory), expected = { ...input.candidate!, kitId: 'hearth-native', kitRevision: 1 };
+  expect(await reader.approved(input.key, input.runId, expected)).toMatch(/^forge-judges-[a-f0-9]{64}$/);
+  expect(await reader.approved(input.key, input.runId, { ...expected, kitRevision: 2 })).toBeNull();
+  expect(await reader.approved(input.key, input.runId, { ...expected, kitId: 'unknown-native' })).toBeNull();
+  expect(await readFile(path, 'utf8')).toBe(bytes);
+  expect((await stat(path)).mode & 0o777).toBe(0o600);
+});
+
+it('rejects partial, malformed and unknown kit metadata on writes, reads and caller expectations', async () => {
+  const { directory, approvals } = await fixture(), input = audit();
+  await approvals.record(input);
+  const [file] = await readdir(directory), path = join(directory, file!), bytes = await readFile(path, 'utf8');
+  const metadata: Record<string, unknown>[] = [
+    { kitId: 'hearth-native' }, { kitRevision: 1 }, { kitId: undefined, kitRevision: undefined },
+    { kitId: 'hearth-native', kitRevision: undefined }, { kitId: null, kitRevision: 1 },
+    { kitId: 'unknown-native', kitRevision: 1 }, { kitId: 'hearth-native', kitRevision: 3 },
+    { kitId: 'hearth-native', kitRevision: 0 }, { kitId: 'hearth-native', kitRevision: '1' },
+    { kitId: 'hearth-native', kitRevision: 1.5 }, { kitId: 'hearth-native', kitRevision: 1, untrusted: true },
+  ];
+  const expected = { ...input.candidate!, kitId: 'hearth-native', kitRevision: 1 };
+  for (const [index, fields] of metadata.entries()) {
+    await writeFile(path, bytes);
+    const candidate = { ...input.candidate!, ...fields } as NonNullable<KingdomForgeAudit['candidate']>;
+    await expect(approvals.record({ ...input, runId: `invalid-kit-${index}`, candidate })).rejects.toThrow();
+    expect(await approvals.approved(input.key, input.runId, candidate)).toBeNull();
+    // JSON omits undefined fields: that disk representation is genuinely legacy, not a partial pair.
+    if (fields.kitId === undefined && fields.kitRevision === undefined) continue;
+    await writeFile(path, JSON.stringify({ ...input, candidate }));
+    expect(await approvals.approved(input.key, input.runId, expected)).toBeNull();
+  }
+});
+
 it('requires complete registered evidence at the independent words and result gates', async () => {
   const { approvals } = await fixture(), input = audit();
   const edits: ((value: Record<string, unknown>) => void)[] = [

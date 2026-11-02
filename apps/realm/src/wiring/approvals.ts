@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import { TokenSchema } from '@chatdom/shared';
 import type { KingdomForgeAudit } from '../../../codex/src/kingdom-forge/ports';
-import type { ForgeCandidateBinding } from '../../../codex/src/kingdom-forge/candidate';
+import { ForgeCandidateBindingSchema, type ForgeCandidateBinding } from '../../../codex/src/kingdom-forge/candidate';
 import { FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, forgeJudgeQuestions, decideForgeSafety,
   primaryForgeSafetyPass, scoreForgeQuality } from '../../../codex/src/providers/policy';
 import { canonicalJson } from '../persistence/codec';
@@ -17,13 +17,12 @@ const QualityScoreSchema = z.strictObject({ ...qualityRead, score: z.number().fi
 const SelectionSchema = z.strictObject({ verdict: z.number().int().min(1).max(2), attempt: z.number().int().min(1).max(2),
   delivery: z.enum(['delivered', 'retried', 'softened']), shared: z.enum(['subject', 'family', 'slot', 'mood', 'colour']),
   reason: z.enum(['vocabulary', 'quality', 'fit']).optional() });
-const CandidateSchema = z.strictObject({ draftDigest: z.string().regex(/^[a-f0-9]{64}$/), homeDigest: z.string().regex(/^[a-f0-9]{64}$/) });
 const AuditSchema = z.strictObject({
   key: z.string().regex(/^forge-chat-[a-f0-9]{64}$/), runId: TokenSchema,
   at: z.number().int().nonnegative().safe(), judgment: z.enum(['approved', 'hold', 'refuse', 'cold']),
   verdicts: z.array(z.strictObject({ outcome: z.enum(['pass', 'hold', 'refuse']), records: z.array(z.unknown()).max(4), quality: QualityScoreSchema.optional() })).max(3),
   selection: SelectionSchema.optional(), attempts: z.number().int().min(0).max(2).optional(), modelCalls: z.number().int().min(0).max(7).optional(),
-  candidate: CandidateSchema.optional(),
+  candidate: ForgeCandidateBindingSchema.optional(),
 });
 const base = {
   backend: z.literal('codex-cli'), policy: z.literal(FORGE_JUDGE_POLICY_VERSION),
@@ -107,8 +106,11 @@ export class FileForgeApprovals implements RealmForgeApprovals {
     } finally { await file.close().catch(() => {}); await unlink(temporary).catch(() => {}); }
   }
 
+  /** Production supplies the attachment's exact kit. An omitted/digest-only expectation can inspect legacy evidence only. */
   async approved(key: string, runId: string, expected?: ForgeCandidateBinding): Promise<string | null> {
     if (!/^forge-chat-[a-f0-9]{64}$/.test(key) || !TokenSchema.safeParse(runId).success) return null;
+    const expectation = expected === undefined ? undefined : ForgeCandidateBindingSchema.safeParse(expected);
+    if (expectation && !expectation.success) return null;
     let bytes: string;
     try {
       const file = await open(this.path(key, runId), 'r');
@@ -118,7 +120,15 @@ export class FileForgeApprovals implements RealmForgeApprovals {
     let audit: z.infer<typeof AuditSchema>;
     try { audit = AuditSchema.parse(JSON.parse(bytes)); } catch { return null; }
     if (audit.key !== key || audit.runId !== runId || !approvedAudit(audit)) return null;
-    if (expected && (!CandidateSchema.safeParse(expected).success || audit.candidate?.draftDigest !== expected.draftDigest || audit.candidate?.homeDigest !== expected.homeDigest)) return null;
+    const candidate = audit.candidate!, bound = expectation?.success ? expectation.data : undefined;
+    if (bound && (candidate.draftDigest !== bound.draftDigest || candidate.homeDigest !== bound.homeDigest)) return null;
+    if ('kitId' in candidate && 'kitRevision' in candidate) {
+      // New evidence can only authorize the exact assembly whose image was inspected, even if draft/home are identical.
+      if (!bound || !('kitId' in bound) || !('kitRevision' in bound) || candidate.kitId !== bound.kitId || candidate.kitRevision !== bound.kitRevision) return null;
+    } else if (bound && 'kitId' in bound && 'kitRevision' in bound && bound.kitRevision !== 1) {
+      // Immutable pre-kit audits remain valid only for the historical kit. Never infer a later revision from the caller.
+      return null;
+    }
     return `forge-judges-${hash(bytes)}`;
   }
 

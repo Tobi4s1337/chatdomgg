@@ -107,10 +107,11 @@ function fits(attachment: ForgeAttachment, home: RealmOwnedForgeHost, kingdomId:
     && a.provenance.source === origin && TokenSchema.safeParse(a.provenance.designId).success
     && a.provenance.makerName === home.attribution.makerName && a.provenance.kingdomName === home.attribution.kingdomName)) return false;
   try {
-    const socket = findForgeSockets(home.blueprint, ownedHostProfile(home)).find(candidate => candidate.kind === draft.data.plan.kind);
+    const kit = forgeStyleKit(home.family);
+    const socket = findForgeSockets(home.blueprint, ownedHostProfile(home), kit.revision).find(candidate => candidate.kind === draft.data.plan.kind);
     if (!socket || socket.id !== a.socketId || socket.origin.some((value, index) => value !== a.origin[index])
       || a.hostFingerprint !== homeFingerprint(home.blueprint)) return false;
-    const assembled = assembleForge(draft.data.plan, forgeStyleKit(home.family), socket);
+    const assembled = assembleForge(draft.data.plan, kit, socket);
     checkForge(assembled, home.blueprint, ownedHostProfile(home));
     return assembled.kit.id === a.kitId && assembled.kit.revision === a.kitRevision;
   } catch { return false; }
@@ -288,7 +289,8 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
       const draft = ForgeDraftSchema.safeParse(input.attachment.draft);
       if (!draft.success) return { kind: 'held' };
       const approval = await options.approvals.approved(input.key, input.attachment.runId,
-        { draftDigest: forgeDraftDigest(draft.data), homeDigest: input.expectedHomeDigest }).catch(() => null);
+        { draftDigest: forgeDraftDigest(draft.data), homeDigest: input.expectedHomeDigest,
+          kitId: input.attachment.kitId, kitRevision: input.attachment.kitRevision }).catch(() => null);
       if (!approval || !TokenSchema.safeParse(approval).success) { note('commit', 'held', 'gates'); return { kind: 'held' }; }
       return holding<Committed>(async kingdom => {
         const state = kingdom.privateState, now = kingdom.databaseNow(), prior = attemptStatus(state, input);

@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCastleModule, createHome } from '@chatdom/content';
+import { assembleForge, findForgeSockets, forgeStyleKit } from '@chatdom/forge';
 import { KingdomIdSchema, PersonIdSchema, type ForgeDraft } from '@chatdom/shared';
 import type { ForgeProviders } from '../providers';
 import { FORGE_JUDGE_POLICY_VERSION } from '../providers/policy';
+import { renderForgeContactSheet } from '../contact-sheet';
 import { createKingdomForgeApplication } from './application';
+import { bindForgeCandidate } from './candidate';
 import type {
   ForgeActivity, ForgeAttachment, ForgeReservation, KingdomForgeAudit, KingdomForgeAuthority, KingdomForgeCommand,
 } from './ports';
@@ -63,6 +66,25 @@ function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (
 }
 
 describe('the kingdom Forge application', () => {
+  it('binds the exact current kit that generated the judged sheet and attachment while revision two stays a preview', async () => {
+    const f = fixture(), lantern: ForgeDraft = {
+      plan: { version: 2, kind: 'lantern', motif: 'crescent-moon', finish: 'native', accent: 'none' },
+      title: 'The moon at home', plaque: 'A borrowed moon beside the hearth.',
+    };
+    vi.mocked(f.providers.draft).mockResolvedValue(lantern);
+    expect(await f.run(command, f.lease)).toMatchObject({ kind: 'committed', attachment: { kitId: 'hearth-native', kitRevision: 1 } });
+    const socket = findForgeSockets(f.reservation.home).find(socket => socket.kind === lantern.plan.kind)!;
+    const current = assembleForge(lantern.plan, forgeStyleKit(f.reservation.family), socket);
+    const preview = assembleForge(lantern.plan, forgeStyleKit(f.reservation.family, 2),
+      findForgeSockets(f.reservation.home, 'street-home', 2).find(socket => socket.kind === lantern.plan.kind)!);
+    const sheet = (piece: typeof current) => renderForgeContactSheet(piece.blueprint, { home: f.reservation.home, origin: piece.socket.origin });
+    const judged = vi.mocked(f.providers.judgeResult).mock.calls[0]![0];
+    expect(judged.contactSheet).toBe(sheet(current));
+    expect(judged.contactSheet).not.toBe(sheet(preview));
+    expect(f.audits[0]?.candidate).toEqual(bindForgeCandidate(lantern, f.reservation.home, current.kit));
+    expect(f.durable).toMatchObject({ kitId: current.kit.id, kitRevision: current.kit.revision, draft: lantern });
+  });
+
   it('keeps quality scores in the private audit and charges once for a safe delivered piece', async () => {
     const f = fixture(), quality = { policy: FORGE_JUDGE_POLICY_VERSION, score: 0.1, recognisability: 0, completeness: 0.4, cleanMarks: 0 };
     vi.mocked(f.providers.judgeResult).mockResolvedValue({ ...pass, quality });

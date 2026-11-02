@@ -36,6 +36,10 @@ providers' bounded judge evidence, without the original wish, identity, whole ho
 It records candidate attempts, actual model calls and the selected result index. Discarded results keep only
 bounded outcome/quality summaries; the selected draft and schema-ordered full home digest bind the approval
 to exactly what may land. A quiet retry cannot substitute an unchecked title, plaque or plan under the same run.
+New private approvals also bind the registered kit ID and revision. One trusted kit is captured before the model
+run and reused for socket selection, result-sheet assembly, audit binding and final attachment. Historical
+digest-only records can authorize revision one only, subject to the existing owned-home/family/current-kit
+checks; they cannot be upgraded into approval for a different revision.
 Judgment `approved` is a model-gate result, not a durable placement. Stage events have only an opaque activity ID
 and stage. Only a successful authority commit releases the approved draft, slot and safe provenance. Refusals,
 holds and errors return privately. If the listener fails, or cancellation arrives after commit, the durable

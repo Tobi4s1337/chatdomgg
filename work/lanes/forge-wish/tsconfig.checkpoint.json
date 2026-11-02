@@ -14,6 +14,8 @@
     "../../../apps/web/src/forge/**/*",
     "../../../apps/web/src/forge-*bench/**/*",
     "../../../apps/web/src/interactions/places/AnvilVisit.tsx",
-    "../../../apps/web/vite.config.ts"
+    "../../../apps/web/vite.config.ts",
+    "../../../packages/content/src/forge-ornaments/**/*.ts",
+    "vitest.checkpoint.config.ts"
   ]
 }

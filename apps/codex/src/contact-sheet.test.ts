@@ -140,14 +140,21 @@ describe('trusted Forge contact sheet', () => {
     const context = { home, origin: [1, 0, 1] as const };
     const sheet = renderForgeContactSheet(part, context);
     const image = decode(sheet);
-    expect([image.width, image.height]).toEqual([768, 944]);
+    expect([image.width, image.height]).toEqual([768, 1260]);
     for (let view = 0; view < 7; view++) {
       let foreground = 0;
-      for (let y = 824; y < 936; y++) for (let x = view * 108; x < (view + 1) * 108; x++)
+      for (let y = 1140; y < 1252; y++) for (let x = view * 108; x < (view + 1) * 108; x++)
         if (!background.equals(image.pixel(x, y))) foreground++;
       expect(foreground).toBeGreaterThan(20);
     }
     expect(renderForgeContactSheet(part, context)).toBe(sheet);
+    // Both broad side tiles expose actual geometry, rather than duplicating the front image.
+    for (const left of [12, 396]) {
+      let visible = 0;
+      for (let y = 370; y < 650; y++) for (let x = left; x < left + 360; x++)
+        if (!background.equals(image.pixel(x, y))) visible++;
+      expect(visible).toBeGreaterThan(1000);
+    }
     const withAir = { ...part, boxes: [...part.boxes, { from: [0, 0, 0] as [number, number, number], to: [2, 1, 2] as [number, number, number], material: MAT.air }] };
     expect(renderForgeContactSheet(withAir, context)).toBe(sheet);
     expect(renderForgeContactSheet(part, { home, origin: [3, 0, 1] })).not.toBe(sheet);

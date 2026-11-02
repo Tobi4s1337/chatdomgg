@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createHome, MATERIALS, MAT, STYLES, type StyleKey } from '@chatdom/content';
-import { assembleForge, checkForge, findForgeSockets, forgeStyleKit } from '@chatdom/forge';
+import { assembleForge, checkForge, createNativeForgeHost, findForgeSockets, forgeStyleKit } from '@chatdom/forge';
 import { createVoxelMaterial, geometryFromChunks, getEnvironment } from '@chatdom/render';
 import { VOXEL_METRES, type HousePartPlan, type VoxelBlueprint } from '@chatdom/shared';
 import { rasterizeBlueprint, VoxelWorkerPool } from '@chatdom/voxel';
@@ -13,18 +13,21 @@ const style = params.get('style') ?? 'hearth';
 const view = params.get('view') ?? 'home';
 const motif = params.get('motif') ?? 'crescent-moon';
 const hour = Number(params.get('hour') ?? '19');
+const kitRevision = Number(params.get('kit') ?? '1');
 const kinds = { 'sleeping-dragon': 'chimney', 'crescent-moon': 'lantern', 'watchful-owl': 'weathervane', 'sleeping-fox': 'chimney', sunflower: 'lantern', 'scallop-shell': 'weathervane', 'shooting-star': 'lantern' } as const;
 const host = document.querySelector<HTMLElement>('#scene')!;
 const cell = VOXEL_METRES.build;
 
 async function main() {
-  if (!['hearth', 'tide', 'grove'].includes(style) || !['home', 'piece'].includes(view) || !Object.hasOwn(kinds, motif) || !Number.isFinite(hour) || hour < 0 || hour > 23) throw new Error('Invalid forge review parameters.');
+  if (!['hearth', 'tide', 'grove'].includes(style) || !['home', 'piece'].includes(view) || !Object.hasOwn(kinds, motif) || !Number.isFinite(hour) || hour < 0 || hour > 23 || ![1, 2].includes(kitRevision)) throw new Error('Invalid forge review parameters.');
   const family = style as StyleKey, selected = motif as keyof typeof kinds, kind = kinds[selected];
-  const home = createHome('house', family, 0);
-  const socket = findForgeSockets(home).find(candidate => candidate.kind === kind);
+  const home = params.get('host') === 'core' ? createHome('house', family, 0)
+    : createNativeForgeHost({ slot: 0, position: [0, 0, 0], rotation: 0, tier: 'house', style: family, variant: 0 }).blueprint;
+  const kit = forgeStyleKit(family, kitRevision);
+  const socket = findForgeSockets(home, 'street-home', kit.revision).find(candidate => candidate.kind === kind);
   if (!socket) throw new Error('This home has no matching socket.');
   const plan: HousePartPlan = { version: 2, kind, motif: selected, finish: 'native', accent: 'none' };
-  const part = assembleForge(plan, forgeStyleKit(family), socket);
+  const part = assembleForge(plan, kit, socket);
   checkForge(part, home);
   const grade = getEnvironment(hour);
   host.style.background = `linear-gradient(180deg, ${grade.zenith} 0%, ${grade.horizon} 78%, ${grade.fog} 100%)`;
@@ -89,7 +92,7 @@ async function main() {
   await renderer.compileAsync(scene, camera);
   renderer.render(scene, camera);
   await new Promise<void>(resolve => requestAnimationFrame(() => { renderer.render(scene, camera); renderer.getContext().finish(); resolve(); }));
-  state.__chatdomForgeWish = { style, view, motif, kind, hour, home: home.id, piece: part.blueprint.id, socket: socket.id, origin: socket.origin,
+  state.__chatdomForgeWish = { style, view, motif, kind, hour, kitRevision, home: home.id, piece: part.blueprint.id, socket: socket.id, origin: socket.origin,
     homeBounds: { min: houseBox.min.toArray(), max: houseBox.max.toArray() }, pieceBounds: { min: pieceBox.min.toArray(), max: pieceBox.max.toArray() },
     horizontalFromFacade: view === 'home' ? 12 : null, width: host.clientWidth, height: host.clientHeight };
   state.__chatdomReady = true;

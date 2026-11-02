@@ -114,6 +114,8 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
           || reservation.expiresAt - now() > MAX_RESERVATION_MS) return { kind: 'held' };
         const attribution = AttributionSchema.parse(reservation.attribution);
         const request = ForgeRunRequestSchema.parse({ words: command.words, family: reservation.family, home: reservation.home, ...(reservation.hostProfile ? { hostProfile: reservation.hostProfile } : {}) });
+        // One trusted kit follows the run through its judged sheet, private approval and committed assembly.
+        const styleKit = Object.freeze(forgeStyleKit(request.family));
         const fingerprint = homeFingerprint(request.home), homeDigest = digest(request.home);
         timer = setTimeout(() => abort.abort(), Math.max(1, reservation.expiresAt - now())); timer.unref?.();
         let approved: Extract<ForgeRunEvent, { type: 'approved' }> | undefined;
@@ -134,10 +136,10 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
             verdicts: entry.verdicts.map(({ outcome, records, quality }, index) => ({ outcome,
               records: index === 0 || index === entry.selection?.verdict ? records : [], ...(quality ? { quality } : {}) })),
             ...(entry.selection ? { selection: entry.selection } : {}), attempts: entry.attempts, modelCalls: entry.modelCalls,
-            ...(entry.outcome === 'approved' && entry.draft ? { candidate: bindForgeCandidate(entry.draft, request.home) } : {}),
+            ...(entry.outcome === 'approved' && entry.draft ? { candidate: bindForgeCandidate(entry.draft, request.home, styleKit) } : {}),
           }), AUDIT_WAIT_MS, () => abort.abort(), signal);
           checkCurrent();
-        }, signal, { safetyIdentifier: reservation!.safetyIdentifier }), RUN_WAIT_MS, () => abort.abort(), signal);
+        }, signal, { safetyIdentifier: reservation!.safetyIdentifier, styleKit }), RUN_WAIT_MS, () => abort.abort(), signal);
         checkCurrent();
         const approval = approved;
         if (!approval) return stopped?.outcome === 'refuse' ? {kind:'refused',message:stopped.message}
@@ -152,9 +154,9 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
           || renewed.native.family !== request.family || (renewed.native.hostProfile ?? 'street-home') !== (request.hostProfile ?? 'street-home')
           || digest(renewed.native.home) !== homeDigest
           || homeFingerprint(renewed.native.home) !== fingerprint) return { kind: 'held' };
-        const socket = findForgeSockets(request.home, request.hostProfile).find(candidate => candidate.kind === approval.draft.plan.kind);
+        const socket = findForgeSockets(request.home, request.hostProfile, styleKit.revision).find(candidate => candidate.kind === approval.draft.plan.kind);
         if (!socket) return { kind: 'held' };
-        const assembled = assembleForge(approval.draft.plan, forgeStyleKit(request.family), socket);
+        const assembled = assembleForge(approval.draft.plan, styleKit, socket);
         checkForge(assembled, request.home, request.hostProfile);
         const attachment: ForgeAttachment = {
           version: 1, id: approval.runId, runId: approval.runId, kingdomId: command.kingdomId, slot: reservation.slot,

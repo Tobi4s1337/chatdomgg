@@ -6,7 +6,8 @@ export type ForgeOrnament = 'sleeping-fox' | 'sunflower' | 'scallop-shell' | 'sh
 export type OrnamentGeometry = { boxes: VoxelBlueprint['boxes']; size: Cell; mount: Cell; emitter: Cell };
 
 /** Carved build-cell ornaments. The emitter is an attachment anchor, never a light. */
-export function createForgeOrnament(id: ForgeOrnament, family: StyleKey): OrnamentGeometry {
+export function createForgeOrnament(id: ForgeOrnament, family: StyleKey, revision = 1): OrnamentGeometry {
+  if (revision !== 1 && revision !== 2) throw new Error('Unregistered Forge ornament revision.');
   const boxes: VoxelBlueprint['boxes'] = [];
   const add = (x:number,y:number,z:number,X:number,Y:number,Z:number,material:number) => boxes.push({from:[x,y,z],to:[X,Y,Z],material});
   const p = {
@@ -17,7 +18,24 @@ export function createForgeOrnament(id: ForgeOrnament, family: StyleKey): Orname
   // A modest foot makes the point of attachment part of the carving.
   add(10,0,7,15,1,12,p.shade);
   let emitter: Cell;
-  if (id === 'sleeping-fox') {
+  if (id === 'sleeping-fox' && revision === 2) {
+    // Low haunches rise behind a long, tapered muzzle. Both ears step to a
+    // single-cell point; the dark lines on the cheeks are closed eyes.
+    add(9,1,5,19,3,13,p.shade); add(9,3,5,19,6,13,p.body);
+    add(10,6,6,18,7,12,p.body); add(12,7,7,17,8,11,p.body);
+    add(5,2,6,11,5,12,p.body); add(4,2,7,7,4,11,p.body);
+    add(2,1,7,6,3,11,p.light); add(1,2,8,3,3,10,p.dark);
+    add(5,5,6,7,7,8,p.body); add(5,7,6,6,9,7,p.shade);
+    add(8,5,10,10,7,12,p.body); add(9,7,11,10,9,12,p.shade);
+    add(5,4,12,8,5,13,p.dark); add(5,4,5,8,5,6,p.dark);
+    add(5,1,11,10,2,14,p.light); add(7,1,4,11,2,6,p.light);
+    // A full brush sweeps around the rump and curls back toward the face;
+    // the pale tapered end stays visible in the street-facing silhouette.
+    add(17,1,10,21,4,15,p.body); add(17,1,14,21,3,16,p.body);
+    add(12,1,14,18,4,17,p.body); add(10,1,14,14,3,17,p.light);
+    add(8,1,14,11,2,16,p.light);
+    emitter = [1,2,9];
+  } else if (id === 'sleeping-fox') {
     // Compact curled body, head laid low on its paws, and a broad white-tipped tail.
     add(9,1,5,19,3,13,p.shade); add(9,3,5,18,6,13,p.body);
     add(10,6,6,17,8,12,p.body); add(11,8,7,16,9,11,p.body);

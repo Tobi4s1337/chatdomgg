@@ -117,6 +117,9 @@ it('shares one retained writer; ignores slot hints, reserves without spending, a
   expect(f.services.kingdoms.get(kingdomId)).toBe(f.kingdom);
   const input = commitInput(wish, reservation), result = await f.authority.commit(input, lease);
   expect(result).toMatchObject({ kind: 'committed' });
+  expect(f.approvals.approved).toHaveBeenCalledWith(wish.key, input.attachment.runId, {
+    ...bindForgeCandidate(input.attachment.draft, reservation.home), kitId: input.attachment.kitId, kitRevision: input.attachment.kitRevision,
+  });
   expect(await f.authority.commit(input, lease)).toEqual(result);
   await f.authority.release(wish);
   expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(1);
@@ -150,7 +153,8 @@ it('requires audited approval and verifies the exact current host, socket, kit, 
   expect(await f.authority.commit(input, lease)).toEqual({ kind: 'held' });
   for (const attachment of [
     { ...input.attachment, hostFingerprint: 'wrong' }, { ...input.attachment, socketId: 'wrong' },
-    { ...input.attachment, kitRevision: 99 }, { ...input.attachment, origin: [1, 2, 3] as const },
+    { ...input.attachment, kitRevision: 2 }, { ...input.attachment, kitRevision: 99 },
+    { ...input.attachment, kitId: 'tide-native' }, { ...input.attachment, origin: [1, 2, 3] as const },
     { ...input.attachment, provenance: { ...input.attachment.provenance, source: 'live' as const } },
     { ...input.attachment, provenance: { ...input.attachment.provenance, makerName: 'Other' } },
   ]) expect(await f.authority.commit({ ...input, attachment }, lease)).toEqual({ kind: 'held' });
@@ -158,7 +162,21 @@ it('requires audited approval and verifies the exact current host, socket, kit, 
   expect(f.state().coals[personId]).toBe(2); expect(f.state().attachments).toEqual({});
 });
 
-it('binds the real private approval to the selected draft and host before spending coal', async () => {
+it('holds a registered revision-two attachment even with a successful approval while the current kit is revision one', async () => {
+  const f = await fixture(), attempt = f.wish(), lease = caller().lease, reservation = await f.reserve(attempt, lease);
+  const input = commitInput(attempt, reservation), preview = forgeStyleKit(reservation.family, 2);
+  expect(input.attachment.kitRevision).toBe(1);
+  expect(await f.authority.commit({ ...input, attachment: { ...input.attachment, kitId: preview.id, kitRevision: preview.revision } }, lease))
+    .toEqual({ kind: 'held' });
+  expect(await f.approvals.approved.mock.results.at(-1)!.value).toBe('simulated-judge-receipt');
+  expect(f.state().coals[personId]).toBe(2);
+  expect(f.state().attachments).toEqual({});
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toEqual([]);
+  expect(await f.authority.commit(input, lease)).toMatchObject({ kind: 'committed' });
+  expect(f.state().coals[personId]).toBe(1);
+});
+
+it('binds the real private approval to the selected draft, host and exact kit before spending coal', async () => {
   const f = await fixture(), attempt = f.wish(), lease = caller().lease, reservation = await f.reserve(attempt, lease);
   const input = commitInput(attempt, reservation, 'bound-selected-run');
   const directory = await mkdtemp(join(tmpdir(), 'chatdom-selected-forge-'));
@@ -174,8 +192,15 @@ it('binds the real private approval to the selected draft and host before spendi
     contactSheet: renderForgeContactSheet(piece.blueprint, { home: reservation.home, origin: socket.origin }) });
   await approvals.record({ key: attempt.key, runId: input.attachment.runId, at: Date.now(), judgment: 'approved',
     verdicts: [words, result].map(({ outcome, records, quality }) => ({ outcome, records, ...(quality ? { quality } : {}) })),
-    candidate: bindForgeCandidate(input.attachment.draft, reservation.home) });
+    candidate: bindForgeCandidate(input.attachment.draft, reservation.home, piece.kit) });
   f.approvals.approved.mockImplementation((key, id, expected) => approvals.approved(key, id, expected));
+  for (const attachment of [
+    { ...input.attachment, kitRevision: 2 }, { ...input.attachment, kitId: 'tide-native' },
+  ]) {
+    expect(await f.authority.commit({ ...input, attachment }, lease)).toEqual({ kind: 'held' });
+    expect(await f.approvals.approved.mock.results.at(-1)!.value).toBeNull();
+    expect(f.state().coals[personId]).toBe(2);
+  }
   for (const draft of [
     { ...input.attachment.draft, title: 'An unjudged retry title' },
     { ...input.attachment.draft, plaque: 'An unjudged retry plaque.' },
