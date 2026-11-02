@@ -719,3 +719,81 @@ For the integrator: publish tobi4s_'s land from the **grader 3, format 2 store**
 (`bake --recipe shots/grand-world/adopted-recipe-g3.json`, 17.63 MB, 92.6 CPU s, 400 MiB peak at nice 19),
 not from the earlier `land-bake-a` or `land-bake-f2` stores; their metadata names grader 2 and the client
 rejects them. The commands in `apps/realm/src/land/README.md` carry the new recipe hash.
+
+## GW14: every lane's piece on the grand land — the asks addressed to grand-world (2026-11-02)
+
+GW14 installs every lane's reviewed piece on the grand land. This section answers each ask other lanes' SEAMS address
+to grand-world, as read on `lane/integrator` b56fb9cc. "Done" means it is on this branch with its test; "mount after
+merge" means the consumer module exists only on `lane/integrator` (play, `fishing/`, `tavern/`, `panel-painter/`,
+raid-show's newer `kingdom/moments/raid-*`), so grand-world mounts it in the first session after `lane/integrator`
+is merged into this branch. Nothing below changes a home, a door, a placement or a plot id.
+
+### Done on this branch
+
+- **play A2.1, the anvil is a solid.** `compileFoundedScene` (`packages/world/src/founded-world/collision.ts`) adds
+  one collision-only asset and placement, `forge:anvil`, with two boxes on the hero's 0.0625 m lattice: the stone
+  block and the iron up to the 1.43 m face. This is play's `founded-anvil-solid.patch`, compiler hunk only. It sits in
+  the compiler, not the placements, so no second plain anvil is drawn inside the hero. A scene that also places
+  `forge:anvil` is refused. `FOUNDED_PHYSICS_VERSION` gains `/founded-anvil:1`. Both lands walk on this compiler, so
+  the anvil stops a walker on the grand floor and on today's land alike.
+  Test: `founded-world/collision.test.ts`. A `stepPlayer` walk from the Forge approach stops at the block's face,
+  and the same walk without the anvil passes. The approach the Forge offers stays clear. Nothing is solid above
+  the face or beyond the drawn footprint.
+  - **Consequence for the integrator:** the physics identity is in the realm's geometry digest
+    (`apps/realm/src/founded/scene.ts`), so every founded kingdom gets a new collision revision, and so a new
+    receipt, the next time it is adopted. tobi4s_'s published land binding is bound to the receipt. Rebind it to
+    the new receipt with the same-plan rebind CLI (`apps/realm/src/land/README.md`; it reuses every blob and needs
+    no bake). Until then the published-land probe falls back to today's land; it never stalls.
+  - **Left to its owners (outside this scope):** drop the anvil line from `ABSENT_PLACE_DEPENDENCIES` in
+    `apps/realm/src/founded/artifact.ts`, and turn play's `it.fails('stops a walker at the anvil')` in
+    `apps/web/src/walk/solids-cases.ts` into `it`. Both hunks are in play's patch as written.
+- **play A2.3, a quality control** (also pier's `KingdomLayerMount.quality`, gather's mount quality). The kingdom
+  scene now has `setQuality(value: SceneQuality | null)` and `quality(): SceneQualityBudget`.
+  `SceneQuality = 'high' | 'balanced' | 'low'`; `SCENE_QUALITIES` and `isSceneQuality` are exported from
+  `apps/web/src/kingdom/scene.ts`. A choice sets the post stack's budget, and `low` also reduces the water
+  reflection. `null` returns to the automatic choice: the size picked at opening, with water following the canvas
+  width, as before. Layers and place mounts already read their quality from the post stack, so they follow the
+  choice with no change on their side. E10 holds: palette, light, near voxel detail and dusk windows never scale.
+  Play's ledger persists the person's choice and calls `scene.setQuality`.
+  Test: `kingdom/grand-land/scene-quality.test.ts`.
+- **pier 1, anchors** and **pier 2, `registerKingdomLayer`**: these landed in GW10. See "Pier anchors and kingdom
+  layers" and "Authored pier proof" above. The accepted pier is candidate #328, root [172, 0.5, 217], turn 1.
+- **gather, tavern exterior:** nothing is needed from grand-world. The door is derived from the installed placement,
+  and the grand floor keeps the same placement id and support (GW10 "Gather: exterior portal").
+- **raid-show, gate anchor and walkable gate route on the grand land:** `land.moments.castleGate` is supported on
+  the grand floor (GW10 native support tests).
+- **front-door, hero URL parameters:** `/-/grand-bench` keeps `GrandEngine`, `grandChannel` and every parameter
+  front-door reads. `/-/grand` is the live kingdom view (FD13 note).
+
+### Mount after merge (grand-world's next GW14 session, in this order)
+
+1. **play A2 `surfaceAt`:** an additive `KingdomLandInterface.surfaceAt(x, z)`, the drawn height, material and water
+   depth. On the grand floor it reads the baked surface and cover. On today's land it reads terrain-art. It must
+   match the drawn triangle, with play's footfall test as the consumer.
+2. **play A2.2, no silent drops:** `enrichNativeForgeHearth` and `Workshop` live in realm founded, which is not this
+   scope. grand-world's side is that the grand floor never drops a placement. The realm side stays with its owner.
+3. **pier 3b, the director's pier shot at dusk:** `StreamParams.camera` gains `'pier'`, framed from the accepted
+   pier's root using pier's starting pose (eye 16 m behind the root along the deck, 18 m to the side, 9 m up),
+   checked against the scene's sightline. **pier 3:** `requestAttention` through the director's existing moment
+   priority. **pier 4/5:** the kingdom clock and the water mood wait on decision 15's cycle length.
+   pier's one-line `registerKingdomLayer('pier', …)` goes in with the merge.
+4. **gather, campfire:** the accepted clearing through `places.campfire`. The GW10 planner found no 9 m clearing in
+   512 real candidates on Willowmere. The next session resolves it on the grand floor's Wilds edge outside the
+   installed region, where the grand land has room. The clearing is graded as a pinned site that never rerolls. The
+   campfire mounts through `PlaceMounter`. Tavern scene selection for stream framing: the stream host gains a
+   source switch, with the director's raid and big-moment priority kept above game cues.
+5. **forge-wish:** the Forge square and its pieces already stand on the grand floor through `createKingdomForge` and
+   `createRealmForgeScene`, with each home's transform from its settlement. A wish spoken from the walk is checked
+   on the merged tree. The ledger wall gets a typed `mountForgeWall(group, anchor)` if the grand square lacks its
+   content.
+6. **raid-show §3, §7 and §8:** `raidChatSupport` from the adopted land and collision; transient fixtures registered
+   with the scene's occupancy and light field; `raidPennantSites` and `raidTorchSites` in metrics; the
+   fixed-time `renderKey` term; native sight (`raidPennantVisible`) and reading (`raidPennantReading`) through the
+   existing owners; `validatePose` from the scene's sightline; and `raidParty` on `SceneOptions` into
+   `createKingdomMoments`. Each is the exact additive line raid-show wrote, applied in `scene.ts` once its
+   `KingdomMomentsOptions` fields exist here.
+7. **front-door FD13, the live hero:** `mountLandHero(canvas, options)` in `apps/web/src/grand/hero.ts` over the live
+   controller, with `pause()` and `resume()`, and windows lighting from the verified presence feed.
+8. **panel-window, the stream still:** `still(width): Promise<Blob>` on the scene, drawn and read in one task, and
+   one call in `apps/web/src/stream/index.tsx` to panel's publisher. Gift effects (PW12) mount through the moment
+   hooks once their payloads are committed.

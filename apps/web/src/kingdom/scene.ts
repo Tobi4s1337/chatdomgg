@@ -76,8 +76,10 @@ import { createPlaceMounts, type PlaceMounter } from './grand-land/place-mount';
 import { createPlaceShot } from './grand-land/place-shot';
 import type { PlaceShot } from '../interactions/places/framing';
 import { createKingdomLayers } from './grand-land/kingdom-layer';
+import { automaticSceneQuality, sceneQualityBudget, type SceneQuality } from './grand-land/scene-quality';
 export type { PlaceMount, PlaceMounter } from './grand-land/place-mount';
 export { registerKingdomLayer, type KingdomLayerMount, type KingdomLayerMounter } from './grand-land/kingdom-layer';
+export { SCENE_QUALITIES, isSceneQuality, type SceneQuality, type SceneQualityBudget } from './grand-land/scene-quality';
 
 const distantAirAnchor='colour=mix(colour,fogColour,min(.86,fogAmount));';
 const distantAir=`colour=mix(colour,fogColour,min(.86,fogAmount));
@@ -149,7 +151,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     handoffPose={view:copy,rotation:new THREE.Quaternion().setFromRotationMatrix(matrix),elapsed:0};poseRevision++;
   }
   if(options.initialView)startHandoff(options.initialView);
-  const post=own(createPostStack(renderer,scene,camera,{quality:canvas.clientWidth<600?'low':'high',toneMapping:'aces',fog:'material'}));
+  // A person's quality choice scales effects only (scene-quality.ts); null keeps the automatic opening choice.
+  const openedQuality=automaticSceneQuality(canvas.clientWidth);let qualityChoice:SceneQuality|null=null;
+  const post=own(createPostStack(renderer,scene,camera,{quality:openedQuality,toneMapping:'aces',fog:'material'}));
   const registry=options.founded?.materials??MATERIALS;
   const clay=own(createVoxelMaterial(registry,'build')),ground=own(createVoxelMaterial(registry,'terrain'));
   // Both lattices share one GPU light volume; two materials must not double the field budget.
@@ -706,7 +710,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
     fog.color.set(grade.fog);fog.density=grade.fogDensity;renderer.toneMappingExposure=grade.exposure;
     post.update({environment:grade,hour,focusDistance:camName==='window'||forgeDirected||forge.status().busy?camera.position.distanceTo(forgeDirected&&realmForge?realmForge.focusPoint:target):null,beacon:{position:new THREE.Vector3(...beaconPosition),strength:beacon},forge:{position:new THREE.Vector3(0,layout.market.elevation+1.6,8),strength:realmForge?.active()||forge.status().busy?1:0}});
-    const nextWaterQuality=canvas.clientWidth<600?'reduced':'full';
+    const nextWaterQuality=sceneQualityBudget(qualityChoice,openedQuality,canvas.clientWidth).water;
     if(nextWaterQuality!==waterQuality){waterQuality=nextWaterQuality;water.setQuality(waterQuality);}
     water.update({time,environment:grade,camera,sources:[
       ...[...windows.getSources(),...build.getSources()].map(source=>({...source,kind:'window' as const})),
@@ -884,6 +888,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     /** Low-priority game framing; clearing it resumes the current director without resetting it. */
     setPlaceShot(shot:PlaceShot|null){placeShot.set(shot);},
     setHour(value:number){targetHour=value;sound.cue('wood');},
+    /** Play's ledger setting: effects scale, palette, light, near detail and dusk windows never do. Null is automatic. */
+    setQuality(value:SceneQuality|null){const budget=sceneQualityBudget(value,openedQuality,canvas.clientWidth);qualityChoice=budget.choice;post.setQuality(budget.post);lastRenderedKey='';},
+    quality:()=>sceneQualityBudget(qualityChoice,openedQuality,canvas.clientWidth),
     setCamera(value:CameraName){arrivalDirector?.cancel();walkSelected=false;walk?.controller.release();capturePose=null;poseRevision++;camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
     /** Evidence framing only. Null returns control to the current production camera. */
     pose(eye:Vec3|null,lookAt?:Vec3,fov=43){
