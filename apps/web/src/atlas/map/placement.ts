@@ -16,7 +16,7 @@
  *
  * Pure: no Pixi, no DOM, no clock. The caller passes `now` and the motion preference.
  */
-import { CollisionGrid, comparePriority, type Rect } from './collide';
+import { blockPieces, CollisionGrid, comparePriority, SHIELD_GAP, type Rect } from './collide';
 
 /** How long a newly placed name, shield, stamp or region name takes to fade in. */
 export const FADE_MS = 140;
@@ -166,8 +166,8 @@ export interface HoldingLabel extends Placed {
 export const SHIELD_PAD = 3;
 
 /**
- * Names and shields beside holdings. Each holding's block (shield, a small gap, the name) tries below its stamp,
- * then right, then left, then above, the remembered side first. The first `limit` blocks placed carry a shield;
+ * Names and shields beside holdings. Each holding's block (shield, a small gap, the name; mirrored on the left, see
+ * `blockPieces`) tries below its stamp, then right, then left, then above, the remembered side first. The first `limit` blocks placed carry a shield;
  * after that a holding shows its name alone, and a holding with no name and no shield left shows nothing.
  */
 export class HoldingLabels {
@@ -195,24 +195,25 @@ export class HoldingLabels {
   place(grid: CollisionGrid, key: string, anchor: Anchor, label: Size | null, shield: Size, forced = false): HoldingLabel | null {
     const withShield = this.shields < this.limit;
     if (!label && !withShield) return null;
-    const gap = withShield ? shield.w + (label ? 4 : 0) : 0;
+    const gap = withShield ? shield.w + (label ? SHIELD_GAP : 0) : 0;
     const w = (label?.w ?? 0) + gap;
     const h = Math.max(label?.h ?? 0, withShield ? shield.h : 0);
     const placed = this.placer.choose(grid, key, HoldingLabels.candidates(anchor, w, h), forced);
     if (!placed) return null;
     this.placed++;
     const { rect } = placed;
+    const { nameX, shieldX } = blockPieces(rect, placed.index, !!label, withShield ? shield.w : null);
     let shieldAt: HoldingLabel['shield'] = null;
     let standard: HoldingLabel['standard'] = null;
-    if (withShield) {
+    if (shieldX !== null) {
       this.shields++;
       const top = Math.round(rect.y + (rect.h - shield.h) / 2 - SHIELD_PAD);
-      shieldAt = { x: Math.round(rect.x - SHIELD_PAD), y: top };
-      standard = { x: rect.x + shield.w / 2, y: top + SHIELD_PAD + 0.5 };
+      shieldAt = { x: Math.round(shieldX - SHIELD_PAD), y: top };
+      standard = { x: shieldX + shield.w / 2, y: top + SHIELD_PAD + 0.5 };
     }
     return {
       ...placed,
-      label: label ? { x: Math.round(rect.x + gap), y: Math.round(rect.y + (rect.h - label.h) / 2) } : null,
+      label: label ? { x: Math.round(nameX), y: Math.round(rect.y + (rect.h - label.h) / 2) } : null,
       shield: shieldAt,
       standard,
     };

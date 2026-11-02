@@ -209,6 +209,34 @@ describe('layoutStill', () => {
     expect(selected.marks[0]!.settler).toBe(knocked);
   });
 
+  it('keeps every shield between its name and its holding, whichever side the name goes', () => {
+    // Crowd the cities so some names have to go left of their stamp.
+    const rows: Row[] = Array.from({ length: 120 }, (_, i) => ({
+      id: String(3_000_000 + i), login: `crowd${i}`, name: `Crowd ${i}`, tier: 1,
+      x: HEAD_ROWS[0]!.x + ((i % 12) - 6) * 14, y: HEAD_ROWS[0]!.y + (Math.floor(i / 12) - 5) * 9,
+      average: 30_000 - i, game: 0, region: 0, realm: 1,
+    }));
+    const world = makeWorld();
+    world.head = columns([...HEAD_ROWS, ...rows]);
+    const env = setup(world);
+    let left = 0;
+    for (const view of [LAPTOP, PHONE]) {
+      for (const mark of layout(env, view).marks) {
+        if (!mark.shield || !mark.name) continue;
+        const centre = mark.box.x + mark.box.w / 2;
+        const shieldL = mark.shield.x + 3;
+        const shieldR = shieldL + mark.shield.width;
+        if (mark.name.x + mark.name.w <= centre) {
+          left++;
+          expect(shieldL).toBeGreaterThanOrEqual(mark.name.x + mark.name.w - 1);
+        } else {
+          expect(shieldR).toBeLessThanOrEqual(mark.name.x + 1);
+        }
+      }
+    }
+    expect(left).toBeGreaterThan(0);
+  });
+
   it('draws at most 300 shields; names go on without them', () => {
     const world = makeWorld();
     world.head = columns(capitals(400));

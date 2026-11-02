@@ -6,8 +6,9 @@ import { chromium, request } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { acquireCaptureLock } from '../../../../../packages/testing/capture-lock.mjs';
 
-const sides = { before: process.env.ATLAS_BEFORE_URL, after: process.env.ATLAS_AFTER_URL };
-if (!sides.before || !sides.after) throw new Error('ATLAS_BEFORE_URL and ATLAS_AFTER_URL are required.');
+// Without ATLAS_BEFORE_URL only the edition side is taken (a later look at the same views).
+const sides = { ...(process.env.ATLAS_BEFORE_URL ? { before: process.env.ATLAS_BEFORE_URL } : {}), after: process.env.ATLAS_AFTER_URL };
+if (!sides.after) throw new Error('ATLAS_AFTER_URL is required (ATLAS_BEFORE_URL too for a before/after pair).');
 const out = process.env.ATLAS_SHOT_DIR ?? 'work/evidence/atlas-map';
 const prefix = process.env.ATLAS_SHOT_PREFIX ?? 'am12';
 const language = process.env.ATLAS_FRAME_LANGUAGE ?? 'de';
@@ -81,4 +82,4 @@ try {
 }
 evidence.lockHeldMs = Date.now() - started;
 await writeFile(`${out}/${prefix}-edition-shots.json`, `${JSON.stringify(evidence, null, 2)}\n`);
-console.log(`PASS before/after stills, lock held ${Math.round(evidence.lockHeldMs / 1000)} s`);
+console.log(`PASS ${Object.keys(sides).join('/')} stills, lock held ${Math.round(evidence.lockHeldMs / 1000)} s`);

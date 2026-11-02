@@ -292,10 +292,12 @@ and the pair `am12-phone-pair.png`. Script: `apps/web/src/atlas/checks/edition-s
   its founding night.
 - The seal reads "Survey 2 Nov 2026" before and "Edition I *Rehearsal*" after, with a crown glyph on the survey wax.
   A real founding shows "Edition I 5 Nov 2026" on the deeper edition wax.
-- Not liked yet:
-  - A Japanese name ("布団ちゃんと申します") runs right up to the JAPANESE lettering at 1440.
-  - At 390 two shields stand in open sea beside the Isles of Many Tongues. That is the same label placement as before
-    the edition ("Donkaaklijn" in the before shot), so it is not new, but it is still not good.
+- Not liked, then fixed (2 Nov): a name set left of its holding carried its shield at the far end, so the shield
+  stood alone in open sea (metashir2, EWROON, enzzai, two beside the Isles of Many Tongues at 390) and the Japanese
+  name ran up to the JAPANESE lettering. A name block left of its stamp is now mirrored: the name, the gap, then the
+  shield beside the holding ("metashir2 ⛨ ♜"). One rule, `blockPieces` in `map/collide.ts`, places both the moving
+  map's names (`HoldingLabels`) and the still's, so the two stay identical; the block's size and the order of sides
+  are unchanged, so nothing else moves. Stills after the fix: `am12-shield-after-{1440,390,de-1440}.png`.
 
 ## Tests
 

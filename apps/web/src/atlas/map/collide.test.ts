@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { CollisionGrid, comparePriority, LETTER_CLEARANCE, MARK_PX, overlaps, underLettering, type Rect } from './collide';
+import { blockPieces, CollisionGrid, comparePriority, LEFT_OF_MARK, LETTER_CLEARANCE, MARK_PX, overlaps, SHIELD_GAP, underLettering, type Rect } from './collide';
 
 function seeded(seed: number): () => number {
   let s = seed >>> 0;
@@ -196,5 +196,23 @@ describe('underLettering', () => {
   });
   it('never lifts anything when nothing is lettered', () => {
     expect(underLettering(200, 115, 0, [])).toBe(false);
+  });
+});
+
+describe('blockPieces', () => {
+  const rect: Rect = { x: 100, y: 50, w: 80, h: 18 };
+
+  it('puts the shield first and the name after the gap on every side but the left', () => {
+    for (const side of [0, 1, 3]) expect(blockPieces(rect, side, true, 12)).toEqual({ nameX: 100 + 12 + SHIELD_GAP, shieldX: 100 });
+    expect(blockPieces(rect, 0, false, 12)).toEqual({ nameX: 112, shieldX: 100 });
+  });
+
+  it('mirrors the block left of the mark, so the shield stays beside the holding', () => {
+    expect(blockPieces(rect, LEFT_OF_MARK, true, 12)).toEqual({ nameX: 100, shieldX: 168 });
+    expect(blockPieces(rect, LEFT_OF_MARK, false, 12)).toEqual({ nameX: 100, shieldX: 168 });
+  });
+
+  it('gives a name alone the whole block', () => {
+    for (const side of [0, 1, 2, 3]) expect(blockPieces(rect, side, true, null)).toEqual({ nameX: 100, shieldX: null });
   });
 });
