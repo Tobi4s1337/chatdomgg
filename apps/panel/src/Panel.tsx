@@ -1,11 +1,12 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, Switch, Match } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, Switch, Match } from 'solid-js';
 import { createPassportReading } from '@chatdom/ui/passport';
 import { selectAdapter } from './adapters/select';
 import { CardSheet, PassportCorner } from './card/CardSheet';
 import { PanelPassport } from './passport/PanelPassport';
 import { createPanelSound } from './sound';
 import { GiftShelf } from './gifts/GiftShelf';
-import { windowViewCrop } from './window-view';
+import { windowViewCrop, type WindowViewCrop } from './window-view';
+import { createDissolve } from './dissolve';
 import type { Home, PanelAdapter, PanelSnapshot, PassportSource, Privacy } from './model';
 import './panel.css';
 import './places.css';
@@ -83,20 +84,10 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   const source = createMemo<Extract<PassportSource, { kind: 'readable' }> | null>(() => { const value = card()?.passport; return value?.kind === 'readable' ? value : null; });
   const picture = () => { const value = snap().picture; return value.kind === 'still' && !failed() ? value : null; };
   // A new painting dissolves in over the one it replaces, so a turn of the camera or a street coming alight never
-  // reads as a cut. The adapter keeps the replaced painting readable until the next one arrives.
+  // reads as a cut.
   const placeOf = (value: { mark?: { x: number; y: number } }) => value.mark ? `${value.mark.x * 100}% ${value.mark.y * 100}%` : '50% 50%';
-  const [fading, setFading] = createSignal<{ url: string; position: string } | null>(null);
-  const [settling, setSettling] = createSignal(false);
-  let shown: { url: string; position: string } | null = null;
-  createEffect(on(picture, value => {
-    const next = value ? { url: value.url, position: placeOf(value) } : null;
-    const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (next && shown && next.url !== shown.url && tab() === 'kingdom' && !calm) { setFading(shown); setSettling(true); }
-    else if (next?.url !== shown?.url) { setFading(null); setSettling(false); }
-    shown = next;
-  }));
-  // Two frames, so the hidden new painting has been drawn once before its fade begins.
-  const reveal = () => { if (settling()) requestAnimationFrame(() => requestAnimationFrame(() => setSettling(false))); };
+  const shot = createMemo(() => { const value = picture(); return value ? { url: value.url, position: placeOf(value) } : null; });
+  const kingdomFade = createDissolve(shot, () => tab() === 'kingdom');
   const gate = () => { const value = snap().entry; return value.kind === 'gate' ? value : null; };
   // The arch on the You tab looks into the painting only while that painting shows the viewer's own window lit.
   const windowView = createMemo(() => {
@@ -105,6 +96,10 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
     const crop = windowViewCrop(value.mark, value);
     return crop ? { url: value.url, crop, time: value.provenance.caption } : null;
   });
+  // The arch dissolves too: from the drawn lit glass into the first painting that shows the window, then from each
+  // painting's crop into the next, wherever the window has moved to in it.
+  const windowFade = createDissolve(windowView, () => tab() === 'you', { fromNothing: true });
+  const cropStyle = (crop: WindowViewCrop) => ({ width: `${crop.zoom * 100}%`, transform: `translate(${-crop.centre.x * 100}%, ${-crop.centre.y * 100}%)` });
   const [portraitFailed, setPortraitFailed] = createSignal(false);
   const portrait = () => { const value = card()?.card.portrait; return value && !portraitFailed() ? value : null; };
   createEffect(() => { void card()?.card.portrait?.url; setPortraitFailed(false); });
@@ -177,11 +172,11 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
       </section>}>
         <Switch>
           <Match when={tab() === 'kingdom'}>
-            <figure class="cw-picture" classList={{ settling: settling() }}>
+            <figure class="cw-picture" classList={{ settling: kingdomFade.settling() }}>
               <Show when={picture()} fallback={<div class="cw-absence"><span class="cw-absence-arch" aria-hidden="true"><span>✦</span></span><p>{snap().connection.kind === 'outside-twitch' ? 'Open on Twitch to see the kingdom' : snap().light.kind === 'unfounded' ? 'No kingdom here yet' : 'The kingdom is out of view'}</p></div>}>{picture =>
-                <><Show when={fading()}>{old => <img class="cw-picture-under" src={old().url} alt="" aria-hidden="true" style={{ 'object-position': old().position }} />}</Show>
+                <><Show when={kingdomFade.under()}>{old => <img class="cw-picture-under" src={old().url} alt="" aria-hidden="true" style={{ 'object-position': old().position }} />}</Show>
                 <img class="cw-picture-image" src={picture().url} alt={picture().mark ? `${picture().alt} Your lit window is marked.` : picture().alt} onError={() => setFailed(true)}
-                  onLoad={reveal} onTransitionEnd={event => { if (event.propertyName === 'opacity' && !settling()) setFading(null); }}
+                  onLoad={kingdomFade.reveal} onTransitionEnd={kingdomFade.settled}
                   style={{ 'object-position': placeOf(picture()) }} />
                 <Show when={picture().mark}>{mark => <span class="cw-yours" aria-hidden="true"
                   classList={{ low: mark().y < .2, west: mark().x < .2, east: mark().x > .8 }} style={{ left: `${mark().x * 100}%`, top: `${mark().y * 100}%` }}>
@@ -210,8 +205,10 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
             <section class="cw-you">
               <div class="cw-you-view">
               <Show when={windowView()} fallback={<div class="cw-window" classList={{ lit: snap().light.kind === 'lit' }} aria-hidden="true"><span /><span /><span /><span /></div>}>{view =>
-                <button type="button" class="cw-window-view" aria-label={`Your lit window in the painting from ${view().time}. Show the kingdom`} onClick={() => openTab('kingdom')}>
-                  <img src={view().url} alt="" draggable={false} style={{ width: `${view().crop.zoom * 100}%`, transform: `translate(${-view().crop.centre.x * 100}%, ${-view().crop.centre.y * 100}%)` }} onError={() => setFailed(true)} />
+                <button type="button" class="cw-window-view" classList={{ settling: windowFade.settling() }} aria-label={`Your lit window in the painting from ${view().time}. Show the kingdom`} onClick={() => openTab('kingdom')}>
+                  <Show when={windowFade.under()}>{old => <img class="cw-window-view-under" src={old().url} alt="" aria-hidden="true" draggable={false} style={cropStyle(old().crop)} />}</Show>
+                  <img class="cw-window-view-image" src={view().url} alt="" draggable={false} style={cropStyle(view().crop)} onError={() => setFailed(true)}
+                    onLoad={windowFade.reveal} onTransitionEnd={windowFade.settled} />
                   <span class="cw-window-view-ring" style={{ left: `${view().crop.ring.x * 100}%`, top: `${view().crop.ring.y * 100}%` }} />
                 </button>}</Show>
               </div>

@@ -1,3 +1,26 @@
+# PW10 checkpoint — 2 November 2026, the window on the You tab dissolves
+
+PW10 is still unticked. Main is still at `0e92df4`, and the Passport provenance seal is still in place on front-door and on the integrator, so the zip fails only on those shared strings, as before. The GPU tunnel was down all session (`chatdom-pc status` exit 3).
+
+## What was below the bar
+
+The last checkpoint's follow-up: the arch on the You tab still swapped the moment a painting arrived. Two things happened at once. When the first painting showing the newcomer's window came in, the drawn lit window was replaced by the painting crop. When a later painting came in, one crop was replaced by the next. That second case happens once a minute, and the window may sit somewhere else in a turned painting.
+
+## Implemented
+
+- `apps/panel/src/dissolve.ts`: one dissolve for both views. `dissolveStep` is the pure rule. A changed picture dissolves over the one before it only when its view is on screen and the viewer has not asked for reduced motion. A change to no picture cuts at once. A first picture fades in only where the view asks for it. `createDissolve` holds the underlay, hides the new image until it has loaded and been drawn for two frames, and drops the underlay when the opacity transition ends. The Kingdom plate now uses it, with the same behaviour as before.
+- The arch (`Panel.tsx`, `window.css`) uses it with `fromNothing`. The arch is drawn over lit glass, a warm radial gradient. The crop always covers the arch, so the glass shows only while a painting fades in. The first painting therefore clears out of the lit window instead of cutting in. Later paintings rise over the old crop at its own framing. The ring fades in 1.2 s into the fade, so it never sits on the old crop. Under reduced motion, or if the painting arrives while another tab is open, it swaps at once.
+
+## Verified
+
+- `apps/panel/src` vitest: 12 files and 108 tests passed, including 5 new `dissolveStep` tests. Repository `tsc --noEmit` shows no errors under `apps/panel`. ESLint is clean on the touched files.
+- Arch still sequence. Headless Chrome, with no WebGL needed, ran under the shared capture lock, queued for about 25 minutes and held for under a minute. A temporary page, deleted afterwards, mounted the real `Panel` in the lit bench state and swapped in the lane's real painting 02 with its mark (11:1328:8242). Vite ran on 5182 and has been stopped. The new crop's opacity was 0.008 at 120 ms, then 0.48 at 318×496 and 0.55 at 390×844 at about 0.8 s. The ring was at 1 when settled. I looked at `work/evidence/panel-window/PW10/arch/sheet-318x496.png` and `sheet-390x844.png`, which show drawn, clearing, mid and settled. The lit glass reads as the same window opening up. The crop clears through it, and the ring lands on the newcomer's front window only once settled. Nothing clips, and the words are unchanged (lit You stays 11).
+
+## Doubts
+
+- The drawn window is smaller than the arch: 72 px against 112 px at 318, and 96 px against 150 px on a phone. So the first frame of the clearing jumps in size. The lit glass is the same colour, so it reads as the window opening, but on a real GPU it may look like a pop.
+- The crop-to-crop case on the arch was not shot, because the lane has only one painting with a mark. It runs through the same code path as the Kingdom plate, whose crossfade was shot last checkpoint.
+
 # PW10 checkpoint — 2 November 2026, the painting dissolves
 
 PW10 is still unticked. Main has not moved since this lane branched (`0e92df4`), and front-door's branch still keeps the Passport provenance seal, so the zip still fails only on those shared strings. The GPU tunnel was down for this whole session (`chatdom-pc status` exit 3).
