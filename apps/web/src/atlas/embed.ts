@@ -7,6 +7,11 @@ export type AtlasFooterSlot = (element: HTMLElement) => void | (() => void);
 export interface AtlasMountOptions {
   mode: AtlasMode;
   focus?: AtlasTarget | null;
+  /**
+   * Start exactly at a view this map gave earlier (`handle.view()`): its position, zoom and open card. Wins over
+   * `focus`. A view from another survey revision, or a malformed one, falls back to the usual start.
+   */
+  view?: AtlasView | null;
   routing?: 'url' | 'memory';
   onExplore?: (view: AtlasView) => void;
   base?: string;
@@ -21,6 +26,12 @@ export interface AtlasHandle {
   readonly gate: AtlasGateHost | null;
   view(): AtlasView;
   flyTo(target: AtlasTarget, options?: { openCard?: boolean; signal?: AbortSignal }): Promise<boolean>;
+  /**
+   * Put the map exactly at a view it gave earlier, without a flight, and open its card (explore only). Resolves true
+   * once it stands there; false for a view from another survey revision, a malformed view, a card that cannot be
+   * shown or a disposed map.
+   */
+  restore(view: AtlasView, options?: { signal?: AbortSignal }): Promise<boolean>;
   setMode(mode: 'hero' | 'explore'): void;
   dispose(): void;
 }
@@ -29,6 +40,7 @@ export interface AtlasHandle {
 export interface AtlasScene {
   view(): AtlasView;
   flyTo: AtlasHandle['flyTo'];
+  restore: AtlasHandle['restore'];
   setMode(mode: 'hero' | 'explore'): void;
   dispose(): void;
 }
@@ -82,6 +94,12 @@ export function mountAtlas(el: HTMLElement, options: AtlasMountOptions): AtlasHa
       if (disposed || flyOptions?.signal?.aborted || !scene) return false;
       await ready;
       return !disposed && !flyOptions?.signal?.aborted ? scene.flyTo(target, flyOptions) : false;
+    },
+    async restore(view, restoreOptions) {
+      await loading;
+      if (disposed || restoreOptions?.signal?.aborted || !scene) return false;
+      await ready;
+      return !disposed && !restoreOptions?.signal?.aborted && scene ? scene.restore(view, restoreOptions) : false;
     },
     setMode(next) {
       if (disposed) return;

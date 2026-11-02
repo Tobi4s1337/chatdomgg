@@ -197,6 +197,54 @@ try {
     await page.close();
   }
   {
+    // The view a page saved before sign-in comes back exactly: on a live handle and as a mount option.
+    const { page, errors } = await open(browser, 'explore');
+    await ready(page);
+    await page.waitForFunction(() => document.querySelector('[data-atlas-ready="map"]'), null, { timeout: 45000 });
+    const login = process.env.ATLAS_RESTORE_LOGIN ?? 'tobi4s_';
+    const flew = await page.evaluate(target => window.__atlasBench.handle.flyTo({ login: target }), login);
+    const card = () => page.evaluate(() => document.querySelector('.atlas-card h2')?.textContent?.trim() ?? null);
+    // Save only once the card's register and any reveal have settled, so a late move cannot pass for a restore.
+    const settled = async () => {
+      let last = null;
+      for (let i = 0; i < 40; i++) {
+        await sleep(400);
+        const next = await page.evaluate(() => window.__atlasBench.handle.view());
+        if (last && JSON.stringify(last) === JSON.stringify(next)) return next;
+        last = next;
+      }
+      return last;
+    };
+    const saved = await settled();
+    const savedCard = await card();
+    check('a flown card is reported in the view', flew && !!saved.selected && !!saved.mapId && !!savedCard, { flew, saved, savedCard });
+    const near = (a, b) => Math.abs(a.scale - b.scale) / b.scale < 1e-6 && Math.abs(a.x - b.x) * b.scale < 1 && Math.abs(a.y - b.y) * b.scale < 1;
+    const elsewhere = { ...saved, x: saved.x + 400 / saved.scale, scale: saved.scale * 0.7, selected: null };
+    const moved = await page.evaluate(next => window.__atlasBench.handle.restore(next), elsewhere);
+    await sleep(400);
+    const away = await page.evaluate(() => window.__atlasBench.handle.view());
+    check('restore without a selection stands there and closes the card', moved && near(away, elsewhere) && away.selected === null && (await card()) === null, { moved, away, elsewhere });
+    const back = await page.evaluate(next => window.__atlasBench.handle.restore(next), saved);
+    await page.waitForFunction(() => !!document.querySelector('.atlas-card h2'), null, { timeout: 10000 }).catch(() => {});
+    await sleep(600);
+    const returned = await page.evaluate(() => ({ view: window.__atlasBench.handle.view(), history: window.__embedCounts.history }));
+    check('restore returns to the exact position, zoom and card', back && near(returned.view, saved) && returned.view.selected === saved.selected && (await card()) === savedCard, { back, saved, returned, card: await card() });
+    check('restore in memory routing never writes history', returned.history === 0, returned.history);
+    const foreign = await page.evaluate(next => window.__atlasBench.handle.restore(next), { ...elsewhere, mapId: 'another-survey' });
+    const unmoved = await page.evaluate(() => window.__atlasBench.handle.view());
+    check('a view from another survey is refused and leaves the map as it is', foreign === false && near(unmoved, saved), { foreign, unmoved });
+    // A reader who panned a little with the card open: the saved camera is not the card's own framing.
+    const panned = { ...saved, x: saved.x + 60 / saved.scale, y: saved.y - 40 / saved.scale };
+    await page.evaluate(next => { window.__atlasBench.mount({ mode: 'explore', view: next }); }, panned);
+    await ready(page);
+    await page.waitForFunction(() => document.querySelector('[data-atlas-ready="map"]'), null, { timeout: 45000 });
+    await page.waitForFunction(() => !!document.querySelector('.atlas-card h2'), null, { timeout: 15000 }).catch(() => {});
+    const remounted = await settled();
+    check('mounting with a saved view starts there with its card', near(remounted, panned) && remounted.selected === saved.selected && (await card()) === savedCard, { panned, remounted, card: await card() });
+    check('restore has no uncaught page errors', errors.length === 0, errors);
+    await page.close();
+  }
+  {
     const { page } = await open(browser, 'hero', '', true);
     await ready(page);
     await page.evaluate(() => { document.body.style.minHeight = '3000px'; window.scrollTo(0, 0); });

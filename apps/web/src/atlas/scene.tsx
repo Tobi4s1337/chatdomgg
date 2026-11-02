@@ -1,7 +1,8 @@
 import { batch, createEffect, createMemo, createSignal, createUniqueId, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import './atlas.css';
 import { render } from 'solid-js/web';
-import type { AtlasMountOptions, AtlasReadyState, AtlasScene as SceneHandle, AtlasTarget } from './embed';
+import type { AtlasMountOptions, AtlasReadyState, AtlasScene as SceneHandle, AtlasTarget, AtlasView } from './embed';
+import { savedView } from './saved-view';
 import type { HistoryLike } from './ui/history';
 import { adoptPreview, loadPreview, type LoadedPreview } from './data/load';
 import { dabHashOf, DirectoryError, fetchCard, fetchRoad, type CardReply, type CardRoad, type ChannelFace, type Lookup, type PencilPosition, type RoadReply, type SearchResult } from './data/directory';
@@ -202,6 +203,8 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   let cardGeneration = 0;
   /** The route the page was opened on, applied once the first view is drawn. */
   let pendingRoute: { route: AtlasRoute; adopted: boolean } | null = null;
+  /** The view the page asked to start at (a return from sign-in), used once by the first revision drawn. */
+  let startView: unknown = props.options.view ?? null;
   const anyOpen = () => !!selected() || !!selectedDab() || !!waiting() || !!road();
 
   const settle = () => { if (!disposed) props.ready(state() === 'ready' ? 'map' : state() === 'still' ? 'still' : 'failed'); };
@@ -300,7 +303,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
    * Read the open card's register entry (its last stream and roads). A reply for a card that has since closed or
    * changed is dropped. A name the register supplies (a pencil flag's) puts the channel's route in the address bar.
    */
-  const readRegister = (lookup: Lookup, cardId: string) => {
+  const readRegister = (lookup: Lookup, cardId: string, fly = true) => {
     registerController?.abort();
     const controller = new AbortController();
     registerController = controller;
@@ -311,7 +314,8 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       setRegister({ status: 'ready', reply });
       if (waiting()?.id === reply.channel.id && reply.position) {
         setWaitingPosition(reply.position);
-        view?.flyTo(reply.position.x, reply.position.y, Math.max(view.cameraState().scale, DISTANCE_STOP.realm));
+        // A restored card keeps the saved camera; the flag is only kept clear of the card.
+        if (fly) view?.flyTo(reply.position.x, reply.position.y, Math.max(view.cameraState().scale, DISTANCE_STOP.realm));
         view?.revealPoint(reply.position);
       }
       if (reply.channel.login && history.isOpen) history.opened(cardId, view?.cameraState() ?? { x: 0, y: 0, scale: 1 }, urlFor(reply.channel.login));
@@ -372,16 +376,18 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   };
 
   /** A named channel without land: its card and stable pencil point, when the register supplies one. */
-  const openWaiting = (face: ChannelFace, position?: PencilPosition) => {
+  const openWaiting = (face: ChannelFace, position?: PencilPosition, fly = true) => {
     clearCards();
     setWaiting(face);
     setWaitingPosition(position ?? null);
     setKeyOpen(false);
     const id = `waiting:${face.id}`;
     opening(id, urlFor(face.login));
-    readRegister({ id: face.id }, id);
+    readRegister({ id: face.id }, id, fly);
     const realm = geo()?.realms[face.realm ?? -1];
-    if (position && view) {
+    if (!fly) {
+      if (position) view?.revealPoint(position);
+    } else if (position && view) {
       view.flyTo(position.x, position.y, Math.max(view.cameraState().scale, DISTANCE_STOP.realm));
       view.revealPoint(position);
     } else if (realm && view) view.flyTo(realm.x, realm.y, Math.max(view.cameraState().scale, DISTANCE_STOP.continent));
@@ -403,16 +409,20 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     return dab ? { dab } : null;
   };
 
-  /** Open any channel the register named (a search result, a road's end, a route): its holding, its flag, or its waiting card. */
-  const openFace = async (face: ChannelFace, position?: PencilPosition) => {
+  /**
+   * Open any channel the register named (a search result, a road's end, a route): its holding, its flag, or its
+   * waiting card. `fly` false (a restored view) opens it where the map already stands. Resolves whether a card opened.
+   */
+  const openFace = async (face: ChannelFace, position?: PencilPosition, fly = true): Promise<boolean> => {
     const generation = ++cardGeneration;
     const place = await locate(face);
-    if (generation !== cardGeneration) return;
-    if (place && 'settler' in place) return choose(place.settler, true);
-    if (place && 'dab' in place) return chooseDab(place.dab, true, face);
-    if (face.place === 'waiting') return openWaiting(face, position);
+    if (generation !== cardGeneration) return false;
+    if (place && 'settler' in place) { choose(place.settler, fly); return true; }
+    if (place && 'dab' in place) { chooseDab(place.dab, fly, face); return true; }
+    if (face.place === 'waiting') { openWaiting(face, position, fly); return true; }
     // A holding the map no longer draws (withheld since the register answered) has no card to open.
     setNotice({ text: 'That channel is no longer drawn on this map.' });
+    return false;
   };
 
   const openSearchResult = (result: SearchResult) => {
@@ -648,6 +658,9 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         setSettlers(holdings);
         setGeo(geography);
       });
+      // A saved view is honoured once, and only by the revision it was taken on.
+      const resumed = savedView(startView, world.id);
+      startView = null;
       // Names travel beside the land: the first view waits for both (or for the names to fail on their own).
       let mapDrawn = false;
       let namesSettled = false;
@@ -661,8 +674,12 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         // The route the page was opened on (a shared link, a reload on a card) opens once the map is there to show it.
         const route = pendingRoute;
         pendingRoute = null;
+        // The host may have settled its size since the map was made; the saved view is placed again, exactly, while
+        // the still still covers it.
+        if (resumed) view?.setCamera(resumed.camera);
         if (route) void applyRoute(route.route, route.adopted);
-        else if (props.options.focus) void flyTo(props.options.focus, { openCard: mode() !== 'hero' });
+        else if (resumed?.selected && mode() !== 'hero') void openSaved(resumed.selected, signal);
+        else if (!resumed && props.options.focus) void flyTo(props.options.focus, { openCard: mode() !== 'hero' });
       };
       void readNames(holdings, world.id, signal).then(() => {
         namesSettled = true;
@@ -723,7 +740,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
           else if (view) void rebuild?.(view.cameraState());
         },
       }, chromeInsets, initial, { interactive: mode() !== 'hero', wheel: activated(), hero: mode() === 'hero', signal });
-      const mounted = await mountAtlasWithRetry(() => mount(null), error => console.error('Atlas renderer could not mount', error));
+      const mounted = await mountAtlasWithRetry(() => mount(resumed?.camera ?? null), error => console.error('Atlas renderer could not mount', error));
       if (signal.aborted) { mounted?.dispose(); return; }
       view = mounted;
       view?.setPaused(!inViewport || document.hidden);
@@ -797,7 +814,34 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     materialSound.setMuted(paused || mode() === 'hero' || muted());
     view?.setPaused(paused);
   };
-  const currentView = () => ({ ...(view?.cameraState() ?? { x: 0, y: 0, scale: 1 }), selected: selected()?.id ?? waiting()?.id ?? null, mapId: loaded()?.world.id ?? '' });
+  /** The channel whose card is open: a holding, a waiting channel, or the channel a pencil flag's register named. */
+  const openChannel = (): string | null => {
+    const flag = selectedDab() ? register() : null;
+    return selected()?.id ?? waiting()?.id ?? (flag?.status === 'ready' ? flag.reply.channel.id : null);
+  };
+  const currentView = () => ({ ...(view?.cameraState() ?? { x: 0, y: 0, scale: 1 }), selected: openChannel(), mapId: loaded()?.world.id ?? '' });
+  /** Open a saved view's card where the map stands. */
+  const openSaved = async (id: string, signal: AbortSignal): Promise<boolean> => {
+    try {
+      const reply = await fetchCard(SOURCE, loaded()!.world.id, { id }, signal);
+      if (signal.aborted || disposed) return false;
+      return await openFace(reply.channel, reply.position, false);
+    } catch { return false; }
+  };
+  const restore = async (target: AtlasView, options?: { signal?: AbortSignal }): Promise<boolean> => {
+    if (disposed || !loaded() || !controller || options?.signal?.aborted) return false;
+    const saved = savedView(target, loaded()!.world.id);
+    if (!saved) return false;
+    const signal = options?.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
+    view?.setCamera(saved.camera);
+    if (mode() === 'hero') return true;
+    if (!saved.selected) {
+      if (anyOpen()) closeCard();
+      return true;
+    }
+    if (openChannel() === saved.selected) return true;
+    return openSaved(saved.selected, signal);
+  };
   const flyTo = async (target: AtlasTarget, options?: { openCard?: boolean; signal?: AbortSignal }): Promise<boolean> => {
     if (disposed || !loaded() || !controller || options?.signal?.aborted) return false;
     const signal = options?.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
@@ -826,7 +870,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       });
     } catch { return false; }
   };
-  props.attach({ view: currentView, flyTo, setMode: next => {
+  props.attach({ view: currentView, flyTo, restore, setMode: next => {
     if (disposed) return;
     if (next === 'hero') { clearCards(); setKeyOpen(false); setActivated(false); }
     setMode(next);

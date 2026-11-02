@@ -19,6 +19,11 @@ export interface AtlasMountOptions {
   /** Where to look first. Default: hero = a composed view of live land; explore = the whole map (or the URL's target). */
   focus?: AtlasTarget | null;
   /**
+   * Start exactly at a view this map gave earlier (`handle.view()`): position, zoom and open card. Wins over `focus`.
+   * A view from another survey revision (`mapId`), or a malformed one, falls back to the usual start. (Added 2 Nov.)
+   */
+  view?: AtlasView | null;
+  /**
    * explore only. 'url' owns the /map routes and history (the /map page uses this); 'memory' keeps every state inside
    * the element and never touches history. Default 'memory'. hero and gate always use 'memory'.
    */
@@ -44,6 +49,12 @@ export interface AtlasHandle {
   view(): AtlasView;
   /** Flies there (van Wijk, under 3 s); resolves false if the channel cannot be shown. */
   flyTo(target: AtlasTarget, options?: { openCard?: boolean; signal?: AbortSignal }): Promise<boolean>;
+  /**
+   * Puts the map exactly at a view it gave earlier, without a flight, and opens its card (explore; a hero takes only
+   * the position). Resolves true once it stands there; false for another survey revision, a malformed view, a card that
+   * cannot be shown, or a disposed map. A view without a selection closes an open card. (Added 2 Nov.)
+   */
+  restore(view: AtlasView, options?: { signal?: AbortSignal }): Promise<boolean>;
   /** hero to explore in place, without remounting (the front page's "Explore the map" can open the map where it is). */
   setMode(mode: 'hero' | 'explore'): void;
   /** Removes the canvas, workers, listeners, timers, audio and transports. Safe to call twice. */
@@ -205,3 +216,16 @@ The separate private POST and `createAtlasRoadIngress` client described above
 remain optional and are not implemented by this checkpoint. Public ledger routes
 and the gate finder are also not yet exposed. Operator adoption and remaining work
 are recorded in `AM11-durable-roads.md`.
+
+## Return to the same view — 2 Nov, AM10 (asked by front-door for FD12)
+
+Additive, nothing renamed: `AtlasMountOptions.view` and `AtlasHandle.restore(view)` above. `view().selected` is the
+open card's Twitch channel ID: a holding, a channel waiting for land, or the channel a pencil flag's register named
+(earlier it was null for a pencil flag). Only digits are accepted back as a selection; anything else keeps the camera
+and opens no card. The camera is clamped to the land and zoom range like any other move. Without WebGL the dated
+still has one fixed view, so a restore there opens the card only. With `routing: 'url'` a restored card puts its
+`/map/<login>` in the address bar like any opened card; memory routing never writes history. A route in the URL
+(`/map/<login>`) still opens its own card after a `view` start.
+
+The sign-in seal and `takeReturnView()` recipe on `/map` waits for front-door's `@chatdom/ui/site` exports to reach
+this branch through main; the embed half is ready for the front page now.
