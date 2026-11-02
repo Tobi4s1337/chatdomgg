@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ATLAS_SPECTACLE, AtlasManifestSchema, createAtlasAlignment, encodeDabsV1, encodeLiveV2,
   type AtlasAlignment, type AtlasDab, type AtlasLiveSlot, type AtlasManifest, type KingdomId,
@@ -421,6 +421,26 @@ describe('LivePaint dab placement', () => {
     expect(restarted.paint.dabs.find(dab => dab.hash === kept.channelHash)).toEqual(expected);
     expect(restarted.paint.dabs[0]!.x).toBe(expected.x);
     expect(restarted.paint.dabs[0]!.y).toBe(expected.y);
+  });
+
+  it('finishes a crowded region over several budgets in exactly the order of one unlimited pass', () => {
+    const whole = setup();
+    whole.paint.apply(frameOf(whole.store, { dabs: dabsIn(1, 12) }));
+    expect(whole.paint.work(1_000)).toBe(false);
+    const sliced = setup();
+    sliced.paint.apply(frameOf(sliced.store, { dabs: dabsIn(1, 12) }));
+    // Every clock read advances a millisecond, so each 1.5 ms budget runs out after one dab inside the region.
+    let t = 0;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => (t += 1));
+    let calls = 0;
+    try {
+      while (sliced.paint.work(1.5) && calls < 100) calls++;
+    } finally {
+      clock.mockRestore();
+    }
+    expect(calls).toBeGreaterThanOrEqual(11);
+    expect(sliced.paint.dabs.map((dab) => [dab.hash, dab.placed, dab.x, dab.y])).toEqual(whole.paint.dabs.map((dab) => [dab.hash, dab.placed, dab.x, dab.y]));
+    expect(sliced.paint.dabs.filter((dab) => dab.placed).length).toBeGreaterThan(0);
   });
 
   it('places the regions in view first', () => {

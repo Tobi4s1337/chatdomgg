@@ -53,6 +53,9 @@ export function chooseSpectacle(candidates: readonly { ordinal: number; founded:
   return best && { ordinal: best.ordinal, spectacle: best.spectacle };
 }
 
+/** Where an interrupted region placement resumes: the dab index and, mid-search, that dab's stepwise search. */
+interface PencilCursor { region: number; next: number; steps: Generator<void, { x: number; y: number } | null, void> | null }
+
 export class LivePaint {
   private classes: Uint8Array;
   private starts = new Map<number, number | null>();
@@ -62,6 +65,8 @@ export class LivePaint {
   private pencil: PencilPlaces | null = null;
   private readonly pencilRegions = new Map<number, PencilRegionPlaces>();
   private queue: number[] = [];
+  /** The region being placed, the next dab to look at and the unfinished search of the current one. */
+  private cursor: PencilCursor | null = null;
   dabs: Dab[] = [];
   frame: LiveFrame | null = null;
   /** Bumped when anything drawn changes; the view redraws on it. */
@@ -139,6 +144,7 @@ export class LivePaint {
     this.frame = frame;
     this.liveCount = live;
     this.queue = [...new Set(dabs.filter(dab => !dab.placed).map(dab => dab.region))];
+    this.cursor = null;
     this.version++;
   }
 
@@ -210,35 +216,55 @@ export class LivePaint {
 
   /**
    * Places dabs region by region within a time budget, regions in `first` (those in view) before the rest. Returns
-   * true while work remains. Each dab depends only on its hash, realm and complete permanent holdings.
+   * true while work remains. Each dab depends only on its hash, realm and complete permanent holdings. The budget is
+   * kept inside a region too: a crowded region is finished over several calls in the same dab order, so one call
+   * never holds the main thread much past its budget.
    */
   work(budgetMs: number, first: ReadonlySet<number> = new Set()): boolean {
-    if (!this.queue.length) return false;
-    const start = performance.now();
+    if (!this.queue.length && !this.cursor) return false;
+    const deadline = performance.now() + budgetMs;
     this.queue.sort((a, b) => Number(first.has(b)) - Number(first.has(a)));
     let changed = false;
-    while (this.queue.length && performance.now() - start < budgetMs) {
-      const region = this.queue.shift()!;
-      this.placeRegion(region);
+    while (performance.now() < deadline) {
+      if (!this.cursor) {
+        const region = this.queue.shift();
+        if (region === undefined) break;
+        this.cursor = { region, next: 0, steps: null };
+      }
       changed = true;
+      if (this.placeRegion(this.cursor, deadline)) this.cursor = null;
     }
     if (changed) this.version++;
-    return this.queue.length > 0;
+    return this.queue.length > 0 || this.cursor !== null;
   }
 
-  private placeRegion(region: number): void {
-    const places = this.placesFor(region);
-    if (!places) return;
-    for (const dab of this.dabs) {
-      if (dab.region !== region || dab.placed) continue;
-      const slot = places.place(dab.hash, dab.realm);
-      if (!slot) {
-        dab.placed = false;
-        continue;
+  /** Places the cursor's region from its next dab on; true once the region is done. */
+  private placeRegion(cursor: PencilCursor, deadline: number): boolean {
+    const places = this.placesFor(cursor.region);
+    if (!places) return true;
+    const dabs = this.dabs;
+    for (; cursor.next < dabs.length; cursor.next++) {
+      const dab = dabs[cursor.next]!;
+      if (dab.region !== cursor.region || dab.placed) continue;
+      // One dab's search can cross a whole crowded region, so it too is taken a bounded step at a time.
+      const steps = cursor.steps ??= places.placeSteps(dab.hash, dab.realm);
+      let step = steps.next();
+      while (!step.done) {
+        if (performance.now() >= deadline) return false;
+        step = steps.next();
       }
-      dab.x = slot.x;
-      dab.y = slot.y;
-      dab.placed = true;
+      cursor.steps = null;
+      const slot = step.value;
+      if (slot) {
+        dab.x = slot.x;
+        dab.y = slot.y;
+        dab.placed = true;
+      } else dab.placed = false;
+      if (performance.now() >= deadline) {
+        cursor.next++;
+        return cursor.next >= dabs.length;
+      }
     }
+    return true;
   }
 }

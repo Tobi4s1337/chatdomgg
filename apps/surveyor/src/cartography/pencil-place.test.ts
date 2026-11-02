@@ -108,6 +108,27 @@ describe('shared pencil places', () => {
     expect(new PencilPlaces(world).forRegion(0, []).place(hashOf('1'), 0)).toBeNull();
   });
 
+  it('steps through the same search in bounded pieces and returns exactly what place returns, full realms included', () => {
+    const world = worldOf();
+    const crowd: PencilHolding[] = [...holdings];
+    // Fill the eastern realm so its searches run to the end of the region before answering null.
+    for (let x = 0; x <= 60; x += 1.2) for (let y = -40; y <= 40; y += 1.2) crowd.push({ x, y, r: 0.6 });
+    const whole = new PencilPlaces(world).forRegion(0, crowd);
+    const stepped = new PencilPlaces(structuredClone(world)).forRegion(0, crowd);
+    let longest = 0;
+    for (let id = 1; id <= 60; id++) for (const realm of [0, 1]) {
+      const hash = hashOf(String(id));
+      const steps = stepped.placeSteps(hash, realm);
+      let pieces = 0;
+      let step = steps.next();
+      while (!step.done) { pieces++; step = steps.next(); }
+      longest = Math.max(longest, pieces);
+      expect(step.value).toEqual(whole.place(hash, realm));
+    }
+    expect(longest).toBeGreaterThan(10);
+    expect(stepped.place(hashOf('1'), 1)).toEqual(whole.place(hashOf('1'), 1));
+  });
+
   it('uses the current language/game resolver, including deterministic unknown-language Outer Isles fallback', () => {
     const world = PreviewWorldSchema.parse(makeWorld());
     world.taxonomy.sha256 = currentTaxonomy().ref.sha256;

@@ -8,12 +8,14 @@ const base = process.env.ATLAS_CHECK_URL ?? 'http://127.0.0.1:5178';
 const dir = 'work/evidence/atlas-map';
 const jitless = process.env.ATLAS_TEST_CSP_JITLESS === '1';
 const phoneOnly = process.argv.includes('--phone-only');
+// The capture lock is a queue shared with other lanes; waiting in it is normal.
+const lockWait = Number(process.env.ATLAS_LOCK_WAIT_MS ?? 1_200_000);
 const artifact = phoneOnly ? 'am10-phone-final-still' : jitless ? 'am10-phone-final-with-bootstrap' : 'am10-phone-final';
 // Mirrors PAGE_HEADERS in apps/api/src/public/main.ts.
 const csp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://static-cdn.jtvnw.net; font-src 'self' data:; connect-src 'self'; media-src 'self' data: blob:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'";
 if (process.argv.includes('--profile-phone')) {
   await mkdir(dir, { recursive: true });
-  const release = await acquireCaptureLock({ signal: AbortSignal.timeout(60000) });
+  const release = await acquireCaptureLock({ signal: AbortSignal.timeout(lockWait) });
   let browser;
   const deadline = setTimeout(() => { void browser?.close(); }, 110000);
   const report = { iterations: [], errors: [] };
@@ -52,7 +54,7 @@ if (process.argv.includes('--profile-phone')) {
   } catch (e) { report.failure = String(e?.stack ?? e); }
   finally {
     clearTimeout(deadline); await browser?.close(); await release();
-    await writeFile(`${dir}/am10-phone-final-profile-after-cache.json`, JSON.stringify(report, null, 2) + '\n');
+    await writeFile(`${dir}/${process.env.ATLAS_PROFILE_NAME ?? "am10-phone-final-profile-after-cache"}.json`, JSON.stringify(report, null, 2) + '\n');
     if (report.failure) { console.error(report.failure); process.exitCode = 1; }
   }
   process.exit(process.exitCode ?? 0);
@@ -60,7 +62,7 @@ if (process.argv.includes('--profile-phone')) {
 if (process.argv.includes('--diagnostic') || process.argv.includes('--moving-diagnostic')) {
   const moving = process.argv.includes('--moving-diagnostic');
   await mkdir(dir, { recursive: true });
-  const release = await acquireCaptureLock({ signal: AbortSignal.timeout(60000) });
+  const release = await acquireCaptureLock({ signal: AbortSignal.timeout(lockWait) });
   let browser;
   const deadline = setTimeout(() => { void browser?.close(); }, 85000);
   const report = { errors: [], responses: [], failed: [], pending: [], violations: [], attrs: null };
@@ -121,7 +123,7 @@ if (process.argv.includes('--diagnostic') || process.argv.includes('--moving-dia
 }
 const checks = [], captures = [], errors = [];
 const check = (name, pass, detail) => { checks.push({ name, pass: !!pass, detail }); console.log(`${pass ? 'ok' : 'FAIL'} ${name} ${JSON.stringify(detail ?? '')}`); };
-const release = await acquireCaptureLock({ signal: AbortSignal.timeout(60000) });
+const release = await acquireCaptureLock({ signal: AbortSignal.timeout(lockWait) });
 let browser;
 const deadline = setTimeout(() => { void browser?.close(); }, 240000);
 try {
@@ -173,7 +175,11 @@ try {
   check('actual selected card reaches DOM and paint within 100ms of pointer down', probe.down !== null && probe.cardDom !== null && probe.cardPaint !== null && probe.cardPaint - probe.down <= 100, probe);
   check('offscreen selection opens the requested card', /squeezie/i.test(await page.locator('.atlas-card').innerText()));
   check('offscreen selection retains cached base labels', JSON.stringify(before) === JSON.stringify(await labels()), { before, after: await labels() });
-  if (phoneOnly) { const path = `${dir}/am10-phone-final-still-card-390.png`; await page.screenshot({ path }); captures.push(path); }
+  if (phoneOnly) {
+    // The sheet and the seal finish their entrance before the still is taken.
+    await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== 'running'), null, { timeout: 5000 }).catch(() => {});
+    const path = `${dir}/am10-phone-final-still-card-390.png`; await page.screenshot({ path }); captures.push(path);
+  }
   await page.close();
   await browser.close(); browser = undefined;
 

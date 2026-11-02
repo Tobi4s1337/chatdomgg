@@ -104,6 +104,8 @@ it('projects fallback over HTTP, preserves old replies and rechecks privacy acro
   expect((await read(`/card/${FACTS.id}?lookup=1`, '192.0.2.3')).status).toBe(404);
   rmSync(file);
 
+  // A restart: the first process lets go of the data directory (one writer holds the road ledger) before the next.
+  await first.service.close();
   const second = await start(dataDir, lookup, true);
   const restarted = await http(second.port, `${base}/card/${FACTS.id}?lookup=1`);
   expect(restarted.status).toBe(200);
@@ -113,6 +115,7 @@ it('projects fallback over HTTP, preserves old replies and rechecks privacy acro
   for (let i = 0; i < 6; i++) expect((await http(second.port, `${base}/card/login/absent${i}?lookup=1`, { forwarded: '192.0.2.20' })).status).toBe(404);
   expect((await http(second.port, `${base}/card/login/absent6?lookup=1`, { forwarded: '192.0.2.20' })).status).toBe(429);
   expect((await http(second.port, `${base}/card/login/absent7?lookup=1`, { forwarded: '192.0.2.21' })).status).toBe(404);
+  await second.service.close();
   const untrusted = await start(dataDir, lookup);
   for (let i = 0; i < 6; i++) expect((await http(untrusted.port, `${base}/card/login/absent${i}?lookup=1`, { forwarded: `192.0.2.${i + 30}` })).status).toBe(404);
   expect((await http(untrusted.port, `${base}/card/login/absent6?lookup=1`, { forwarded: '192.0.2.99' })).status).toBe(429);

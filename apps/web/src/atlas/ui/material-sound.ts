@@ -3,12 +3,57 @@ export type AtlasMaterialCue = 'press' | 'shutter' | 'wax';
 export interface AtlasMaterialSoundOptions {
   now?: () => number;
   contextFactory?: () => AudioContext;
+  /** Runs `run` once the gesture's answer has been painted; returns a cancel. */
+  afterPaint?: (run: () => void) => () => void;
 }
 interface Voice { stop(): void }
 interface Intent { kind: AtlasMaterialCue; at: number }
 const MIN_GAP_MS = 40;
 const MAX_RESUME_AGE_MS = 160;
+/** The very first cue waits for its answer to be painted before the device opens, so it may arrive a little later. */
+const FIRST_CUE_MAX_AGE_MS = 450;
 const MAX_VOICES = 3;
+
+/** A press that never becomes a click (a drag, a cancelled touch) stops waiting for one after this long. */
+const CLICK_WAIT_MS = 400;
+
+/**
+ * After the gesture's answer is on screen: a pointerdown is answered by its click, which can come a finger-lift
+ * later, so this waits for the click, lets two frames paint what it opened, then runs when the page is next idle.
+ */
+function browserAfterPaint(run: () => void): () => void {
+  if (typeof window === 'undefined' || typeof requestAnimationFrame !== 'function') {
+    const timer = setTimeout(run, 16);
+    return () => clearTimeout(timer);
+  }
+  let frame = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let idle: number | undefined;
+  let waiting = true;
+  const answered = () => {
+    if (!waiting) return;
+    waiting = false;
+    window.removeEventListener('click', answered, true);
+    clearTimeout(timer);
+    // A card can mount a step after its click, so the device also waits for the first idle moment after two frames.
+    frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (typeof requestIdleCallback === 'function') idle = requestIdleCallback(run, { timeout: 200 });
+        else timer = setTimeout(run, 0);
+      });
+    });
+  };
+  window.addEventListener('click', answered, true);
+  timer = setTimeout(answered, CLICK_WAIT_MS);
+  return () => {
+    waiting = false;
+    window.removeEventListener('click', answered, true);
+    cancelAnimationFrame(frame);
+    clearTimeout(timer);
+    if (idle !== undefined && typeof cancelIdleCallback === 'function') cancelIdleCallback(idle);
+  };
+}
 
 function browserContext(): AudioContext {
   if (typeof AudioContext === 'undefined') throw new Error('Audio is unavailable');
@@ -16,12 +61,19 @@ function browserContext(): AudioContext {
 }
 
 /**
+ * Opening an audio device can take tens of milliseconds, which must never sit between a tap and the card it opens.
+ * A gesture that opens nothing (a tap into the search field, a key) primes the context ahead of time; when the very
+ * first gesture is itself a selection, the context is opened after the answering frame is painted and the cue follows.
+ *
  * A tap has a hollow wooden body, a shutter has a soft grainy scrape, and wax lands with a lower, padded thud.
  * Each strike varies its resonance and grain deterministically. These are interface sounds, never map activity.
  */
 export class AtlasMaterialSound {
   private readonly now: () => number;
   private readonly contextFactory: () => AudioContext;
+  private readonly afterPaint: (run: () => void) => () => void;
+  private opening = false;
+  private cancelOpening: (() => void) | null = null;
   private context: AudioContext | null = null;
   private voices: Voice[] = [];
   private pending: Intent | null = null;
@@ -35,6 +87,7 @@ export class AtlasMaterialSound {
   constructor(options: AtlasMaterialSoundOptions = {}) {
     this.now = options.now ?? (() => performance.now());
     this.contextFactory = options.contextFactory ?? browserContext;
+    this.afterPaint = options.afterPaint ?? browserAfterPaint;
   }
 
   get muted(): boolean { return this.silent; }
@@ -47,17 +100,51 @@ export class AtlasMaterialSound {
     }
   }
 
+  /**
+   * Call from a real gesture that opens nothing (a tap into the search field, a key): the context is opened now,
+   * inside the gesture, so the next cue is struck at once. Nothing sounds.
+   */
+  prime(): void {
+    if (this.stopped || this.silent || this.unavailable || this.context) return;
+    const context = this.open();
+    if (context && context.state === 'suspended') {
+      try { void context.resume().catch(() => {}); } catch { /* A later gesture tries again. */ }
+    }
+  }
+
   /** Call only from a real control gesture; a hidden embed, timer or live frame must never call this. */
   play(kind: AtlasMaterialCue): void {
     if (this.stopped || this.silent || this.unavailable) return;
     const at = this.now();
     if (at - this.lastAt < MIN_GAP_MS) return;
     this.lastAt = at;
-    let context = this.context;
+    const context = this.context;
     if (!context) {
-      try { context = this.context = this.contextFactory(); }
-      catch { this.unavailable = true; return; }
+      // The first cue waits for the painted answer to its tap; the latest cue asked for in the meantime wins.
+      this.pending = { kind, at };
+      if (this.opening) return;
+      this.opening = true;
+      const cancel = this.afterPaint(() => {
+        this.opening = false;
+        this.cancelOpening = null;
+        const intent = this.pending;
+        this.pending = null;
+        if (!intent || this.stopped || this.silent) return;
+        const opened = this.context ?? this.open();
+        if (opened && this.now() - intent.at <= FIRST_CUE_MAX_AGE_MS) this.sound(opened, { kind: intent.kind, at: this.now() });
+      });
+      if (this.opening) this.cancelOpening = cancel;
+      return;
     }
+    this.sound(context, { kind, at });
+  }
+
+  private open(): AudioContext | null {
+    try { return (this.context = this.contextFactory()); }
+    catch { this.unavailable = true; return null; }
+  }
+
+  private sound(context: AudioContext, { kind, at }: Intent): void {
     if (context.state === 'closed') return;
     if (context.state !== 'running') {
       this.pending = { kind, at };
@@ -80,6 +167,9 @@ export class AtlasMaterialSound {
     if (this.stopped) return;
     this.stopped = true;
     this.pending = null;
+    this.cancelOpening?.();
+    this.cancelOpening = null;
+    this.opening = false;
     this.stopVoices();
     const context = this.context;
     this.context = null;

@@ -14,8 +14,15 @@ export interface PencilPoint { x: number; y: number }
 export interface PencilRegionPlaces {
   /** First eight SHA-256 bytes, as sixteen hexadecimal characters; realm is already resolved by realmFor. */
   place(channelHash: string, realmIndex: number): PencilPoint | null;
+  /**
+   * The same search as `place`, a little at a time: each `next()` does a bounded piece of it, and the generator
+   * returns exactly what `place` would. A browser drives it against a frame budget; the service simply calls `place`.
+   */
+  placeSteps(channelHash: string, realmIndex: number): Generator<void, PencilPoint | null, void>;
 }
 interface Bounds { minX: number; minY: number; maxX: number; maxY: number }
+/** Candidates tested between two steps of a stepwise search. */
+const STEP_CHECKS = 48;
 
 /** The existing dab target: an area-uniform point inside 85% of its realm circle, before snapping to actual land. */
 export function pencilTarget(channelHash: string, realm: RealmCircle): PencilPoint {
@@ -81,19 +88,27 @@ export class PencilPlaces {
     const bounds = this.bounds.get(region);
     // Empty realms need only one exhaustive check, even when many channels ask for the same overflow isle.
     const empty = new Set<number>();
+    const realms = this.realms;
+    const search = (realm: RealmCircle, target: PencilPoint, within: Bounds) => this.nearest(occupancy, realm, target, within);
+    function* placeSteps(channelHash: string, realmIndex: number): Generator<void, PencilPoint | null, void> {
+      const realm = realms.get(realmIndex);
+      if (!realm || realm.region !== region || !bounds || empty.has(realmIndex) || !/^[a-f0-9]{16}$/i.test(channelHash)) return null;
+      const target = pencilTarget(channelHash, realm);
+      const point = yield* search(realm, target, bounds);
+      if (!point) empty.add(realmIndex);
+      return point;
+    }
     return {
+      placeSteps,
       place: (channelHash, realmIndex) => {
-        const realm = this.realms.get(realmIndex);
-        if (!realm || realm.region !== region || !bounds || empty.has(realmIndex) || !/^[a-f0-9]{16}$/i.test(channelHash)) return null;
-        const target = pencilTarget(channelHash, realm);
-        const point = this.nearest(occupancy, realm, target, bounds);
-        if (!point) empty.add(realmIndex);
-        return point;
+        const steps = placeSteps(channelHash, realmIndex);
+        for (let step = steps.next(); ; step = steps.next()) if (step.done) return step.value;
       },
     };
   }
 
-  private nearest(occupancy: Occupancy, realm: RealmCircle, target: PencilPoint, bounds: Bounds): PencilPoint | null {
+  /** Yields after every lattice row it gathers and every STEP_CHECKS candidates it tests; never changes the answer. */
+  private *nearest(occupancy: Occupancy, realm: RealmCircle, target: PencilPoint, bounds: Bounds): Generator<void, PencilPoint | null, void> {
     // The drawn coast can extend beyond its realm circle. Search all the region's land before declaring it full.
     const reach = Math.hypot(Math.max(Math.abs(bounds.minX - target.x), Math.abs(bounds.maxX - target.x)),
       Math.max(Math.abs(bounds.minY - target.y), Math.abs(bounds.maxY - target.y))) + 1e-9;
@@ -112,9 +127,12 @@ export class PencilPlaces {
           const d = Math.hypot(p.x - target.x, p.y - target.y);
           if (d <= radius && d > inner) candidates.push({ ...p, d });
         }
+        yield;
       }
       candidates.sort((a, b) => a.d - b.d || a.j - b.j || a.i - b.i);
+      let checked = 0;
       for (const p of candidates) {
+        if (++checked % STEP_CHECKS === 0) yield;
         if (!occupancy.fits(p.x, p.y, this.hamletRadius)) continue;
         if (this.land.realmAt(p.x, p.y) !== realm.index) continue;
         if (this.land.distanceToCoast(p.x, p.y, clearance) < clearance) continue;

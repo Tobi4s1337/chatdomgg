@@ -32,11 +32,22 @@ class FakeContext {
   resume = vi.fn(async () => { this.state = 'running'; });
   close = vi.fn(async () => { this.state = 'closed'; });
 }
-function rig(context = new FakeContext()) {
+function rig(context = new FakeContext(), afterPaint: (run: () => void) => () => void = (run) => { run(); return () => {}; }) {
   let at = 0;
   const factory = vi.fn(() => context as unknown as AudioContext);
-  const sound = new AtlasMaterialSound({ now: () => at, contextFactory: factory });
+  const sound = new AtlasMaterialSound({ now: () => at, contextFactory: factory, afterPaint });
   return { sound, context, factory, advance: (ms = 50) => { at += ms; } };
+}
+/** A painted frame that arrives only when the test says so. */
+function frames() {
+  const queue: Array<{ run: () => void; cancelled: boolean }> = [];
+  const afterPaint = (run: () => void) => {
+    const entry = { run, cancelled: false };
+    queue.push(entry);
+    return () => { entry.cancelled = true; };
+  };
+  const paint = () => { for (const entry of queue.splice(0)) if (!entry.cancelled) entry.run(); };
+  return { afterPaint, paint, waiting: () => queue.filter(entry => !entry.cancelled).length };
 }
 const settle = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
 
@@ -114,7 +125,7 @@ describe('Atlas material sound ownership', () => {
 
   it('survives an unavailable or rejected audio device without an unhandled failure', async () => {
     const factory = vi.fn((): AudioContext => { throw new Error('Device unavailable'); });
-    const absent = new AtlasMaterialSound({ contextFactory: factory });
+    const absent = new AtlasMaterialSound({ contextFactory: factory, afterPaint: (run) => { run(); return () => {}; } });
     expect(() => { absent.play('press'); absent.play('wax'); absent.dispose(); }).not.toThrow();
     expect(factory).toHaveBeenCalledTimes(1);
     const context = new FakeContext(); context.state = 'suspended';
@@ -133,5 +144,85 @@ describe('Atlas material sound ownership', () => {
     expect(context.sources[0]!.disconnect).toHaveBeenCalledTimes(1);
     sound.dispose();
     expect(context.sources[0]!.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens no audio device inside a selection gesture: the first cue follows the painted answer', () => {
+    const clock = frames();
+    const { sound, context, factory, advance } = rig(new FakeContext(), clock.afterPaint);
+    sound.play('wax');
+    expect(factory).not.toHaveBeenCalled();
+    expect(context.sources).toHaveLength(0);
+    advance(); sound.play('press');
+    expect(clock.waiting()).toBe(1);
+    advance(20); clock.paint();
+    expect(factory).toHaveBeenCalledTimes(1);
+    // The latest cue asked for before the frame is the one struck, once.
+    expect(context.sources).toHaveLength(1);
+    expect(context.oscillators[0]!.frequency.setValueAtTime.mock.calls[0]![0]).toBeGreaterThan(400);
+    advance(); sound.play('wax');
+    expect(context.sources).toHaveLength(2);
+    expect(clock.waiting()).toBe(0);
+    sound.dispose();
+  });
+
+  it('still strikes a first cue whose answer took a finger-lift and two frames to paint', () => {
+    const clock = frames();
+    const { sound, context, advance } = rig(new FakeContext(), clock.afterPaint);
+    sound.play('wax');
+    advance(300); clock.paint();
+    expect(context.sources).toHaveLength(1);
+    sound.dispose();
+  });
+
+  it('drops a deferred first cue that is muted, stale or disposed before its frame', () => {
+    const muted = frames();
+    const a = rig(new FakeContext(), muted.afterPaint);
+    a.sound.play('wax');
+    a.sound.setMuted(true);
+    muted.paint();
+    expect(a.factory).not.toHaveBeenCalled();
+
+    const late = frames();
+    const b = rig(new FakeContext(), late.afterPaint);
+    b.sound.play('wax');
+    b.advance(1_000); late.paint();
+    expect(b.factory).toHaveBeenCalledTimes(1);
+    expect(b.context.sources).toHaveLength(0);
+    b.sound.dispose();
+
+    const gone = frames();
+    const c = rig(new FakeContext(), gone.afterPaint);
+    c.sound.play('wax');
+    c.sound.dispose();
+    expect(gone.waiting()).toBe(0);
+    gone.paint();
+    expect(c.factory).not.toHaveBeenCalled();
+  });
+
+  it('prime opens and unlocks the device inside a quiet gesture without sounding, then cues strike at once', async () => {
+    const context = new FakeContext();
+    context.state = 'suspended';
+    const clock = frames();
+    const { sound, factory, advance } = rig(context, clock.afterPaint);
+    sound.prime();
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(context.resume).toHaveBeenCalledTimes(1);
+    expect(context.sources).toHaveLength(0);
+    await settle();
+    advance(); sound.play('wax');
+    expect(clock.waiting()).toBe(0);
+    expect(context.sources).toHaveLength(1);
+    sound.prime();
+    expect(factory).toHaveBeenCalledTimes(1);
+    sound.dispose();
+    sound.prime();
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it('never primes while muted', () => {
+    const { sound, factory } = rig();
+    sound.setMuted(true);
+    sound.prime();
+    expect(factory).not.toHaveBeenCalled();
   });
 });

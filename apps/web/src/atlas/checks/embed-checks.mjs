@@ -78,7 +78,7 @@ async function open(browser, mode, extra = '', mobile = false) {
 
 let release, browser;
 try {
-  release = await acquireCaptureLock({ signal: AbortSignal.timeout(60000) });
+  release = await acquireCaptureLock({ signal: AbortSignal.timeout(Number(process.env.ATLAS_LOCK_WAIT_MS ?? 1_200_000)) });
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: GPU });
   {
     // The bench imports only the entry when lazy=1; scene chunks and data must wait for mount.
@@ -160,8 +160,9 @@ try {
     const box = await page.locator('[data-chatdom-atlas]').boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + Math.min(box.height / 2, 300));
     await page.mouse.wheel(0, 450);
-    await sleep(500);
-    check('hero wheel scrolls its host page', await page.evaluate(() => scrollY > 0), { scrollY: await page.evaluate(() => scrollY) });
+    // A loaded host can deliver the scroll late; wait for it rather than sampling once.
+    const scrolled = await page.waitForFunction(() => scrollY > 0, null, { timeout: 3000 }).then(() => true, () => false);
+    check('hero wheel scrolls its host page', scrolled, { scrollY: await page.evaluate(() => scrollY) });
     const before = await page.evaluate(() => { window.__canvasBefore = document.querySelector('[data-chatdom-atlas] canvas'); window.__atlasBench.handle.setMode('explore'); return window.__canvasBefore !== null; });
     await sleep(300);
     check('setMode preserves the canvas', before && await page.evaluate(() => document.querySelector('[data-chatdom-atlas] canvas') === window.__canvasBefore && window.__atlasBench.handle.mode === 'explore'));

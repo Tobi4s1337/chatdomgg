@@ -108,10 +108,20 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   const soundFor = (target: EventTarget | null) => {
     if (mode() === 'hero' || !visible() || !(target instanceof Element)) return;
     const fitting = target.closest('button,a,[role="option"]');
-    if (!fitting || fitting.matches(':disabled,.atlas-sound-toggle') || !root?.contains(fitting)) return;
+    if (!fitting) {
+      // A tap into a field opens nothing, so it readies the sound for the cue that follows (never the map: a drag
+      // must not wait on an audio device either).
+      if (target.closest('input,textarea') && root?.contains(target)) materialSound.prime();
+      return;
+    }
+    if (fitting.matches(':disabled,.atlas-sound-toggle') || !root?.contains(fitting)) return;
     materialSound.play(fitting.matches('.atlas-key-toggle') ? 'shutter' : fitting.matches('.atlas-survey-button,.atlas-search-result,.atlas-door') ? 'wax' : 'press');
   };
   const onMaterialPointer = (event: PointerEvent) => { if (event.isPrimary && event.button === 0) soundFor(event.target); };
+  // Typing or moving focus readies the sound too; Enter and Space may themselves select, so they never open the device.
+  const onMaterialKey = (event: KeyboardEvent) => {
+    if (mode() !== 'hero' && visible() && !event.repeat && event.key !== 'Enter' && event.key !== ' ') materialSound.prime();
+  };
   let disposed = false;
   let liveWait: ReturnType<typeof setTimeout> | undefined;
   let backdropTimer: ReturnType<typeof setTimeout> | undefined;
@@ -835,6 +845,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     resizeObserver.observe(root!);
     root?.addEventListener('keydown', onKey);
     root?.addEventListener('pointerdown', onMaterialPointer, { capture: true });
+    root?.addEventListener('keydown', onMaterialKey, { capture: true });
     if (ownsUrl) {
       window.addEventListener('popstate', onPop);
       const route = parseRoute(window.location.pathname);
@@ -856,6 +867,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     cardGeneration++;
     root?.removeEventListener('keydown', onKey);
     root?.removeEventListener('pointerdown', onMaterialPointer, { capture: true });
+    root?.removeEventListener('keydown', onMaterialKey, { capture: true });
     materialSound.dispose();
     document.removeEventListener('visibilitychange', pause);
     if (ownsUrl) { window.removeEventListener('popstate', onPop); delete window.__chatdomAtlas; }

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
 import stampSheetUrl from '../assets/stamps.webp?url';
 import stampSheet from '../assets/stamps.json';
 import { decodeRings, type Geography, type Settler, type SettlerStore } from '../data/model';
@@ -72,45 +72,106 @@ function tinted(paint: (ctx: CanvasRenderingContext2D) => void): HTMLCanvasEleme
   return canvas;
 }
 
+/** One slice of wash painting may hold the main thread this long; input and the card always get the next turn. */
+const WASH_SLICE_MS = 6;
+
 /**
  * The vermilion wash in Canvas 2D: stains accumulate on one layer with ordinary alpha (overlaps deepen toward full
  * pigment and stop there), and the layer is multiplied into the paper once, so it can only darken toward vermilion.
+ *
+ * Tens of thousands of stains take a few hundred milliseconds to lay on a slow device, so they are laid in short
+ * slices on a back layer and the finished layer is swapped in whole. The drawing then composites the finished layer,
+ * which is one image, as often as it likes: a selection or a new name never repaints the wash.
  */
 class WashCanvas {
   private readonly blots = Array.from({ length: BLOT_VARIANTS }, (_, i) => tinted((ctx) => paintBlot(ctx, i)));
   private readonly density = tinted(paintDensity);
-  private readonly layer = document.createElement('canvas');
+  private front = document.createElement('canvas');
+  private back = document.createElement('canvas');
+  private job: { stains: readonly Stain[]; next: number; res: number; opacity: number; owner: object } | null = null;
+  /** What the front layer was laid for, and at what opacity it is multiplied in; null while there is none. */
+  private shown: { owner: object; opacity: number; count: number } | null = null;
 
-  paint(target: CanvasRenderingContext2D, stains: readonly Stain[], opacity: number, view: Viewport, pixelRatio: number): void {
+  get busy(): boolean {
+    return this.job !== null;
+  }
+
+  /** How many stains the shown layer carries for `owner` (0 when it carries none, or was laid for another view). */
+  count(owner: object): number {
+    return this.shown?.owner === owner ? this.shown.count : 0;
+  }
+
+  /** Begin laying `stains` for the view `owner`; any unfinished layer is dropped. */
+  begin(owner: object, stains: readonly Stain[], opacity: number, view: Viewport, pixelRatio: number): void {
     const res = Math.min(1.5, pixelRatio);
     const width = Math.max(1, Math.round(view.width * res));
     const height = Math.max(1, Math.round(view.height * res));
-    if (this.layer.width !== width || this.layer.height !== height) {
-      this.layer.width = width;
-      this.layer.height = height;
+    if (this.back.width !== width || this.back.height !== height) {
+      this.back.width = width;
+      this.back.height = height;
     }
-    const ctx = this.layer.getContext('2d')!;
+    const ctx = this.back.getContext('2d')!;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
     ctx.clearRect(0, 0, width, height);
-    for (const stain of stains) {
+    this.job = { stains, next: 0, res, opacity, owner };
+  }
+
+  /** Lays stains until `deadline`; true once the layer is finished and shown. */
+  step(deadline: number): boolean {
+    const job = this.job;
+    if (!job) return true;
+    const ctx = this.back.getContext('2d')!;
+    const { stains, res } = job;
+    let i = job.next;
+    while (i < stains.length) {
+      const stain = stains[i++]!;
       const size = stain.size * res;
       ctx.globalAlpha = Math.min(1, stain.alpha);
       if (stain.variant < 0) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(this.density, stain.x * res - size / 2, stain.y * res - size / 2, size, size);
-        continue;
+      } else {
+        const cos = Math.cos(stain.rotation);
+        const sin = Math.sin(stain.rotation);
+        ctx.setTransform(cos, sin, -sin, cos, stain.x * res, stain.y * res);
+        ctx.drawImage(this.blots[stain.variant % BLOT_VARIANTS]!, -size / 2, -size / 2, size, size);
       }
-      ctx.setTransform(1, 0, 0, 1, stain.x * res, stain.y * res);
-      ctx.rotate(stain.rotation);
-      ctx.drawImage(this.blots[stain.variant % BLOT_VARIANTS]!, -size / 2, -size / 2, size, size);
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      // The clock is read every few dozen stains: reading it costs more than one small stain.
+      if ((i & 31) === 0 && performance.now() >= deadline) break;
     }
+    job.next = i;
+    if (i < stains.length) return false;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
+    [this.front, this.back] = [this.back, this.front];
+    this.shown = { owner: job.owner, opacity: job.opacity, count: stains.length };
+    this.job = null;
+    return true;
+  }
+
+  /** Nothing is to be shown (no live frame, or nobody live in view); an unfinished layer is dropped too. */
+  clear(owner: object): void {
+    this.job = null;
+    this.shown = { owner, opacity: 0, count: 0 };
+  }
+
+  /** Multiplies the finished layer into `target` when it was laid for `owner`. */
+  composite(target: CanvasRenderingContext2D, owner: object): void {
+    const shown = this.shown;
+    if (!shown || shown.owner !== owner || !shown.count) return;
     target.save();
     target.setTransform(1, 0, 0, 1, 0, 0);
     target.globalCompositeOperation = 'multiply';
-    target.globalAlpha = opacity;
-    target.drawImage(this.layer, 0, 0, target.canvas.width, target.canvas.height);
+    target.globalAlpha = shown.opacity;
+    target.drawImage(this.front, 0, 0, target.canvas.width, target.canvas.height);
     target.restore();
+  }
+
+  dispose(): void {
+    this.job = null;
+    this.shown = null;
+    this.front.width = this.front.height = this.back.width = this.back.height = 0;
   }
 }
 
@@ -149,16 +210,19 @@ function composeLand(view: StillView, tiles: Map<string, Baked | null>, pixelRat
 /** A channel's seeded arms on the paper halo the map gives them. */
 function StillShield(props: { id: string; width: number; x: number; y: number; pixelRatio: number }) {
   let canvas: HTMLCanvasElement | undefined;
+  // A new layout hands every mark a new object; the arms are repainted only when their size really changes.
+  const shieldWidth = createMemo(() => props.width);
+  const shieldRatio = createMemo(() => props.pixelRatio);
   createEffect(() => {
-    const width = props.width;
-    const ratio = props.pixelRatio;
+    const width = shieldWidth();
+    const ratio = shieldRatio();
     if (!canvas) return;
     canvas.width = Math.ceil((width + 6) * ratio);
     canvas.height = Math.ceil((width * SHIELD_ASPECT + 6) * ratio);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    drawShield(ctx, shieldDesign(props.id), 3, 3, width, { halo: true, pixelRatio: ratio });
+    drawShield(ctx, shieldDesign(untrack(() => props.id)), 3, 3, width, { halo: true, pixelRatio: ratio });
   });
   return (
     <canvas
@@ -266,6 +330,8 @@ export function Still(props: StillProps): JSX.Element {
   let fontTimer: ReturnType<typeof setTimeout> | undefined;
   let versionTimer: ReturnType<typeof setInterval> | undefined;
   let idleHandle: number | undefined;
+  let selectionFrame = 0;
+  let selectionTimer: ReturnType<typeof setTimeout> | undefined;
   let chunksStarted = false;
   const pixelRatio = stillPixelRatio(window.devicePixelRatio);
   const tiles = new Map<string, Baked | null>();
@@ -356,11 +422,25 @@ export function Still(props: StillProps): JSX.Element {
     void labelsVersion();
     return layoutStill({ world: props.world, geo: props.geo, store: props.store, camera: drawn.view.camera, view: drawn.view.view, stamps, measure });
   });
+  /**
+   * The selection the lettering is laid around follows the card by one painted frame: the card and its seal answer
+   * the tap first, then the map makes room for the chosen holding. The pressed state of a drawn mark is immediate.
+   */
+  const [laidSelection, setLaidSelection] = createSignal<Settler | null>(untrack(() => props.selected));
+  createEffect(on(() => props.selected, (next) => {
+    cancelAnimationFrame(selectionFrame);
+    clearTimeout(selectionTimer);
+    selectionFrame = requestAnimationFrame(() => {
+      selectionTimer = setTimeout(() => {
+        if (!disposed) setLaidSelection(next);
+      }, 0);
+    });
+  }, { defer: true }));
   /** The selection is drawn first and always, as on the moving map; a holding already drawn keeps the layout as it is. */
   const layout = createMemo<StillLayout | null>(() => {
     const base = baseLayout();
     const drawn = land();
-    const selected = props.selected;
+    const selected = laidSelection();
     if (!base || !drawn) return base;
     void labelsVersion();
     return layoutStillSelection(base, { world: props.world, geo: props.geo, store: props.store, camera: drawn.view.camera, view: drawn.view.view, stamps, measure, selected });
@@ -398,39 +478,122 @@ export function Still(props: StillProps): JSX.Element {
     return image;
   };
 
+  /**
+   * The wash is laid apart from the drawing. A request while a layer is being laid waits for it, so a stream of
+   * arriving chunks never starves the layer; a request soon after the last one waits out WASH_REPAINT_MIN_MS, unless
+   * the land itself changed. The layer is laid in slices of WASH_SLICE_MS and swapped in whole when it is finished.
+   */
+  let washQueued = false;
+  let washOwner: Land | null = null;
+  let washStartedAt = -Infinity;
+  let washSlice: ReturnType<typeof setTimeout> | undefined;
+  const [washVersion, setWashVersion] = createSignal(0);
+
   const scheduleWash = (next: number) => {
     clearTimeout(washTimer);
+    washTimer = undefined;
     if (!Number.isFinite(next)) return;
-    washTimer = setTimeout(() => setWashTick(washTick() + 1), Math.max(WASH_REPAINT_MIN_MS, next));
+    washTimer = setTimeout(() => {
+      washTimer = undefined;
+      requestWash();
+    }, Math.max(WASH_REPAINT_MIN_MS, next));
   };
 
-  // The drawing: land, the live wash multiplied into it, the margin and neatline over both, then the lettering.
-  createEffect(() => {
+  const pumpWash = () => {
+    washSlice = setTimeout(() => {
+      washSlice = undefined;
+      if (disposed || !wash) return;
+      if (!wash.step(performance.now() + WASH_SLICE_MS)) return pumpWash();
+      finishWash();
+    }, 0);
+  };
+
+  const finishWash = () => {
     const drawn = land();
-    const placed = layout();
+    setWashes(drawn && wash ? wash.count(drawn) : 0);
+    setWashVersion(washVersion() + 1);
+    const paint = props.paint;
+    if (paint?.frame) scheduleWash(paint.nextChange(paint.time()));
+    else clearTimeout(washTimer);
+    if (washQueued) {
+      washQueued = false;
+      requestWash();
+    }
+  };
+
+  const startWash = () => {
+    const drawn = land();
+    if (disposed || !drawn) return;
+    washStartedAt = performance.now();
+    const paint = props.paint;
+    wash ??= new WashCanvas();
+    if (!paint?.frame) {
+      wash.clear(drawn);
+      return finishWash();
+    }
+    const { stains, opacity } = washStains(props.store, paint, drawn.view.camera, drawn.view.view, paint.time());
+    if (!stains.length) {
+      wash.clear(drawn);
+      return finishWash();
+    }
+    wash.begin(drawn, stains, opacity, drawn.view.view, pixelRatio);
+    pumpWash();
+  };
+
+  function requestWash(): void {
+    if (disposed) return;
+    const drawn = land();
+    if (!drawn) return;
+    // A new land drops whatever was being laid for the old one and is laid at once.
+    if (washOwner !== drawn) {
+      clearTimeout(washSlice);
+      washSlice = undefined;
+      clearTimeout(washTimer);
+      washTimer = undefined;
+      washQueued = false;
+      washOwner = drawn;
+      return startWash();
+    }
+    if (wash?.busy) {
+      washQueued = true;
+      return;
+    }
+    const wait = washStartedAt + WASH_REPAINT_MIN_MS - performance.now();
+    if (wait > 0) {
+      if (washTimer === undefined) washTimer = setTimeout(() => {
+        washTimer = undefined;
+        requestWash();
+      }, wait);
+      return;
+    }
+    startWash();
+  }
+
+  createEffect(() => {
+    land();
     void props.liveTick;
     void washTick();
-    const paint = props.paint;
-    if (!drawn || !placed || !canvas) return;
-    const target = drawn.view;
-    if (canvas.width !== drawn.canvas.width) canvas.width = drawn.canvas.width;
-    if (canvas.height !== drawn.canvas.height) canvas.height = drawn.canvas.height;
-    const ctx = canvas.getContext('2d');
+    void props.paint;
+    untrack(requestWash);
+  });
+
+  /**
+   * The paper: land, the finished wash multiplied into it, the margin and neatline over both. It is composed once per
+   * land and finished wash, so the drawing below is a single copy of it plus the lettering.
+   */
+  const paper = document.createElement('canvas');
+  let paperFor: { land: Land; wash: number } | null = null;
+  const composePaper = (drawn: Land) => {
+    if (paper.width !== drawn.canvas.width) paper.width = drawn.canvas.width;
+    if (paper.height !== drawn.canvas.height) paper.height = drawn.canvas.height;
+    const ctx = paper.getContext('2d');
     if (!ctx) return;
+    const target = drawn.view;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     ctx.drawImage(drawn.canvas, 0, 0);
-    let laid = 0;
-    if (paint?.frame) {
-      const now = paint.time();
-      const { stains, opacity } = washStains(props.store, paint, target.camera, target.view, now);
-      laid = stains.length;
-      if (laid) (wash ??= new WashCanvas()).paint(ctx, stains, opacity, target.view, pixelRatio);
-      scheduleWash(paint.nextChange(now));
-    } else clearTimeout(washTimer);
-    setWashes(laid);
-
+    wash?.composite(ctx, drawn);
     ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     const frame = sheetFrame(props.geo.bounds, target.camera, target.view);
     ctx.fillStyle = PAPER_DEEP;
@@ -442,6 +605,29 @@ export function Still(props: StillProps): JSX.Element {
     ctx.globalAlpha = 0.7;
     ctx.lineWidth = 0.8;
     ctx.strokeRect(frame.outer.x, frame.outer.y, frame.outer.w, frame.outer.h);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+  };
+
+  // The drawing: the paper, then the lettering. A selection or a change of names only redraws this.
+  createEffect(() => {
+    const drawn = land();
+    const placed = layout();
+    const washed = washVersion();
+    if (!drawn || !placed || !canvas) return;
+    if (paperFor?.land !== drawn || paperFor.wash !== washed) {
+      composePaper(drawn);
+      paperFor = { land: drawn, wash: washed };
+    }
+    if (canvas.width !== drawn.canvas.width) canvas.width = drawn.canvas.width;
+    if (canvas.height !== drawn.canvas.height) canvas.height = drawn.canvas.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'copy';
+    ctx.globalAlpha = 1;
+    ctx.drawImage(paper, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (const text of placed.texts) {
@@ -450,7 +636,8 @@ export function Still(props: StillProps): JSX.Element {
     }
     ctx.globalAlpha = 1;
 
-    if (!readyFired) {
+    // The still is ready once its first wash is in (or there is none to lay), so it is never shown as bare paper.
+    if (!readyFired && washVersion() > 0 && !wash?.busy) {
       readyFired = true;
       // Two frames, so the buttons and shields are on screen before anyone is told the still is ready.
       requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -556,6 +743,13 @@ export function Still(props: StillProps): JSX.Element {
     disposed = true;
     generation++;
     clearTimeout(washTimer);
+    clearTimeout(washSlice);
+    clearTimeout(selectionTimer);
+    cancelAnimationFrame(selectionFrame);
+    wash?.dispose();
+    wash = null;
+    paperFor = null;
+    paper.width = paper.height = 0;
     clearTimeout(fontTimer);
     clearTimeout(resizeTimer);
     clearInterval(versionTimer);
