@@ -6,8 +6,8 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { KingdomIdSchema, PersonIdSchema, parseRaidGuestVisualMark, starterCitizenLook, type PresenceInput } from '@chatdom/shared';
-import { REALM_AUTH_ROUTES, REALM_FOUNDED_ROUTES, REALM_NO_HOME_SLOT, WALK_BODY, RealmFoundedManifestSchema,
+import { KingdomIdSchema, PersonIdSchema, parseRaidChatFrame, parseRaidGuestVisualMark, starterCitizenLook, type PresenceInput } from '@chatdom/shared';
+import { REALM_AUTH_ROUTES, REALM_FOUNDED_ROUTES, REALM_HERALD_ROUTE, REALM_NO_HOME_SLOT, WALK_BODY, RealmFoundedManifestSchema,
   RealmSessionReplySchema, RealmTicketReplySchema, type RealmJoin } from '@chatdom/shared/realm';
 import { generateSettlementPlan } from '@chatdom/world';
 import { compileFoundedScene } from '@chatdom/world/founded-collision';
@@ -28,6 +28,12 @@ import { giftRouteOf } from '../../../web/src/kingdom/moments/anchors';
 import { TenureEvidenceVerifier } from '../allocation';
 import { createDurableRealmBoot } from '../bootstrap/durable';
 import { createRealmCitizens } from '../evening/citizens';
+import { mountEveningRoutes } from '../evening/http';
+import { INGRESS_ROUTE } from '../ingress';
+import { FileForgeApprovals, ForgeWriteGate } from '../wiring';
+import { RaidChatPresentation } from './raid-chat-presentation';
+import { RaidChatBridge } from './raid-chat-bridge';
+import { mountRaidChatRead } from './raid-chat-http';
 import { createRealmPool, migrateRealmSchema } from '../persistence';
 import { foundedSpawnAnchors } from '../founded/anchors';
 import { createRaidGuestRuntime } from './guest-runtime';
@@ -113,12 +119,15 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('actual OIDC to founded
     const authority = new RaidGuestAuthority({ pool, origin: 'simulated', clock: Date.now });
     const citizens = createRealmCitizens({ db: pool, origin: 'simulated', kingdomNames: new Map([[host, 'SIMULATED Host'], [source, 'SIMULATED Source']]) });
     const ordinaryObservations: PresenceInput[] = [], joins: RaidGuestRoomReceipt[] = [], leaves: RaidGuestRoomReceipt[] = [];
-    const runtime = createRaidGuestRuntime({ origin: 'simulated', authority, citizens: async input => {
+    const raidChat = new RaidChatPresentation({ origin: 'simulated' }), gate = new ForgeWriteGate();
+    const secret = 'h'.repeat(32);
+    const runtime = createRaidGuestRuntime({ chatPresented: (input, result) => raidChat.observe(input, result), origin: 'simulated', authority, citizens: async input => {
       ordinaryObservations.push(input); await citizens.observe(input);
     } });
     const boot = createDurableRealmBoot({ pool, origin: 'simulated', foundedDirectory: directory,
       verifier: new TenureEvidenceVerifier('simulated', randomBytes(32)), furnish: citizens.furnish,
-      foundedAccess: target => target.origin === 'simulated', ingressCredentials: {},
+      foundedAccess: target => target.origin === 'simulated', ingressCredentials: { herald: secret },
+      repositoryOptions: gate.install({ origin: 'simulated' }),
       attach: kingdom => {
         const detach = runtime.attach(kingdom);
         const record = kingdom.onLifecycle((event, principal, _walker, at) => {
@@ -129,6 +138,10 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('actual OIDC to founded
         });
         return () => { record(); detach(); };
       } });
+    const current = (kingdomId: typeof host) => boot.services.kingdoms.get(kingdomId)?.current === true;
+    const bridge = new RaidChatBridge({ origin: 'simulated', ingress: boot.ingress, gate,
+      approvals: new FileForgeApprovals(join(directory, 'forge-approvals')), raidChat, current, beforeObservation: input => runtime.observe(input) });
+    bridge.use(boot.services);
     citizens.use(boot.allocation, boot.services);
     boot.ingress.moments.useSettler(runtime.guardSettler(citizens));
     Object.assign(boot.services, { prepareSpawn: createRaidGuestSpawn({ authority, current: kingdomId => {
@@ -141,6 +154,7 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('actual OIDC to founded
     const clients: RealmClient[] = [];
     const worldDeliveries: unknown[] = [];
     let shutdown: (() => Promise<void>) | undefined;
+    let reader: ReturnType<typeof mountRaidChatRead> | undefined;
     try {
       expect(await migrateRealmSchema(pool, schema)).toContain('0011d_realm_raid_guests');
       await new Promise<void>(resolve => api.listen(0, '127.0.0.1', resolve));
@@ -202,7 +216,9 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('actual OIDC to founded
       expect((await pool.query('select 1 from realm_raid_guest_arrivals')).rowCount).toBe(0);
 
       const port = await freePort(), endpoint = `http://127.0.0.1:${port}`;
-      const realm = boot.createServer(); shutdown = () => realm.server.gracefullyShutdown(false);
+      const realm = boot.createServer({ mountIngress: app => {
+        mountEveningRoutes(app, bridge); reader = mountRaidChatRead(app, { origin: 'simulated', presentation: raidChat, current });
+      } }); shutdown = () => realm.server.gracefullyShutdown(false);
       expect((await boot.readiness.start()).ready).toBe(true);
       await realm.server.listen(port, '127.0.0.1');
       const manifestResponse = await fetch(`${endpoint}${REALM_FOUNDED_ROUTES.manifest.replace(':kingdomId', host)}`);
@@ -305,16 +321,43 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('actual OIDC to founded
       expect(await expiredVisitor.guest(host)).toBeNull();
       expect((await authority.history(expiredId)).items).toEqual([]);
 
-      const sourceChat = chat(sourceId, 'Bram', 'SIMULATED-source-chat');
-      await runtime.observe(sourceChat); await runtime.observe(sourceChat);
+      const postHerald = (path: string, body: unknown, token = secret) => fetch(`${endpoint}${path}`, { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const frame = async () => {
+        const response = await fetch(`${endpoint}/realm/raid-chat/${host}`);
+        expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('no-store');
+        const value = parseRaidChatFrame(await response.json(), Date.now()); expect(value).not.toBeNull(); return value!;
+      };
+      const sourceChat = chat(sourceId, 'Bram', 'chat:SIMULATED-source-chat');
+      const speech = { version: 1, chat: { version: 1, id: 'SIMULATED-source-chat', personId: sourceId, kingdomId: host,
+        origin: 'simulated', asOf: sourceChat.observedAt, expiresAt: sourceChat.observedAt + 10_000,
+        parts: [{ kind: 'text', text: 'SIMULATED greetings from the caravan' }] } };
+      expect((await postHerald(INGRESS_ROUTE, { version: 1, observation: sourceChat }, 'wrong')).status).toBe(401);
+      expect((await postHerald(REALM_HERALD_ROUTE, speech, 'wrong')).status).toBe(401);
+      expect((await frame()).cues).toEqual([]);
+      expect((await postHerald(INGRESS_ROUTE, { version: 1, observation: sourceChat })).status).toBe(202);
+      expect((await postHerald(REALM_HERALD_ROUTE, speech)).status).toBe(202);
+      const qualifiedFrame = await frame();
+      expect(qualifiedFrame.lights).toHaveLength(1);
+      expect(qualifiedFrame.lights[0]).toMatchObject({ asOf: sourceChat.observedAt, expiresAt: sourceChat.observedAt + 90_000 });
+      expect(qualifiedFrame.cues).toMatchObject([{ parts: speech.chat.parts,
+        raid: { raidId, fromKingdomId: source, fromName: 'Source Channel' } }]);
+      await runtime.observe(sourceChat);
+      expect((await postHerald(REALM_HERALD_ROUTE, { version: 1, chatCleanup: { type: 'remove', origin: 'simulated',
+        kingdomId: host, messageIds: [speech.chat.id] } })).status).toBe(202);
+      expect(await frame()).toMatchObject({ lights: [], cues: [] });
       expect((await authority.history(sourceId)).items).toMatchObject([{ kind: 'raid', raidId, kingdomId: host }]);
       expect([...wrenWalks.room.state.walkers.values()].some(walker => walker.name === 'Bram')).toBe(false);
       expect(await boot.allocation.deedIn(host, sourceId)).toBeNull();
       expect(ordinaryObservations.some(input => input.kind === 'observe' && input.people.some(person => person.personId === sourceId))).toBe(false);
       await runtime.observe(chat(wrenId, 'Wren', 'SIMULATED-walked-guest-chat'));
       expect(await boot.allocation.deedIn(host, wrenId)).toBeNull();
-      const outsiderChat = chat(outsiderId, 'Ilse', 'SIMULATED-outsider-chat');
-      await runtime.observe(outsiderChat);
+      const outsiderChat = chat(outsiderId, 'Ilse', 'chat:SIMULATED-outsider-chat');
+      expect((await postHerald(INGRESS_ROUTE, { version: 1, observation: outsiderChat })).status).toBe(202);
+      const outsiderSpeech = { version: 1, chat: { ...speech.chat, id: 'SIMULATED-outsider-chat', personId: outsiderId,
+        asOf: outsiderChat.observedAt, expiresAt: outsiderChat.observedAt + 10_000 } };
+      expect((await postHerald(REALM_HERALD_ROUTE, outsiderSpeech)).status).toBe(202);
+      expect((await frame()).cues).toEqual([]);
       expect(ordinaryObservations).toContainEqual(outsiderChat);
       expect((await authority.history(outsiderId)).items).toEqual([]);
       expect(await boot.allocation.deedIn(host, outsiderId)).toMatchObject({ status: 'installed' });
@@ -344,10 +387,11 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('actual OIDC to founded
       await runtime.flush(); expect(await wren.guest(host)).toBeNull();
       expect((await restarted.history(wrenId)).items).toHaveLength(1);
     } finally {
+      reader?.close();
       for (const client of clients) client.dispose();
       try { await shutdown?.(); }
       finally {
-        await runtime.close(); await boot.stop();
+        await bridge.stop(); await runtime.close(); await boot.stop();
         await new Promise<void>(resolve => api.listening ? api.close(() => resolve()) : resolve());
         await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`); await pool.end();
         await rm(directory, { recursive: true, force: true });

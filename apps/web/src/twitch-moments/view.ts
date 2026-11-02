@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
+import type { RaidChatCue, RaidChatFrame, Vec3, VoxelBlueprint } from '@chatdom/shared';
 import {
   BANNER_CELLS, BANNER_TIERS, CELL, RIBBON_SLOTS, SHIMMER_PHASES, SWAG_CELLS, bannerBracket, bannerParts, bannerRibbon, type BannerKit, type BannerTier,
 } from './banner';
@@ -104,6 +104,8 @@ export function mergeGlow(a: SkyGlow, b: SkyGlow): SkyGlow {
   const total = a.strength + b.strength, mixed = (i: 0 | 1 | 2) => total > 0 ? (a.colour[i] * a.strength + b.colour[i] * b.strength) / total : 0;
   return { colour: [mixed(0), mixed(1), mixed(2)], strength: Math.min(0.6, 1 - (1 - a.strength) * (1 - b.strength)), night: Math.max(a.night ?? 0, b.night ?? 0) };
 }
+export interface RaidChatLabel { readonly cue: RaidChatCue; readonly x: number; readonly y: number; readonly distance: number; readonly opacity: number }
+
 export interface ScreenNameplate { readonly id: string; readonly name: string; readonly x: number; readonly y: number }
 
 const NO_PLACES: SpectaclePlaces = {
@@ -167,6 +169,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
     /** The followed subject's shot, once the shot has moved on to it; undefined until then, null when it has none. */
     second?: CameraPose | null } | null = null;
   let lastFrame: MomentFrame | null = null, disposed = false;
+  const disposeListeners = new Set<() => void>();
 
   function geometry(blueprint: VoxelBlueprint): Promise<THREE.BufferGeometry> {
     let promise = geometries.get(blueprint.id);
@@ -776,6 +779,28 @@ export function createTwitchMomentView(host: MomentViewHost) {
 
   return {
     prepare,
+    /** Caller has checked the frame's origin and destination against this kingdom. */
+    receiveRaidChat(frame: RaidChatFrame): void { if (!disposed) raid.chat(frame.cues, frame.lights); },
+    onDispose(listener: () => void): () => void {
+      if (disposed) { listener(); return () => {}; }
+      disposeListeners.add(listener);
+      return () => { disposeListeners.delete(listener); };
+    },
+    raidChatLabels(camera: THREE.Camera): RaidChatLabel[] {
+      if (!lastFrame?.visible) return [];
+      const { width, height } = host.viewport(), eye = camera.getWorldPosition(new THREE.Vector3());
+      const candidates = raid.chatAnchors().flatMap(({ cue, position, opacity }) => {
+        const distance = eye.distanceTo(position), p = position.clone().project(camera);
+        if (p.z < -1 || p.z > 1 || Math.abs(p.x) > 0.95 || Math.abs(p.y) > 0.95) return [];
+        return [{ cue, x: (p.x + 1) * width / 2, y: (1 - p.y) * height / 2, distance, opacity }];
+      }).sort((a, b) => a.distance - b.distance);
+      const out: RaidChatLabel[] = [];
+      for (const candidate of candidates) {
+        if (out.every(other => Math.abs(other.x - candidate.x) >= 180 || Math.abs(other.y - candidate.y) >= 76)) out.push(candidate);
+        if (out.length === 3) break;
+      }
+      return out;
+    },
     apply(frame: MomentFrame): void {
       if (disposed) return;
       lastFrame = frame;
@@ -856,6 +881,11 @@ export function createTwitchMomentView(host: MomentViewHost) {
     dispose(): void {
       if (disposed) return;
       disposed = true;
+      const listeners = [...disposeListeners];
+      disposeListeners.clear();
+      for (const listener of listeners) {
+        try { listener(); } catch (error) { console.error('Moment view disposal listener failed', error); }
+      }
       release();
       if (crowdCalled) { host.crowd?.(null); crowdCalled = false; }
       host.light?.({ colour: [0, 0, 0], strength: 0, hush: 0 });

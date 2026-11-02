@@ -2,7 +2,7 @@ import type { PresenceInput, RaidGuestVisualMark } from '@chatdom/shared';
 import type { DurableKingdom, RealmLifecycleListener } from '../persistence/kingdom';
 import type { RaidGuestProjection, RaidGuestRoomReceipt } from '../../../api/src/raid-gate/guest-contracts';
 import { RaidGuestProjectionSchema } from '../../../api/src/raid-gate/guest-contracts';
-import type { RaidGuestAuthority } from './guests';
+import type { RaidGuestAuthority, RaidGuestChatResult } from './guests';
 import type { TownSettler } from '../moments/service';
 import { deriveRaidGuestVisualMark } from './guest-insignia';
 
@@ -15,6 +15,8 @@ export interface RaidGuestRuntimeOptions {
   readonly citizens: (input: PresenceInput) => Promise<void>;
   readonly log?: (message: string) => void;
   readonly clock?: () => number;
+  /** The same committed chat qualification, for transient presentation; never a second stamp authority. */
+  readonly chatPresented?: (input: PresenceInput, result: RaidGuestChatResult | null) => void;
 }
 
 /** Actual room callbacks only. A failed receipt stays pending; it never turns authentication into an arrival. */
@@ -130,7 +132,8 @@ export function createRaidGuestRuntime(options: RaidGuestRuntimeOptions) {
         await barrier([...pending.values()].filter(job => job.kind === 'join' && people.has(job.receipt.personId)
           && job.receipt.kingdomId === input.kingdomId), CHAT_BARRIER_MS);
       }
-      await options.authority.observePresence(input);
+      const result = await options.authority.observePresence(input);
+      options.chatPresented?.(input, result);
       if (input.kind !== 'observe' || input.source !== 'chat') { await options.citizens(input); return; }
       const visitors = new Set(await options.authority.visitors(input.kingdomId, input.people.map(person => person.personId), input.providerAt ?? input.observedAt));
       const people = input.people.filter(person => !visitors.has(person.personId));

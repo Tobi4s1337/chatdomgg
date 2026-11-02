@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { KingdomIdSchema, PersonIdSchema, PRESENCE_LEASE_MS, PresenceInputSchema, type KingdomId, type PersonId, type PresenceInput } from '@chatdom/shared';
 import { RaidObservationSchema, type RaidObservation } from '../../../api/src/raid-gate/observations';
 import { serializable, type SqlClient, type SqlPool } from '../../../api/src/raid-gate/postgres-repository';
+import type { RaidChatQualification } from './raid-chat-contracts';
 import { RAID_GUEST_CLOCK_ALLOWANCE_MS, RAID_GUEST_WINDOW_MS, RaidGuestBeginSchema, RaidGuestChatSchema,
   RaidGuestProjectionSchema, RaidGuestReadSchema, RaidGuestRewardSchema, RaidGuestRoomReceiptSchema, RaidGuestStampSchema,
   type RaidGuestBeginReply, type RaidGuestChat, type RaidGuestProjection, type RaidGuestRefusalReason,
@@ -14,7 +15,8 @@ type Raid = { readonly raidId: string; readonly observation: RaidObservation };
 type Refusal = { readonly status: 'refused'; readonly reason: RaidGuestRefusalReason };
 export type RaidGuestArrivalResult = Refusal | { readonly status: 'accepted' | 'duplicate'; readonly guest: RaidGuestProjection; readonly stamp: RaidGuestStamp };
 export type RaidGuestChatResult = { readonly status: 'ignored'; readonly reason: RaidGuestRefusalReason }
-  | { readonly status: 'accepted' | 'duplicate'; readonly guest: RaidGuestProjection | null; readonly stamp: RaidGuestStamp };
+  | { readonly status: 'accepted' | 'duplicate'; readonly guest: RaidGuestProjection | null; readonly stamp: RaidGuestStamp;
+    readonly presentation?: RaidChatQualification };
 export type RaidGuestPendingEntry = Refusal | { readonly status: 'pending'; readonly raidId: string; readonly expiresAt: number };
 export interface RaidGuestAuthorityOptions { readonly pool: SqlPool; readonly origin: 'live' | 'simulated'; readonly clock: () => number }
 export class RaidGuestError extends Error {
@@ -356,7 +358,11 @@ export class RaidGuestAuthority {
       [input.origin, input.personId, raid.raidId, input.at, this.now(), PRESENCE_LEASE_MS]));
       if (arrival) guest = projection(arrival, raid);
     }
-    return { status, guest, stamp };
+    return { status, guest, stamp, presentation: {
+      origin: input.origin, kingdomId: input.kingdomId, personId: input.personId, messageId: input.messageId, at: input.at,
+      proofMessageId: String(chat.message_id), proofAt: integer(chat.at_ms), raidOccurredAt: raid.observation.occurredAt,
+      raid: { raidId: raid.raidId, fromKingdomId: raid.observation.from.kingdomId, fromName: raid.observation.from.name },
+    } };
   }
 
   private async continueChatVisit(client: SqlClient, input: RaidGuestChat): Promise<RaidGuestChatResult> {

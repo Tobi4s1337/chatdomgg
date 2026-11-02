@@ -32,12 +32,12 @@ function controller(origin: 'live' | 'simulated' = 'simulated', current: unknown
 }
 
 describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
-  it('sizes the caravan on a log curve and says Twitch\'s count honestly', () => {
+  it('sizes the caravan on a log curve without airing a viewer count', () => {
     expect([1, 3, 10, 50, 140, 1000, 10_000, 10_000_000].map(raidUnits)).toEqual([1, 1, 2, 3, 4, 6, 9, 12]);
     for (let v = 1; v < 200_000; v = Math.ceil(v * 1.3)) expect(raidUnits(v + 1)).toBeGreaterThanOrEqual(raidUnits(v));
-    expect(raidLine(1)).toBe('A raid of one');
-    expect(raidLine(140)).toBe('A raid of 140');
-    expect(raidLine(10_000)).toBe('A raid of 10,000');
+    expect(raidLine(1)).toBe('Colours from the road');
+    expect(raidLine(140)).toBe('Colours from the road');
+    expect(raidLine(10_000)).toBe('Lanterns fill the road');
   });
 
   it('admits a raid once, captions it at the gate, takes the shot and lets it go', () => {
@@ -53,7 +53,7 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     expect(early.captions).toEqual([]);
 
     const titled = moments.sample(START + 6000);
-    expect(titled.captions).toEqual([expect.objectContaining({ at: { kind: 'place', place: 'gate' }, title: 'Mossbrook rides in', line: 'A raid of 140',
+    expect(titled.captions).toEqual([expect.objectContaining({ at: { kind: 'place', place: 'gate' }, title: 'Mossbrook rides in', line: 'Colours from the road',
       detail: RAID_DETAIL, opacity: 1 })]);
     expect(titled.stage).toMatchObject({ subject: { kind: 'place', place: 'gate' } });
     const cues = titled.audio.map(c => c.cue);
@@ -125,14 +125,14 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     const first = moments.sample(START + 5000);
     expect(first.raids.map(r => r.key)).toEqual(['one']);
     expect(first.raids[0]!.units).toBe(1);
-    expect(first.captions[0]).toMatchObject({ title: 'Wrenfield rides in', line: 'A raid of 3' });
+    expect(first.captions[0]).toMatchObject({ title: 'Wrenfield rides in', line: 'Colours from the road' });
     // The second wakes the gate only after the first gate has gone to sleep.
     const sleepGone = RAID_BEAT.minHold + RAID_BEAT.sleep + RAID_BEAT.sleepFade;
     expect(moments.sample(START + sleepGone - 50).raids.map(r => r.key)).toEqual(['one']);
     const both = moments.sample(START + sleepGone + 6000);
     expect(both.raids.map(r => r.key)).toEqual(['one', 'two']);
     expect(both.raids[1]!.units).toBe(9);
-    expect(both.captions[0]).toMatchObject({ title: 'Highmoor rides in', line: 'A raid of 10,000' });
+    expect(both.captions[0]).toMatchObject({ title: 'Highmoor rides in', line: 'Lanterns fill the road' });
     expect(both.audio.map(c => c.cue)).toContain('festival-drum');
     expect(both.raids.length).toBeLessThanOrEqual(RAID_LIMITS.caravans);
   });
@@ -251,7 +251,7 @@ describe('Incoming raid in the view', () => {
     const eye = new THREE.PerspectiveCamera(shot.fov, 1920 / 1080, 0.5, 400);
     eye.position.set(...shot.eye); eye.lookAt(...shot.target); eye.updateMatrixWorld(); eye.updateProjectionMatrix();
     const labels = view.labels(eye);
-    expect(labels).toEqual([expect.objectContaining({ title: 'Mossbrook rides in', line: 'A raid of 1,000' })]);
+    expect(labels).toEqual([expect.objectContaining({ title: 'Mossbrook rides in', line: 'Colours from the road' })]);
     expect(labels[0]!.y).toBeGreaterThan(0);
     expect(mid.raids[0]!.units).toBe(6);
 

@@ -89,9 +89,9 @@ export function raidUnits(viewers: number): number {
   return Math.min(RAID_LIMITS.units, Math.max(1, Math.round(1 + 0.6 * Math.log(v / 3) ** 1.25)));
 }
 
-/** Twitch's count, honestly: "A raid of one", "A raid of 140", "A raid of 10,000". */
+/** The column carries its scale in the world; the stream never airs an audience count. */
 export function raidLine(viewers: number): string {
-  return viewers === 1 ? 'A raid of one' : `A raid of ${viewers.toLocaleString('en-US')}`;
+  return viewers >= 10_000 ? 'Lanterns fill the road' : 'Colours from the road';
 }
 export const RAID_DETAIL = 'The gate is open to visitors';
 

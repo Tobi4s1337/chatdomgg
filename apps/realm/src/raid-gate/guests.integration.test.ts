@@ -104,8 +104,11 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('raid guests on isolate
     const committed = await entry('506', session);
     expect(await arrive(committed, '506')).toMatchObject({ status: 'accepted' });
     const message = { version: 1 as const, origin: 'simulated' as const, kingdomId: '201', personId: '506', messageId: 'guest-message', at: now };
-    expect(await authority().chat(message)).toMatchObject({ status: 'accepted' });
-    expect(await authority().chat(message)).toMatchObject({ status: 'duplicate' });
+    expect(await authority().chat(message)).toMatchObject({ status: 'accepted', presentation: {
+      origin: 'simulated', kingdomId: '201', personId: '506', messageId: 'guest-message', at: now,
+      proofMessageId: 'guest-message', proofAt: now, raid: { raidId, fromKingdomId: '101', fromName: 'Raider' },
+    } });
+    expect(await authority().chat(message)).toMatchObject({ status: 'duplicate', presentation: { messageId: 'guest-message', proofAt: now } });
     expect((await authority().history('506')).items.map(i => i.kind)).toEqual(['visit']);
     const outsider = await person('507');
     expect(outsider).toBeTruthy();
@@ -279,12 +282,18 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('raid guests on isolate
     now += 599_999;
     const message = { version: 1, origin: 'simulated', kingdomId: '203', personId: '511', messageId: 'lease-first', at: now };
     const first = await authority().chat(message);
-    expect(first).toMatchObject({ status: 'accepted', stamp: { kind: 'raid' } });
+    expect(first).toMatchObject({ status: 'accepted', stamp: { kind: 'raid' }, presentation: {
+      messageId: 'lease-first', at: message.at, proofMessageId: 'lease-first', proofAt: message.at,
+    } });
     const history = await authority().history('511');
     expect(history.items).toHaveLength(1);
     now += 2;
     const continued = await authority().chat({ ...message, messageId: 'lease-next', at: now });
-    expect(continued).toMatchObject({ status: 'accepted', stamp: history.items[0] });
+    expect(continued).toMatchObject({ status: 'accepted', stamp: history.items[0], presentation: {
+      messageId: 'lease-next', at: now, proofMessageId: 'lease-first', proofAt: message.at,
+    } });
+    expect(await authority().chat({ ...message, messageId: 'lease-next', at: now }))
+      .toMatchObject({ status: 'duplicate', presentation: { messageId: 'lease-next', at: now, proofMessageId: 'lease-first', proofAt: message.at } });
     expect(await authority().history('511')).toEqual(history);
     now += 89_999;
     expect(await authority().visitors('203', ['511'], now)).toEqual(['511']);

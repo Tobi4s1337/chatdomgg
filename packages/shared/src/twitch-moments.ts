@@ -175,6 +175,7 @@ export interface MomentResetInfo { epoch: string; asOf: number; throughSeq: numb
 /** Injected public source. There is no default live endpoint (Spec 20). */
 export interface TwitchMomentFeed {
   readonly origin: 'live' | 'simulated';
+  readonly raidChat?: import('./raid-show').RaidChatFeed;
   subscribe(
     reset: (info: MomentResetInfo) => void,
     receive: (epoch: string, fact: TwitchMomentFact) => void,

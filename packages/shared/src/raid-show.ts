@@ -47,3 +47,75 @@ export function encodeRaidGuestVisualMark(raw: RaidGuestVisualMark | null | unde
   const mark = parseRaidGuestVisualMark(raw, now);
   return mark ? JSON.stringify(mark) : '';
 }
+
+/** Disposable speech at the caravan; neither a home slot nor a walker identity is implied. */
+export const RAID_CHAT_CUE_TTL_MS = 10_000;
+export const RAID_CHAT_MAX_CUES = 32;
+export const RAID_CHAT_FRAME_MAX_BYTES = 96 * 1024;
+export const RaidChatCueSchema = z.strictObject({
+  version: z.literal(1),
+  id: z.string().regex(/^raid-chat\.[a-f0-9]{64}$/u),
+  lightId: z.string().regex(/^raid-light\.[a-f0-9]{64}$/u),
+  kingdomId: KingdomIdSchema, origin: z.enum(['live', 'simulated']),
+  asOf: EpochMsSchema, expiresAt: EpochMsSchema,
+  raid: RaidGuestVisualMarkSchema.omit({ expiresAt: true }),
+  parts: z.array(z.discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('text'), text: z.string().min(1).max(240) }),
+    z.strictObject({ kind: z.literal('emote'), id: z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/u), alt: z.string().min(1).max(32) }),
+  ])).min(1).max(16),
+}).superRefine((cue, context) => {
+  if (cue.expiresAt <= cue.asOf || cue.expiresAt > cue.asOf + RAID_CHAT_CUE_TTL_MS) context.addIssue({ code: 'custom', message: 'Raid speech lasts at most ten seconds' });
+  if (cue.parts.reduce((count, part) => count + (part.kind === 'text' ? part.text.length : part.alt.length), 0) > 480) context.addIssue({ code: 'custom', message: 'Raid speech exceeds its bubble budget' });
+});
+export type RaidChatCue = z.infer<typeof RaidChatCueSchema>;
+export const RAID_CHAT_LIGHT_LEASE_MS = PRESENCE_LEASE_MS;
+/** A witnessed chatter's light, independent of whether that message contains displayable speech. */
+export const RaidChatLightSchema = z.strictObject({
+  lightId: RaidChatCueSchema.shape.lightId,
+  kingdomId: KingdomIdSchema, origin: z.enum(['live', 'simulated']),
+  asOf: EpochMsSchema, expiresAt: EpochMsSchema,
+  raid: RaidChatCueSchema.shape.raid,
+}).superRefine((light, context) => {
+  if (light.expiresAt <= light.asOf || light.expiresAt > light.asOf + RAID_CHAT_LIGHT_LEASE_MS) context.addIssue({ code: 'custom', message: 'Raid light cannot outlive its witnessed presence lease' });
+});
+export type RaidChatLight = z.infer<typeof RaidChatLightSchema>;
+export const RaidChatFrameSchema = z.strictObject({
+  version: z.literal(1), kingdomId: KingdomIdSchema, origin: z.enum(['live', 'simulated']),
+  asOf: EpochMsSchema, lights: z.array(RaidChatLightSchema).max(RAID_CHAT_MAX_CUES), cues: z.array(RaidChatCueSchema).max(RAID_CHAT_MAX_CUES),
+}).superRefine((frame, context) => {
+  const lights = new Map(frame.lights.map(light => [light.lightId, light]));
+  if (lights.size !== frame.lights.length || frame.lights.some(light => light.kingdomId !== frame.kingdomId
+    || light.origin !== frame.origin || light.asOf > frame.asOf || light.expiresAt <= frame.asOf)) {
+    context.addIssue({ code: 'custom', message: 'Raid lights do not belong to this current frame' });
+  }
+  if (new Set(frame.cues.map(cue => cue.id)).size !== frame.cues.length
+    || new Set(frame.cues.map(cue => cue.lightId)).size !== frame.cues.length) context.addIssue({ code: 'custom', message: 'Raid speech repeats a cue or light' });
+  if (frame.cues.some(cue => cue.kingdomId !== frame.kingdomId || cue.origin !== frame.origin
+    || cue.asOf > frame.asOf || cue.expiresAt <= frame.asOf)) context.addIssue({ code: 'custom', message: 'Raid speech does not belong to this current frame' });
+  if (frame.cues.some(cue => {
+    const light = lights.get(cue.lightId);
+    return !light || cue.expiresAt > light.expiresAt || cue.raid.raidId !== light.raid.raidId
+      || cue.raid.fromKingdomId !== light.raid.fromKingdomId || cue.raid.fromName !== light.raid.fromName;
+  })) context.addIssue({ code: 'custom', message: 'Raid speech must belong to a witnessed current light' });
+});
+export type RaidChatFrame = z.infer<typeof RaidChatFrameSchema>;
+export interface RaidChatFeed {
+  readonly origin: 'live' | 'simulated';
+  subscribe(receive: (frame: RaidChatFrame) => void): () => void;
+}
+
+/** Revalidate against an advancing epoch clock even when transport stops. Expiry can only remove cues. */
+export function parseRaidChatFrame(raw: unknown, now: number): RaidChatFrame | null {
+  if (!EpochMsSchema.safeParse(now).success) return null;
+  try {
+    if (typeof raw === 'string') {
+      if (raw.length > RAID_CHAT_FRAME_MAX_BYTES || utf8.encode(raw).byteLength > RAID_CHAT_FRAME_MAX_BYTES) return null;
+      raw = JSON.parse(raw) as unknown;
+    }
+    const parsed = RaidChatFrameSchema.safeParse(raw);
+    if (!parsed.success || parsed.data.asOf > now + 5_000
+      || utf8.encode(JSON.stringify(parsed.data)).byteLength > RAID_CHAT_FRAME_MAX_BYTES) return null;
+    const lights = parsed.data.lights.filter(light => light.expiresAt > now), keys = new Set(lights.map(light => light.lightId));
+    return { ...parsed.data, lights, cues: parsed.data.cues.filter(cue => cue.expiresAt > now && keys.has(cue.lightId)) };
+  } catch { return null; }
+}

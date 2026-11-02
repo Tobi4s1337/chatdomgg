@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { KingdomIdSchema } from '@chatdom/shared';
+import { KingdomIdSchema, type RaidChatFeed, type RaidChatFrame } from '@chatdom/shared';
 import { WORLD_FIXTURE_KINGDOM, WORLD_FIXTURE_TIME } from '@chatdom/shared/world-fixtures';
 import { createKingdomScene } from '../kingdom/scene';
 import { SkyCaptions, type ScreenCaption, type TwitchMomentFeed } from '../twitch-moments';
@@ -8,6 +8,7 @@ import './incoming.css';
 /** Private art bench. Its synthetic evidence never leaves this page or enters a live feed. */
 export default function IncomingRaid() {
   const query = new URLSearchParams(location.search);
+  const withChat = query.get('chat') === '1', raidId = `raid.${'a'.repeat(64)}`;
   const viewers = Math.max(1, Math.min(1_000_000, Math.floor(Number(query.get('viewers')) || 140)));
   const requestedAt = Number(query.get('at'));
   const offset = query.has('at') && Number.isFinite(requestedAt) ? Math.max(0, Math.min(119_000, requestedAt)) : 16_000;
@@ -19,11 +20,13 @@ export default function IncomingRaid() {
   const [error, setError] = createSignal<string | null>(null);
   let canvas!: HTMLCanvasElement, scene: Awaited<ReturnType<typeof createKingdomScene>> | undefined;
   let deliver: Parameters<TwitchMomentFeed['subscribe']>[1] | undefined;
+  let deliverChat: Parameters<RaidChatFeed['subscribe']>[0] | undefined;
   let animation = 0;
   let presented = false, sceneReady = false;
   const priorReady = Object.getOwnPropertyDescriptor(window, '__chatdomReady');
   const feed: TwitchMomentFeed = {
     origin: 'simulated',
+    raidChat: { origin: 'simulated', subscribe(receive) { deliverChat = receive; return () => { deliverChat = undefined; }; } },
     subscribe(reset, receive) {
       deliver = receive;
       reset({ epoch: 'raid-show-art', asOf: at, throughSeq: 0, current: [] });
@@ -55,7 +58,7 @@ export default function IncomingRaid() {
       deliver?.('raid-show-art', {
         version: 1, kingdomId: WORLD_FIXTURE_KINGDOM, seq: 1, occurredAt: at, receivedAt: at, committedAt: at,
         origin: 'simulated', type: 'twitch.moment', actor: null, cause: { kind: 'external', source: 'twitch', id: 'raid-show-art' },
-        body: { kind: 'raid', key: 'raid.art', displayUntil: at + 60_000, raidKey: 'art',
+        body: { kind: 'raid', key: raidId, displayUntil: at + 60_000, raidKey: raidId,
           from: { kingdomId: raider, displayName: 'Mossbrook', crestKey: null }, viewers, founded: false },
       });
       // Poses and director eases use absolute time. Render the entrance and the final still, not a CPU recording.
@@ -65,6 +68,17 @@ export default function IncomingRaid() {
         await frame();
       }
       if (life.signal.aborted) return;
+      if (withChat) {
+        // Public-shape art fixtures only. Authority/Herald correlation is demonstrated separately by room tests.
+        const asOf = at + offset - 2_000, raid = { raidId, fromKingdomId: raider, fromName: 'Mossbrook' };
+        const cues: RaidChatFrame['cues'] = ['Good evening, Willowmere!', 'A fine road to friends.', 'We brought the night lights.'].map((text, i) => ({
+          version: 1, id: `raid-chat.${String(i + 1).repeat(64)}`, lightId: `raid-light.${String(i + 1).repeat(64)}`,
+          kingdomId: WORLD_FIXTURE_KINGDOM, origin: 'simulated', asOf, expiresAt: asOf + 10_000, raid, parts: [{ kind: 'text', text }],
+        }));
+        deliverChat?.({ version: 1, kingdomId: WORLD_FIXTURE_KINGDOM, origin: 'simulated', asOf: at + offset,
+          lights: cues.map(cue => ({ lightId: cue.lightId, kingdomId: cue.kingdomId, origin: cue.origin, raid: cue.raid,
+            asOf: cue.asOf, expiresAt: cue.asOf + 90_000 })), cues });
+      }
       await frame(); await frame();
       const inspect = scene.inspect().moments;
       if (!inspect || inspect.controller.admitted !== 1 || Number(inspect.view['raid.wagons']) < 1 && offset >= 5000 && offset < 50_000) {

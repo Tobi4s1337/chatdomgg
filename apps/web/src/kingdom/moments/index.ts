@@ -11,6 +11,7 @@ import { festivalPlacesOf, withFestivalPlaces } from '../../twitch-moments/festi
 import type { CrowdCall } from '../../twitch-moments/stage-beat';
 import type { TwitchMomentFeed } from '../../twitch-moments/contracts';
 import { bannerMount, doorOf, giftRouteOf, spectaclePlacesOf, windowOf } from './anchors';
+import { mountKingdomRaidChat } from './raid-chat';
 
 export interface KingdomMomentsOptions {
   scene: THREE.Scene; camera: THREE.PerspectiveCamera; canvas: HTMLCanvasElement; target: THREE.Vector3;
@@ -88,6 +89,7 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
       lease = current; abort.addEventListener('abort', () => current.release(), { once: true }); return current;
     } },
   });
+  mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock: () => now });
   const disconnect = controller.connect(feed);
   const dispose = () => {
     if (disposed) return;

@@ -34,7 +34,7 @@ if (!process.argv.includes('--worker')) {
     if (![3, 140, 10000, 70000].includes(viewers) || !Number.isFinite(at) || at < 0 || at > 119000) throw new Error('Choose a specified raid scale and a valid beat time.');
     const scene = argument('--scene', 'incoming');
     if (!['incoming', 'insignia'].includes(scene)) throw new Error('Choose incoming or insignia.');
-    const route = scene === 'insignia' ? '/-/raid-gate?guestInsignia=1' : `/-/raid-gate?incoming=1&viewers=${viewers}&at=${at}`;
+    const route = scene === 'insignia' ? '/-/raid-gate?guestInsignia=1' : `/-/raid-gate?incoming=1&viewers=${viewers}&at=${at}${process.argv.includes('--chat') ? '&chat=1' : ''}`;
     const page = await browser.newPage({ viewport: { width, height } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
