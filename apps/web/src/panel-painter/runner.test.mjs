@@ -16,7 +16,7 @@ function harness({ changedHash = false, sourceMissing = false, rejectUpload = fa
     assert.equal(locked, true);
     return { newContext: async () => ({ newPage: async () => {
       assert.equal(locked, true);
-      const page = { input: null, closed: false,
+      const page = { input: null, closed: false, on: () => {},
         route: async () => {}, exposeBinding: async (_name, read) => { page.input = await read(); },
         goto: async url => { assert.equal(url, `${config.webOrigin}/-/panel-painter`); assert.equal(locked, true); },
         waitForFunction: async () => {}, screenshot: async () => { assert.equal(locked, true); return Buffer.from('browser PNG'); },

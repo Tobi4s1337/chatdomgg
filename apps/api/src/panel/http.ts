@@ -173,12 +173,15 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
         const picture = stored ? { capturedAt: stored.capturedAt, revision: stored.revision, kind: stored.kind } : null;
         // Only a committed public fact is projected; no interpretation of private observations or rejected words.
         const fact = state.moment as { body?: { kind?: string }; occurredAt?: number } | null;
-        const words: Record<string, string> = { raid: 'Guests are arriving at the gate', fireworks: 'Fireworks over the kingdom', feast: 'The kingdom gathers for a feast', battle: 'The kingdom stands together', bell: 'The bell rings over the square', parade: 'A parade crosses the square', train: 'The Hype Train is arriving' };
+        const words: Record<string, string> = { raid: 'Raiders at the gate', fireworks: 'Fireworks overhead', feast: 'A feast in the hall', battle: 'The kingdom stands together', bell: 'The bell rings', parade: 'A parade crosses the square', train: 'The Hype Train arrives' };
         const event = state.publicEvent as { type?: string; at?: number } | null;
         const gift = state.giftMoment as { line?: string; committedAt?: number } | null;
         const moment = gift && typeof gift.line === 'string' && typeof gift.committedAt === 'number' && gift.committedAt >= (event?.at ?? 0)
-          ? gift.line : event?.type === 'home' ? 'A home is raised' : event?.type === 'forge' ? 'A new piece leaves the Forge' : fact?.body?.kind ? words[fact.body.kind] ?? null : null;
+          ? gift.line : event?.type === 'home' ? 'A home is raised' : event?.type === 'forge' ? 'New work leaves the Forge' : fact?.body?.kind ? words[fact.body.kind] ?? null : null;
+        // Unclaimed land is named for its streamer, from Twitch's public profile of the channel in the token.
+        const streamer = state.status === 'unfounded' ? (await services.users.person(viewer.channelId).catch(() => null))?.displayName ?? null : null;
         send(200, { version: 1, status: state.status, stream: state.stream ?? 'resting', lights: state.lights ?? null, moment, picture, pledges: state.pledges ?? null,
+          ...(streamer ? { streamer } : {}),
           ...(state.settings ? { settings: state.settings, settingsRevision: state.settingsRevision } : {}) }); return;
       }
       if (viewer.kind !== 'shared') { send(403, { version: 1, status: 'refused' }); return; }

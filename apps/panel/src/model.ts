@@ -348,6 +348,8 @@ export interface PanelSnapshot {
   readonly connection: Connection;
   /** Null when no service has told us which kingdom this channel holds. */
   readonly kingdom: Kingdom | null;
+  /** The streamer's Twitch display name, told only while their channel has no kingdom yet. */
+  readonly streamer?: string | null;
   readonly stream: 'live' | 'resting' | 'unknown';
   readonly kingdomLights?: number | null;
   readonly moment?: string | null;

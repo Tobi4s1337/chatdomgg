@@ -197,9 +197,10 @@ describe('verified panel transport', () => {
   });
 
   it('pledges waiting land privately without claiming a home or lighting a window', async () => {
-    const server = backend(); server.kingdom({ ...KINGDOM_STATE, status: 'unfounded', pledges: 'A few tents' }); server.reading({ version: 1, kingdom: null, viewer: { kind: 'unknown', reason: 'Waiting land.' } });
+    const server = backend(); server.kingdom({ ...KINGDOM_STATE, status: 'unfounded', pledges: 'A few tents', streamer: 'tobi4s_' }); server.reading({ version: 1, kingdom: null, viewer: { kind: 'unknown', reason: 'Waiting land.' } });
     const { adapter } = mount(standIn(), server); await settle();
     expect(adapter.get().entry.kind).toBe('none'); expect(adapter.get().light).toEqual({ kind: 'unfounded', pledged: false, band: 'A few tents' });
+    expect(adapter.get().streamer).toBe('tobi4s_');
     adapter.requestLight('named'); await settle();
     expect(adapter.get().light).toEqual({ kind: 'unfounded', pledged: true, band: 'A handful of tents' });
     expect(calls(server, '/light')).toHaveLength(0); expect(calls(server, '/presence')).toHaveLength(0);
@@ -235,6 +236,24 @@ describe('verified panel transport', () => {
     await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS); expect(revoke).toHaveBeenCalledWith('blob:first');
     expect(adapter.get().picture).toMatchObject({ provenance: { origin: 'sketch' } });
     adapter.dispose(); expect(revoke).toHaveBeenCalledWith('blob:second');
+  });
+
+  it('shows the next minute’s painting, and polls nothing while the panel is hidden', async () => {
+    const create = vi.fn().mockReturnValueOnce('blob:minute-one').mockReturnValueOnce('blob:minute-two'), revoke = vi.fn();
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL: create, revokeObjectURL: revoke }));
+    const server = backend(), helper = standIn(); const first = { capturedAt: 1_793_520_000_000, revision: 'minute-one', kind: 'realm' };
+    server.kingdom({ ...KINGDOM_STATE, picture: first }); const { adapter } = mount(helper, server); await settle();
+    expect(adapter.get().picture).toMatchObject({ url: 'blob:minute-one' });
+    // The painter's next live pass, a minute later, stores a new revision; the panel shows it at its next poll.
+    await vi.advanceTimersByTimeAsync(60_000 - KINGDOM_REFRESH_MS);
+    server.kingdom({ ...KINGDOM_STATE, picture: { ...first, capturedAt: first.capturedAt + 60_000, revision: 'minute-two' } });
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS);
+    expect(adapter.get().picture).toMatchObject({ url: 'blob:minute-two' }); expect(revoke).toHaveBeenCalledWith('blob:minute-one');
+    helper.visible(false); const hidden = server.send.mock.calls.length;
+    server.kingdom({ ...KINGDOM_STATE, picture: { ...first, capturedAt: first.capturedAt + 120_000, revision: 'minute-three' } });
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(server.send).toHaveBeenCalledTimes(hidden); expect(adapter.get().picture).toMatchObject({ url: 'blob:minute-two' });
+    adapter.dispose();
   });
 
   it('stops polling, aborts pending requests and cancels a queued share gesture when hidden', async () => {

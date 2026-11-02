@@ -47,6 +47,12 @@ export async function encodeScreenshot(page, png) {
   return { ...encoded, bytes: Buffer.from(encoded.bytes) };
 }
 
+/** A short, credential-free reason for the log: the first line of the message, with any bearer value removed. */
+export function reason(error) {
+  const text = error instanceof Error ? `${error.name}: ${error.message}` : 'unknown failure';
+  return text.split('\n')[0].replace(/Bearer\s+\S+/gi, 'Bearer …').slice(0, 400);
+}
+
 export async function runPainter(config, { once = false, signal, report = console.info, evidenceDirectory,
   launch = options => chromium.launch(options), fetcher = fetch, acquireLock = acquireCaptureLock } = {}) {
   let browser, context;
@@ -102,7 +108,12 @@ export async function runPainter(config, { once = false, signal, report = consol
           const input = { snapshot, ...(sceneBytes ? { sceneBytes: [...sceneBytes] } : {}) };
           if (!entry) {
             const page = await context.newPage();
-            entry = { page, sceneHash: null }; warm.set(kingdomId, entry);
+            entry = { page, sceneHash: null, errors: [] }; warm.set(kingdomId, entry);
+            const noted = entry.errors;
+            const note = text => { noted.push(text); noted.splice(0, noted.length - 3); };
+            page.on('pageerror', error => note(reason(error)));
+            page.on('crash', () => note('The painter page crashed.'));
+            page.on('console', message => { if (message.type() === 'error') note(message.text().split('\n')[0].replace(/Bearer\s+\S+/gi, 'Bearer …').slice(0, 200)); });
             if (config.cdpOrigin) {
               await page.bringToFront();
               const cdp = await context.newCDPSession(page);
@@ -120,7 +131,8 @@ export async function runPainter(config, { once = false, signal, report = consol
             await page.goto(`${config.webOrigin}/-/panel-painter`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
           } else await entry.page.evaluate(input => window.__chatdomPainter.prepare(input), input);
           await entry.page.waitForFunction(() => window.__chatdomPainter?.ready() || window.__chatdomPainter?.error(), null, { timeout: 180_000 });
-          if (await entry.page.evaluate(() => window.__chatdomPainter.error())) throw new Error('The renderer refused the painting.');
+          const refusal = await entry.page.evaluate(() => window.__chatdomPainter.error());
+          if (refusal) throw new Error(`The renderer refused the painting. ${String(refusal).slice(0, 200)}${entry.errors?.length ? ` Page: ${entry.errors.join(' | ')}` : ''}`);
           await entry.page.evaluate(() => window.__chatdomPainter.freeze());
           const png = await entry.page.screenshot({ type: 'png', timeout: 30_000 });
           const image = await encodeScreenshot(entry.page, png);
@@ -139,10 +151,11 @@ export async function runPainter(config, { once = false, signal, report = consol
           }
           result.painted++;
           report(`Kingdom ${kingdomId}: painted ${image.width}x${image.height}, ${image.bytes.length} bytes.`);
-        } catch {
+        } catch (error) {
           result.unavailable++;
-          const entry = warm.get(kingdomId); if (entry) { await entry.page.close().catch(() => {}); warm.delete(kingdomId); }
-          report(`Kingdom ${kingdomId}: painting unavailable; retrying on the next pass.`);
+          const entry = warm.get(kingdomId), notes = entry?.errors?.length ? ` Page: ${entry.errors.join(' | ')}` : '';
+          if (entry) { await entry.page.close().catch(() => {}); warm.delete(kingdomId); }
+          report(`Kingdom ${kingdomId}: painting unavailable (${reason(error)}${error instanceof Error && error.message.includes(' Page: ') ? '' : notes}); retrying on the next pass.`);
         } finally { await release?.(); }
       }
       if (!once && !signal?.aborted) await new Promise(resolve => {

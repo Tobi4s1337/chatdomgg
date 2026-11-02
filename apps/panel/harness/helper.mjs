@@ -54,8 +54,10 @@ export function signTransactionReceipt(secret, { extensionId, transactionId, use
       cost: { amount: bits, type: 'bits' }, inDevelopment } } });
 }
 export function helperSource(secret, options = {}) {
-  const { channel = '1234', user = '5678', client = 'panel-lane', identity = 'unshared', visible = true, playing = true, bits = false, role = 'viewer' } = options;
+  const { channel = '1234', user = '5678', client = 'panel-lane', identity = 'unshared', visible = true, playing = true, bits = false, role = 'viewer', share = 'grant' } = options;
   if (!['logged-out', 'unshared', 'shared'].includes(identity)) throw new Error('Unknown identity');
+  // 'grant' answers Twitch's identity prompt at once; 'hold' leaves the prompt open until the operator grants or declines it.
+  if (!['grant', 'hold'].includes(share)) throw new Error('Unknown share behaviour');
   if (!['viewer', 'moderator', 'broadcaster'].includes(role)) throw new Error('Unknown role');
   // Products come only from a direct Node harness option, never a viewer URL or production catalogue.
   const products = productOptions(options.products === undefined ? [] : options.products);
@@ -73,7 +75,8 @@ export function helperSource(secret, options = {}) {
     let state = ${JSON.stringify(identity)}, visible = ${JSON.stringify(visible)}, playing = ${JSON.stringify(playing)};
     const authorized = [], viewers = [], contexts = [], visibility = [], features = [], listeners = [], complete = [], cancelled = [], configurationChanged = [];
     let broadcasterConfiguration;
-    let shareRequests = 0, bitsRequests = 0, selectedSku = null, pendingSku = null;
+    let shareRequests = 0, bitsRequests = 0, selectedSku = null, pendingSku = null, sharePrompt = false;
+    const holdShare = ${JSON.stringify(share === 'hold')};
     const notifyAuth = () => { viewers.forEach(fn => fn()); authorized.forEach(fn => fn(auth[state])); };
     const ext = {
       onAuthorized(fn) { authorized.push(fn); queueMicrotask(() => fn(auth[state])); },
@@ -81,7 +84,12 @@ export function helperSource(secret, options = {}) {
       onVisibilityChanged(fn) { visibility.push(fn); queueMicrotask(() => fn(visible)); },
       viewer: { get isLinked() { return state === 'shared'; }, role: ${JSON.stringify(role)}, onChanged(fn) { viewers.push(fn); } },
       features: { isBitsEnabled: ${JSON.stringify(bits)}, onChanged(fn) { features.push(fn); } },
-      actions: { requestIdShare() { shareRequests++; if (state === 'unshared') { state = 'shared'; queueMicrotask(notifyAuth); } } },
+      actions: { requestIdShare() {
+        shareRequests++;
+        if (state !== 'unshared') return;
+        if (holdShare) { sharePrompt = true; return; }
+        state = 'shared'; queueMicrotask(notifyAuth);
+      } },
       listen(topic, fn) { listeners.push({ topic, fn }); },
       configuration: {
         get broadcaster() { return broadcasterConfiguration; },
@@ -106,6 +114,9 @@ export function helperSource(secret, options = {}) {
     window.__panelHarness = {
       setIdentity(next) { if (!auth[next]) throw Error('Unknown identity'); state = next; notifyAuth(); },
       setVisible(next) { visible = !!next; visibility.forEach(fn => fn(visible)); },
+      grantShare() { if (!sharePrompt) return false; sharePrompt = false; state = 'shared'; notifyAuth(); return true; },
+      declineShare() { if (!sharePrompt) return false; sharePrompt = false; return true; },
+      get sharePrompt() { return sharePrompt; },
       setPlaying(next) { playing = !!next; contexts.forEach(fn => fn({ isPaused: !playing }, ['isPaused'])); },
       publish(topic, message) { listeners.filter(item => item.topic === topic).forEach(item => item.fn(topic, 'application/json', typeof message === 'string' ? message : JSON.stringify(message))); },
       transactionComplete(event = {}) {

@@ -1,4 +1,53 @@
-# PW10 checkpoint — 1 November 2026
+# PW10 checkpoint — 2 November 2026
+
+PW10 is still unticked. The browser path from tap to lit window to painting now runs end to end on the lane stack, with stills at both sizes. Four things are still outside this lane: real-GPU stills, the accepted zip, guest windows and the waiting-land painting.
+
+## Implemented this session
+
+- Kingdom tab foot: one quiet row reads the lights count and the moment, with a 44 px "Walk in ↗" button. Tapping it opens a "Leaves Twitch for chatdom.gg" line plus Kingdom, Tavern and Forge links. Each has an aria-label saying it leaves Twitch. Switching tabs closes it again. The foot shows only once the panel has lights, a moment or a gate. The picture caption is a brush mark and the time, with "Painted at …" as its accessible name.
+- Unfounded channels: the kingdom route carries the streamer's display name, but only for unfounded channels and up to 25 characters. The header reads "<streamer>'s land" and the nudge reads "Tell <streamer> their kingdom is waiting".
+- Moment lines were shortened so the Kingdom foot fits one row at 318 px (for example "Raiders at the gate", "A home is raised").
+- The You tab's plate links "Privacy ›" and "Your card ›". Their accessible names are "Your privacy" and "Your citizen card".
+- The Kingdom foot never tells anything stale. If the kingdom cannot be read, it says "Out of reach since <time of the last good read>". While the stream rests, it says "Resting" (with a dimmed dot) instead of a lights count that would always be 0.
+- Unfounded channels: the Kingdom tab says "No kingdom here yet" instead of the out-of-reach line. Once pledged, the You tab reads "Your tent waits". Out of reach on the You tab reads "Out of reach for now". These keep every first view at 12 words or fewer.
+- Card text that was 11.5 px (portrait slot, fact labels, portrait note) is now 12 px.
+- Painter: failures carry a reason (first line, bearer redacted, at most 400 characters), and page errors are collected for the runner log. A refusal now explains itself instead of reading "renderer refused".
+- Helper substitute: `share=hold` keeps Twitch's identity prompt open until the operator grants or declines it, so the "sharing" state is captured for real.
+- `apps/api/src/panel/serve.mjs` exports `createLaneGateway`, so the panel stack can mount the real gateway in-process. Its CLI mode is unchanged.
+- `apps/panel/scripts/pw10-stack.mjs` is one loopback host for the panel views, the painter page, the Helper substitute, `/api/panel/*` (real gateway) and `/api/realm/*` (lane realm).
+- `apps/panel/scripts/pw10-capture.mjs` is the full lane-stack capture. It starts the lane realm and stack on two free capture ports, takes Twitch IDs from Helix and drives herald stream live/offline through the realm ingress. It paints with the real runner inside its own lock hold and records the words, scrolling, clipping and sub-12 px text for every still in `work/evidence/panel-window/PW10/capture.json`.
+
+## Verified this session
+
+- Focused TypeScript over `apps/panel/src` and `apps/api/src/panel` passes, and so does lint on every touched file.
+- Vitest across `apps/panel`, `apps/api/src/panel` and `apps/web/src/panel-painter`: 147 passed. New tests cover the unfounded streamer name, the next minute's painting replacing the blob URL, and zero sends for five minutes while the panel is hidden.
+- `node --test` painter runner and Helper: 12 passed, including the held identity prompt.
+- Browser capture against the lane realm, the real gateway and the real painter, rendered with SwiftShader (the GPU tunnel was disconnected all session):
+  - Tap to lit at 318×496: 1401 ms, with the realm's presence frame confirming the window. A repeat tap at 390×844 took 227 ms and stayed idempotent. Both are under the 5 s bar. The earlier runs took 869–1373 ms and 246–478 ms.
+  - Painting 01 was stored at 0 lights before the tap. Painting 02 was made by the runner while the viewer was present, stored at 1 light, and replaced the Kingdom picture in the open panel. Each WebP is about 19 KB at 636×400, well under 60 KiB. Each SwiftShader painting takes about 48 s.
+  - Word counts for Kingdom/You (head and main, without the tab bar), identical at both sizes: outside 9/7; logged out 11/9; unshared 11/4; sharing 4; lit 11/11; walk-in open 10; gifts 10; held 11/9; unfounded 6/12, pledged 12; resting 10/11; out of reach 11/12. The card is one tap deeper and allowed to say more (46). Across the 49 records, no still scrolls, none clips and none has text under 12 px.
+- I looked at every still at 318×496 and 390×844 (`work/evidence/panel-window/PW10/*.png`).
+
+## Doubts and gaps
+
+- In SwiftShader, painting 02 differs from painting 01 only in moving clouds and a few warm specks near the market. The single lit window is not obvious at panel size. The light count is real (realm presence), but judging the glow needs the real-GPU still.
+- The early-morning paintings (4:20 and 5:57 AM shared-clock hour) render a mauve pre-dawn sky. That is the kingdom renderer's hour look; it is not the panel's to change.
+- The guest-at-three-homes state needs a second founded kingdom; the lane stack has one. Realm integration tests cover the cap and the honest guest result. needs: integrator bind guest public windows.
+- The unfounded Kingdom tab shows a calm absence, not waiting land. needs: grand-world bare waiting-land render (see the shared-kit request below).
+- `node scripts/public/extension.mjs` still rejects the zip, only on shared strings: `packages/ui/src/provenance.ts` through the passport Book, and the `live|simulated` origin enum in `packages/shared/src/passport.ts`. needs: main/front-door apply PW13-PASSPORT-NEEDS.patch then PW13-PASSPORT-PANEL.patch.
+
+- Finding for main (outside this lane's scope): while the realm boots, `apps/realm/src/main.ts` holds its port with a reservation socket server. That server accepts connections and never answers, and `close()` waits for them. A readiness probe sent during boot therefore stalls the boot itself. The probe's connection holds the release, and the realm never listens until the client gives up. Repeated by-hand starts stalled about one time in three or four; after waiting for the listening line, 10 of 10 were ready in under 3 s. The capture now waits for the realm's "realm on <port>:" line before probing. A one-line realm fix would let other probes stop waiting: destroy each socket the reservation accepts.
+
+## Reproduction
+
+```
+node --env-file=/tmp/panel-window-realm.env --env-file=$HOME/.config/chatdom/atlas.env \
+  apps/panel/scripts/pw10-capture.mjs [--gpu] [--only states,tap,held,unfounded,resting,reach]
+```
+
+Build the realm first (`apps/realm/dist/realm.mjs`). Without `--gpu` the capture picks two free capture ports (5198/5199 first). With `--gpu` the stack takes the lease port 5192 and connects to the tunnel's Chrome at 127.0.0.1:9333, so run it inside `chatdom-pc-lease`. `--only` without `tap` skips the paintings. The capture has two lock holds, each about two minutes. Give it a long enough outer timeout to wait in the queue between them. A painting that fails is tried once more, as the live painter would on its next pass. The runner names a page crash in its reason. A stream heartbeat miss is logged, and the run aborts only after three misses in a row, before the 180 s lease could lapse. `capture.json` is saved after every entry and merged by still, painting and tap name, so a partial run keeps what it proved. Every run sends stream offline and stops its children on exit or interrupt.
+
+# PW10 checkpoint — 1 November 2026 (earlier)
 
 PW10 is not done and its box remains unticked. No visual result has been accepted.
 

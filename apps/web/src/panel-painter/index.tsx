@@ -6,6 +6,9 @@ import { createKingdomScene } from '../kingdom/scene';
 import { createRealmSoulClock } from '../soul/realm-clock';
 import './style.css';
 
+/** The runner logs this reason; it carries scene and decode errors, never data or credentials. */
+const why = (error: unknown) => `The kingdom could not be painted: ${error instanceof Error ? error.message.split('\n')[0]!.slice(0, 160) : 'the renderer stopped'}`;
+
 interface PainterInput { snapshot: unknown; sceneBytes?: number[] }
 interface PainterHost extends Window {
   __chatdomReady?: boolean;
@@ -54,7 +57,7 @@ export default function PanelPainter() {
         ...founded.plan.config, founded, kingdomId, presenceFeed, source: 'herald', presenceOrigin: 'live',
         hour: targetHour, time: null, camera: 'hero', directArrivals: false, signal: abort.signal,
         onProgress: () => {}, onNames: () => {}, onSource: () => {},
-        onError: () => { failure = 'The kingdom could not be painted.'; host.__chatdomReady = false; },
+        onError: message => { failure = `The kingdom could not be painted: ${message.slice(0, 160)}`; host.__chatdomReady = false; },
       });
       sceneHash = manifest.sceneHash;
     } else {
@@ -65,13 +68,13 @@ export default function PanelPainter() {
   };
   onMount(() => {
     host.__chatdomPainter = {
-      async prepare(input) { try { await prepare(input); } catch (error) { failure = 'The kingdom could not be painted.'; throw error; } },
+      async prepare(input) { try { await prepare(input); } catch (error) { failure = why(error); throw error; } },
       freeze,
       ready: () => !!scene?.debug.ready && scene.inspect().renderCompletedAt > previousFrame && scene.debug.fieldSettled && Math.abs(scene.debug.hour - targetHour) < .01 && failure === null,
       error: () => failure,
     };
-    if (host.__chatdomPainterRead) void host.__chatdomPainterRead().then(input => host.__chatdomPainter!.prepare(input)).catch(() => {
-      failure = 'The kingdom could not be painted.';
+    if (host.__chatdomPainterRead) void host.__chatdomPainterRead().then(input => host.__chatdomPainter!.prepare(input)).catch(error => {
+      failure = why(error);
     });
     else failure = 'This window opens through the kingdom painter.';
   });

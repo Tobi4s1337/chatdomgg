@@ -87,6 +87,7 @@ interface KingdomWire {
   readonly moment: string | null;
   readonly picture: { readonly capturedAt: number; readonly revision: string; readonly kind: 'realm' | 'sketch' } | null;
   readonly pledges: string | null;
+  readonly streamer?: string;
   readonly settings?: PanelSettings;
   readonly settingsRevision?: string;
 }
@@ -98,6 +99,7 @@ function kingdomWire(value: unknown): KingdomWire | null {
   if (value.lights !== null && !(Number.isSafeInteger(value.lights) && Number(value.lights) >= 0)) return null;
   if (value.moment !== null && !words(value.moment, 280)) return null;
   if (value.pledges !== null && !words(value.pledges, 120)) return null;
+  if (value.streamer !== undefined && (value.status !== 'unfounded' || !words(value.streamer, 25))) return null;
   if (value.picture !== null && (!object(value.picture) || !Number.isSafeInteger(value.picture.capturedAt) || Number(value.picture.capturedAt) < 0 || Number(value.picture.capturedAt) > 8.64e15 || !words(value.picture.revision, 160) || !['realm', 'sketch'].includes(String(value.picture.kind)))) return null;
   if (value.settings !== undefined && (!parsePanelSettings(value.settings) || !words(value.settingsRevision, 160))) return null;
   return value as unknown as KingdomWire;
@@ -154,6 +156,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       source: { kind: 'production', label: null }, connection, gifts: gifts.get(), ...(shared() ? { privacy } : {}),
       ...(kingdom?.settings ? { settings: kingdom.settings } : {}),
       kingdom: realm ? { name: realm.name, tier: realm.tier, motto: realm.motto } : null,
+      streamer: kingdom?.status === 'unfounded' ? kingdom.streamer ?? null : null,
       stream: kingdom?.stream ?? 'unknown', kingdomLights: kingdom?.lights ?? null, moment: kingdom?.moment ?? null,
       picture, light: currentLight(),
       tonight: { kind: 'unavailable', reason: 'Tonight’s chronicle is not reaching the panel yet.' },
@@ -224,7 +227,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       pictureUrl = url; pictureRevision = frame.revision;
       const capturedOn = new Date(frame.capturedAt).toISOString();
       picture = { kind: 'still', url, alt: frame.kind === 'sketch' ? 'The waiting land of this channel.' : 'The kingdom as its people left it.', width: 640, height: 400, portrait: null,
-        provenance: { origin: frame.kind, caption: frame.kind === 'sketch' ? 'Waiting land' : `Painted at ${timeWords(frame.capturedAt)}`, capturedOn } };
+        provenance: { origin: frame.kind, caption: frame.kind === 'sketch' ? 'Waiting land' : timeWords(frame.capturedAt), capturedOn } };
       refresh();
     } catch { /* A previous authenticated painting may stay visible with its captured time. */ }
   };
