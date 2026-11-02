@@ -1,5 +1,65 @@
 # Mouse look: the wild spin (2026-11-02)
 
+## Update, 21:45: near the centre, and a false twin
+
+The 21:05 filter only learnt an echo bigger than 200 counts. Clicking in near the middle of the screen starts the
+hidden cursor near the re-centre point, so its echoes start small and look like the hand's own moves. Every one got
+through, and each tiny move was followed by a turn as large as the cursor's distance from the centre. Measured on the
+same model of Tobias's stream (below), the old filter ended a typical 2 s of slow looking about 4,500 counts (4.5 rad)
+off. It also had a false positive on real hands: two Firefox-on-Windows re-centre pairs close together, such as
+`-304, 304, 1, 0, 299`, fell within its 3 + 2 % twin slack, so a real move was dropped.
+
+What changed (`apps/web/src/walk/input/look.ts`, `createEchoFilter`):
+- **A small echo is learnt from its arithmetic.** Three events in a row, each the last plus the real movement
+  between them, to the count (±1). The echo must be at least 6 counts and at least twice the movement between,
+  with 1 to 3 real events between links, within 250 ms. Once a chain is proven, the earlier links that already
+  turned the world are taken back out of the pending turn (down to 2 counts), so the net turn is the hand's. A
+  steady real turn can never form a chain, because a link always needs real movement between.
+- **Proof is exact.** A held twin (offsets over 200) must also add up to ±1 count. The lab's 3 + 2 % stays only for
+  following an echo already learnt.
+- **A small learnt echo is matched within 1 count, and only after the hand has moved since the last echo.** Just
+  after an echo, the next event is the hand's own, and at small offsets it could match the prediction.
+- **An echo whose own move never came** (`[-971,107], [-971,106]` in the recording) may lead its prediction by up to
+  the hand's last small move. That holds when following a large echo and in a proven chain's tail, never as proof.
+  It must lead by at least one count, because "equal to the last event" is also a steady real turn, or the first
+  real move of a lock begun dead centre.
+- **Tracking is dropped after 8 real events with no echo**, and `recent` keeps every event still in the turn, so a
+  chain broken by a lost echo is found again and taken back whole.
+
+Checked against a model of Tobias's stream. In the lab recording, every real move is followed by the cursor's
+offset, which moves with the hand. The model adds a missing echo now and then, and a move that never came while its
+echo did:
+- Lock begun at 0, 3, 12, 40, 150, 190 and 199 counts from the centre, at hand paces of 1 to 25 counts a move: within
+  3 counts of the hand (`look.test.ts`).
+- An offset that crosses the centre and out the other side: exact.
+- Missing echoes and echo-only moves, from 978 counts out down to 8: within 3 counts.
+- 600 seeded real hands (a creep to a 600-count sweep, steady and uneven frames, half with Firefox-on-Windows
+  re-centre pairs): every count kept, no echo ever learnt.
+- End to end through the walk and the camera at 343 Hz from 6, -3 and at 144 Hz from -40, 0: exact, nothing after the
+  hand stops (`mouse-look.test.ts`).
+- Every older trace still passes: Tobias's recording, all the flicks, Chrome with no hold.
+- Run against the 21:05 filter, all ten new `look.test.ts` tests fail, the real-hands test included (the false twin).
+- A wider fuzz while building (not kept as a test): 2,000 random echo streams with offsets of up to 300 counts and a
+  hand changing speed, up to 25 counts a move. Error in counts from the hand:
+  - Clean: median 0, 99th percentile 14, none over 50.
+  - 5 % missing echoes: median 0, 99th percentile 15, 2 over 50.
+  - 5 % echo-only moves: median 0, 99th percentile 25, 4 over 50.
+  - Both: median 0, 99th percentile 106, 25 over 50.
+
+  The bad cases were not traced one by one. The old filter's median on the same streams was about 4,500.
+
+Not checked: how Firefox's stream really looks at fast hand speeds near the centre. The lab recording is a slow
+move far from the centre, and the model above is built on it. Only a real check on Tobias's machine can confirm it
+(below).
+
+Tests run from the repo root config (`pnpm exec vitest run apps/web/src/walk ...`, node environment). Running vitest
+inside `apps/web` loads `vite-plugin-solid`, which switches the environment to jsdom, and jsdom is not a dependency
+of the repo. That is why those runs stop with "MISSING DEPENDENCY jsdom". No test here needs a DOM.
+
+Real-GPU check: `chatdom-pc-lease` drives Tobias's Chrome over DevTools, not Firefox, and the echo exists only in
+Firefox on X11. Chrome runs no filter at all (pure 1:1, covered by the tests). So the Firefox sequence the goal asks
+for has to come from Tobias's own browser: see "Check on Tobias's machine", step 1 (click near the middle).
+
 ## Update, 20:40: the real cause on Tobias's machine
 
 The three fixes below were right but not enough. Tobias is on **Linux, Firefox 158 on X11** (dpr 1, 343 fps), not

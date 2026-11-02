@@ -1160,3 +1160,20 @@ Asks:
   when the build has no adopted recipe for that kingdom (`readServedLandRecipe`, `kingdom/grand-land/recipes.ts`,
   4 s, any failure keeps today's land) and then probe the receipt's binding as before. Gateway: one additive line in
   `apps/api/src/public/routes.ts` carries `/api/realm/land/<id>/recipe` as a realm read; front-door, please keep it.
+
+
+## from launch
+
+- 2 Nov (LA10): `/stream` without a kingdom showed "Choose a kingdom" calmly but logged
+  `console.error('The stream kingdom could not open', …)` on every load. The refusal is now a `StreamRefusal`
+  (`apps/web/src/stream/mount.ts`), which the mount still turns into the failed phase but does not log; every other
+  failure still logs. Test in `mount.test.ts`.
+- 2 Nov (LA10, review): the stream shows only calm words when it fails. `fail()` in `apps/web/src/stream/mount.ts`
+  now takes the cause: a `StreamRefusal` speaks its own message; any other cause (a realm 500, a TypeError, a scene
+  `onError`, the five-minute replacement timeout, a rejected final handoff) shows "The kingdom could not be opened
+  just now." (or "…could not refresh just now." for a replacement), is logged, and keeps its raw message in
+  `stats.lastCause` for diagnostics. A rejected final handoff is now logged too. Tests in `mount.test.ts`.
+- 2 Nov (LA10, session 4, realm): `GET /api/realm/entry/<id>` for a kingdom with no approved entry name answers **404**
+  "No kingdom with this address is open to visitors." instead of 503 "…no approved entry name configured." (the walk-in
+  gate turns the 404 into its `nowhere` state). Every client of the route already treats any non-OK answer alike
+  (`apps/realm/src/bootstrap/entry.ts`, new `entry.test.ts`).
