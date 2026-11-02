@@ -23,3 +23,11 @@ main.dock{display:block;width:100%;min-height:100vh;margin:0;padding:14px;text-a
 .dock .action:disabled .action-detail{color:#d8c09b}
 .dock .action:disabled .action-icon{color:#c5a77b;border-color:#806b4d;background:#30241c}
 .dock .action:disabled .arrow{color:#a98f6b}
+/* The press on the throne: a wax crest on brass-bound timber, the one way out of the kingdom. */
+.dock .raid-gate-press { min-height: 62px; border-color: #c9a05e; background: linear-gradient(#6a3f27, #4b2a1a);
+  box-shadow: inset 0 1px #e9c38f55, inset 0 0 0 1px #8e6a4566, 0 2px 3px #1c100a; }
+.dock .raid-gate-press:hover:not(:disabled) { background: linear-gradient(#7a4a2f, #58331f); border-color: #ecc98a; }
+.dock .raid-gate-press .action-icon { width: 38px; height: 42px; color: #f8d795; border-color: #d5ad68; border-radius: 50% 50% 45% 45%;
+  background: linear-gradient(#80402e, #4a201a); box-shadow: inset 0 0 0 3px #55271e, 0 2px 3px #190e09; }
+.dock .raid-gate-press .action-title { font-size: 16px; }
+.gate-loading{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:20px;background:linear-gradient(100deg,#302015,#4a2e1b 32%,#2b1b13 68%,#3c2618)}.gate-loading span{color:#e5d0aa;font:italic 15px/1.4 Alegreya,Georgia,serif}

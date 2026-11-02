@@ -7,6 +7,7 @@ import { twitchOidc } from './realm-auth/oidc';
 import { createRealmAuthService } from './realm-auth/service';
 import { createSimulatedOidcProvider } from './realm-auth/simulated-provider';
 import { handleRaidCrierSetting } from './raid-gate/crier-settings';
+import { bindRaidGate, serveRaidGate } from './raid-gate/bind';
 
 const config = readRealmAuthConfig(process.env);
 const pool = new pg.Pool({
@@ -31,6 +32,7 @@ catch (error) {
   process.exit(1);
 }
 
+const raidGate = bindRaidGate({ pool, config, issuer: provider.issuer });
 const routes = createRealmAuthHttp({
   service, publicOrigin: config.publicOrigin, secureCookies: config.secureCookies,
   ...(config.internalSecret ? { internalSecret: config.internalSecret } : {}),
@@ -47,6 +49,7 @@ const server = createServer((request, response) => {
     if (await (await import('./dock')).handleDock(request, response, { pool, config })) return;
     if (await handleRaidCrierSetting(request, response, { pool, config })) return;
     if (await (await import('./raid-gate/guests-http')).handleRaidGuest(request, response, { pool, config })) return;
+    if (await serveRaidGate(raidGate, request, response)) return;
     if (!await routes(request, response)) {
       response.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
         .end(JSON.stringify({ version: 1, status: 'refused', message: 'No such route' }));
@@ -61,9 +64,11 @@ await new Promise<void>((resolve, reject) => { server.once('error', reject); ser
 console.info(config.mode === 'live'
   ? `Chatdom API listening on ${config.host}:${config.port}: LIVE Twitch sign-in (openid only) for ${config.publicOrigin}`
   : `Chatdom API listening on ${config.host}:${config.port}: SIMULATED sign-in provider, no real accounts, for ${config.publicOrigin}`);
+console.info(`Raid Gate bound: Herald ${raidGate.bound.herald ? 'connected' : 'not connected'}, roads from the realm ledger, travel ${raidGate.bound.rooms ? 'bound' : 'not bound'}`);
 
 const stop = () => {
   clearInterval(sweep);
+  raidGate.service.close();
   server.close(() => { void pool.end().finally(() => process.exit(0)); });
   setTimeout(() => process.exit(1), 5_000).unref();
 };

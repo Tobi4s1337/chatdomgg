@@ -9,6 +9,7 @@ import { presentKingdom } from '../source/kingdom';
 import { toPresenceInput, type Observation } from '../source/observations';
 import { PresenceSource } from '../source/source';
 import type { RealmDelivery } from '../realm-delivery/delivery';
+import { RAID_AUTHORITY_ROUTE } from '../../../api/src/raid-gate/raid-authority-contracts';
 
 /**
  * SIMULATED EventSub door. Twitch CLI (`twitch event trigger … -F <door> -s <secret>`) and the scripts in
@@ -46,6 +47,8 @@ export interface MockDoorOptions {
   readonly now?: () => number;
   /** Recording-only crier diagnostics, never a live chat writer. */
   readonly crier?: () => unknown;
+  /** The SIMULATED raid authority: its private route and its bounded recorded writes for `/health`. */
+  readonly raidGate?: { readonly route: (request: IncomingMessage, response: ServerResponse) => Promise<void>; readonly health: () => unknown };
 }
 
 export interface MockDoor {
@@ -81,8 +84,10 @@ export async function startMockDoor(options: MockDoorOptions): Promise<MockDoor>
   });
   async function handle(request: IncomingMessage, response: ServerResponse) {
     if (request.method === 'GET' && request.url === '/health') {
-      return reply(response, 200, { origin: 'simulated', kingdomId, door: counts, ingest: ingest.health().counters, source: source.health(), realm: options.realm.health(), ...(options.crier ? { crier: options.crier() } : {}) });
+      return reply(response, 200, { origin: 'simulated', kingdomId, door: counts, ingest: ingest.health().counters, source: source.health(), realm: options.realm.health(), ...(options.crier ? { crier: options.crier() } : {}),
+        ...(options.raidGate ? { raidGate: options.raidGate.health() } : {}) });
     }
+    if (options.raidGate && request.url === RAID_AUTHORITY_ROUTE) return options.raidGate.route(request, response);
     if (request.method !== 'POST' || request.url !== '/eventsub') return reply(response, 404, { error: 'not found' });
     const body = await readBody(request);
     if (body === null) { counts.refused++; return reply(response, 413, { error: 'too large' }); }

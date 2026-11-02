@@ -8,6 +8,7 @@
     "../../../apps/web/src/raid-gate/raid-pennants*.ts",
     "../../../packages/shared/src/raid-pennant-archive.test.ts",
     "../../../apps/web/src/raid-gate/index.tsx",
+    "../../../apps/web/src/raid-gate/atlas-gate*.ts",
     "../../../apps/web/src/raid-gate/guest-insignia*.ts",
     "../../../apps/web/src/raid-gate/guest-insignia*.tsx",
     "../../../apps/web/src/realm-reference/index.tsx",
