@@ -107,7 +107,10 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     scene: id => { const prepared = boot.loader.current(id); return prepared ? { world: prepared.world, plan: prepared.scene.plan } : undefined; } } });
   const raidGuests = createRaidGuestRuntime({ authority: guestAuthority, origin, marchers: roomTravel, citizens: input => citizens.observe(input), log: line => console.info(line),
     chatPresented: (input, result) => raidChat.observe(input, result) });
+  // The grand land: bound to each founded receipt before it is public, baked in a niced child for a new plan.
+  const land = process.env.REALM_LAND_DIRECTORY ? await (await import('./land/realm')).openRealmLand(process.env.REALM_LAND_DIRECTORY, line => console.info(line)) : null;
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
+    ...(land ? { beforeFoundedPublication: land.beforePublication } : {}),
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
     repositoryOptions: gate.install({ origin, guards: [castle.guard] }), furnish: citizens.furnish,
@@ -161,11 +164,12 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   mountRealmWatchRoutes(transport.app, { services: disclosedServices(boot.services, createQuietDisclosure({ db: pool, origin })), founded: boot.founded, loader: boot.loader });
   const raidChatRead = mountRaidChatRead(transport.app, { origin, presentation: raidChat, current: kingdomId => boot.services.kingdoms.get(kingdomId)?.current === true });
   forgeChat.mount(transport.app);
-  if (process.env.REALM_LAND_DIRECTORY) (await import('./land/mount')).mountLandRoutes(transport.app, process.env.REALM_LAND_DIRECTORY);
+  land?.mount(transport.app);
   mountForgeQueueRoutes(transport.app, evening.line, { pool, origin, secureCookies: new URL(process.env.REALM_PUBLIC_ORIGIN ?? 'http://localhost:5190').protocol === 'https:' });
   ownRealmShutdown(server, transport, async () => {
     itemFoundation.dispose();
     dock.stop();
+    await land?.stop();
     raidChatRead.close();
     await raidShow.close();
     await chatCommands.close();

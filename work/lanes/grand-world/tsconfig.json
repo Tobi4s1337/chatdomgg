@@ -18,6 +18,8 @@
     "../../../packages/world/src/grand-adoption/pier-fishing-candidates*.ts",
     "../../../packages/voxel/src/collision/**/*.ts",
     "../../../packages/world/src/grand/**/*.ts",
-    "../../../apps/realm/src/land/**/*.ts"
+    "../../../apps/realm/src/land/**/*.ts",
+    "../../../apps/realm/src/bootstrap/durable.ts",
+    "../../../apps/realm/src/main.ts"
   ]
 }

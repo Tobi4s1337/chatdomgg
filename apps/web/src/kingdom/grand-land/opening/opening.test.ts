@@ -13,6 +13,20 @@ function land() {
 }
 
 describe('the opening journal', () => {
+  it('stands each home only once its own mesh is in the scene, never from a share of the total', () => {
+    const journal = createOpeningJournal();
+    journal.streets(streets);
+    journal.assets(5, 6);
+    expect(journal.state.raised).toEqual([]);
+    journal.raised([65534, -1, 1.5]);
+    expect(journal.state.raised).toEqual([]);
+    const before = journal.state.revision;
+    journal.raised([3, 1, 3]);
+    expect(journal.state.raised).toEqual([3, 1]);
+    journal.raised([1]);
+    expect(journal.state.revision).toBe(before + 1);
+  });
+
   it('shows nothing as done before a real step happens, however long it waits', () => {
     vi.useFakeTimers();
     try {

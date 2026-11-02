@@ -1,20 +1,22 @@
 // The opening's frame sequence: the parchment loader's beats into the first street, one page per size.
-//   node work/lanes/grand-world/capture-opening.mjs <base-url> <out-dir> [--gpu]
+//   node work/lanes/grand-world/capture-opening.mjs <base-url> <out-dir> [--only stream|grand] [--at 1500,3500,...]
 // Holds the shared capture lock only while the pages are open. Stills are named <surface>-<size>-<ms>.png.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 import { acquireCaptureLock } from '../../../packages/testing/capture-lock.mjs';
 
-const [base, out] = process.argv.slice(2);
+const [base, out, ...flags] = process.argv.slice(2);
+const flag = name => { const i = flags.indexOf(name); return i >= 0 ? flags[i + 1] : undefined; };
 if (!base || !out) throw new Error('usage: capture-opening.mjs <base-url> <out-dir>');
 mkdirSync(out, { recursive: true });
 const kingdom = '129634568';
-const runs = [
+const allRuns = [
   { name: 'stream', path: `/stream?source=realm&kingdom=${kingdom}&hour=17.5`, width: 1920, height: 1080 },
   { name: 'grand', path: '/-/grand?channel=tobi4s_', width: 1440, height: 900 },
   { name: 'grand', path: '/-/grand?channel=tobi4s_', width: 390, height: 844 },
 ];
-const at = [400, 1500, 3500, 7000, 12000, 20000, 30000, 42000, 56000, 72000];
+const runs = allRuns.filter(run => !flag('--only') || run.name === flag('--only'));
+const at = flag('--at') ? flag('--at').split(',').map(Number) : [400, 1500, 3500, 7000, 12000, 20000, 30000, 42000, 56000, 72000];
 const release = await acquireCaptureLock({ signal: AbortSignal.timeout(240_000) });
 const report = [];
 try {

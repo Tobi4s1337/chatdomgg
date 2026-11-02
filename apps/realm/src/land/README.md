@@ -81,11 +81,24 @@ Null means this kingdom retains its existing land path. `withLandPublication(fou
 is a typed loader-store adapter: it retains one owned byte/receipt snapshot, waits for the guard, checks
 cancellation, then calls the original founded `put`. Revision/native calls retain the original store receiver.
 
-**The lifecycle adapter is not wired into bootstrap.** The integrator must compose it before adopted scenes
-can publish, and prepare historical bindings before exposing their receipts. Full re-verification costs real
-CPU and memory (see evidence); schedule preparation outside the held writer's time-sensitive adoption window.
-Do not deploy the frontend alone or make a GET run a bake. The exact proposed integration changes are in
-[SEAMS.md](../../../../work/lanes/grand-world/SEAMS.md).
+## In the realm: bound on publication, baked on founding
+
+`createRealmLand` (`realm.ts`) is composed by the realm host when `REALM_LAND_DIRECTORY` is set
+(`openRealmLand` in `main.ts`, `beforeFoundedPublication` in `bootstrap/durable.ts`). Each founded scene the loader
+writes is first offered to `beforePublication`: an adopted kingdom's new receipt of an already baked plan is bound
+from the catalogue with `verification: 'catalogued'` (metadata decoded, every blob present at its size; the bake
+verified every byte before cataloguing) before the receipt can become public. A plan without land is queued and
+baked once in a child process (`childLandBake`, `dist/land-bake.mjs` from `build:land`, priority 19, two threads, no
+realm environment); the write never waits for it and never fails because of land. The deploy steps are in
+[SEAMS.md](../../../../work/lanes/grand-world/SEAMS.md) under "deploy:". Historical Chronicle receipts still need
+their exact bytes published with the command above.
+
+## Sketches of unfounded channels
+
+`sketch.ts` raises a channel's land from its full identity and Genesis profile alone (`genesisSketchRecipe`), with
+every region at every level and no installed town, into `sketches/<channel>/<recipeHash>.json` beside the blobs.
+Sketches are private (decision 3): no route serves them. Build with `work/lanes/grand-world/build-sketch.mjs`, run
+`UV_THREADPOOL_SIZE=2 nice -n 19 node shots/grand-world/sketch-cli/sketch.mjs --channel ID --name NAME --directory DIR --report FILE`.
 
 Evidence: [GW10 offline bake](../../../../work/evidence/grand-world/GW10-bake.md),
 [native consumer](../../../../work/evidence/grand-world/GW10-baked-client.md),

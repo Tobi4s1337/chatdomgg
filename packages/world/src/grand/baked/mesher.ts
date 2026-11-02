@@ -8,7 +8,8 @@ import { HOSTED_PAVING, BAKED_REGION_QUAD_BYTES, type BakedRegionKey, type Baked
 import { assertRegionKey } from './validation';
 
 /** One synchronous mesher per worker; never share its mutable voxel scratch concurrently. */
-export function createInstalledRegionMesher({ land, seated }: PreparedGrandLand): { mesh(key: BakedRegionKey): BakedRegionMesh } {
+/** `seated: null` meshes a sketch: a land with no installed town (an unfounded channel), every region at every level. */
+export function createInstalledRegionMesher({ land, seated }: Pick<PreparedGrandLand, 'land'> & { readonly seated: PreparedGrandLand['seated'] | null }): { mesh(key: BakedRegionKey): BakedRegionMesh } {
   const ctx = createVoxelizeContext(land);
   const volume = new Uint8Array(PAD_VOLUME);
   const kinds = kindTable(landMaterials(land));
@@ -21,7 +22,7 @@ export function createInstalledRegionMesher({ land, seated }: PreparedGrandLand)
   function mesh(message: BakedRegionKey): BakedRegionMesh {
     const { level, rx, rz } = message;
     assertRegionKey(message, ctx.land.size);
-    if (level !== 0 && regionTouchesPhysical(rx, rz, seated)) throw new Error('Installed physical ground must render at half-metre resolution');
+    if (level !== 0 && seated && regionTouchesPhysical(rx, rz, seated)) throw new Error('Installed physical ground must render at half-metre resolution');
     const s = 1 << level, land = ctx.land;
     const per = Math.max(1, (GRAND_REGION / GRAND_CHUNK) >> level), coarse = GRAND_REGION / s;
     const skirt = level > 0 ? [rx * coarse, rz * coarse, (rx + 1) * coarse, (rz + 1) * coarse] as const : undefined;
@@ -34,7 +35,7 @@ export function createInstalledRegionMesher({ land, seated }: PreparedGrandLand)
       const hi = Math.min(Math.ceil(land.height / s / GRAND_CHUNK) - 1, Math.floor((range.hi - 1) / GRAND_CHUNK));
       for (let cy = lo; cy <= hi; cy++) {
         voxelizeChunk(ctx, level, cx, cy, cz, volume, skirt ? { skirt } : {});
-        if (level === 0) restoreInstalledFloor(land, seated, cx, cy, cz, volume);
+        if (level === 0 && seated) restoreInstalledFloor(land, seated, cx, cy, cz, volume);
         const emitted = meshQuadChunk(volume, flags, lx | (cy << 4) | (lz << 8), buckets);
         if (emitted > 0) { minY = Math.min(minY, cy * GRAND_CHUNK); maxY = Math.max(maxY, (cy + 1) * GRAND_CHUNK); }
         if (buckets.counts.reduce((sum, count) => sum + count, 0) * 8 > BAKED_REGION_QUAD_BYTES)

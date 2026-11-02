@@ -893,3 +893,69 @@ is merged into this branch. Nothing below changes a home, a door, a placement or
 8. **panel-window, the stream still:** `still(width): Promise<Blob>` on the scene, drawn and read in one task, and
    one call in `apps/web/src/stream/index.tsx` to panel's publisher. Gift effects (PW12) mount through the moment
    hooks once their payloads are committed.
+
+## GW11 the realm makes, binds and serves the land — 2026-11-02
+
+The realm now owns the land's whole life on the server (`apps/realm/src/land/realm.ts`, `createRealmLand`):
+
+- **Bound before it is public.** `DurableRealmBootOptions.beforeFoundedPublication` (additive, `bootstrap/durable.ts`)
+  wraps the founded store with `withLandPublication`. Every exact founded scene the loader writes passes through
+  `land.beforePublication(bytes, receipt)` first. For an adopted kingdom (`adoptedGrandRecipe`, now in
+  `packages/world/src/grand/adopted.ts`, which the browser's `grandRecipeFor` re-exports) whose plan is already
+  baked, it binds the land to the new receipt before the write continues (`verification: 'catalogued'`: the scene
+  verified against its receipt, the metadata decoded, every blob present at its recorded size; 1.7 s for his real
+  2.2 MB scene on this host at load 25, almost all of it the scene check the founded store repeats anyway; the bake verified every byte before cataloguing, the routes and every browser
+  verify again). A Forge piece, a claimed home or a new collision revision (the anvil's `/founded-anvil:1`) is
+  therefore on the grand floor from its first public moment, with no flip to today's land.
+- **Baked on founding.** A plan the store has never baked (a new layout, or an empty store) is queued, the write
+  continues at once, and one bake runs in a child process (`childLandBake`: `dist/land-bake.mjs`, priority 19, two
+  threads, none of the realm's environment, inputs in a private `.bake-*` directory that is removed afterwards).
+  Newer receipts of the same plan bind from the catalogue when it finishes. Until then the kingdom keeps today's land
+  (the published-land probe sees 404). A failed bake is logged and not retried for that plan until the realm restarts.
+- **Never silently migrated.** A store whose pinned recipe differs from the adopted one is logged and left alone.
+- **It never throws into a founded write.** Land is presentation; a land fault never refuses a scene.
+- Unadopted kingdoms and simulated origins are untouched, so every other kingdom renders exactly as before.
+
+`mountLandRoutes` now also takes the store the service owns; `main.ts` composes the service only when
+`REALM_LAND_DIRECTORY` is set (three additive lines: create, pass the hook, mount; plus `land.stop()` on shutdown).
+
+### deploy: the grand land on chatdom.io
+
+Run in the deployed checkout (lane/integrator with this checkpoint merged). Nothing here touches the database.
+
+1. **Build** (the realm build empties `dist/`, so the land bundle comes second):
+   ```sh
+   pnpm --filter @chatdom/realm build
+   pnpm --filter @chatdom/realm build:land      # writes apps/realm/dist/land-bake.mjs beside realm.mjs
+   pnpm --filter @chatdom/web build             # unchanged
+   ```
+2. **Land directory:** one persistent directory outside the repo, owned by the realm's user, on the same disk as
+   `REALM_FOUNDED_DIRECTORY` (for example `/var/lib/chatdom/land`). Either:
+   - **copy the verified bake** (instant, 17.63 MB): `cp -a <grand-world worktree>/shots/grand-world/land-bake-g3/. /var/lib/chatdom/land/`
+     It holds recipe `71f6888b…` (grader 3, format 2), the plan catalogue and the binding for the live receipt
+     `af5df495…` (collision revision 11); or
+   - **leave it empty**: on the kingdom's first open the realm bakes it itself (about 93 CPU s at priority 19,
+     about 400 MiB in the child; on this host under load 25 it took the wall time recorded in GW11.md), and the
+     kingdom shows today's land until the binding lands.
+3. **Environment of the realm process:**
+   - `REALM_LAND_DIRECTORY=/var/lib/chatdom/land` (required; without it nothing changes and clients keep today's land).
+   - `REALM_LAND_BAKE_SCRIPT` (optional; the default is `land-bake.mjs` beside `dist/realm.mjs`). Without the bundle
+     the realm still serves and rebinds, and logs that a new plan waits for the offline bake command.
+   - No `GRAND_*` variable is used in production (those are private test inputs). No migration.
+4. **Gateway:** nothing to add. The public allowlist already admits exactly `/api/realm/land/<kingdom>/<scene>` and
+   `/api/realm/land/<kingdom>/<scene>/<blob>` (`apps/api/src/public/routes.ts`), forwarded to the realm.
+5. **Restart the realm.** Expect `land: serving and baking /var/lib/chatdom/land (bake command …/land-bake.mjs)`.
+   On the first open of 129634568 with a new receipt of the same plan:
+   `land: 129634568 scene xxxxxxxx bound to baked land 3489f414 (352 meshes reused)`.
+6. **Check** (GET only):
+   ```sh
+   S=$(curl -s https://chatdom.io/api/realm/founded/129634568 | jq -r .sceneHash)
+   curl -sI https://chatdom.io/api/realm/land/129634568/$S        # 200, cache-control: public, max-age=31536000, immutable
+   ```
+   Then `/stream?source=realm&kingdom=129634568` and `/-/grand?channel=tobi4s_` open on the grand land with his homes
+   (the canvas's `data-hosted-land` is not `absent`).
+7. **Rollback:** unset `REALM_LAND_DIRECTORY` and restart. Clients fall back to today's land (the probe's 6 s limit
+   ends the wait on an unmounted route). The land directory can stay; it is immutable.
+
+Still open for the integrator (unchanged): the Chronicle's historical scenes do not pass through the founded store, so
+replaying an old receipt shows today's land unless that exact receipt was published (`publish-cli`).

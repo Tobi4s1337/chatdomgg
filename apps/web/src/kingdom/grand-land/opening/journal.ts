@@ -73,10 +73,14 @@ export interface OpeningState {
   /** performance.now() of each step that has happened. */
   readonly at: Readonly<Partial<Record<OpeningStep, number>>>;
   readonly streets: OpeningStreets | null;
+  /** performance.now() when the streets were given (a verified founded scene, or the kingdom's own plan). */
+  readonly streetsAt: number | null;
   readonly land: OpeningLand | null;
   readonly regions: readonly OpeningRegion[];
   readonly bytes: OpeningLandBytes | null;
   readonly assets: { readonly done: number; readonly total: number } | null;
+  /** Home slots whose own first mesh is in the scene, in the order they were raised. */
+  readonly raised: readonly number[];
   /** True while the kingdom draws today's land (no baked land for this receipt). */
   readonly local: boolean;
   readonly failed: string | null;
@@ -86,11 +90,13 @@ export interface OpeningJournal {
   readonly state: OpeningState;
   step(step: OpeningStep, at?: number): void;
   name(name: string): void;
-  streets(streets: OpeningStreets): void;
+  streets(streets: OpeningStreets, at?: number): void;
   land(land: OpeningLand): void;
   region(region: Omit<OpeningRegion, 'at'>, at?: number): void;
   bytes(bytes: OpeningLandBytes): void;
   assets(done: number, total: number): void;
+  /** The homes on these slots now stand in the scene (their own blueprint was meshed and instanced). */
+  raised(slots: readonly number[]): void;
   local(): void;
   fail(message: string): void;
   subscribe(listener: (state: OpeningState) => void): () => void;
@@ -100,10 +106,10 @@ const MAX_REGIONS = 4096;
 const now = () => (typeof performance === 'undefined' ? Date.now() : performance.now());
 
 export function createOpeningJournal(): OpeningJournal {
-  let state: OpeningState = { revision: 0, name: null, at: {}, streets: null, land: null, regions: [], bytes: null,
-    assets: null, local: false, failed: null };
+  let state: OpeningState = { revision: 0, name: null, at: {}, streets: null, streetsAt: null, land: null, regions: [], bytes: null,
+    assets: null, raised: [], local: false, failed: null };
   const listeners = new Set<(state: OpeningState) => void>();
-  const seen = new Set<string>();
+  const seen = new Set<string>(), standing = new Set<number>();
   function commit(next: Omit<OpeningState, 'revision'>) {
     state = Object.freeze({ ...next, revision: state.revision + 1 });
     for (const listener of [...listeners]) listener(state);
@@ -123,7 +129,7 @@ export function createOpeningJournal(): OpeningJournal {
       if (!value || value === state.name) return;
       commit({ ...state, name: value });
     },
-    streets(streets) { if (!state.streets) commit({ ...state, streets }); },
+    streets(streets, at = now()) { if (!state.streets) commit({ ...state, streets, streetsAt: at }); },
     land(land) {
       if (state.land) return;
       if (land.columns < 1 || land.rows < 1 || land.heights.length !== land.columns * land.rows || land.water.length !== land.heights.length)
@@ -148,6 +154,12 @@ export function createOpeningJournal(): OpeningJournal {
       const value = Math.min(done, total);
       if (state.assets && state.assets.done >= value && state.assets.total === total) return;
       commit({ ...state, assets: Object.freeze({ done: value, total }) });
+    },
+    raised(slots) {
+      const fresh = slots.filter(slot => Number.isInteger(slot) && slot >= 0 && slot < 65534 && !standing.has(slot) && standing.size < MAX_REGIONS);
+      if (!fresh.length || state.failed) return;
+      for (const slot of fresh) standing.add(slot);
+      commit({ ...state, raised: Object.freeze([...state.raised, ...new Set(fresh)]) });
     },
     local() { if (!state.local) commit({ ...state, local: true }); },
     fail(message) { commit({ ...state, failed: message }); },
