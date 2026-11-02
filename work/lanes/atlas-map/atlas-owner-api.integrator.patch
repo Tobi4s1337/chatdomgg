@@ -262,7 +262,7 @@ index cc1c6a3..b49489c 100644
      if (await (await import('./raid-gate/guests-http')).handleRaidGuest(request, response, { pool, config })) return;
      if (await (await import('./raid-gate/passport-http')).handleRaidPassport(request, response, { pool, config })) return;
 diff --git a/apps/api/src/public/main.ts b/apps/api/src/public/main.ts
-index 863c8fd..e5735ca 100644
+index 4ebd02e..b0695ea 100644
 --- a/apps/api/src/public/main.ts
 +++ b/apps/api/src/public/main.ts
 @@ -158,6 +158,9 @@ async function route(request: IncomingMessage, response: ServerResponse) {
@@ -272,7 +272,7 @@ index 863c8fd..e5735ca 100644
 +    case 'atlas-owner':
 +      if (!await (await import('../atlas-owner')).handleAtlasOwner(request, response, { pool, config: auth })) unavailableJson(response, 404, 'No such route');
 +      return;
-     case 'realm': proxyHttp(config.realm.target, request, response, config.proto); return;
+     case 'realm': proxyHttp(config.realm.target, request, response, config.proto, config.trustedProxies); return;
      case 'panel': await panel(request, response, url.pathname); return;
      case 'door-data': await doorData(response); return;
 diff --git a/apps/api/src/public/routes.test.ts b/apps/api/src/public/routes.test.ts
