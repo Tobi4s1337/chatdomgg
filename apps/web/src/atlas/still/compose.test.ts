@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import stampSheet from '../assets/stamps.json';
 import { columns, HEAD_ROWS, makeChunk, makeNames, makeWorld, type Row } from '../data/fixtures.test-support';
@@ -165,9 +166,11 @@ describe('layoutStill', () => {
     world.head = columns([...HEAD_ROWS, ...capitals(120).map((row) => ({ ...row, x: (row.x % 2200) / 1, y: row.y % 1000 }))]);
     for (const view of [LAPTOP, PHONE, { width: 1920, height: 1080 }]) {
       const result = layout(setup(world), view);
+      const clashes: [number, number][] = [];
       for (let i = 0; i < result.claims.length; i++) {
-        for (let j = i + 1; j < result.claims.length; j++) expect(overlaps(result.claims[i]!, result.claims[j]!)).toBe(false);
+        for (let j = i + 1; j < result.claims.length; j++) if (overlaps(result.claims[i]!, result.claims[j]!)) clashes.push([i, j]);
       }
+      expect(clashes).toEqual([]);
       // Crowded capitals fall back to survey marks rather than piling up.
       expect(result.marks.some((mark) => mark.mark)).toBe(true);
     }

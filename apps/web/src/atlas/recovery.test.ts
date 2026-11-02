@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import { PreviewError } from './data/preview';
 import { atlasFailureState, mountAtlasWithRetry } from './recovery';

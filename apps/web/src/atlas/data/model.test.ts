@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { columns, decorCode, makeChunk, makeNames, makeWorld } from './fixtures.test-support';
 import { decodeDecor, decodeRings, geographyOf, SettlerStore, tierOf, type Settler } from './model';

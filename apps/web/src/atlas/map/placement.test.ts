@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { CollisionGrid, overlaps, type Rect } from './collide';
 import { comparePlacement, FADE_MS, fadeIn, HoldingLabels, MEMORY_LIMIT, onScreen, plan, Placer, SHIELD_LIMIT, type PlacementItem, type Placed } from './placement';
@@ -63,7 +64,10 @@ describe('plan', () => {
   it('places greedily without overlaps, the stronger holding first', () => {
     const placed = frame(new Placer(), itemsAt(scene(1, 600), identity));
     const rects = [...placed.values()].map((p) => p.rect);
-    for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) expect(overlaps(rects[i]!, rects[j]!)).toBe(false);
+    // Collect the offending pairs and assert once: one expectation per pair costs seconds on a busy host.
+    const clashes: [number, number][] = [];
+    for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) if (overlaps(rects[i]!, rects[j]!)) clashes.push([i, j]);
+    expect(clashes).toEqual([]);
     expect(placed.size).toBeGreaterThan(100);
     expect(placed.size).toBeLessThan(600);
   });

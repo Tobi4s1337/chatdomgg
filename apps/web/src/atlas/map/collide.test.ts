@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { CollisionGrid, comparePriority, LETTER_CLEARANCE, MARK_PX, overlaps, underLettering, type Rect } from './collide';
 

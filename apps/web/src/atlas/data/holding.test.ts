@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { DOOR_KEY, doorHolding, handOffHolding, takeHandOff, waitingDoorHolding } from './holding';
 import type { CardReply } from './directory';

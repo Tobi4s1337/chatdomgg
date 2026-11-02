@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, it, vi } from 'vitest';
 import { LANGUAGE_NAMES } from '../../../../surveyor/src/cartography/language-labels';
 import { makeWorld } from './fixtures.test-support';

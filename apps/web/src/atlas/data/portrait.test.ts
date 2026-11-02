@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { PORTRAIT_MAX_AGE_MS, portraitUrl } from './portrait';
 

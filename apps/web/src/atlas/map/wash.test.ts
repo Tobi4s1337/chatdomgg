@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { DISTANCE_SCALE } from './camera';
 import { WASH_PX, WASH_RADIUS, washDetail, washPx, washSoftening } from './wash';

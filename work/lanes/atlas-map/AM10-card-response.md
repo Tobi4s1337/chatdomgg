@@ -227,3 +227,34 @@ Verification:
   `am10-lettering-390.png` were taken on the real retained survey through the
   owned service and preview, and viewed. Every continent name reads clean,
   with 135 / 70 marks drawn.
+
+## Test environment (2 Nov, review follow-up)
+
+The review asked for the lettering tests to run in their configured
+environment. The repository's configured environment is `node`
+(`vitest.config.ts` at the root). `jsdom` was never installed: the lockfile
+lists it only as an optional peer of Vitest. It shows up only because
+`vite-plugin-solid` sets `test.environment = 'jsdom'` whenever Vitest reads
+`apps/web/vite.config.ts`, which is what the PRD's filtered command
+(`pnpm --filter @chatdom/web exec vitest run src/atlas/…`) does. Under that
+command every web test failed to start with "Cannot find package 'jsdom'".
+
+- None of the 32 Atlas test files needs a DOM (`Event` is a Node 22 global),
+  so each now starts with `// @vitest-environment node`. The root and
+  filtered commands run them the same way.
+- Vitest still checks the project's default environment at startup. The
+  filtered command therefore needs `--environment node` to exit 0; without
+  it, it prints "MISSING DEPENDENCY jsdom" and exits 1 even when every test
+  passes. The command used from now on is
+  `pnpm --filter @chatdom/web exec vitest run src/atlas/<files> --environment node --maxWorkers=1`.
+  The flag mirrors the root config's single worker for this shared host.
+- Under host load 25–32, three exhaustive sweeps went over Vitest's 5 s
+  default: heraldry, the placement overlap check and the tile-plan
+  no-empty-paper sweep. The two pairwise overlap checks (placement, still
+  composition) now collect the clashing pairs and assert once, instead of
+  making up to about 180,000 separate expectations. They are as strict as
+  before, faster, and print a better failure. The heraldry file and the
+  tile-plan sweep get explicit 30 s timeouts, because their work is real
+  computation.
+- Changing the web package's environment for every lane (set `node`, or add
+  `jsdom`) is outside this lane's scope. It is written as a `needs:` line.
