@@ -317,12 +317,7 @@ export interface WalkFeatureContext extends Omit<ToolContext, 'holdPose'> {
   readonly overlay: HTMLElement;                // a layer of the feature's own, over the world and under the HUD
   audio(): KingdomAudio | null;                 // the kingdom's mixer, null while sound is off or not yet allowed
   onFrame(listener: (dt: number, now: number) => void): () => void;
-  // Added by PL11 for the wardrobe at home (optional, additive):
-  ownHome?(): OwnHomeInside | null;             // your own home while the room says you are in it, else null
-  holdCamera?(reason: string): CameraHold;      // the drawn camera for a moment; your body shows whole while held
 }
-export interface OwnHomeInside { readonly plotId: string; readonly interior: { min: Vec3; max: Vec3 }; readonly door: Vec3; readonly inside: Vec3; readonly world: CollisionWorld }
-export interface CameraHold { set(eye: Vec3, target: Vec3, fov?: number): void; release(): void }
 export interface WalkFeatureProvider { readonly id: string; mount(ctx: WalkFeatureContext): () => void }
 export function registerWalkFeature(provider: WalkFeatureProvider): () => void;
 export function walkFeatures(): readonly WalkFeatureProvider[];
@@ -342,49 +337,8 @@ Decisions:
 - `audio()` follows the same rule as the soul's sound: the kingdom's mixer only while sound is on and the browser
   allows it. `hour()` is the kingdom's own clock; only a host that lends none gets dusk (19.5).
 - No `holdPose` here: a held tool (B1a) shows a pose, a walk feature does not.
-- `ownHome` (PL11): the walk scene derives it from the founded scene and the collision world it already holds
-  (`foundedInstalledHomes` + `homeThreshold` for `connection.ownedPlotId`, once per collision revision); `interior` is
-  the zone's box (the whole plot's volume, not the room), `inside` is the door's inside threshold. Null unless the
-  room's self state is `interior` on your own plot.
-- `holdCamera` (PL11): `set` writes the camera after the walk placed it for this frame (features run after the
-  controller), and while any hold is live your own body is drawn at full opacity, even in first person. The holder
-  takes an input lease of its own; release gives the camera back on the next frame.
 
 Pier mounts with one line in `play/providers.ts`: `import '../fishing/play-slot';` (pier's own file).
-
-### B1d. The map, the friend authority, the card's forged shelf and the lantern path (landed in `slots.ts` and `host.ts`, additive; PL12, 2026-11-02)
-
-```ts
-// apps/web/src/play/slots.ts
-/** Which walkers drawn now are your MUTUAL friends (walked together, or both added each other; never a Twitch follow). One may be registered. */
-export interface FriendSource { readonly id: string; mutual(walkers: readonly { id: string; name: string }[], ctx: PlayContext): ReadonlySet<string> }
-export function registerFriendSource(source: FriendSource): () => void;
-/** What the signed-in person forged in this kingdom, from the Forge's own records. One may be registered. */
-export interface ForgedThing { readonly id: string; readonly title: string; readonly plaque: string; readonly forgedAt: number; paint?(canvas: HTMLCanvasElement): void }
-export interface ForgedSource { readonly id: string; mine(ctx: PlayContext, signal: AbortSignal): Promise<readonly ForgedThing[]> }
-export function registerForgedSource(source: ForgedSource): () => void;
-// PlayAction gains 'map' (default KeyM): opens the ledger at its map page, only where the walk lends a map.
-```
-
-Decisions:
-- The map's only people are you and the walkers a registered `FriendSource` names. `play/map/people.ts` (`mapPeople`) is the one door from
-  the walkers to the map: the minimap, the big map page and the painter take only what it returns. No source: you alone. A source that
-  throws or answers anything but a `Set` shows no one. Names never identify (a stranger who shares your name stays a stranger).
-- No realm authority for friendship exists this round, so no one registers a source and no friend positions are shown (a `question:`
-  line asks Tobias where mutual friendship lives). When it exists, its lane registers a source with one line in `providers.ts`.
-- The card's "Forged by you" shelf shows only while a `ForgedSource` is registered and answers with real pieces. forge-wish's own
-  kingdom-wide page (`FORGE_LEDGER_PAGE`, id `forged`, "The forge remembers") is unchanged and registers as any page does.
-- The card's facts come from the look module: `GET /api/realm/looks/me?kingdom=<id>` now carries an optional `citizen`
-  (`RealmCitizenFactsSchema` in `packages/shared/src/look-store.ts`: the Twitch picture, citizen since = the deed's allocation, homes).
-- The walk lends the map through `PlayHost.map()` and the lantern path through `PlayHost.lights` (`host.ts`), built by
-  `play/way-home-runtime.ts` from the founded plan (both lands), your plot (`home.owned`) and your feet. The trail is lights and decals
-  only (`play/lantern/trail.ts`): no solid, nothing in the collision world.
-- The kingdom's Chronicle button (`kingdom.css`, fixed at the top right) steps down under the minimap while the minimap is
-  shown: one `body:has(.pl-map-mini)` rule in play's `map/map.css`, so no kingdom file changes. A lane that adds a fixed
-  top-right piece outside the HUD regions should do the same or use `registerHudPiece`.
-- Mount recipe for the merged build: nothing to mount. The minimap and the map page appear wherever the walk scene runs; the card
-  appears for a signed-in walker. The route follows the plan's open streets (`activeStreetIds`), so on the grand land it follows the
-  streets grand-world's plan opens.
 
 ### Changes play made outside its folder (no round lane owns them; main takes no patches this round)
 
@@ -438,18 +392,6 @@ export const REALM_LOOK_ROUTES = {
   `grantWardrobePiece({ personId, pieceId, slot: 'hat' | 'held' | 'back' | 'neck' | 'badge', recipe, source: 'forge' })`
   from `apps/realm/src/look/index.ts`. The builder shows granted pieces in a "Yours" tab. Play draws a granted piece
   only once its recipe fits the avatar's sockets; until then it is listed with its forge card and not worn.
-- **Resolving a token on any page.** `sharedCitizenLooks().load(token)` (`apps/web/src/citizens/look-library.ts`)
-  answers the recipe for a starter id or a saved token through `GET /api/realm/looks/:token`; pass the recipe, not the
-  string, to `paintPortraits`/`createPortraitRenderer`. (citizen-card's `paintPortraits` still maps a string through
-  `defaultCitizenRecipe`, which knows only the six starters: a card showing a saved look passes the loaded recipe.)
-- **Mount recipe (what the look needs in a merged build).** Realm: migration `0013_realm_citizen_looks.sql`;
-  `apps/realm/src/main.ts` creates `createRealmLooks({ pool, origin, verifier, names, scene, publicOrigin, log })`,
-  attaches `looks.attach(kingdom)` in the boot's `attach`, and calls `looks.mount(transport.app)`; the authenticator
-  reads `realm_citizen_looks` at entry. Gateway: the one `/api/realm/looks/(me|lk.<40 hex>|<starter>)` line in
-  `apps/api/src/public/routes.ts`; the web dev and preview proxy: `/api/realm/looks` in `apps/web/vite.config.ts`.
-  Web: `import '../avatar-builder/play-slot';` in `play/providers.ts` (the "Your look" ledger page, the mirror on a
-  first walk, the wardrobe at home). `/-/avatar-builder` opens the real wardrobe page (signed in: your saved look).
-  No land mount: the wardrobe finds its own wall in your own home on any land.
 
 ## C. Between play's own goals
 

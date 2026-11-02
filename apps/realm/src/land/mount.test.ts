@@ -15,6 +15,7 @@ type ResponseDouble = {
   writeStatus: (status: string) => ResponseDouble;
   writeHeader: (key: string, value: string) => ResponseDouble;
   end: (body?: Uint8Array) => void;
+  endWithoutBody: (length?: number) => void;
 };
 
 function mounted() {
@@ -30,6 +31,7 @@ function mounted() {
     writeStatus: status => { writes.push(['status', status]); return res; },
     writeHeader: (key, value) => { writes.push(['header', key, value]); return res; },
     end: body => { writes.push(['end', body]); },
+    endWithoutBody: length => { writes.push(['endWithoutBody', length]); },
   };
   return { handler, res, abort: () => abort(), writes };
 }
@@ -47,10 +49,15 @@ describe('uWebSockets land mount', () => {
     request.getUrl = request.getMethod = request.getHeader = () => { throw new Error('expired request'); };
     expect(read).toHaveBeenCalledWith(expect.anything(), path, 'HEAD', '"etag"');
     const bytes = new Uint8Array([0, 255, 13]);
-    finish({ status: 200, headers: { 'content-type': 'application/gzip', etag: '"digest"' }, body: bytes });
-    await vi.waitFor(() => expect(writes).toContainEqual(['end', bytes]));
+    finish({ status: 200, headers: { 'content-type': 'application/gzip', etag: '"digest"', 'content-length': '3' }, body: new Uint8Array() });
+    await vi.waitFor(() => expect(writes).toContainEqual(['endWithoutBody', 3]));
     expect(writes).toEqual([['cork'], ['status', '200 OK'], ['header', 'content-type', 'application/gzip'],
-      ['header', 'etag', '"digest"'], ['end', bytes]]);
+      ['header', 'etag', '"digest"'], ['endWithoutBody', 3]]);
+    // A GET leaves Content-Length to uWS and sends the bytes.
+    read.mockResolvedValueOnce({ status: 200, headers: { 'content-type': 'application/gzip', 'content-length': '3' }, body: bytes });
+    const get = mounted(); get.handler(get.res, { ...req(), getMethod: () => 'get' });
+    await vi.waitFor(() => expect(get.writes).toContainEqual(['end', bytes]));
+    expect(get.writes).toEqual([['cork'], ['status', '200 OK'], ['header', 'content-type', 'application/gzip'], ['end', bytes]]);
   });
 
   it('does not write a successful response after an aborted request', async () => {

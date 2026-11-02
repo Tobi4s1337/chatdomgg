@@ -2,7 +2,6 @@ import { batch, createEffect, createMemo, createSignal, createUniqueId, Match, o
 import './atlas.css';
 import { render } from 'solid-js/web';
 import type { AtlasGateEmit, AtlasMountOptions, AtlasReadyState, AtlasScene as SceneHandle, AtlasSceneGate, AtlasTarget, AtlasView } from './embed';
-import type { HeadStart } from './head-start';
 import { AtlasChannelSchema, type AtlasChannel } from '@chatdom/shared';
 import type { AtlasTravelStage } from '../raid-gate/ports';
 import { fetchBusiest, fetchChannelRoads, fetchFinder, fetchRoadStory, type BusyRoad, type CaravanRaid, type ChannelRoads, type FinderEntry, type FinderReply, type MapPoint, type RoadStory } from './data/roads';
@@ -125,18 +124,17 @@ function webglAvailable(): boolean {
  * The Atlas of Kingdoms: a survey preview of real Twitch channels drawn as draft land. One root element carries
  * `data-chatdom-atlas` and the state; the owning embed is notified when the first coherent frame is drawn. Without WebGL the same survey is drawn as a still.
  */
-export function mountScene(element: HTMLElement, options: AtlasMountOptions, ready: (state: AtlasReadyState) => void, gateEmit: AtlasGateEmit = () => undefined, head: HeadStart | null = null): SceneHandle {
+export function mountScene(element: HTMLElement, options: AtlasMountOptions, ready: (state: AtlasReadyState) => void, gateEmit: AtlasGateEmit = () => undefined): SceneHandle {
   let api!: Omit<SceneHandle, 'dispose'>;
-  const dispose = render(() => <AtlasScene options={options} ready={ready} gateEmit={gateEmit} head={head} attach={value => { api = value; }} />, element);
+  const dispose = render(() => <AtlasScene options={options} ready={ready} gateEmit={gateEmit} attach={value => { api = value; }} />, element);
   return { ...api, dispose };
 }
 
-function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReadyState): void; gateEmit: AtlasGateEmit; head: HeadStart | null; attach(api: Omit<SceneHandle, 'dispose'>): void }) {
+function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReadyState): void; gateEmit: AtlasGateEmit; attach(api: Omit<SceneHandle, 'dispose'>): void }) {
   // Bloom reads this for every live stain. Keep the query, while its matches value follows preference changes.
   const motionPreference = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
   const reduceMotion = () => motionPreference?.matches ?? false;
-  // The embed's head start answers the pointer and world reads it already made; everything else is fetched as usual.
-  const SOURCE: PreviewSource = { base: props.options.base ?? '/map-data', fetch: (input, init) => props.head?.take(String(input), init) ?? fetch(input, init) };
+  const SOURCE: PreviewSource = { base: props.options.base ?? '/map-data', fetch: (input, init) => fetch(input, init) };
   const [mode, setMode] = createSignal(props.options.mode);
   const ownsUrl = props.options.routing === 'url' && props.options.mode === 'explore';
   // The gate is the Raid Gate's own full surface: its map takes the wheel at once.
@@ -1616,8 +1614,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
             liveTick={liveTick()}
             selected={selected()}
             onSelect={(settler) => choose(settler)}
-            warmBakers={() => props.head?.bakers() ?? []}
-            onReady={() => { setStillDrawn(true); if (!noWebgl && state() === 'loading') props.ready('still'); stillReady(); stillUp(); props.head?.done(); }}
+            onReady={() => { setStillDrawn(true); if (!noWebgl && state() === 'loading') props.ready('still'); stillReady(); stillUp(); }}
             shareTiles={(copy) => { stillTiles = copy; }}
             loadChunk={(region) => loadChunk(region)}
             onView={(next) => {

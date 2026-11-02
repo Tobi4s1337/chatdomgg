@@ -21,13 +21,3 @@ export function matchOpenKingdom(list: readonly OpenKingdom[], query: string): O
 export async function findOpenKingdom(query: string): Promise<OpenKingdom | null> {
   return matchOpenKingdom(await read(), query);
 }
-
-/** A channel's own founded kingdom: by its login only, so a channel that happens to share a kingdom's name gets nothing. */
-export function matchFoundedChannel(list: readonly OpenKingdom[], login: string): OpenKingdom | null {
-  const wanted = key(login);
-  return wanted ? list.find(kingdom => kingdom.login === wanted) ?? null : null;
-}
-
-export async function findFoundedChannel(login: string): Promise<OpenKingdom | null> {
-  return matchFoundedChannel(await read(), login);
-}

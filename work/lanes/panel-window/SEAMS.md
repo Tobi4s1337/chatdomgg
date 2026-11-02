@@ -250,10 +250,3 @@ These are not seams between lanes, but the panel depends on them:
 - needs (2 Nov, LA10 walk, for whoever owns the passport now that panel-window is finished): there is no passport on the
   web. On chatdom.io a visitor cannot see their passport or raid stamps at all; inside Twitch it opens from the panel's
   "You" tab. Either a signed-in web route (`/passport`) or a decision that it lives only in the panel.
-- 2 Nov (LA10, panel live in Hosted Test on tobi4s_): the open "Walk in" row said "Leaves Twitch for chatdom.gg" and
-  its links' labels named chatdom.gg, a domain that does not answer; the links themselves followed the realm's full
-  walk address (`https://chatdom.io/?walk=1&kingdom=…`). `gateHref`/`hostOf` now live in `apps/panel/src/gate.ts`
-  (base `https://chatdom.io` for a bare path; tested in `gate.test.ts`), and both `Panel.tsx` and `ui/places.tsx` name
-  the host the link really opens. Extension zip 0.0.3 carries it (no `chatdom.gg` left in the bundle).
-- 2 Nov (LA10): the panel's picture reads "The kingdom is out of view" on Twitch because no panel painter runs in
-  production; the steps to run it are `deploy: 4` in launch `SEAMS.md`.

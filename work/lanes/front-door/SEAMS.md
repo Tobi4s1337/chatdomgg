@@ -336,19 +336,3 @@ call is still fetching stays as they left it. The front page needs no guard of i
 - needs (front-door): a signed-out stranger has no way from the front page into a kingdom; only the signed-in seal
   offers "Walk into Willowmere". The front door's open kingdom (`/api/public/door`) deserves a visible way in for
   everyone (the hero caption already names "The land of tobi4s_ at dusk").
-- 2 Nov (LA10, chatdom.io down): `apps/api`'s own `build` script now builds both bundles (`dist/api.mjs`, then
-  `dist/public.mjs` from `src/public/vite.config.mjs`), and `scripts/public/build.mjs` calls that script. Before, any
-  `pnpm build` after the public build emptied `apps/api/dist/` (vite's default `emptyOutDir`) and deleted
-  `public.mjs`, and `scripts/public/start.mjs` then refused to start: that is why chatdom.io answered 502 after the
-  17:55 redeploy (the deploy checkout held `api.mjs` only).
-- 2 Nov (LA10, harness request): atlas-map's `gateway-visitor-address.integrator.patch` is applied in
-  `apps/api/src/public` (`proxy.ts`: `parseTrustedProxies`, `clientAddress`; `config.ts`: `trustedProxies`;
-  `main.ts` passes it to `proxyHttp`/`proxyUpgrade`). With `PUBLIC_TRUSTED_PROXIES` unset nothing changes; on chatdom.io
-  it is `172.18.0.0/16` (launch `SEAMS.md`, `deploy: 3`).
-- 2 Nov (LA10, session 4, walk-in gate): "What the gate said" showed the raw failure to visitors, e.g. during a
-  redeploy "Finding the kingdom (/api/realm/entry/129634568) returned HTTP 502 text/html; expected JSON." It now shows
-  only a realm refusal (words written for people); any other cause goes to `console.warn` and is kept for the
-  portal's rejoin error, and the closed gate's own words say what to do. New gate state `nowhere` ("This road leads
-  nowhere.", Open the Atlas / The front page): the realm's entry read answering 404 (a kingdom not open to visitors,
-  a stale or mistyped link) shows it at once instead of offering sign-in into "the kingdom" (`gateName` in
-  `kingdom-entry/gate.ts`, tested; `index.tsx`; `entry.css`).

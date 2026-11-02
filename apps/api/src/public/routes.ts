@@ -26,7 +26,7 @@ const SITE_PAGES: Readonly<Record<string, SitePage>> = { '/how-it-works': 'how-i
 const MOVED: Readonly<Record<string, string>> = { '/showcase': '/' };
 
 const AUTH = /^\/api\/realm\/(?:session|ticket|signout|auth\/(?:start|callback)|simulated-oidc\/.*)$/;
-const REALM_READ = /^\/api\/realm\/(?:clock|(?:founded|entry|watch|chronicle)\/[1-9][0-9]{0,31}|founded\/scenes\/[a-f0-9]{64})$/;
+const REALM_READ = /^\/api\/realm\/(?:clock|(?:founded|entry|watch|chronicle|pier\/almanac|pier\/watch)\/[1-9][0-9]{0,31}|founded\/scenes\/[a-f0-9]{64})$/;
 const MATCHMAKE = /^\/matchmake\/(?:(?:joinOrCreate|create|join)\/kingdom|(?:joinById|reconnect)\/k:[1-9][0-9]{0,31})$/;
 const ROOM_SOCKET = /^\/[A-Za-z0-9_-]{1,128}\/k:[1-9][0-9]{0,31}$/;
 const REALM_PREFIX = '/live-realm-data';
@@ -49,7 +49,7 @@ export function isRealmSocket(pathname: string): boolean {
  * The product's pages. Everything else the web build can draw (lane benches, references) stays off the public
  * origin. A new public page is added here deliberately.
  */
-const PAGES = /^\/(?:stream|panel|dock\/?|map(?:\/(?:[a-z0-9_]{1,25}|road\/[a-z0-9_]{1,25}\/[a-z0-9_]{1,25}))?|kingdom\/[1-9][0-9]{0,31}|-\/(?:avatar-builder|grand))$/;
+const PAGES = /^\/(?:stream|panel|dock\/?|map(?:\/(?:[a-z0-9_]{1,25}|road\/[a-z0-9_]{1,25}\/[a-z0-9_]{1,25}))?|kingdom\/[1-9][0-9]{0,31}|-\/grand)$/;
 
 /**
  * A page address that asks for staged data instead of the real kingdom: a simulated or fixture source, or a named
@@ -71,8 +71,11 @@ export function classify(pathname: string, search: string): PublicRoute {
   if (AUTH.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/raid-gate\/crier\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/raid-gate\/guest\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
+  if (pathname === '/api/raid-gate/passport/travels') return { kind: 'auth' };
   if (/^\/api\/raid-gate\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'auth' };
   if (/^\/api\/realm\/forge\/chat\/(?:status|authorize|callback|wish|revoke)$/.test(pathname)) return { kind: 'realm' };
+  if (pathname === '/api/realm/forge/queue') return { kind: 'realm' };
+  if (pathname === '/api/realm/forge/ledger') return { kind: 'realm' };
   if (/^\/api\/dock\/(?:status|actions|presentations|witness)$/.test(pathname)) return { kind: 'dock' };
   if (REALM_READ.test(pathname)) return { kind: 'realm' };
   if (/^\/(?:live-realm-data\/)?realm\/(?:raid-roads|raid-pennants\/[1-9][0-9]{0,31})$/.test(pathname)) return { kind: 'realm' };
@@ -80,6 +83,7 @@ export function classify(pathname: string, search: string): PublicRoute {
   if (/^\/api\/realm\/land\/[1-9][0-9]{0,31}\/[a-f0-9]{64}(?:\/[a-f0-9]{64})?$/.test(pathname)) return { kind: 'realm' };
   if (/^\/api\/realm\/land\/[1-9][0-9]{0,31}\/world$/.test(pathname)) return { kind: 'realm' };
   if (/^\/api\/realm\/land\/[1-9][0-9]{0,31}\/recipe$/.test(pathname)) return { kind: 'realm' };
+  if (/^\/(?:live-realm-data\/)?realm\/raid-party\/[1-9][0-9]{0,31}$/.test(pathname)) return { kind: 'realm' };
   if (pathname === REALM_PREFIX || pathname.startsWith(`${REALM_PREFIX}/`)) {
     const upstream = pathname.slice(REALM_PREFIX.length);
     // Literal route grammar deliberately accepts no percent escapes, repeated prefixes or arbitrary tails:
@@ -102,11 +106,10 @@ export function classify(pathname: string, search: string): PublicRoute {
   const page = Boolean(site) || PAGES.test(pathname);
   if (page && asksForStagedData(search)) return { kind: 'staged' };
   if (pathname === '/') {
-    // The bare origin is the front page; a sign-in outcome returning there still lands on it. Any other query
-    // (`?walk=1&kingdom=…`, `?forge=1`) is the app itself.
-    const params = new URLSearchParams(search);
-    params.delete('signin');
-    return [...params.keys()].length === 0 ? { kind: 'site', page: 'index' } : { kind: 'page' };
+    // The bare origin is the front page, whatever else its query says (a sign-in outcome, a Forge permission that
+    // expired before it knew its kingdom). Only the walk (`?walk=1&kingdom=…`) is the app itself: any other app
+    // address on `/` is the staged town, which the public origin never shows.
+    return new URLSearchParams(search).get('walk') === '1' ? { kind: 'page' } : { kind: 'site', page: 'index' };
   }
   if (site) return { kind: 'site', page: site };
   if (page) return { kind: 'page' };

@@ -62,13 +62,6 @@ describe('the public origin route table', () => {
     }
   });
 
-  it('routes a signed-in streamer’s own Atlas visibility to its session-checked handler, and nothing near it', () => {
-    for (const path of ['/api/atlas/me', '/api/atlas/me/hide', '/api/atlas/me/show']) expect(classify(path, '')).toEqual({ kind: 'atlas-owner' });
-    for (const path of ['/api/atlas', '/api/atlas/me/', '/api/atlas/me/unhide', '/api/atlas/me/hide/1', '/api/atlas/129634568/hide', '/v1/channels/1/hide']) {
-      expect(classify(path, '')).not.toEqual({ kind: 'atlas-owner' });
-    }
-  });
-
   it('keeps the Surveyor public projections and event streams reachable', () => {
     const preview = 'pv-20261101T120000Z-aaaaaaaaaaaa', frame = 'lf-20261101T120000Z-bbbbbbbbbbbb';
     for (const path of ['/map-data/v1/health', '/map-data/v1/survey', '/map-data/v1/preview',

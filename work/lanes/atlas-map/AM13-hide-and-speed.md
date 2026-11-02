@@ -63,9 +63,8 @@ the card says only "It stays off the map for now", never why.
 
 ### Still owed
 
-- Stills of the flow through the real Twitch sign-in as tobi4s_: needs the session authority applied on the
-  integrator (`atlas-owner-api.integrator.patch`, rebased 2 Nov 18:45 because the gateway moved), the API process with
-  `ATLAS_PRIVATE_URL` and `ATLAS_INGEST_TOKEN`, the Atlas service with its ingest listener, and Tobias at a browser.
+- Stills of the flow through the real Twitch sign-in as tobi4s_: needs the API process with `ATLAS_PRIVATE_URL` and
+  `ATLAS_INGEST_TOKEN`, the Atlas service with its ingest listener, and Tobias at a browser.
 
 ### Operator adoption
 
@@ -158,66 +157,14 @@ shell gives it one), `is-on-https` and `redirects-http` (the bench is plain http
 - **Live stays after the moving map.** An A/B with live started at the still showed it slower on both milestones
   (/map 1440 still: median ~8.1 s early against ~5.8 s late; moving map 15–22 s against 12–14 s): its 256 KB and the
   first paint run compete with the still. It was reverted.
-- **The embed gives the first frame a head start** (after the real-GPU run): the pointer, the world and the still's
-  bakers with their stamp sheet need none of the scene's code, so `mountAtlas` asks for them before it asks for the
-  scene. The answers are handed over by URL, once, so the reader and its pinned-hash checks stay exactly as they were,
-  and nothing is stored past the first frame. A shared module cache was rejected: it would outlive a disposed map.
 - **Faces are preloaded and do not gate the world read.** All seven files are preloaded because the realms' own names
   are lettered in Cyrillic too; letting `unicode-range` decide would save ~100 KB but letter the first frame twice.
 
-### Real GPU (2 Nov, 18:47 and 19:05)
-
-Tobias's own Chrome (RTX 5080, Chrome 149) through `chatdom-pc-lease`, driven by `checks/cold-load.mjs` with
-`COLD_CDP=http://127.0.0.1:9333` (new: each run is a new browser context, so its cache is cold; his Chrome is never
-closed). The build is served from this host on `localhost:5192` through his SSH tunnel, with my own Atlas service
-(127.0.0.1:5198, a copy of the deployed data and live frames), so every byte also crosses a real long-distance link.
-The phone profile adds 9/3 Mbps, 170 ms and CPU ×4 on top. Raw runs: `am13-cold-load-gpu.json` (the AM13 build) and
-`am13-cold-load-gpu-after.json` (with the head start below); stills `am13-cold-load-gpu-after-{map,hero}-{1440,390}.png`.
-
-**The first frame, before → after the head start** (ms from navigation; unthrottled cells are run 1/run 2):
-
-| case | none | broadband | phone |
-|---|---|---|---|
-| /map 1440 | 1591/951 → **718/1186** | 1655 → **983** | 3871 → **2893** |
-| /map 390 | 837/830 → **809/693** | 934 → **792** | 3668 → **2876** |
-| hero 1440 | 804/791 → **672/683** | 1025 → **957** | 3541 → **2842** |
-| hero 390 | 887/1096 → **614/630** | 3694 → **828** | 3499 → **2863** |
-
-The bar (under 1.5 s on broadband, under 3 s on a phone) is met in every cell after. The moving map follows at
-1.0–1.7 s unthrottled, 1.4–2.0 s on broadband and 4.5–5.7 s on the phone profile.
-
-**What the real GPU showed.** Before the head start, the pointer was asked only once the scene chunk had arrived
-(366 ms on broadband, 1,848 ms on the phone profile, against the map mounting at 168 and 806 ms), the world after it,
-and the still's bakers were only made and fetched the 481 KB stamp sheet once the world was read; at 1440 the still
-bakes 48 tiles (12 on the hero), so `/map` 1440 spent ~950 ms between the world and its first frame.
-
-**The head start** (`head-start.ts`, called by `mountAtlas` before the scene chunk is even asked for): the pointer is
-read at once and the world it names right after, with the same request the reader makes (`credentials: 'omit'`); the
-scene's reader takes each answer once by URL (`PreviewSource.fetch`), bound to its own signal so its timeout and
-disposal still abort it, and a head start that failed is simply asked again the ordinary way. The still's bakers are
-made at mount and sent `sheet` first (`map/bake.worker.ts`), so the stamp sheet is read and decoded while the world is
-on its way; `StillBaker` takes them (`warmBakers`). A baker that fails to start is never handed over. What the scene
-does not take is dropped at the first frame or at disposal (reads aborted, bakers terminated). The embed's entry stays
-Pixi-free (the head start is a 1.5 KB chunk with two asset URLs). After: pointer asked at 223 ms (broadband) and
-804 ms (phone), world in at 434 and 1,661 ms.
-
-**Measured settled, real GPU** (`renderer` runs, 1440×900): `/map` 143 textures, 36.0 MB (stamp sheet with mips
-14.2 MB, wash picture 7.8 MB, tiles 256 KB each), 7.8 MB of buffers, drawing buffer 11.1 MB, **0 frames drawn in 5 s
-idle**; hero 153 textures, 37.6 MB, 9.1 MB of buffers, 7 frames drawn in 5 s (the drift's quarter-pixel steps) at 8
-draw calls each. JS heap used 143 MB (`/map`) and 141 MB (hero bench page). Transfer before the first frame (encoded,
-page target; the bakers' stamp sheet is read by workers and not counted here): `/map` 1440 1,404 KB (JS 177, CSS 18,
-fonts 443, stamps for the marks 470, world 237, names head 41, roads 15, pointer 1); hero 935 KB.
-
-**Why `/map` 390 looked slower on SwiftShader.** A traced SwiftShader run (`am13-cold-load-swift390.json`) spent ~1 s on
-the main thread before the first frame and 15.2 s in the bake workers (DPR 2 tiles drawn in software on a loaded
-host); the same run reached its still in 5.0 s, so the 8.2 s was host load and software baking. On the real GPU `/map`
-390 is the fastest `/map` case (693–809 ms).
-
 ### Still owed
 
-- Stills of the hide flow through the real Twitch sign-in as tobi4s_ on chatdom.io: needs the session authority
-  (`atlas-owner-api.integrator.patch`) applied and configured; the steps are in `SEAMS.md` "On the integrator".
-- A world-view-only stamp sheet (the 481 KB sheet is the largest still asset on `/map`); not needed for the bar.
+- Real-GPU cold-load timings for `/map` and the hero bench at 1440×900 and 390×844 through pc-lease: `chatdom-pc vis`
+  shows the remote Chrome drawing 0 frames in 1 s, so no lease was taken and no GPU number is claimed.
+- A world-view-only stamp sheet (the 481 KB sheet is the largest still asset on `/map`).
 - Outside this lane: `main.tsx` preloads `identity` and `realm` (61 KB gz) on every route; lazy-importing them in the
   `walk=1` branch and brotli for static JS/CSS would take ~70 KB more off the front page (written to front-door's
   `SEAMS.md`).

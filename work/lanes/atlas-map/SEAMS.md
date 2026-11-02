@@ -328,37 +328,6 @@ branch's base; `git apply` it as its own commit, `feat(api): the Atlas owner's h
 `apps/api/src/atlas-owner/index.test.ts` and `public/routes.test.ts`). Until it lands, `/api/atlas/me` is a gateway
 404, the map reads that as anonymous and no card offers hiding; everything on the Atlas side is in this branch.
 
-**On the integrator (2 Nov, 18:45):** the integrator's gateway moved (raid-gate handlers after the dock, more routes),
-so `atlas-owner-api.patch` no longer applies there. `work/lanes/atlas-map/atlas-owner-api.integrator.patch` is the same
-change rebased on `lane/integrator` `ce219fd5` (`git apply --check` passes there and on `worktrees/public-next`; the
-patched `public/routes.test.ts` passes 23/23 on the integrator's route table; `dock/auth.ts`, `realm-auth/secrets.ts`
-and `realm-auth/config.ts`, which the new handler imports, are byte-identical on both branches).
-
-*Rebased again (2 Nov, 19:20 local):* the integrator's pending launch merge passes `config.trustedProxies` to every
-`proxyHttp` call in `public/main.ts`, which moved the patch's one context line there. The patch file now applies on
-top of that merge (`git apply --check --cached` passes on the integrator's staged index); the only change is that
-context line, the `atlas-owner` case is unchanged and still sits between `dock` and `realm`. For `lane/integrator`
-`2949613a` without the launch merge, the previous version is `git show
-f803a214:work/lanes/atlas-map/atlas-owner-api.integrator.patch`.
-
-*Checked (2 Nov, 19:17 local):* the launch merge is committed (`0f3173f8`) and `lane/integrator` `da04caad` has
-merged this lane; the current patch file applies there as it is (`git apply --check` on the clean integrator
-worktree). The deployed Atlas service (`worktrees/atlas-live`, `fcfe6d47`) already carries the owner log and the
-private hide endpoints, so steps 2 and 3 below are env lines only, with no rebuild of the Atlas service.
-
-To make the hide flow real on chatdom.io, in this order:
-
-1. Integrator: `git apply work/lanes/atlas-map/atlas-owner-api.integrator.patch`, its own commit
-   (`feat(api): the Atlas owner's hide and show`); run `apps/api/src/atlas-owner/index.test.ts` and
-   `public/routes.test.ts`; rebuild the public gateway (`node scripts/public/build.mjs`).
-2. Atlas service (`atlas-live.sh serve`): `ATLAS_INGEST_PORT=5201` and `ATLAS_INGEST_TOKEN=<openssl rand -hex 32>`
-   in its env file (the deploy table's optional row).
-3. Public gateway (`ops/bin/public`): `ATLAS_PRIVATE_URL=http://127.0.0.1:5201` and the same
-   `ATLAS_INGEST_TOKEN`.
-4. Check: signed out, `curl https://chatdom.io/api/atlas/me` answers `{"version":1,"status":"anonymous"}` (not 404).
-   Then Tobias signs in with Twitch as tobi4s_ on chatdom.io/map, opens his card (search `tobi4s_`) and the line
-   "Your channel · Hide my channel" is under its actions; atlas-map takes the hide-flow stills from there.
-
 - **`apps/api/src/atlas-owner/index.ts`** (new): `GET /api/atlas/me[?preview=<map id>]`, `POST /api/atlas/me/hide`,
   `POST /api/atlas/me/show`. The channel is always the session's own person (`dockPrincipal`: a signed-in Twitch user
   is the broadcaster of exactly one channel), never anything the browser sends. Mutations need the page's exact
@@ -530,39 +499,3 @@ git apply work/lanes/atlas-map/gateway-visitor-address.integrator.patch   # own 
 # ops/bin/public: export PUBLIC_TRUSTED_PROXIES=172.17.0.0/16   (Traefik's docker bridge; the gateway listens on 172.17.0.1)
 # restart the public window, then the serve loop as ATLAS_LOOKUPS_PER_CLIENT_MINUTE=6 atlas-live.sh serve (6 per visitor)
 ```
-
-## from launch
-
-- 2 Nov (LA10): `needs: integrator/atlas-map: land the Atlas owner API.` On chatdom.io every Atlas load in explore mode
-  logs a console error (`404 /api/atlas/me?preview=…`): nothing serves the route, because
-  `work/lanes/atlas-map/atlas-owner-api.patch` was never applied, and it no longer applies to `lane/integrator`
-  (`git apply --check`: `apps/api/src/main.ts:44` and `apps/api/src/public/routes.ts:8` drifted). Rebase the patch
-  and land it, with its operator settings (`ATLAS_PRIVATE_URL`, `ATLAS_INGEST_TOKEN`), so a signed-out visitor
-  gets `{version:1,status:'anonymous'}` instead of a 404.
-- 2 Nov (LA10): a waiting card whose login is one of the kingdoms the front door opens (`/api/public/door`) now says
-  "Founded · <name>", offers **Enter <name>** (`/kingdom/<id>`) and replaces the pencil note with "<name> is founded
-  and open to visit. The map draws its land with the Atlas's next edition." Before, tobi4s_'s card (found by the
-  public lookup since the Atlas service was rebuilt) said "Waiting · no land of its own" with no way in.
-  (`apps/web/src/atlas/ui/Register.tsx`, `WaitingCard`.)
-  Review follow-up: the words live in `apps/web/src/atlas/ui/waiting.ts` (tested), and the card matches by the
-  channel's login only (`matchFoundedChannel` in `data/open-kingdoms.ts`), so a channel that merely shares a
-  kingdom's name is never offered its door.
-- 2 Nov (LA10): `gateway-visitor-address.integrator.patch` is applied on `lane/launch` (tests pass) and goes to
-  `lane/integrator` with the launch merge. On this host Traefik reaches the gateway from `172.18.0.4` (bridge
-  `172.18.0.0/16`), not from docker0, so the setting is `PUBLIC_TRUSTED_PROXIES=172.18.0.0/16` (launch `SEAMS.md`,
-  `deploy: 3`).
-- 2 Nov (LA10, session 4): one stale link stopped channel search for everyone. Twitch answers `GET /helix/users?id=`
-  for an ID that cannot exist (e.g. `999999999999`) with **400 Bad Identifiers**; the lookup's `call()` took every
-  throw as an outage, backed off and refused every visitor's lookup for 1–64 s (`2147483647`, which Twitch answers
-  200 with no data, then got `503 lookup-upstream` too). Now a single-identity `users` read refused with 400 is an
-  absent channel (cached for an hour like any miss, no backoff); a batch's 400 still counts as a failure, since it does
-  not say which ID was bad (`apps/surveyor/src/directory/twitch-lookup.ts`, test added). Live after the Atlas
-  service is rebuilt from the merge.
-- 2 Nov (LA10, session 4): `/kingdom/<id>` for a channel the register does not know (its card answers 404) said "The
-  Atlas could not be read just now, so the road into this land is closed"; a card `not-found` is now the calm
-  `missing` holding ("This channel has no holding on the current survey of the Atlas."). Other card failures still
-  read as unavailable (`apps/web/src/atlas/data/holding.ts`, new `holding-read.test.ts`).
-- 2 Nov (LA10, session 4, operator note 19:45): `atlas-owner-api.integrator.patch` is applied on `lane/launch` as it is
-  (`git apply --check` clean; `atlas-owner/index.test.ts` and `public/` 138 tests pass, typecheck and lint clean), so
-  it reaches `lane/integrator` with the launch merge; the `needs:` above is closed by that merge. The env lines for the
-  hide flow are launch `SEAMS.md` `deploy: 6` (pointing at your steps 2–3).

@@ -32,7 +32,8 @@ export function mountLandRoutes(app: uWebSocketsTransport['app'], source: string
         res.writeStatus(STATUSES[answer.status] ?? '503 Service Unavailable');
         for (const [key, value] of Object.entries(answer.headers)) if (key.toLowerCase() !== 'content-length') res.writeHeader(key, value);
         const length = answer.headers['content-length'];
-        if (method === 'HEAD' && length !== undefined) res.endWithoutBody(Number(length));
+        if (answer.status === 304) res.endWithoutBody();
+        else if (method === 'HEAD') res.endWithoutBody(Number(length ?? answer.body.byteLength));
         else res.end(answer.body);
       });
     };
