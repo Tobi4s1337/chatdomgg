@@ -79,6 +79,16 @@ export interface FishSpecies {
   readonly hours: readonly FishingHour[]; readonly moods: readonly FishingMood[]; readonly minDepthM: number;
   readonly lengthMm: readonly [number, number]; readonly weightG: readonly [number, number];
   readonly fight: FishingProfile;
+  /** One of the four legends: rare, never stacked, and too strong for a chat line. Same odds for everyone. */
+  readonly legend?: true;
+  /** Share of kingdoms whose water holds this fish (0 < share < 1), fixed per kingdom by `kingdomHoldsFish`.
+   * Absent: every water of its kind holds it. */
+  readonly share?: number;
+}
+/** Whether this kingdom's water holds the fish at all. A pure function of the kingdom and the species, so it never moves. */
+export function kingdomHoldsFish(kingdomId: KingdomId, species: Pick<FishSpecies, 'id' | 'share'>): boolean {
+  if (species.share === undefined) return true;
+  return fishingHash(`share:1:${kingdomId}:${species.id}`) % 10_000 < Math.round(species.share * 10_000);
 }
 export interface FishingRoll {
   readonly speciesId: string; readonly lengthMm: number; readonly weightG: number;
@@ -92,6 +102,7 @@ export const FishingChannelRequestSchema = z.union([
   z.strictObject({ type: z.literal('pier.take'), id: requestId }),
   z.strictObject({ type: z.literal('pier.equip'), id: requestId, itemId: z.string().uuid().nullable() }),
   z.strictObject({ type: z.literal('pier.keep'), id: requestId, castId }),
+  z.strictObject({ type: z.literal('pier.marks'), id: requestId }),
 ]);
 export type FishingChannelRequest = z.infer<typeof FishingChannelRequestSchema>;
 export const FISHING_CHANNEL = 'fishing';
@@ -126,6 +137,8 @@ export type FishingPrivateReply =
       readonly site: FishingPierSite | null; readonly rack: Vec3 | null;
       /** The pier's lantern glass, in world metres, so a walker's view lights them without reading the founded plan. */
       readonly lights?: readonly Vec3[];
+      /** The Almanac lectern on the head, in world metres. */
+      readonly almanac?: Vec3;
       readonly water: { readonly hour: number; readonly mood: FishingMood } | null;
       readonly casts: readonly FishingPublicCast[]; readonly rods: readonly FishingPublicRod[];
       readonly self: { readonly rod: ItemRecord | null; readonly cast: FishingOwnerCast | null; readonly pendingCastId: string | null } }
@@ -133,7 +146,10 @@ export type FishingPrivateReply =
   | { readonly type: 'pier.refused'; readonly id?: string; readonly castId?: string; readonly message: string }
   | { readonly type: 'pier.pending'; readonly id?: string; readonly castId: string; readonly message: string }
   | { readonly type: 'pier.kept'; readonly id?: string; readonly castId: string; readonly item: ItemRecord;
-      readonly fish: FishingCaughtFish; readonly personalFirst: boolean; readonly kingdomFirst: boolean; readonly replayed: boolean };
+      readonly fish: FishingCaughtFish; readonly personalFirst: boolean; readonly kingdomFirst: boolean; readonly replayed: boolean;
+      /** The numbered mount a rare catch or a kingdom first leaves on your shelf. */
+      readonly keepsake?: ItemRecord | null }
+  | { readonly type: 'pier.marks'; readonly id: string; readonly marks: readonly PierAlmanacMark[] };
 export type FishingPublicReply =
   | { readonly type: 'pier.casts'; readonly at: number; readonly revision: number; readonly casts: readonly FishingPublicCast[] }
   | { readonly type: 'pier.rod'; readonly at: number; readonly walkerId: string; readonly equipped: boolean }
@@ -141,3 +157,63 @@ export type FishingPublicReply =
   | { readonly type: 'pier.caught'; readonly at: number; readonly castId: string; readonly walkerId: string;
       readonly fish: FishingCaughtFish; readonly kingdomFirst: boolean };
 export type FishingChannelReply = FishingPrivateReply | FishingPublicReply;
+
+/** Public reads. Approved names only, never a person id; a hidden name reads as null ("a fisher"). */
+export const PIER_ALMANAC_ROUTE = '/api/realm/pier/almanac/:kingdomId';
+export const PIER_WATCH_ROUTE = '/api/realm/pier/watch/:kingdomId';
+export const PIER_CHAT_COMMAND = '!fish';
+/** 'caught': caught in this kingdom. 'waiting': lives in these waters, not caught yet. 'elsewhere': not in these waters. */
+export type PierAlmanacStatus = 'caught' | 'waiting' | 'elsewhere';
+export interface PierAlmanacFact { readonly name: string | null; readonly at: number; readonly via: 'pier' | 'chat' }
+export interface PierAlmanacEntry {
+  readonly speciesId: string;
+  readonly status: PierAlmanacStatus;
+  readonly count: number;
+  /** The kingdom's first catch of this species. */
+  readonly first: PierAlmanacFact | null;
+  readonly biggest: (PierAlmanacFact & { readonly weightG: number; readonly lengthMm: number }) | null;
+  /** How many numbered mounts of it the kingdom has given. */
+  readonly mounts: number;
+}
+export interface PierAlmanac {
+  readonly version: 1;
+  readonly kingdomId: KingdomId;
+  /** The kingdom's approved name; empty when it has none. */
+  readonly kingdom: string;
+  readonly asOf: number;
+  /** The water at this kingdom's pier, or null where no pier stands. */
+  readonly water: FishingPierSite['water'] | null;
+  readonly entries: readonly PierAlmanacEntry[];
+  readonly caught: number;
+  readonly catches: number;
+}
+/** Your own marks, private over the fishing channel. */
+export interface PierAlmanacMark {
+  readonly speciesId: string; readonly count: number; readonly firstAt: number;
+  readonly bestWeightG: number; readonly bestLengthMm: number; readonly kingdomFirst: boolean;
+}
+
+/** A chat fisher is a light, never a body: their float is their window light's colour. */
+export const PIER_LIGHT_COLOURS = ['#ffb347', '#ff8a5c', '#ffd36e', '#f5a3c7', '#9fd8ff', '#b9f18c', '#d7b4ff', '#ffe7a8'] as const;
+/** A home's light colour on the water. Neighbouring homes always differ: the stride 5 is coprime with the eight colours. */
+export function pierLightColour(slot: number): string {
+  const n = PIER_LIGHT_COLOURS.length, index = ((Math.trunc(slot) * 5) % n + n) % n;
+  return PIER_LIGHT_COLOURS[index]!;
+}
+
+/** Who a public pier beat is about: an approved name and, for a chat light, its window slot. Never a person id. */
+/** `name` is null when it is hidden from public pages (moderation or a forgotten name): show "a fisher". */
+export interface PierFeedWho { readonly name: string | null; readonly slot: number | null; readonly colour: string | null }
+export interface PierFeedLine {
+  readonly id: string; readonly who: PierFeedWho; readonly via: 'chat' | 'pier';
+  readonly phase: 'float' | 'bite' | 'fight'; readonly float: Vec3; readonly at: number;
+}
+export type PierFeedEvent =
+  | { readonly kind: 'lines'; readonly at: number; readonly lines: readonly PierFeedLine[]; readonly cap: number }
+  | { readonly kind: 'line'; readonly at: number; readonly line: PierFeedLine }
+  | { readonly kind: 'caught'; readonly at: number; readonly id: string; readonly who: PierFeedWho; readonly via: 'chat' | 'pier';
+      readonly fish: FishingCaughtFish; readonly kingdomFirst: boolean; readonly keepsake: number | null; readonly float: Vec3 | null }
+  /** A legend took a chat line: only a walker could have held it. */
+  | { readonly kind: 'broken'; readonly at: number; readonly id: string; readonly who: PierFeedWho; readonly speciesId: string; readonly float: Vec3 }
+  | { readonly kind: 'gone'; readonly at: number; readonly id: string; readonly reason: 'escaped' | 'snapped' | 'missed' | 'pulled' | 'cleared' | 'unkept' }
+  | { readonly kind: 'full'; readonly at: number; readonly who: PierFeedWho; readonly cap: number };

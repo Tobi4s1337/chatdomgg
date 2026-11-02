@@ -4,5 +4,7 @@
  * and nothing else. The HUD imports this file, so every provider has registered before the ledger first opens.
  */
 import '../tavern/register';
+import '../fishing/play-slot';
+import '../fishing/kingdom-slot';
 
 export {};

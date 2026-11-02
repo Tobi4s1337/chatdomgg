@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { FISHING_HOURS, FISHING_MOODS, type FishingEnvironment } from '@chatdom/shared';
+import { FISHING_HOURS, FISHING_MOODS, KingdomIdSchema, type FishingEnvironment } from '@chatdom/shared';
 import { FISH_ITEM_DEFINITIONS, FISH_SPECIES } from '../../../../packages/content/src/fish';
 import { WILLOW_ROD_DEFINITION } from '../../../../packages/content/src/pier/rod';
 import { createItemCatalogue } from '../items';
@@ -7,13 +7,27 @@ import { createFishingSpecies } from './species';
 
 it('validates the complete content and provides common catches for every environment on an unknown biome', () => {
   const catalogue = createFishingSpecies(FISH_SPECIES);
-  expect(FISH_SPECIES).toHaveLength(12);
+  expect(FISH_SPECIES).toHaveLength(28);
   for (const water of ['lake', 'river', 'sea'] as const) for (const hour of FISHING_HOURS) for (const mood of FISHING_MOODS) {
     const environment: FishingEnvironment = { water, hour, mood, biome: 'unknown', depthM: 1 };
     const eligible = catalogue.eligible(environment);
     for (const id of ['fish:bell-minnow', 'fish:silver-dace']) expect(eligible.some(fish => fish.id === id && fish.rarity === 'common'), `${water}/${hour}/${mood}/${id}`).toBe(true);
     expect(catalogue.roll(environment, 42)).not.toBeNull();
   }
+});
+
+it('keeps every kingdom’s own water fishable while some fish live only in some kingdoms', () => {
+  const catalogue = createFishingSpecies(FISH_SPECIES);
+  const environment: FishingEnvironment = { water: 'lake', hour: 'day', mood: 'clear', biome: 'unknown', depthM: 3 };
+  const counts = new Set<number>();
+  for (let n = 0; n < 60; n++) {
+    const kingdom = catalogue.forKingdom(KingdomIdSchema.parse(String(5000 + n * 104_729)));
+    const eligible = kingdom.eligible(environment).map(fish => fish.id);
+    for (const id of ['fish:bell-minnow', 'fish:silver-dace']) expect(eligible).toContain(id);
+    counts.add(eligible.length);
+    expect(kingdom.all().length).toBeLessThanOrEqual(FISH_SPECIES.length);
+  }
+  expect(counts.size).toBeGreaterThan(1);
 });
 
 it('restricts eel to night and trout to dawn mist and makes every authored species selectable', () => {

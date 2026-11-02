@@ -2,6 +2,10 @@ import type { ItemDefinition } from '@chatdom/shared';
 import { createBellMinnow, createCopperPerch, createReedRoach, createSilverDace } from './shoal';
 import { createLanternEel, createMoonlitPike, createMossbackCarp, createWhiskerCatfish } from './deep';
 import { createMistfinTrout, createPebbleFlounder, createRedfinChar, createSunBream } from './shore';
+import { createGlimmerRudd, createStarlitBleak, createThimbleGudgeon, createWillowTench } from './still';
+import { createEmberSunfish, createHollowBurbot, createPearlGrayling, createSaltmarshMullet } from './sunlit';
+import { createDriftglassHerring, createHarbourMackerel, createInkfinWrasse, createTidepoolSculpin } from './sea';
+import { createFrostkingChar, createGoldscaleEmperor, createMoonwakeRay, createStormcrownSturgeon } from './legends';
 import { FISH_SPECIES } from './species';
 import type { FishModel } from './model';
 
@@ -15,6 +19,14 @@ const models: ReadonlyMap<string, () => FishModel> = new Map([
   ['fish:mossback-carp', createMossbackCarp], ['fish:whisker-catfish', createWhiskerCatfish],
   ['fish:mistfin-trout', createMistfinTrout], ['fish:sun-bream', createSunBream],
   ['fish:pebble-flounder', createPebbleFlounder], ['fish:redfin-char', createRedfinChar],
+  ['fish:glimmer-rudd', createGlimmerRudd], ['fish:thimble-gudgeon', createThimbleGudgeon],
+  ['fish:willow-tench', createWillowTench], ['fish:starlit-bleak', createStarlitBleak],
+  ['fish:ember-sunfish', createEmberSunfish], ['fish:pearl-grayling', createPearlGrayling],
+  ['fish:hollow-burbot', createHollowBurbot], ['fish:saltmarsh-mullet', createSaltmarshMullet],
+  ['fish:harbour-mackerel', createHarbourMackerel], ['fish:driftglass-herring', createDriftglassHerring],
+  ['fish:inkfin-wrasse', createInkfinWrasse], ['fish:tidepool-sculpin', createTidepoolSculpin],
+  ['fish:stormcrown-sturgeon', createStormcrownSturgeon], ['fish:goldscale-emperor', createGoldscaleEmperor],
+  ['fish:moonwake-ray', createMoonwakeRay], ['fish:frostking-char', createFrostkingChar],
 ]);
 
 export function createFishModel(id: string): FishModel {

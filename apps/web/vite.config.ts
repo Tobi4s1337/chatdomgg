@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
   const realmLive = { target: realmTarget, ws: true, rewrite: (path: string) => path.replace(/^\/live-realm-data/, '') };
   const proxies = { '/live-realm-data': realmLive, '/realm-data': realmPreview,
     '/api/realm/founded': realmTarget, '/api/realm/entry': realmTarget, '/api/realm/watch': realmTarget,
-    '/api/realm/chronicle': realmTarget, '/api/realm/clock': realmTarget,
+    '/api/realm/chronicle': realmTarget, '/api/realm/clock': realmTarget, '/api/realm/pier': realmTarget,
     '/api/realm/forge/chat': realmTarget,
     '/api/realm/land': setting('CHATDOM_LAND_TARGET', realmTarget),
     '/api/realm/forge/queue': realmTarget,

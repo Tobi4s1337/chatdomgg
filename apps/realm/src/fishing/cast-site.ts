@@ -6,7 +6,8 @@ export type FishingWaterSampler = (x: number, z: number) => FishingWaterSample;
 export type FishingCastAim = { readonly ok: true; readonly anchor: Vec3; readonly float: Vec3; readonly depthM: number }
   | { readonly ok: false; readonly message: string };
 
-function frame(site: FishingPierSite) {
+/** The pier's own metre frame: `right` across the deck, `out` from the bank over the water. */
+export function pierFrame(site: FishingPierSite) {
   const right: Vec3 = site.turn === 0 ? [1, 0, 0] : site.turn === 1 ? [0, 0, -1] : site.turn === 2 ? [-1, 0, 0] : [0, 0, 1];
   const out: Vec3 = site.turn === 0 ? [0, 0, 1] : site.turn === 1 ? [1, 0, 0] : site.turn === 2 ? [0, 0, -1] : [-1, 0, 0];
   return { right, out };
@@ -20,7 +21,7 @@ export function onFishingLip(site: FishingPierSite, pose: RealmChannelPose, revi
     || pose.position.length !== 3 || !pose.position.every(Number.isFinite)
     || !Array.isArray(site.root) || site.root.length !== 3 || !site.root.every(Number.isFinite) || !Number.isFinite(site.deckY) || !Number.isFinite(site.waterY)
     || !Number.isFinite(site.walk) || site.walk <= 0 || ![0, 1, 2, 3].includes(site.turn)) return false;
-  const { right, out } = frame(site), dx = pose.position[0] - site.root[0], dz = pose.position[2] - site.root[2];
+  const { right, out } = pierFrame(site), dx = pose.position[0] - site.root[0], dz = pose.position[2] - site.root[2];
   const x = dx * right[0] + dz * right[2], z = dx * out[0] + dz * out[2];
   return Math.abs(pose.position[1] - site.deckY) <= .3 && Math.abs(x) <= 3.55
     && z >= site.walk + 2.9 && z <= site.walk + 3.85;
@@ -32,7 +33,7 @@ export function aimFishingCast(site: FishingPierSite, pose: RealmChannelPose, re
   const refuse = (message: string): FishingCastAim => ({ ok: false, message });
   if (!onFishingLip(site, pose, revision)) return refuse('Stand at the end of the pier to cast.');
   if (!Number.isFinite(chargeMs) || chargeMs < 200 || chargeMs > 5000) return refuse('Draw the rod back a little before casting.');
-  const { out } = frame(site), yaw = pose.yaw * Math.PI * 2 / 256, dx = Math.sin(yaw), dz = Math.cos(yaw);
+  const { out } = pierFrame(site), yaw = pose.yaw * Math.PI * 2 / 256, dx = Math.sin(yaw), dz = Math.cos(yaw);
   const forward = dx * out[0] + dz * out[2];
   if (forward < Math.cos(35 * Math.PI / 180)) return refuse('Face the open water to cast.');
   const fromRootX = pose.position[0] - site.root[0], fromRootZ = pose.position[2] - site.root[2];

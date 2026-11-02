@@ -1,5 +1,5 @@
 import type { FishingCaughtFish, FishingChannelReply, FishingMood, FishingOwnerCast, FishingPierSite, FishingPublicBeat,
-  FishingPublicCast, ItemRecord, Vec3 } from '@chatdom/shared';
+  FishingPublicCast, ItemRecord, PierAlmanacMark, Vec3 } from '@chatdom/shared';
 import { requestId, type FishingLink } from './link';
 
 /** What the presentation hears. The server decides every one of these; the browser only draws them. */
@@ -9,7 +9,9 @@ export type FishingEvent =
   | { readonly kind: 'caught'; readonly castId: string; readonly walkerId: string; readonly fish: FishingCaughtFish;
       readonly kingdomFirst: boolean; readonly self: boolean }
   | { readonly kind: 'kept'; readonly castId: string; readonly item: ItemRecord; readonly fish: FishingCaughtFish;
-      readonly personalFirst: boolean; readonly kingdomFirst: boolean; readonly replayed: boolean }
+      readonly personalFirst: boolean; readonly kingdomFirst: boolean; readonly replayed: boolean;
+      /** The numbered mount a rare catch or a kingdom's first brings, on your shelf. */
+      readonly keepsake: ItemRecord | null }
   | { readonly kind: 'rod'; readonly walkerId: string; readonly equipped: boolean; readonly self: boolean }
   | { readonly kind: 'taken'; readonly item: ItemRecord }
   | { readonly kind: 'note'; readonly message: string; readonly tone: 'plain' | 'warn' }
@@ -22,6 +24,8 @@ export interface FishingControllerState {
   readonly ready: boolean;
   readonly site: FishingPierSite | null;
   readonly rack: Vec3 | null;
+  /** The Almanac lectern, once the realm names the pier. */
+  readonly almanac: Vec3 | null;
   /** The pier's lantern glass, as the realm placed it. */
   readonly lights: readonly Vec3[];
   readonly water: { readonly hour: number; readonly mood: FishingMood } | null;
@@ -65,12 +69,13 @@ export function createFishingController(options: FishingControllerOptions) {
   const now = options.now ?? (() => performance.now()), schedule = options.schedule ?? defaultSchedule;
   const listeners = new Set<(event: FishingEvent) => void>();
   let state: FishingControllerState = {
-    ready: false, site: null, rack: null, lights: [], water: null, revision: 0, offset: 0, casts: new Map(), rods: new Set(),
+    ready: false, site: null, rack: null, almanac: null, lights: [], water: null, revision: 0, offset: 0, casts: new Map(), rods: new Set(),
     rod: null, cast: null, pendingCastId: null, input: 'idle', drawStartedAt: null, reelChangedAt: 0, busy: false,
   };
   let closed = false, takeWaiting = false, seq = 0, drawId: string | null = null, earlyStrike: string | null = null, struck: string | null = null, takeId: string | null = null, releaseQueued = false, drawSentAt = 0;
   let reelWanted = false, reelSent = false, reelSentAt = -Infinity, cancelReel: (() => void) | null = null, cancelRelease: (() => void) | null = null;
   const requests = new Set<string>();
+  const marking = new Map<string, { resolve(marks: readonly PierAlmanacMark[]): void; reject(error: Error): void; cancel(): void }>();
   const set = (patch: Partial<FishingControllerState>) => { state = { ...state, ...patch }; };
   const emit = (event: FishingEvent) => {
     for (const listener of [...listeners]) { try { listener(event); } catch (error) { console.error('A fishing listener failed.', error); } }
@@ -131,7 +136,7 @@ export function createFishingController(options: FishingControllerOptions) {
     switch (reply.type) {
       case 'pier.state': {
         const casts = new Map(reply.casts.map(cast => [cast.walkerId, cast]));
-        set({ ready: true, site: reply.site, rack: reply.rack, lights: reply.lights ?? [], water: reply.water, revision: reply.revision, offset: reply.at - now(),
+        set({ ready: true, site: reply.site, rack: reply.rack, almanac: reply.almanac ?? null, lights: reply.lights ?? [], water: reply.water, revision: reply.revision, offset: reply.at - now(),
           casts, rods: new Set(reply.rods.map(rod => rod.walkerId)), rod: reply.self.rod, pendingCastId: reply.self.pendingCastId, busy: false });
         adoptCast(reply.self.cast);
         if (reply.self.pendingCastId && !reply.self.cast) note('A catch is still waiting to be kept.');
@@ -146,7 +151,16 @@ export function createFishingController(options: FishingControllerOptions) {
         if (reply.cast?.phase === 'fighting' && reelWanted !== reelSent && !cancelReel) flushReel();
         emit({ kind: 'state' });
         return;
+      case 'pier.marks': {
+        const waiting = marking.get(reply.id);
+        if (waiting) { marking.delete(reply.id); waiting.cancel(); waiting.resolve(reply.marks); }
+        return;
+      }
       case 'pier.refused': {
+        if (reply.id && marking.has(reply.id)) {
+          const waiting = marking.get(reply.id)!; marking.delete(reply.id); waiting.cancel(); waiting.reject(new Error(reply.message));
+          return;
+        }
         const mine = reply.id === undefined || requests.has(reply.id) || reply.id === 'fishing';
         if (!mine) return;
         if (reply.id && reply.id === drawId) resetInput();
@@ -167,7 +181,7 @@ export function createFishingController(options: FishingControllerOptions) {
         set({ pendingCastId: state.pendingCastId === reply.castId ? null : state.pendingCastId, ...(wasMine ? { cast: null } : {}) });
         if (wasMine) resetInput();
         emit({ kind: 'kept', castId: reply.castId, item: reply.item, fish: reply.fish, personalFirst: reply.personalFirst,
-          kingdomFirst: reply.kingdomFirst, replayed: reply.replayed });
+          kingdomFirst: reply.kingdomFirst, replayed: reply.replayed, keepsake: reply.keepsake ?? null });
         emit({ kind: 'state' });
         return;
       }
@@ -291,8 +305,19 @@ export function createFishingController(options: FishingControllerOptions) {
         case 'landing': return null;
       }
     },
+    /** Your own Almanac marks in this kingdom: every species you have caught here, your best and your firsts. */
+    marks(): Promise<readonly PierAlmanacMark[]> {
+      return new Promise((resolve, reject) => {
+        const id = send('marks', id => ({ type: 'pier.marks', id }));
+        if (!id) { reject(new Error('The pier is closed.')); return; }
+        const cancel = schedule(() => { if (marking.delete(id)) reject(new Error('The Almanac did not answer in time.')); }, 8000);
+        marking.set(id, { resolve, reject, cancel });
+      });
+    },
     dispose() {
       if (closed) return;
+      for (const waiting of marking.values()) { waiting.cancel(); waiting.reject(new Error('The pier is closed.')); }
+      marking.clear();
       closed = true; unsubscribe(); listeners.clear(); cancelReel?.(); cancelRelease?.();
     },
   };
