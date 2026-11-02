@@ -8,7 +8,7 @@
 // in /srv/chatdom-stills/site/img/ and other lanes' evidence. Crops cut away the old stream-view chrome (corner
 // marks, the kingdom plaque, the frame) so a picture shows only the kingdom itself.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -18,14 +18,18 @@ const kitOut = join(root, 'packages/ui/src/site/img');
 const gpu = join(root, 'work/evidence/front-door/fd10/gpu');
 const stills = '/srv/chatdom-stills/site/img';
 const evidence = join(root, 'work/evidence');
+/** The hero's pictures, re-shot on a real GPU from the live land's own camera and hour (scripts/public/hero-gpu.mjs);
+ * until they exist, the first captures from fd10. */
+const heroShots = join(root, 'work/evidence/front-door/fd13/gpu');
+const hero = (name, fallback) => (existsSync(join(heroShots, name)) ? join(heroShots, name) : fallback);
 
 const FULL = [1920, 1440, 960], FRAMED = [1280, 800], PANEL = [640, 400];
 /** id: source, crop [x, y, w, h] in source pixels, output widths, WebP quality. */
 const PICTURES = [
-  { id: 'hero-a', src: `${gpu}/y120.webp`, crop: [0, 72, 1920, 1008], widths: FULL, quality: 72 },
-  { id: 'hero-b', src: `${gpu}/y90.webp`, crop: [0, 72, 1920, 1008], widths: FULL, quality: 72 },
-  { id: 'hero-c', src: `${gpu}/y150.webp`, crop: [0, 72, 1920, 1008], widths: FULL, quality: 72 },
-  { id: 'hero-phone', src: `${gpu}/portrait-a.webp`, crop: [0, 140, 780, 1548], widths: [780, 520], quality: 74 },
+  { id: 'hero-a', src: hero('hero-a.webp', `${gpu}/y120.webp`), crop: [0, 72, 1920, 1008], widths: FULL, quality: 72 },
+  { id: 'hero-b', src: hero('hero-b.webp', `${gpu}/y90.webp`), crop: [0, 72, 1920, 1008], widths: FULL, quality: 72 },
+  { id: 'hero-c', src: hero('hero-c.webp', `${gpu}/y150.webp`), crop: [0, 72, 1920, 1008], widths: FULL, quality: 72 },
+  { id: 'hero-phone', src: hero('portrait.webp', `${gpu}/portrait-a.webp`), crop: [0, 140, 780, 1548], widths: [780, 520], quality: 74 },
   { id: 'streets', src: `${stills}/1935-windows-haze.png`, crop: [12, 60, 1896, 940], widths: FULL, quality: 74 },
   { id: 'forge-a', src: `${stills}/0845-forge-crucible-pair.png`, crop: [8, 24, 944, 456], widths: [944, 640], quality: 80 },
   { id: 'forge-b', src: `${stills}/0845-forge-crucible-pair.png`, crop: [968, 24, 944, 456], widths: [944, 640], quality: 80 },

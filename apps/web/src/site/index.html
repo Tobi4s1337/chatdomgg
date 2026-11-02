@@ -111,8 +111,15 @@
         </div>
         <div class="story-atlas-plate cd-plate cd-kit">
           <h2 id="atlas-title">Every Twitch channel is on the map.</h2>
-          <a class="story-explore" href="/map">Explore the map<!--@icon-arrow-right--></a>
-          <p class="story-atlas-line">Search for any channel by its name.</p>
+          <form class="story-find cd-field" action="/map" method="get" role="search" data-atlas-find>
+            <label class="cd-field-label" for="atlas-find">Find any channel</label>
+            <div class="story-find-row">
+              <input class="cd-field-input" id="atlas-find" name="channel" type="text" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="60" placeholder="its Twitch name" />
+              <button class="story-find-go" type="submit" aria-label="Find it on the map"><!--@icon-search--></button>
+            </div>
+          </form>
+          <p class="story-find-said" data-atlas-said role="status" aria-live="polite"></p>
+          <a class="story-explore" href="/map" data-atlas-explore>Explore the map<!--@icon-arrow-right--></a>
         </div>
         <p class="story-caption" data-atlas-caption>The Atlas · drawn 1 Nov 2026</p>
       </section>

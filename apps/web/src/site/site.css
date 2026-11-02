@@ -20,7 +20,7 @@ body.site { margin: 0; min-height: 100svh; color: var(--cd-cream); font: var(--s
 .site img { display: block; max-width: 100%; height: auto; }
 .site h1, .site h2, .site h3 { margin: 0; font-family: var(--cd-face-story); font-weight: 400; letter-spacing: 0; text-wrap: balance; }
 .site p { margin: 0; text-wrap: pretty; }
-.site a { color: inherit; }
+:where(.site a) { color: inherit; }
 .site a, .site button { -webkit-tap-highlight-color: transparent; }
 .site :focus { outline: none; }
 .site :focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); border-radius: 4px; }
@@ -60,6 +60,13 @@ body.site { margin: 0; min-height: 100svh; color: var(--cd-cream); font: var(--s
 .story-hero-frame { position: absolute; inset: 0; opacity: 0; transition: opacity 2.6s ease-in-out; }
 .story-hero-frame.is-shown { opacity: 1; }
 .story-hero-frame img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 58%; transform-origin: 54% 52%; }
+/* The live land (./hero/): over the pictures and under the shade, sized so its crop lands where the picture's does. It
+   fades in wearing the picture's held drift, then settles out of it; it never takes a pointer. */
+.story-hero-live { position: absolute; inset: 0; overflow: hidden; opacity: 0; pointer-events: none; transform-origin: 54% 52%;
+  transition: opacity 1.8s ease-in-out; }
+.story-hero-live.is-shown { opacity: 1; }
+.story-hero-live.is-settling { transition: opacity 1.8s ease-in-out, transform 9s cubic-bezier(.45, 0, .25, 1); }
+.story-hero-live canvas { position: absolute; display: block; outline: none; }
 .story-hero-shade { position: absolute; inset: 0; z-index: -1; pointer-events: none;
   /* Night settles over the top of the sky (softening the far horizon and carrying the header), and under the plate. */
   background: linear-gradient(180deg, #171a2ad9 0, #2a234080 9%, #2a234026 17%, transparent 26%),
@@ -144,7 +151,19 @@ body.site { margin: 0; min-height: 100svh; color: var(--cd-cream); font: var(--s
   box-shadow: inset 0 1px 0 #fff6d8, inset 0 -3px 0 #7c5a2a, 0 3px 0 #000000a6, 0 10px 20px #0a081466; transition: transform .12s ease, box-shadow .12s ease; }
 .story-explore:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 #fff6d8, inset 0 -3px 0 #7c5a2a, 0 4px 0 #000000a6, 0 12px 24px #0a081466; }
 .story-explore:active { transform: translateY(2px); box-shadow: inset 0 1px 0 #f4dc9d, inset 0 -1px 0 #7c5a2a, 0 1px 0 #000000a6; }
-.story-atlas-line { margin-top: 14px; color: var(--cd-cream-soft); font-size: 16px; }
+/* Find any channel: a parchment slip with a brass search button; on the live map it flies there in place. */
+.story-find { margin-top: 20px; max-width: 360px; }
+.story-find-row { display: flex; align-items: center; gap: 8px; }
+.story-find .cd-field-input { min-height: 40px; font: 19px/1.2 var(--cd-face-body); }
+.story-find-go { flex: none; display: grid; place-items: center; width: 44px; height: 40px; margin: 0; padding: 0; border: 0; border-radius: 7px; cursor: pointer;
+  color: var(--cd-wood-edge); background: linear-gradient(180deg, var(--cd-brass-hi), var(--cd-brass) 55%, #a9813f);
+  box-shadow: inset 0 1px 0 #fff6d8, inset 0 -2px 0 #7c5a2a, 0 2px 0 #00000080; }
+.story-find-go svg { width: 22px; height: 22px; }
+.story-find-go:active { transform: translateY(1px); box-shadow: inset 0 1px 0 #f4dc9d, inset 0 -1px 0 #7c5a2a, 0 1px 0 #00000080; }
+.story-find-go:focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); }
+.story-find:has(.story-find-go:focus-visible) { outline: none; }
+.story-find-said { min-height: 1.3em; margin-top: 8px; color: var(--cd-cream-soft); font: italic 15.5px/1.3 var(--cd-face-body); }
+.story-find-said:empty { min-height: 0; margin-top: 0; }
 .story-atlas > .story-caption { position: absolute; right: var(--site-pad); bottom: 14px; color: var(--cd-ink-soft); text-shadow: 0 0 8px #f3e6c6; }
 
 .story-close { display: grid; justify-items: center; gap: 26px; padding: clamp(84px, 10vw, 140px) 20px; text-align: center;

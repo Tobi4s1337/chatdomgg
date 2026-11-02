@@ -66,6 +66,32 @@ merge.
 front-door never edits `apps/web/src/grand/**`, `packages/world/src/grand/**`, `packages/voxel/**`,
 `packages/render/**` or the kingdom scene.
 
+**FD13 (2 Nov): the live hero, landed on front-door's side.** The story page draws the land itself, after first paint
+and only on devices that can (`apps/web/src/site/hero/`): a desktop or laptop with WebGL2 on a real GPU, motion
+allowed, not saving data, four or more cores and 4 GB where the browser says; phones keep their composed capture. It
+finds a land in this order, both with `import.meta.glob`, so the page builds and works with either or neither:
+
+1. grand-world's `mountLandHero(canvas, options)` from `apps/web/src/grand/hero.ts` (or `hero/index.ts`), when it
+   exists: `options = { channel, hour, time, yaw, tier: 'high' | 'medium' | 'low' | 'software', onFailure(message) }`,
+   resolving to `{ settled(): Promise<void>, setYaw(yaw), resize(), dispose() }` (types in
+   `apps/web/src/site/hero/land.ts`). It draws only into the canvas it is given and never takes input.
+2. Until then, the grand land's own engine, read-only: `GrandEngine` from `apps/web/src/grand/engine.ts` (constructor
+   `(canvas, seed, { tier, capture, hour, view, time })`, `controls.enabled`, `onReady`, `onFailure`, `start()`,
+   `orbit(yaw, pitch, distance)`, `resize()`, `dispose()`) and `grandChannel('tobi4s_')` from
+   `apps/web/src/grand/channels.ts`. front-door asks grand-world to keep those names and their meaning, or to ship (1)
+   first; a rename only sends the hero back to its pictures, never breaks the build.
+
+The hero holds the land's clock (`time` set) so it draws only while its camera moves, and rests out of view. Its
+camera is the orbit view at yaw 120 / 90 / 150 (`hero/frame.ts`), the same three cameras the pictures are shot from
+(`scripts/public/hero-gpu.mjs` re-shoots them from `/-/grand?channel=tobi4s_&view=orbit&hour=&t=&yaw=&tier=high`, or
+from `--poster-path` if that view moves), so the live land fades in over its own picture without a pop.
+
+What front-door still asks of grand-world for the live hero (one `mountLandHero`, above): a pause and resume, so the
+clock can run while the hero is on screen (moving water and clouds) and nothing is drawn when it is not; the town and
+its lit windows once the grand land carries the kingdom, with windows lighting as names appear (the hero uses whatever
+presence the land shows, and never stages any); and the same first frame for a given camera, hour and time, so the
+pictures still match.
+
 ## 3. The carved kit `packages/ui` (front-door owns, everyone reads)
 
 **Rules.** Every existing export of `@chatdom/ui` (`.`, `./kit.css`, `./passport`, `./growth-card`) keeps its name and
