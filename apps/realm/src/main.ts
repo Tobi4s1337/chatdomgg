@@ -36,6 +36,8 @@ import { createRealmForgeChat } from './wiring/forge-chat-runtime';
 import { itemCatalogue } from './items';
 import { createDurableFishingChannel } from './fishing/durable';
 import { fishingSpecies } from './fishing/content';
+import { installGatherStore, createPostgresGatherStore } from './games/store';
+import { installTavernReturns } from './games/return';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -133,6 +135,8 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   evening.use(boot.services);
   const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
   dock.use(boot.services);
+  installGatherStore(boot.services, createPostgresGatherStore(pool));
+  installTavernReturns(boot.services, kingdomId => boot.loader.current(kingdomId)?.scene);
   const panel = new RealmPanelService({ settings: new RealmPanelSettings({ db: pool, services: boot.services, origin }), gifts: new RealmPanelGifts({ db: pool, services: boot.services, origin }), db: pool, origin, secret: credentials.panel, services: boot.services, allocation: boot.allocation, citizens, castle: castle.observe, loader: boot.loader, founded: boot.founded });
   const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); mountRealmPanelRoutes(app, panel); } });
   const raidShow = mountRaidShowRoutes(transport.app, { pool, origin, credentials, clock: Date.now, moment: observation => boot.ingress.moments.acceptMoment(observation) });

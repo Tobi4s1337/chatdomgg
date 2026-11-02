@@ -4,6 +4,7 @@ import { KingdomRoomState, WalkerSchema, WalkInputSchema, RealmJoinSchema, Realm
   sanitizeRealmWalkInput, WALK_BODY, type RealmPrincipal, type RealmReceipt } from '@chatdom/shared/realm';
 import { stepPlayer, bodyStuck, embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmRoomHandle, RealmRoomServices } from './ports';
+import { tavernReturnsFor } from './games/return';
 import { RealmSeats, RealmSeatRefusedError, REALM_SESSION_CHECK_MS } from './auth/seats';
 import { RealmDistricts } from './limits/districts';
 import { attachRealmRoomChannels } from './room-channels';
@@ -203,8 +204,11 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       }
       // No awaits below: re-read both this person's current seat and every actual walker before choosing a gap.
       const previous = this.seats.seatOf(auth.personId), resume = carriedPose();
+      // Just out of the tavern: outside its street door, facing out (gather's record of the leave; null otherwise).
+      const back = resume ? null : tavernReturnsFor(services)?.arrival(auth.kingdomId, auth.personId, this.world, Date.now(), this.state.walkers.values()) ?? null;
       let position: readonly [number, number, number];
       if (resume) position = [resume.x, resume.y, resume.z];
+      else if (back) position = back.feet;
       else if (preparation) {
         if (!Number.isFinite(preparation.expiresAt) || preparation.expiresAt <= Date.now() || !preparation.current()
           || preparation.positions.length > 128) throw new ServerError(503, 'The kingdom gate changed. Try entering again.');
@@ -226,7 +230,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       const replaced = this.seats.seat(auth, client.sessionId);
       if (replaced) this.removeWalker(replaced, replacedPrincipal);
       const walker = new WalkerSchema({ name: auth.publicName, look: auth.look, district: '', x: position[0], y: position[1], z: position[2],
-        vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
+        vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? back?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
       this.state.walkers.set(client.sessionId, walker);
       // Attached to state first, then shared: Colyseus sends this socket the full state of its view after the join.
       client.view = this.districts.enter(client.sessionId, walker);

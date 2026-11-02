@@ -3,4 +3,6 @@
  * adds exactly one side-effect import of its own slot module here, for example `import '../forge/play-slot';`,
  * and nothing else. The HUD imports this file, so every provider has registered before the ledger first opens.
  */
+import '../tavern/register';
+
 export {};

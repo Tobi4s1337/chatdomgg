@@ -20,3 +20,4 @@ export * from './growth';
 export * from './items';
 export * from './fishing';
 export * from './raid-show';
+export * from './games';
