@@ -17,6 +17,10 @@
     "../../../apps/web/src/twitch-moments/controller.ts",
     "../../../apps/web/src/raid-gate/march-call*.ts",
     "../../../apps/web/src/raid-gate/MarchCall.tsx",
-    "../../../apps/web/src/raid-gate/march-bench.tsx"
+    "../../../apps/web/src/raid-gate/march-bench.tsx",
+    "../../../apps/web/src/raid-gate/road/*.ts",
+    "../../../apps/web/src/raid-gate/road/*.tsx",
+    "../../../apps/web/src/raid-gate/bench.ts",
+    "../../../apps/web/src/raid-gate/controller*.ts"
   ]
 }

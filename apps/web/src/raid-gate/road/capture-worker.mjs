@@ -153,7 +153,7 @@ try {
       await until(s => s.facts.departedAt !== null);
       const departureFacts = (await state()).facts;
       const setoutAt = Math.max(reduced ? 4 : 9, departureFacts.departedAt);
-      const riseAt = Math.max(setoutAt + (reduced ? 1 : 3.4), departureFacts.mapReadyAt);
+      const riseAt = Math.max(setoutAt + (reduced ? 1 : 7), departureFacts.mapReadyAt);
       await walkTo(riseAt + (reduced ? 0.7 : 1.7), 0.5, false);
       console.log(`[capture] entered ride: ${JSON.stringify(await state())}`);
       const ride = (await spans()).find(span => span.act === 'ride');
@@ -206,7 +206,7 @@ try {
     while (t <= end) {
       await walkTo(t, 1 / fps, false);
       // The map moves every frame; the kingdoms' cameras stand still, so their worlds are redrawn every fourth frame
-      // while the tableaux, the board and the light over them change every frame.
+      // while the words, the board and the light over them change every frame.
       const act = (await state()).act;
       await seek(t, false, ON_MAP.includes(act) ? 2 : frame % 4 === 0 ? 1 : 0);
       await page.screenshot({ path: `${dir}/${String(frame).padStart(5, '0')}.png`, timeout: 240_000 });

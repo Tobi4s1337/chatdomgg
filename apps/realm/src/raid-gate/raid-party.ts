@@ -7,21 +7,17 @@
  * from a count, a chat roster or a browser claim. Names of the two channels come from witnessed raid evidence only.
  */
 import { createHash } from 'node:crypto';
-import { KingdomIdSchema, PersonIdSchema, RAID_PARTY_DRAWN, RaidPartyReplySchema, starterCitizenLook,
-  type KingdomId, type PersonId, type RaidPartyMarcher, type RaidPartyPublicFrame, type RaidPartyReply } from '@chatdom/shared';
-import { GATE_LIMITS } from '../../../api/src/raid-gate/contracts';
+import { KingdomIdSchema, RaidPartyReplySchema, type KingdomId, type PersonId, type RaidPartyReply } from '@chatdom/shared';
 import { readActionRecord, readGatePointer, readMemberRecord, type RaidActionRecord } from '../../../api/src/raid-gate/repository';
 import { RaidObservationSchema } from '../../../api/src/raid-gate/observations';
 import type { SqlPool } from '../../../api/src/raid-gate/postgres-repository';
+import { buildRaidPartyFrame, partyPhase, type RaidPartyFace } from './raid-party-frame';
 
-/** How long the witnessed set-out stays on the gate: the column walks out and the road takes it. */
-export const RAID_PARTY_SETOUT_MS = 45_000;
-/** A dispatched start Twitch has not answered for this long is told as "checking", never as gathering. */
-const DISPATCH_QUIET_MS = 30_000;
+export { partyPhase, RAID_PARTY_SETOUT_MS } from './raid-party-frame';
+
 const CACHE_MS = 750;
 const NAME = /^[^\p{Cc}\p{Cf}\p{Cs}]{1,64}$/u;
 const LOGIN = /^[a-z0-9_]{1,64}$/u;
-const RAID_ID = /^raid\.[a-f0-9]{64}$/u;
 
 export interface RaidPartyReaderOptions {
   readonly pool: SqlPool;
@@ -31,25 +27,8 @@ export interface RaidPartyReaderOptions {
   readonly walkers?: (kingdomId: KingdomId, personId: PersonId) => string | null;
 }
 
-type Phase = RaidPartyPublicFrame['phase'];
 type Row = Record<string, unknown>;
-type Face = { login: string | null; name: string | null };
-
-/** The phase a viewer is told, or null when this action is no party at all. Mirrors the gate application's view. */
-export function partyPhase(action: RaidActionRecord, now: number): Phase | null {
-  switch (action.state) {
-    case 'prepared': return action.endReason === null && now < action.previewExpiresAt ? 'gather' : null;
-    case 'dispatching': return now < action.observedAt + DISPATCH_QUIET_MS ? 'gather' : now < action.observedAt + GATE_LIMITS.unknownHoldMs ? 'checking' : null;
-    case 'pending': {
-      const ends = action.acceptedAt! + GATE_LIMITS.twitchCountdownMs;
-      if (now < ends) return 'countdown';
-      return now < ends + GATE_LIMITS.observationGraceMs + GATE_LIMITS.unknownHoldMs ? 'checking' : null;
-    }
-    case 'unknown': return now < action.observedAt + GATE_LIMITS.unknownHoldMs ? 'checking' : null;
-    case 'landed': return now < action.observedAt + RAID_PARTY_SETOUT_MS && action.raid !== null && RAID_ID.test(action.raid.id) ? 'setout' : null;
-    default: return null;
-  }
-}
+type Face = RaidPartyFace;
 
 export const marcherKey = (requestId: string, personId: PersonId): string =>
   `marcher.${createHash('sha256').update(`${requestId}\u0000${personId}`).digest('hex').slice(0, 24)}`;
@@ -81,40 +60,17 @@ export class RaidPartyReader {
       const actionRow = (await client.query('SELECT record FROM realm_raid_gate_actions WHERE request_id = $1 AND origin = $2', [pointer.requestId, origin])).rows[0] as Row | undefined;
       const action = actionRow && readActionRecord(JSON.parse(String(actionRow.record)));
       if (!action || action.from !== kingdomId || action.origin !== origin) return none;
-      const phase = partyPhase(action, now);
-      if (!phase) return none;
-
-      const members = (await client.query(`SELECT m.person_id, m.record, p.public_name FROM realm_raid_gate_members m
+      if (!partyPhase(action, now)) return none;
+      const members = (await client.query(`SELECT m.record, p.public_name FROM realm_raid_gate_members m
         LEFT JOIN realm_persons p ON p.person_id = m.person_id AND p.origin = $2
         WHERE m.request_id = $1 AND m.joined`, [action.requestId, origin])).rows as Row[];
-      const joined = members.flatMap(row => {
+      const records = members.flatMap(row => {
         const record = readMemberRecord(JSON.parse(String(row.record)));
-        if (!record?.joined || record.requestId !== action.requestId || record.kingdomId !== kingdomId || record.joinedAt === null) return [];
-        const name = typeof row.public_name === 'string' && NAME.test(row.public_name) ? row.public_name : 'Citizen';
-        return [{ personId: record.personId, joinedAt: record.joinedAt, name }];
-      }).sort((a, b) => Number(b.personId === action.actorId) - Number(a.personId === action.actorId)
-        || a.joinedAt - b.joinedAt || (a.personId < b.personId ? -1 : 1));
-      const seen = new Set<string>();
-      const marchers: RaidPartyMarcher[] = joined.slice(0, RAID_PARTY_DRAWN).map(person => {
-        const walker = this.options.walkers?.(kingdomId, person.personId) ?? null;
-        const drawn = walker && /^[A-Za-z0-9_-]{1,64}$/u.test(walker) && !seen.has(walker) ? walker : null;
-        if (drawn) seen.add(drawn);
-        return { key: marcherKey(action.requestId, person.personId), name: person.name,
-          look: starterCitizenLook(PersonIdSchema.parse(person.personId)), walker: drawn,
-          leader: person.personId === action.actorId, joinedAt: Math.min(person.joinedAt, now) };
+        return record ? [{ record, name: typeof row.public_name === 'string' ? row.public_name : null }] : [];
       });
-
-      const faces = await this.faces(client, action);
-      const party: RaidPartyPublicFrame = {
-        version: 1, origin, kingdomId, asOf: now, phase,
-        source: faces.source,
-        destination: { kingdomId: action.to, ...faces.destination, land: action.target.founded ? 'founded' : 'waiting' },
-        countdownEndsAt: action.acceptedAt !== null && (phase === 'countdown' || phase === 'checking') ? action.acceptedAt + GATE_LIMITS.twitchCountdownMs : null,
-        departedAt: phase === 'setout' ? action.raid!.occurredAt : null,
-        raidId: phase === 'setout' ? action.raid!.id : null,
-        marchers,
-        more: marchers.length === RAID_PARTY_DRAWN ? joined.length - RAID_PARTY_DRAWN : 0,
-      };
+      const party = buildRaidPartyFrame({ origin, kingdomId, now, action, members: records, faces: await this.faces(client, action),
+        key: marcherKey, ...(this.options.walkers ? { walkers: this.options.walkers } : {}) });
+      if (!party) return none;
       return RaidPartyReplySchema.parse({ version: 1, origin, kingdomId, asOf: now, party });
     } finally { client.release(); }
   }
