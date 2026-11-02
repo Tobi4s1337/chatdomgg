@@ -160,3 +160,47 @@ export function parseRaidPennantFrame(raw: unknown, now: number): RaidPennantFra
     return parsed.data;
   } catch { return null; }
 }
+
+export interface RaidPennantArchiveCursor {
+  readonly origin: RaidPennantFrame['origin']; readonly kingdomId: z.infer<typeof KingdomIdSchema>;
+  readonly ceiling: number; readonly before: number;
+}
+/** A public commit position, scoped to one origin/destination; never provider or person identity. */
+export function parseRaidPennantArchiveCursor(raw: unknown): RaidPennantArchiveCursor | null {
+  if (typeof raw !== 'string' || raw.length > 128) return null;
+  const match = /^pennants:1:(live|simulated):([1-9][0-9]{0,31}):([1-9][0-9]{0,15}):([1-9][0-9]{0,15})$/u.exec(raw);
+  if (!match) return null;
+  const ceiling = Number(match[3]), before = Number(match[4]);
+  if (!Number.isSafeInteger(ceiling) || !Number.isSafeInteger(before) || before > ceiling) return null;
+  return { origin: match[1] as RaidPennantFrame['origin'], kingdomId: KingdomIdSchema.parse(match[2]), ceiling, before };
+}
+export const RaidPennantArchivePageSchema = z.strictObject({
+  ...RaidPennantFrameSchema.shape,
+  next: z.string().max(128).nullable(),
+}).superRefine((page, context) => {
+  const { next, ...frame } = page;
+  if (!RaidPennantFrameSchema.safeParse(frame).success) context.addIssue({ code: 'custom', message: 'Invalid pennant history frame' });
+  if (next !== null) {
+    const cursor = parseRaidPennantArchiveCursor(next);
+    if (!cursor || cursor.origin !== page.origin || cursor.kingdomId !== page.kingdomId || page.items.length === 0) {
+      context.addIssue({ code: 'custom', message: 'The earlier-pennant cursor must belong to this page' });
+    }
+  }
+});
+export type RaidPennantArchivePage = z.infer<typeof RaidPennantArchivePageSchema>;
+export interface RaidPennantArchiveReader {
+  readonly origin: RaidPennantFrame['origin'];
+  read(before: string | null, signal: AbortSignal): Promise<RaidPennantArchivePage>;
+}
+export function parseRaidPennantArchivePage(raw: unknown, now: number): RaidPennantArchivePage | null {
+  if (!EpochMsSchema.safeParse(now).success) return null;
+  try {
+    if (typeof raw === 'string') {
+      if (raw.length > RAID_PENNANT_FRAME_MAX_BYTES || utf8.encode(raw).byteLength > RAID_PENNANT_FRAME_MAX_BYTES) return null;
+      raw = JSON.parse(raw) as unknown;
+    }
+    const parsed = RaidPennantArchivePageSchema.safeParse(raw);
+    if (!parsed.success || parsed.data.asOf > now + 5_000 || utf8.encode(JSON.stringify(parsed.data)).byteLength > RAID_PENNANT_FRAME_MAX_BYTES) return null;
+    return parsed.data;
+  } catch { return null; }
+}

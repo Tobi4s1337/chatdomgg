@@ -69,9 +69,13 @@ export function createRaidShowService(options: RaidShowServiceOptions) {
         const pennant = /^\/realm\/raid-pennants\/([1-9][0-9]{0,31})$/u.exec(url.pathname);
         if (pennant) {
           if (request.method !== 'GET') return refused(405);
-          const limit = count(url.searchParams.get('limit'), 24, 64);
-          if (!parameters(url, ['limit']) || limit === null) return refused(400);
-          const kingdomId = KingdomIdSchema.parse(pennant[1]), items = await ledger.pennants(kingdomId, limit);
+          const archive = url.searchParams.get('archive');
+          const limit = count(url.searchParams.get('limit'), archive === '1' ? 12 : 24, 64);
+          if (!parameters(url, ['limit', 'archive', 'before']) || limit === null || (archive !== null && archive !== '1')
+            || (url.searchParams.has('before') && archive !== '1')) return refused(400);
+          const kingdomId = KingdomIdSchema.parse(pennant[1]);
+          if (archive === '1') return json(200, await ledger.pennantArchive(kingdomId, url.searchParams.get('before'), limit));
+          const items = await ledger.pennants(kingdomId, limit);
           return json(200, RaidPennantFrameSchema.parse({ version: 1, origin: options.origin, kingdomId, asOf: options.clock(), items }));
         }
         if (url.pathname !== RAID_OBSERVATION_ROUTE) return refused(404);

@@ -36,7 +36,9 @@ if (!process.argv.includes('--worker')) {
     if (!Number.isFinite(chatAge) || chatAge < 500 || chatAge > 89500) throw new Error('Chat age must retain some of its original light lease.');
     const scene = argument('--scene', 'incoming');
     if (!['incoming', 'insignia'].includes(scene)) throw new Error('Choose incoming or insignia.');
-    const route = scene === 'insignia' ? '/-/raid-gate?guestInsignia=1' : `/-/raid-gate?incoming=1&viewers=${viewers}&at=${at}${process.argv.includes('--pennants') ? '&pennants=1' : ''}${process.argv.includes('--chat') ? `&chat=1&chatAge=${chatAge}` : ''}`;
+    const archivePage = Number(argument('--archive-page', '0'));
+    if (!Number.isInteger(archivePage) || archivePage < 0 || archivePage > 7 || archivePage && scene !== 'incoming') throw new Error('Choose archive page 1–7 on the incoming bench.');
+    const route = scene === 'insignia' ? '/-/raid-gate?guestInsignia=1' : `/-/raid-gate?incoming=1&viewers=${viewers}&at=${at}${archivePage ? '&browse=1' : ''}${process.argv.includes('--pennants') ? '&pennants=1' : ''}${process.argv.includes('--chat') ? `&chat=1&chatAge=${chatAge}` : ''}`;
     const page = await browser.newPage({ viewport: { width, height } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -51,6 +53,32 @@ if (!process.argv.includes('--worker')) {
     const failure = await page.locator('.raid-show-error').count() ? await page.locator('.raid-show-error').textContent() : null;
     if (failure) throw new Error(failure);
     if (errors.length) throw new Error(errors.join('\n'));
+    let book;
+    if (archivePage) {
+      await page.locator('.raid-pennant-browser__trigger').click();
+      for (let chapter = 1; chapter <= archivePage; chapter++) {
+        await page.waitForFunction(expected => {
+          const state = window.__chatdomRaidShow?.inspect();
+          return state?.raidPennants?.archiveReads === expected && document.querySelectorAll('.raid-pennant-browser__row').length === Math.min(12, 73 - (expected - 1) * 12);
+        }, chapter);
+        await page.evaluate(() => window.__chatdomRaidShow?.redraw());
+        await page.evaluate(() => new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))));
+        if (chapter < archivePage) {
+          const earlier = page.locator('.raid-pennant-browser__older');
+          await earlier.focus(); await earlier.press('Enter');
+          const focus = await page.evaluate(() => document.activeElement?.textContent);
+          if (focus !== 'Earlier visits' && focus !== 'Recent visits') throw new Error('Keyboard paging lost its action focus');
+        }
+      }
+      book = await page.evaluate(() => ({
+        rows: [...document.querySelectorAll('.raid-pennant-browser__row')].map(node => node.textContent),
+        status: document.querySelector('.raid-pennant-browser__message')?.textContent,
+        horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
+        activeControl: document.activeElement?.textContent,
+        keyboardPagination: true,
+      }));
+      if (book.horizontalOverflow || archivePage === 7 && book.status !== 'No earlier visits') throw new Error('Archive layout or final-page state failed');
+    }
     await page.evaluate(() => document.fonts.ready);
     const file = argument('--out', scene === 'insignia' ? `guest-insignia@${size}.png` : `caravan-${viewers}@${size}.png`);
     if (!/^[a-z0-9@.-]+\.png$/.test(file)) throw new Error('Output must be a plain evidence PNG name.');
@@ -61,6 +89,7 @@ if (!process.argv.includes('--worker')) {
     await page.screenshot({ path: out, timeout: 90_000 });
     await writeFile(out.replace('.png', '.json'), JSON.stringify({ renderer: 'SwiftShader', performanceEvidence: false,
       route, size: [width, height], errors,
+      book,
       state: await page.evaluate(() => window.__chatdomRaidShow?.inspect() ?? window.__guestInsignia),
     }, null, 2));
     console.log(`Look at ${out}`);

@@ -47,6 +47,32 @@ function mount(view: ReturnType<typeof fakeView>, source: RaidPennantFeed, signa
 }
 
 describe('injected pennant history mount', () => {
+  it.each([false, true])('releases a typed reading host even when its disposer throws: %s', throws => {
+    const view = fakeView(), source = fakeSource(), controller = new AbortController();
+    const sites = vi.fn(() => []), release = vi.fn(() => { if (throws) throw new Error('retired host'); });
+    let canOpen = false;
+    const stop = mountKingdomRaidPennants({ view: { ...view.methods, raidPennantSites: sites } as View,
+      feed: { origin: 'live', raidPennants: source.source, subscribe: vi.fn(() => () => {}) }, kingdomId,
+      clock: () => now, signal: controller.signal, reading(port) {
+        expect(port.sites()).toEqual([]);
+        const off = port.subscribe(state => { canOpen = state.canOpen; });
+        return () => { off(); release(); };
+      } });
+    source.emit(frame); expect(canOpen).toBe(true); expect(sites).toHaveBeenCalledTimes(1);
+    controller.abort(); stop();
+    expect(release).toHaveBeenCalledTimes(1); expect(source.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(view.current).toBeNull(); expect(view.listeners.size).toBe(0);
+  });
+
+  it('releases a reading adapter returned after synchronous abort without starting its feed', () => {
+    const view = fakeView(), source = fakeSource(), controller = new AbortController(), release = vi.fn();
+    const stop = mountKingdomRaidPennants({ view: view.methods as View,
+      feed: { origin: 'live', raidPennants: source.source, subscribe: vi.fn(() => () => {}) }, kingdomId,
+      clock: () => now, signal: controller.signal, reading() { controller.abort(); return release; } });
+    stop(); expect(release).toHaveBeenCalledTimes(1); expect(source.source.subscribe).not.toHaveBeenCalled();
+    expect(view.methods.receiveRaidPennants).toHaveBeenCalledExactlyOnceWith(null);
+  });
+
   it('retains verified history through invalid scope, malformed frames, future time and asOf regressions', () => {
     const view = fakeView(), source = fakeSource(), stop = mount(view, source.source, new AbortController().signal);
     source.emit(frame);

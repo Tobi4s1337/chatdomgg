@@ -72,13 +72,15 @@ export interface KingdomRaidChatOptions {
   plan?: SettlementPlan;
   ground?: (x: number, z: number) => number;
   support?: RaidChatSupport;
+  pennantVisible?: import('./raid-pennants').KingdomRaidPennantOptions['visible'];
+  pennantReading?: import('./raid-pennants').KingdomRaidPennantOptions['reading'];
 }
 
 /** Projects only the moment view's currently visible verified lanterns, moving or beside the gate. */
-export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock, plan, ground, support }: KingdomRaidChatOptions): () => void {
+export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, signal, clock, plan, ground, support, pennantVisible, pennantReading }: KingdomRaidChatOptions): () => void {
   if (signal.aborted) return () => {};
-  const detachPennants = mountKingdomRaidPennants({ view, feed, kingdomId, signal, clock,
-    ...(plan ? { plan } : {}), ...(ground ? { ground } : {}), ...(support ? { support } : {}) });
+  const detachPennants = mountKingdomRaidPennants({ view, feed, kingdomId, signal, clock, canvas, camera,
+    ...(plan ? { plan } : {}), ...(ground ? { ground } : {}), ...(support ? { support } : {}), ...(pennantVisible ? { visible: pennantVisible } : {}), ...(pennantReading ? { reading: pennantReading } : {}) });
   view.setRaidChatGround(plan && ground ? raidChatGroundOf(plan, ground, support) : undefined);
   const layer = document.createElement('div');
   layer.className = 'raid-chat-layer';

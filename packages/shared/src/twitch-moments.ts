@@ -177,6 +177,7 @@ export interface TwitchMomentFeed {
   readonly origin: 'live' | 'simulated';
   readonly raidChat?: import('./raid-show').RaidChatFeed;
   readonly raidPennants?: import('./raid-show').RaidPennantFeed;
+  readonly raidPennantArchive?: import('./raid-show').RaidPennantArchiveReader;
   subscribe(
     reset: (info: MomentResetInfo) => void,
     receive: (epoch: string, fact: TwitchMomentFact) => void,

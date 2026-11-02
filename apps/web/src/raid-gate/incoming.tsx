@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { KingdomIdSchema, type RaidChatFeed, type RaidChatFrame, type RaidPennantFeed } from '@chatdom/shared';
+import { KingdomIdSchema, type RaidChatFeed, type RaidChatFrame, type RaidPennantFeed, type RaidPennant, parseRaidPennantArchiveCursor } from '@chatdom/shared';
 import { WORLD_FIXTURE_KINGDOM, WORLD_FIXTURE_TIME } from '@chatdom/shared/world-fixtures';
 import { createKingdomScene } from '../kingdom/scene';
 import * as THREE from 'three';
@@ -10,7 +10,8 @@ import './incoming.css';
 /** Private art bench. Its synthetic evidence never leaves this page or enters a live feed. */
 export default function IncomingRaid() {
   const query = new URLSearchParams(location.search);
-  const withPennants = query.get('pennants') === '1';
+  const withArchive = query.get('browse') === '1';
+  const withPennants = withArchive || query.get('pennants') === '1';
   const withChat = query.get('chat') === '1', raidId = `raid.${'a'.repeat(64)}`;
   const viewers = Math.max(1, Math.min(1_000_000, Math.floor(Number(query.get('viewers')) || 140)));
   const requestedAt = Number(query.get('at'));
@@ -27,11 +28,38 @@ export default function IncomingRaid() {
   let deliver: Parameters<TwitchMomentFeed['subscribe']>[1] | undefined;
   let deliverChat: Parameters<RaidChatFeed['subscribe']>[0] | undefined;
   let deliverPennants: Parameters<RaidPennantFeed['subscribe']>[0] | undefined;
+  let archiveReads = 0, redraws = 0;
+  let lastArchiveIds: string[] = [];
+  const archiveItems: RaidPennant[] = Array.from({ length: 73 }, (_, i) => ({
+    raidId: i === 0 ? raidId : `raid.${(1000 + i).toString(16).padStart(64, '0')}`,
+    from: i % 3 === 0 ? { kingdomId: raider, login: 'mossbrook', name: 'Mossbrook' }
+      : i % 3 === 1 ? { kingdomId: KingdomIdSchema.parse('7331'), login: 'copperleaf', name: 'Copperleaf' }
+        : { kingdomId: KingdomIdSchema.parse('91234'), login: 'emberford', name: 'Emberford' },
+    occurredAt: at - i * 86_400_000,
+  }));
+  const fixtureHistory: RaidPennant[] = withArchive ? archiveItems : [
+    { raidId, from: { kingdomId: raider, login: 'mossbrook', name: 'Mossbrook' }, occurredAt: at },
+    { raidId: `raid.${'b'.repeat(64)}`, from: { kingdomId: KingdomIdSchema.parse('7331'), login: 'copperleaf', name: 'Copperleaf' }, occurredAt: at - 86_400_000 },
+    { raidId: `raid.${'c'.repeat(64)}`, from: { kingdomId: KingdomIdSchema.parse('91234'), login: 'emberford', name: 'Emberford' }, occurredAt: at - 172_800_000 },
+    { raidId: `raid.${'d'.repeat(64)}`, from: { kingdomId: raider, login: 'mossbrook', name: 'Mossbrook' }, occurredAt: at - 604_800_000 },
+  ];
   let animation = 0;
   let presented = false, sceneReady = false;
   const priorReady = Object.getOwnPropertyDescriptor(window, '__chatdomReady');
   const feed: TwitchMomentFeed = {
     origin: 'simulated',
+    raidPennantArchive: { origin: 'simulated', async read(before, signal) {
+      signal.throwIfAborted();
+      if (withArchive) await new Promise<void>(resolve => setTimeout(resolve, 120));
+      signal.throwIfAborted();
+      const cursor = before === null ? null : parseRaidPennantArchiveCursor(before);
+      if (before !== null && (!cursor || cursor.origin !== 'simulated' || cursor.kingdomId !== WORLD_FIXTURE_KINGDOM || cursor.ceiling !== fixtureHistory.length)) throw new Error('Invalid private history cursor');
+      const eligible = fixtureHistory.filter((_item, i) => fixtureHistory.length - i < (cursor?.before ?? fixtureHistory.length + 1));
+      const items = eligible.slice(0, 12), tail = items.at(-1);
+      archiveReads++; lastArchiveIds = items.map(item => item.raidId);
+      return { version: 1, origin: 'simulated', kingdomId: WORLD_FIXTURE_KINGDOM, asOf: at + offset, items,
+        next: eligible.length > 12 && tail ? `pennants:1:simulated:${WORLD_FIXTURE_KINGDOM}:${fixtureHistory.length}:${fixtureHistory.length - fixtureHistory.indexOf(tail)}` : null };
+    } },
     raidPennants: { origin: 'simulated', subscribe(receive) { deliverPennants = receive; return () => { deliverPennants = undefined; }; } },
     raidChat: { origin: 'simulated', subscribe(receive) { deliverChat = receive; return () => { deliverChat = undefined; }; } },
     subscribe(reset, receive) {
@@ -53,8 +81,8 @@ export default function IncomingRaid() {
         hour: 19.5, time: 40, camera: 'hero', source: 'simulated', momentFeed: feed,
         onMomentCaptions: setCaptions, onProgress: () => {}, onNames: () => {}, onSource: () => {}, onError: fail,
       });
-      window.__chatdomRaidShow = { viewers, offset, inspect: () => ({ ...scene?.inspect(),
-        raidPennants: { framing: 'private evidence pose, no raid camera lease', fixtures: withPennants },
+      window.__chatdomRaidShow = { viewers, offset, redraw: () => scene?.seek(40 + offset / 1000 + ++redraws / 1000), inspect: () => ({ ...scene?.inspect(),
+        raidPennants: { framing: 'private evidence pose, no raid camera lease', fixtures: withPennants, archiveReads, lastArchiveIds },
         raidChat: { chatAge, bubbles: [...document.querySelectorAll<HTMLElement>('.raid-chat-bubble')].filter(node => !node.hidden).length,
           framing: offset >= 120_000 ? 'private evidence pose, no raid camera lease' : 'production raid director' } }) };
       while (!life.signal.aborted) {
@@ -105,12 +133,7 @@ export default function IncomingRaid() {
         await Promise.all([document.fonts.load('bold 49px "Alegreya"'), document.fonts.load('32px "IM Fell English"')]);
         // Art fixtures exercise reload-shaped history without replaying any older raid facts.
         deliverPennants?.({ version: 1, origin: 'simulated', kingdomId: WORLD_FIXTURE_KINGDOM, asOf: at + offset,
-          items: [
-            { raidId, from: { kingdomId: raider, login: 'mossbrook', name: 'Mossbrook' }, occurredAt: at },
-            { raidId: `raid.${'b'.repeat(64)}`, from: { kingdomId: KingdomIdSchema.parse('7331'), login: 'copperleaf', name: 'Copperleaf' }, occurredAt: at - 86_400_000 },
-            { raidId: `raid.${'c'.repeat(64)}`, from: { kingdomId: KingdomIdSchema.parse('91234'), login: 'emberford', name: 'Emberford' }, occurredAt: at - 172_800_000 },
-            { raidId: `raid.${'d'.repeat(64)}`, from: { kingdomId: raider, login: 'mossbrook', name: 'Mossbrook' }, occurredAt: at - 604_800_000 },
-          ] });
+          items: fixtureHistory.slice(0, 24) });
         // Fixed-time benches must explicitly request a draw after asynchronous history arrives.
         scene.seek(40 + offset / 1000 + .001);
       }
@@ -163,4 +186,4 @@ export default function IncomingRaid() {
   </div>;
 }
 
-declare global { interface Window { __chatdomReady?: boolean; __chatdomRaidShow?: { viewers: number; offset: number; inspect(): unknown } } }
+declare global { interface Window { __chatdomReady?: boolean; __chatdomRaidShow?: { viewers: number; offset: number; redraw?(): void; inspect(): unknown } } }

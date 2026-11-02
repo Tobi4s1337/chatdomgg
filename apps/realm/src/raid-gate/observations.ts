@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { AtlasRaidSchema, type AtlasRaid, KingdomIdSchema, type KingdomId } from '@chatdom/shared';
+import { AtlasRaidSchema, type AtlasRaid, KingdomIdSchema, type KingdomId,
+  parseRaidPennantArchiveCursor, RaidPennantArchivePageSchema, type RaidPennantArchivePage } from '@chatdom/shared';
 import { RealmMomentObservationSchema, type RealmMomentObservation } from '@chatdom/shared/realm';
 import { RaidObservationSchema, RAID_BEAT_WINDOW_MS, type RaidObservation } from '../../../api/src/raid-gate/observations';
 import { correlateObservedRaid, recordObservedRaid, RaidObservationConflict } from '../../../api/src/raid-gate/observed-raid';
@@ -127,7 +128,7 @@ export class RaidObservationLedger {
   async page(after: string | null = null, limit = 200): Promise<RaidRoadPage> {
     const sequence = this.cursor(after);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new RaidObservationError('invalid', 'A road page takes 1–200 raids.');
-    const result = await this.withClient(client => client.query(`SELECT ${COLUMNS} FROM realm_raid_observations WHERE origin = $1 AND sequence > $2 ORDER BY sequence LIMIT $3`, [this.options.origin, sequence, limit]));
+    const result = await this.withClient(client => client.query(`SELECT ${COLUMNS} FROM realm_raid_observations WHERE origin = $1 AND sequence > $2 ORDER BY realm_raid_observations.sequence LIMIT $3`, [this.options.origin, sequence, limit]));
     const rows = result.rows.map(readRow);
     if (rows.some(row => row.observation.origin !== this.options.origin)) throw new RaidObservationError('storage', 'A road crossed origins.');
     return { version: 1, items: rows.map(row => row.raid), next: rows.length ? `${this.options.origin}:${rows.at(-1)!.sequence}` : after };
@@ -137,8 +138,36 @@ export class RaidObservationLedger {
     KingdomIdSchema.parse(kingdomId);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 64) throw new RaidObservationError('invalid', 'A wall shows 1–64 pennants.');
     const result = await this.withClient(client => client.query(`SELECT ${COLUMNS} FROM realm_raid_observations
-      WHERE origin = $1 AND to_kingdom_id = $2 AND direction = 'incoming' ORDER BY sequence DESC LIMIT $3`, [this.options.origin, kingdomId, limit]));
+      WHERE origin = $1 AND to_kingdom_id = $2 AND direction = 'incoming' ORDER BY realm_raid_observations.sequence DESC LIMIT $3`, [this.options.origin, kingdomId, limit]));
     return result.rows.map(raw => { const row = readRow(raw); return { raidId: row.raid.id, from: row.observation.from, occurredAt: row.observation.occurredAt }; });
+  }
+
+  /** Earlier incoming commits within the first read's ceiling, independent of provider time or process lifetime. */
+  async pennantArchive(kingdomId: KingdomId, before: string | null, limit = 12): Promise<RaidPennantArchivePage> {
+    if (!KingdomIdSchema.safeParse(kingdomId).success || !Number.isSafeInteger(limit) || limit < 1 || limit > 64) {
+      throw new RaidObservationError('invalid', 'A pennant archive needs a kingdom and 1–64 visits.');
+    }
+    const cursor = before === null ? null : parseRaidPennantArchiveCursor(before);
+    if (before !== null && (!cursor || cursor.origin !== this.options.origin || cursor.kingdomId !== kingdomId)) {
+      throw new RaidObservationError('invalid', 'The pennant cursor is invalid for this archive.');
+    }
+    // The first row and lookahead come from one statement snapshot: no separate head read can admit a
+    // later commit. Following pages use that same public ceiling and the last returned commit position.
+    const result = await this.withClient(client => cursor
+      ? client.query(`SELECT ${COLUMNS} FROM realm_raid_observations
+        WHERE origin = $1 AND to_kingdom_id = $2 AND direction = 'incoming' AND sequence <= $3 AND sequence < $4
+        ORDER BY realm_raid_observations.sequence DESC LIMIT $5`, [this.options.origin, kingdomId, cursor.ceiling, cursor.before, limit + 1])
+      : client.query(`SELECT ${COLUMNS} FROM realm_raid_observations
+        WHERE origin = $1 AND to_kingdom_id = $2 AND direction = 'incoming' ORDER BY realm_raid_observations.sequence DESC LIMIT $3`,
+      [this.options.origin, kingdomId, limit + 1]));
+    const rows = result.rows.map(readRow), items = rows.slice(0, limit);
+    if (rows.some(row => row.observation.origin !== this.options.origin || row.observation.to.kingdomId !== kingdomId || row.observation.direction !== 'incoming')) {
+      throw new RaidObservationError('storage', 'A pennant archive crossed its scope.');
+    }
+    const ceiling = cursor?.ceiling ?? rows[0]?.sequence;
+    return RaidPennantArchivePageSchema.parse({ version: 1, origin: this.options.origin, kingdomId, asOf: this.options.clock(),
+      items: items.map(row => ({ raidId: row.raid.id, from: row.observation.from, occurredAt: row.observation.occurredAt })),
+      next: rows.length > limit ? `pennants:1:${this.options.origin}:${kingdomId}:${ceiling}:${items.at(-1)!.sequence}` : null });
   }
 
   recover(limit = 32): Promise<{ delivered: number; expired: number; waiting: number }> {

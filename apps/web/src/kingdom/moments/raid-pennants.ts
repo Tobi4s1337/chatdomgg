@@ -1,4 +1,7 @@
 import { parseRaidPennantFrame, RAID_PENNANT_FRAME_MAX_BYTES, type KingdomId, type RaidPennantFeed } from '@chatdom/shared';
+import type { Camera } from 'three';
+import { mountRaidPennantBrowser, type RaidPennantBrowserOptions } from '../../raid-gate/pennant-browser';
+import { createRaidPennantArchiveReader, createRaidPennantBrowser } from './raid-pennant-browser';
 import type { SettlementPlan } from '@chatdom/world';
 import type { TwitchMomentFeed } from '../../twitch-moments/contracts';
 import type { createTwitchMomentView } from '../../twitch-moments/view';
@@ -83,6 +86,9 @@ export function createRaidPennantFeed(kingdomId: KingdomId, origin: RaidPennantF
   } };
 }
 
+export type RaidPennantReadingPort = Pick<ReturnType<typeof createRaidPennantBrowser>, 'open' | 'close' | 'subscribe'> & {
+  sites: ReturnType<typeof createTwitchMomentView>['raidPennantSites'];
+};
 export interface KingdomRaidPennantOptions {
   view: ReturnType<typeof createTwitchMomentView>;
   feed: TwitchMomentFeed;
@@ -92,17 +98,26 @@ export interface KingdomRaidPennantOptions {
   plan?: SettlementPlan;
   ground?: (x: number, z: number) => number;
   support?: RaidChatSupport;
+  canvas?: HTMLCanvasElement;
+  camera?: Camera;
+  visible?: NonNullable<RaidPennantBrowserOptions['visible']>;
+  reading?: (port: RaidPennantReadingPort) => () => void;
 }
 
 /** Installs only channel history and its adopted terrain sampler, never a new raid moment. */
-export function mountKingdomRaidPennants({ view, feed, kingdomId, signal, clock, plan, ground, support }: KingdomRaidPennantOptions): () => void {
+export function mountKingdomRaidPennants({ view, feed, kingdomId, signal, clock, plan, ground, support, canvas, camera, visible, reading }: KingdomRaidPennantOptions): () => void {
   let stopped = false, lastAsOf = -1;
-  let disconnect = () => {}, unsubscribeView = () => {};
+  const children: { browser?: ReturnType<typeof createRaidPennantBrowser> } = {};
+  let ui: ReturnType<typeof mountRaidPennantBrowser> | undefined;
+  let disconnect = () => {}, unsubscribeView = () => {}, detachReading = () => {};
   const dispose = () => {
     if (stopped) return;
     stopped = true; signal.removeEventListener('abort', dispose);
     unsubscribeView(); disconnect();
-    view.receiveRaidPennants(null); view.setRaidPennantGround(undefined);
+    ui?.dispose();
+    try { detachReading(); } catch { /* A retired host cannot retain this feature's data or request. */ }
+    if (children.browser) children.browser.dispose(); else view.receiveRaidPennants(null);
+    view.setRaidPennantGround(undefined);
   };
   if (signal.aborted) { dispose(); return dispose; }
   unsubscribeView = view.onDispose(dispose);
@@ -114,12 +129,20 @@ export function mountKingdomRaidPennants({ view, feed, kingdomId, signal, clock,
   view.setRaidPennantGround(plan && ground ? raidPropGroundOf(plan, ground, {
     radius: RAID_PENNANT_WALL_RADIUS, height: RAID_PENNANT_WALL_HEIGHT, maxRise: .18, sampleSpacing: .5, ...(support ? { support } : {}),
   }) : undefined);
+  const browser = createRaidPennantBrowser({ reader: feed.raidPennantArchive ?? createRaidPennantArchiveReader(kingdomId, feed.origin, clock),
+    kingdomId, origin: feed.origin, clock, signal, present: frame => view.receiveRaidPennants(frame) });
+  children.browser = browser;
+  if (canvas && camera) ui = mountRaidPennantBrowser({ canvas, camera, sites: () => view.raidPennantSites(), browser, signal, ...(visible ? { visible } : {}) });
   try {
+    if (reading) {
+      detachReading = reading({ open: browser.open, close: browser.close, subscribe: browser.subscribe, sites: () => view.raidPennantSites() });
+      if (stopped) { detachReading(); return dispose; }
+    }
     disconnect = source.subscribe(raw => {
       if (stopped) return;
       const frame = parseRaidPennantFrame(raw, clock());
       if (!frame || frame.kingdomId !== kingdomId || frame.origin !== feed.origin || frame.asOf < lastAsOf) return;
-      lastAsOf = frame.asOf; view.receiveRaidPennants(frame);
+      lastAsOf = frame.asOf; browser?.receive(frame);
     });
     // A synchronous source can trigger an abort or view disposal before subscribe returns.
     if (stopped) disconnect();

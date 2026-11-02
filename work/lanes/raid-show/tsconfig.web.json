@@ -4,6 +4,8 @@
     "../../../apps/web/src/twitch-moments/raid*.ts",
     "../../../apps/web/src/kingdom/moments/raid-*.ts",
     "../../../apps/web/src/raid-gate/incoming.tsx",
+    "../../../apps/web/src/raid-gate/pennant-browser*.ts",
+    "../../../packages/shared/src/raid-pennant-archive.test.ts",
     "../../../apps/web/src/raid-gate/index.tsx",
     "../../../apps/web/src/raid-gate/guest-insignia*.ts",
     "../../../apps/web/src/raid-gate/guest-insignia*.tsx",
