@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Your card bench</title>
+  <link rel="icon" href="data:," />
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #120c22; }
+    #stage { position: fixed; inset: 0;
+      background: var(--bench-backdrop) center 38% / auto 112% no-repeat, linear-gradient(180deg, #3d3564, #7a5a6a 46%, #2b2436 47%, #1d1a26); }
+    @media (max-aspect-ratio: 1/1) { #stage { background-size: auto 104%, auto; background-position: 50% 30%, 0 0; } }
+  </style>
+</head>
+<body><div id="stage"></div><script type="module" src="./bench.tsx"></script></body>
+</html>

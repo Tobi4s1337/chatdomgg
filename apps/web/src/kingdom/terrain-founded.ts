@@ -1,6 +1,7 @@
 /* global Worker:readonly */
 import { terrainHeight, type SettlementPlan } from '@chatdom/world';
 import { foundedTerrainFrame } from '@chatdom/world/founded-collision';
+export { foundedHeightSampler } from './terrain-founded-sampler';
 
 /**
  * The installed ground the opening needs before it can place anything: the founded collision grid (half-metre
@@ -75,13 +76,14 @@ export function joinFoundedGround(plan: SettlementPlan, window: FoundedGroundWin
 }
 
 /**
- * Samples the installed ground in up to three workers. Without workers (tests, very old browsers) it samples
+ * Samples the installed ground in up to six workers. Without workers (tests, very old browsers) it samples
  * here. Rejects on abort or a worker failure; there is no partial result.
  */
 export function prepareFoundedGround(plan: SettlementPlan, options: { readonly signal?: AbortSignal; readonly parts?: number } = {}): Promise<FoundedGround> {
   const window = foundedGroundWindow(plan);
   if (typeof Worker === 'undefined') return Promise.resolve(joinFoundedGround(plan, window, [sampleFoundedGroundBand({ plan, window, part: 0, parts: 1 })]));
-  const parts = options.parts ?? Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 4) - 2));
+  // The opening waits on these bands before it can place anything; on a big machine more bands finish sooner.
+  const parts = options.parts ?? Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 2));
   const signal = options.signal;
   if (signal?.aborted) return Promise.reject(new DOMException('The kingdom closed', 'AbortError'));
   return new Promise((resolve, reject) => {

@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
   const proxies = { '/live-realm-data': realmLive, '/realm-data': realmPreview,
     '/api/realm/founded': realmTarget, '/api/realm/entry': realmTarget, '/api/realm/watch': realmTarget,
     '/api/realm/chronicle': realmTarget, '/api/realm/clock': realmTarget, '/api/realm/pier': realmTarget,
+    '/api/realm/looks': realmTarget,
     '/api/realm/forge/chat': realmTarget,
     '/api/realm/land': setting('CHATDOM_LAND_TARGET', realmTarget),
     '/api/realm/forge/queue': realmTarget,

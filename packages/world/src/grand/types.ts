@@ -1,5 +1,6 @@
 import type { GenesisBiome, GenesisTier, GenesisLandscape } from '../genesis/contracts';
 import type { GrandPaletteStyle } from './palette';
+import type { GrandWorldTraits } from './world';
 
 /** The grand land uses the terrain lattice: one voxel is half a metre. */
 export const GRAND_VOXEL_METRES = 0.5;
@@ -22,6 +23,8 @@ export interface GrandLandSeed {
   readonly character: GrandCharacter;
   /** Minimum columns required by an installed settlement; rounded up to a streaming region. */
   readonly minSize?: number;
+  /** Generator `grand-land-2`: the channel's own landform, forest and crest (`./world.ts`). Absent: `grand-land-1`. */
+  readonly world?: GrandWorldTraits;
 }
 
 export type TreeSpecies =

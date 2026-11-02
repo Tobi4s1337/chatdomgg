@@ -18,8 +18,16 @@ export function mountLandRoutes(app: uWebSocketsTransport['app'], source: string
         405: '405 Method Not Allowed', 503: '503 Service Unavailable' };
       res.cork(() => {
         res.writeStatus(statuses[reply.status] ?? '503 Service Unavailable');
-        for (const [key, value] of Object.entries(reply.headers)) res.writeHeader(key, value);
-        res.end(reply.body);
+        // uWS writes Content-Length itself. A second copy makes Node clients (the public gateway) refuse the reply.
+        let length: string | undefined;
+        for (const [key, value] of Object.entries(reply.headers)) {
+          if (key.toLowerCase() === 'content-length') length = value;
+          else res.writeHeader(key, value);
+        }
+        // HEAD reports the artifact's real length without a body; a 304 carries neither.
+        if (reply.status === 304) res.endWithoutBody();
+        else if (method === 'HEAD') res.endWithoutBody(Number(length ?? reply.body.byteLength));
+        else res.end(reply.body);
       });
     }, () => { if (!aborted) res.cork(() => res.writeStatus('503 Service Unavailable').writeHeader('Cache-Control', 'no-store').end()); });
   });

@@ -5,8 +5,9 @@ import type { XZ } from '@chatdom/world';
 import type { WaterReach } from '../../../../../../packages/world/src/places/water/reaches';
 import { assertGround, basinDistance, waterAt, type WaterAt, type WaterGround } from './coverage';
 import { basinGeometry, reachGeometry } from './geometry';
-import { assertRaster, rasterGeometry, rasterSamples, rasterWaterAt, type WaterRaster } from './raster';
+import { assertRaster, OPEN_SEA_DEPTH, openSeaGeometry, rasterGeometry, rasterSamples, rasterWaterAt, type WaterRaster } from './raster';
 import { FLOW_PERIOD, waterPhases } from './phases';
+import { NO_MIST, type LandMistUniforms } from '../../../../../../packages/render/src/grand/mist';
 import { PILLAR_CAP, selectPillars, type PillarSelection, type WaterLightSource } from './pillars';
 import { createPlanarReflection, type PlanarReflectionOptions, type ReflectionDiagnostics, type ReflectionFrame, type ReflectionReport } from './reflection';
 import { BASIN_CAP, CONTACT_CAP, waterFragment, waterVertex } from './shader';
@@ -32,11 +33,19 @@ export interface WaterSurfaceOptions {
   readonly ground: WaterGround;
   /** Optional native terrain water levels, in the same grid as ground. */
   readonly raster?: WaterRaster;
-  /** Bed height outside the sampled ground grid; defaults to an occluding height. */
+  /** Bed height outside the sampled ground grid; defaults to an occluding height, or the deep sea with `openSea`. */
   readonly outsideGroundHeight?: number;
+  /**
+   * Raster only: the open sea beyond the sampled land, as far as this many metres from the land's centre. A grand
+   * land is an island; without it the sea would stop in a square edge where the raster ends. Its far reach takes the
+   * sky's own horizon colour, so from any height the sea meets the sky at the horizon without a seam.
+   */
+  readonly openSea?: number;
   readonly contacts?: readonly WaterContact[];
   readonly quality: WaterQuality;
   readonly reflection?: PlanarReflectionOptions;
+  /** The land's sea mist (GW13), shared with the floor; without one the water is all open. */
+  readonly mist?: LandMistUniforms;
 }
 
 export interface WaterSurfaceFrame {
@@ -74,7 +83,9 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
   const { bodies, reaches, ground } = options;
   assertGround(ground);
   if (options.raster) assertRaster(options.raster, ground);
-  const outsideGroundHeight = options.outsideGroundHeight ?? 1e4;
+  const openSea = options.openSea ?? 0;
+  if (!Number.isFinite(openSea) || openSea < 0 || (openSea > 0 && !options.raster)) throw new RangeError('The open sea needs a raster and a finite reach');
+  const outsideGroundHeight = options.outsideGroundHeight ?? (openSea && options.raster ? options.raster.seaLevel - OPEN_SEA_DEPTH : 1e4);
   if (!Number.isFinite(outsideGroundHeight)) throw new RangeError('Outside ground height must be finite');
   if (!options.raster && !bodies.length && !reaches.length) throw new RangeError('Water needs at least one supplied basin or course');
   for (const body of bodies) {
@@ -100,7 +111,7 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
     uHeight: { value: heights }, uOrigin: { value: new THREE.Vector2(...ground.origin) },
     uSize: { value: new THREE.Vector2(ground.width + (options.raster ? 1 : 0), ground.height + (options.raster ? 1 : 0)) }, uStep: { value: ground.step },
     uGroundScale: { value: quantized ? ground.scale : 1 }, uGroundOffset: { value: quantized ? ground.offset : 0 },
-    uOutsideGroundHeight: { value: outsideGroundHeight },
+    uOutsideGroundHeight: { value: outsideGroundHeight }, uOpenSea: { value: openSea }, uOpenSeaMesh: { value: 0 },
     uBasins: { value: v4(BASIN_CAP) }, uBasinLevels: { value: new Array<number>(BASIN_CAP).fill(-1e6) }, uBasinCount: { value: options.raster ? 0 : bodies.length },
     uWind: { value: new THREE.Vector3() }, uFlowPhase: { value: new THREE.Vector2() },
     uFlowOffset0: { value: new THREE.Vector2() }, uFlowOffset1: { value: new THREE.Vector2() }, uFlowPeriod: { value: FLOW_PERIOD },
@@ -112,6 +123,8 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
     uPillarCount: { value: 0 }, uPillarPos: { value: v4(PILLAR_CAP) }, uPillarShape: { value: v4(PILLAR_CAP) },
     uContactCount: { value: 0 }, uContactA: { value: v4(CONTACT_CAP) },
     uContactB: { value: Array.from({ length: CONTACT_CAP }, () => new THREE.Vector2()) },
+    // The land's sea mist (GW13) by reference, so one lift reaches the floor and the water together; off by default.
+    ...(options.mist ?? NO_MIST.uniforms),
   };
   bodies.forEach((body, i) => { shared.uBasins.value[i]!.set(body.x, body.z, body.radiusX, body.radiusZ); shared.uBasinLevels.value[i] = body.level; });
   // A blank 1×1 stands in for the target until the first pass, so the sampler is always bound to a real texture.
@@ -137,6 +150,12 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
   if (options.raster) {
     const mesh = new THREE.Mesh(rasterGeometry(options.raster, ground), material(1, { uBasin: { value: new THREE.Vector4() }, uFeather: { value: 0 }, uWindAmp: { value: 1 } }));
     mesh.name = 'water:raster'; meshes.push(mesh);
+    if (openSea) {
+      const sea = new THREE.Mesh(openSeaGeometry(options.raster.seaLevel, ground, openSea), material(1, { uBasin: { value: new THREE.Vector4() }, uFeather: { value: 0 }, uWindAmp: { value: 1 }, uOpenSeaMesh: { value: 1 } }));
+      const seaMaterial = sea.material as THREE.ShaderMaterial;
+      seaMaterial.polygonOffset = true; seaMaterial.polygonOffsetFactor = 0; seaMaterial.polygonOffsetUnits = -4;
+      sea.name = 'water:open-sea'; sea.frustumCulled = false; meshes.push(sea);
+    }
   }
   for (const body of options.raster ? [] : bodies) {
     const mesh = new THREE.Mesh(basinGeometry(body), material(0, {

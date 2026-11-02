@@ -720,6 +720,28 @@ For the integrator: publish tobi4s_'s land from the **grader 3, format 2 store**
 not from the earlier `land-bake-a` or `land-bake-f2` stores; their metadata names grader 2 and the client
 rejects them. The commands in `apps/realm/src/land/README.md` carry the new recipe hash.
 
+## GW15 the kingdom as stunning as the island — 2026-11-02
+
+What GW15 changes on shared surfaces, for workers 1 (GW11) and 2 (GW14) and the integrator:
+
+- `kingdom/scene.ts`: new `CameraName`s `island` and `vista` (offered only on the grand floor, `offers(view)`), an
+  `opening` scene option (hold on the island, then descend to the hero), the forest fringe planted just outside the
+  physical region, and the town ground (fields, meadow, heath, bracken, borders) planned in a worker
+  (`grand-land/town-ground/remote.ts`). The town-ground block sits right after the adopted cover; the fringe sits
+  inside the grand-land task beside `materialFactory`. Nothing touches collision, plots, doors or placements.
+- The grand replacement water now has an **open sea** (`createWaterSurface({ openSea })`): four quads at sea level
+  from the raster's edge to 40 km, and the camera's far plane reaches it. Its far reach takes the sky dome's horizon
+  colour (`domeHorizon` in `places/water/surface/shader.ts`), so a change to the dome's horizon terms in
+  `packages/render/src/atmosphere.ts` should be mirrored there.
+- Ground dressing: `GroundDressing.yieldGround(drop)` permanently drops passive cover (never solids; their
+  collision stays) and a new band family `fields` for `town-*` crops and borders. `pieceRole` treats any `town-*`
+  blueprint as passive cover.
+- The hosted floor material takes the town's land-use mask late (`HostedGrandMaterial.setTownUse`).
+- Stream: `window.__chatdomStream.inspect()` returns the scene's diagnostics for capture probes; the director's
+  break and show tours include `island` and `vista` where the scene offers them; `?opening=0` turns the opening off.
+- **needs (Backlog):** trees inside the walkable town. They need colliders through GW14's solids query; until then
+  the fringe stands only outside the physical region (SEAMS guarantee 4).
+
 ## GW11 the opening loader, mountable — 2026-11-02
 
 The kingdom page, the stream stage and `/-/grand` now open behind one loader: the parchment map of the kingdom.
@@ -894,6 +916,74 @@ is merged into this branch. Nothing below changes a home, a door, a placement or
    one call in `apps/web/src/stream/index.tsx` to panel's publisher. Gift effects (PW12) mount through the moment
    hooks once their payloads are committed.
 
+### Installed after the integrator merge, third GW14 session (2026-11-02)
+
+`lane/integrator` is merged into this branch (548dc883). What each ask now has, and what stays with its owner:
+
+- **pier 3a, the lanterns in every scene: installed.** `apps/web/src/kingdom/grand-land/pier-layer.ts` (this lane's
+  folder; the pier's own `fishing/**` stays untouched) calls `registerPierKingdomLayer(registerKingdomLayer)`. It
+  imports the registry from `kingdom/grand-land/kingdom-layer.ts`, not from `scene.ts`, and `scene.ts` imports it
+  once, so the stream, a watcher's page, the panel's painter and the walk all get the lanterns with no import cycle.
+  A kingdom without `pier:` placements mounts nothing. The realm's adoption already installs the pier
+  (`pierFurnishings` in `apps/realm/src/founded/scene.ts`); tobi4s_'s live scene gets it on its next adoption.
+  - **Superseded (GW12, 2026-11-02):** the pier now registers its own layer (`fishing/kingdom-slot.ts`, loaded by
+    `play/providers` through `walk-scene.ts`, which `scene.ts` imports statically). Both registrations threw
+    `Kingdom layer already registered: pier` and no kingdom page opened, so `grand-land/pier-layer.ts` is removed;
+    the lanterns still mount in every scene through the pier's own line.
+  - **For the realm owner:** `REALM_PIER_FISHING=1` can now be set wherever this build serves the kingdom view; the
+    layer is drawn.
+- **raid-show §8, §9, native sight and the gate shot: the scene side is installed; the forwarding is raid-show's.**
+  `kingdom/moments/index.ts` is raid-show's file, so grand-world does not edit it. `scene.ts` builds
+  `createRaidMomentHooks(...)` (`kingdom/grand-land/raid-support.ts`) from the scene's one adopted collision world
+  (compiled once, now shared by the soul host, the observed walkers and the moments) and its founded ground, and
+  spreads `{raidChatSupport, raidPennantVisible, validatePose}` into its single `createKingdomMoments({...})` call
+  under exactly the option names raid-show's SEAMS asks for. They are inert until raid-show forwards them; the ask
+  with the exact lines is in `work/lanes/raid-show/SEAMS.md` ("grand-world answer, GW14").
+  - `raidChatSupport`: every half-metre sample of the footprint stands on dry founded ground between 2 cm under the
+    foot and the prop's rise above it (lamp .08 m, wall bay .18 m, approach road .9 m); nothing solid overlaps the
+    body from `foot.y + .1` (lamp) or `+ .25` (bay) to its height; outside the walkable region only the visual road
+    may run (the caller's terrain check decides there); false once the scene's world retires.
+  - `validatePose`, for every moment shot: the eye stands at least .6 m above the drawn land, the land does not rise
+    over the line (sampled every 2 m to 2 m short of the subject, the grand land included), and no founded solid
+    stands in the way inside the walkable region (`segmentClear`, the subject's own box exempt).
+  - `raidPennantVisible`: the same sightline from the camera to the bay at 30, 60 and 90 % of its height.
+  - Torch light: the scene's light field reads `moments.metrics().raidTorchSites` through `raidTorchLights` (at most
+    twelve, flame 2.2 m above the foot) and lights the town from them as soon as raid-show adds that metrics field.
+  - Fixed-time draws: `renderKey` carries `view['pennantWall.revision']` (raid-show's ask, done in `scene.ts`).
+  - **Not done, by design:** pennant bays and torch posts are not registered as walking solids. Walking collision is
+    the realm's authority; a client-only blocker would make prediction disagree with the room. If they must stop
+    walkers, the realm must add them to the room's world; until then they are visual and the support check keeps
+    them off the paved egress. `raidPennantReading` needs play's input owner.
+  - **raidParty / `gatherAt`:** waits on raid-show's moments consumer and play's `gatherAt`. Nothing in the tree
+    produces a `RaidPartyFeed` yet; `SceneOptions` gains the option when that consumer lands.
+- **forge-wish §13, a commit must not block the realm: the compiler half is done.** `compileCollisionWorld` and
+  `compilePlacedSolids` (`packages/voxel/src/collision`) reuse each unchanged asset's coalesced boxes and each
+  unchanged placement's world boxes across trusted compiles. A hit is checked against the asset's exact writes,
+  size, lattice and solid materials, so it returns the same boxes a fresh compile gives (tobi4s_'s real scene:
+  194,992 boxes identical, and identical again after moving one placement). Untrusted proposals (explicit limits)
+  never touch the cache. Bounds: 1,024 assets, 1,000,000 retained boxes. On his real scene (1,197 placements,
+  101 assets) a warm recompile of the whole world went from 1,372–1,421 ms to 110–162 ms (placed solids
+  1,282–1,302 ms to 20–30 ms). No realm change is needed: the founded provider's existing call gets faster.
+  `COLLISION_COMPILER_VERSION` is unchanged because the output is identical.
+  - **Left to its owners:** §12 (no reload on a Forge commit) still needs play's hot adoption in `walk-scene.ts`.
+    grand-world's half (swap one home's attachment meshes in place, honouring `hideAttachment`) waits on that.
+- **play A2 `surfaceAt` into the walk:** still play's step (an optional `surfaceAt` on `createKingdomWalk` and
+  `createObservedWalkers`, passed to `createWalkerGround`). `scene.surfaceAt` is ready; walking already stands on the
+  collision floor on the grand land (floor gap 0 in every bench walk), so this is for footfall sound and dust only.
+- **gather, the campfire:** the pinned Wilds-edge clearing (`pinnedCampfireSite('129634568')`) is not installed by
+  the realm yet; no founded adoption places `gather:campfire:*`. Installing it is a realm adoption change (a new
+  placement for every kingdom with a pinned site, so a new receipt and a land rebind) and stays with the realm founded
+  owner. grand-world's side (the site, its validation and the `places` mount) is ready.
+- **panel-window:** the painter (`apps/web/src/panel-painter`) opens the kingdom scene itself with the founded scene
+  and receipt, so it paints the grand land wherever the land is published; it takes Chrome screenshots, so
+  `scene.still()` is offered but not needed.
+- **front-door FD13:** `apps/web/src/site/hero/land.ts` imports `mountLandHero` lazily; nothing more is asked.
+
+**Evidence bench for the next adoption.** `work/lanes/grand-world/stage-adoption.mjs` builds what the merged realm
+adopts next for tobi4s_ (the live scene plus the realm's own `pierFurnishings`, collision revision + 1, nothing else
+moved). The publication CLI rebinds the existing land to that receipt in 2.5 s with every blob reused.
+`capture-walk.mjs --scene/--receipt` serves it, and `--stream` takes the stream's held director shots on the same
+bench through a watch route that serves the bench's checkpoint.
 ## GW11 the realm makes, binds and serves the land — 2026-11-02
 
 The realm now owns the land's whole life on the server (`apps/realm/src/land/realm.ts`, `createRealmLand`):
@@ -932,8 +1022,9 @@ Run in the deployed checkout (lane/integrator with this checkpoint merged). Noth
 2. **Land directory:** one persistent directory outside the repo, owned by the realm's user, on the same disk as
    `REALM_FOUNDED_DIRECTORY` (for example `/var/lib/chatdom/land`). Either:
    - **copy the verified bake** (instant, 17.63 MB): `cp -a <grand-world worktree>/shots/grand-world/land-bake-g3/. /var/lib/chatdom/land/`
-     It holds recipe `71f6888b…` (grader 3, format 2), the plan catalogue and the binding for the live receipt
-     `af5df495…` (collision revision 11); or
+     It holds recipe `71f6888b…` (grader 3, format 2), the plan catalogue and the bindings for the live receipts
+     `af5df495…` (collision revision 11) and `1ee0e81d…` (collision revision 12, the anvil's physics identity; same
+     plan, rebound with the publication command in 1.9 s, all 354 blobs reused); or
    - **leave it empty**: on the kingdom's first open the realm bakes it itself (about 93 CPU s at priority 19,
      about 400 MiB in the child; on this host under load 25 it took the wall time recorded in GW11.md), and the
      kingdom shows today's land until the binding lands.
@@ -954,11 +1045,56 @@ Run in the deployed checkout (lane/integrator with this checkpoint merged). Noth
    ```
    Then `/stream?source=realm&kingdom=129634568` and `/-/grand?channel=tobi4s_` open on the grand land with his homes
    (the canvas's `data-hosted-land` is not `absent`).
+   After the Content-Length fix (`apps/realm/src/land/mount.ts`, GW11 third session) merges and the realm is
+   rebuilt, the deployed copy's local patch that skipped the header can be dropped; `curl -sI` then shows exactly
+   one `content-length`, equal to the blob's size.
 7. **Rollback:** unset `REALM_LAND_DIRECTORY` and restart. Clients fall back to today's land (the probe's 6 s limit
    ends the wait on an unmounted route). The land directory can stay; it is immutable.
 
 Still open for the integrator (unchanged): the Chronicle's historical scenes do not pass through the founded store, so
 replaying an old receipt shows today's land unless that exact receipt was published (`publish-cli`).
+
+### GW11 opening speed: small additive changes beside this lane's files
+
+No round lane owns these, so they were made here as the smallest backward-compatible change (note of 2 Nov 12:18):
+- `packages/voxel/src/collision`: `compileCollisionWorldWithSolids`, `packCollisionBoxes`, `unpackCollisionBoxes`;
+  `compileCollisionWorld` now calls the first with `compilePlacedSolids(input)`, the same world as before.
+- `packages/world/src/founded-world/collision.ts`: `foundedPlacedSolidsInput` and `compileFoundedSceneWithSolids`.
+  `compileFoundedScene` is unchanged in result.
+- `terrain-art` is untouched: the scene answers ground queries from the workers' corners in its own
+  `apps/web/src/kingdom/terrain-founded-sampler.ts` (the producer's interpolation, spot-checked against
+  `terrainHeight`).
+
+## GW12 frame budget: what the scene host now offers and one ask — 2026-11-02
+
+- **Quality.** `kingdom/scene.ts` governs the automatic quality (`grand-land/quality-governor.ts`): GPU time from
+  timer queries plus main-thread render time, high/balanced/low, applied at camera cuts. A chosen quality
+  (`setQuality`) turns it off; `null` hands it back. Inside OBS (`window.obsstudio`) it opens balanced on a 4 ms GPU
+  budget and never probes above balanced without timer queries. Software renderers, replays and fixed captures are
+  never governed. `inspect().quality` reports the tier, the budget and the governor's last 90th percentiles.
+- **Reflection.** The water's planar pass draws the outer land at level 2 and leaves out the ground dressing. A lane
+  that adds many small objects near the ground and wants them out of the half-resolution reflection asks for its
+  root to join `reflectionExclusions` in `scene.ts`.
+- **Ask (forge):** `forge/emitters` submits all of its point pools in every pass, also when no particle is alive:
+  21 draws of zero triangles in the main view and 21 more in the reflection at every stream pose (the 5080 count at
+  the door and pier shots). Hiding a pool while its alphas are all zero (`points.visible = false`) brings the door
+  shot under spec 56's 500-draw frame budget. Nothing else changes; the pools stay allocated.
+  Meanwhile the kingdom host skips them itself (GW12, `kingdom/grand-land/empty-points.ts`, called from `scene.ts`
+  just before each frame is drawn): any `THREE.Points` with an all-zero `aAlpha` attribute is hidden for that frame
+  and shown again as soon as one point has alpha. It never shows a pool its owner hid. If forge adopts the same rule
+  in `forge/emitters`, the host sweep simply finds nothing to hide; nothing needs removing.
+
+## GW13 every channel its own world — the asks (2026-11-02, checkpoint)
+
+- **needs: integrator** — a kingdom founded on its own world needs its `grand-land-2` recipe pinned at founding and
+  bound into the founded receipt, so the realm bakes and serves it and the browser can verify it. Today only adopted
+  `grand-land-1` recipes exist (`adoptedGrandRecipe`); `grandSeedFromGenesis(recipe, name, { character })` in
+  `packages/world/src/grand/world.ts` (or `grandSeedForHolding` in `apps/web/src/grand/holding-world.ts` for an Atlas
+  holding) makes the seed. Grand-world will add the realm's immutable recipe store and the served-recipe check next.
+- **needs: chronicle** — each opening is offered as a Chronicle page. The opening is a pure function of the baked
+  surface, the founded town's columns and the citizen count (`grandRevealField`, `grandRevealStage`,
+  `grandRevealOpening` in `packages/world/src/grand/reveal.ts`); the page text is `opening.line`. The realm sees the
+  count cross a milestone; it should append one page per crossing, never more than once per stage.
 
 ## from launch
 

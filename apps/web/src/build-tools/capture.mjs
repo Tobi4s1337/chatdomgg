@@ -18,7 +18,7 @@ const rack = page => page.locator('[data-build-tools-rack]');
 const core = page => page.evaluate(() => {
   const s = window.__chatdomKingdom.build.session, c = s.controller.snapshot();
   return { revision: s.draft.revision, occupied: s.draft.voxelCount, canUndo: s.draft.canUndo, canRedo: s.draft.canRedo, status: s.debug.status,
-    tool: c.tool, material: c.material, brush: c.brush, mirror: c.mirror, budget: c.budget };
+    tool: c.tool, material: c.material, brush: c.brush, budget: c.budget };
 });
 const cellAt = (page, at) => page.evaluate(cell => window.__chatdomKingdom.build.session.draft.get(cell), at);
 const button = (page, name) => rack(page).getByRole('button', { name, exact: true });
@@ -78,17 +78,17 @@ const census = () => {
 /**
  * The plot is dressed (lawn, a paved path, window boxes), so the tour finds open lawn rather than trusting fixed cells.
  * A ½ m patch row is open when its front three courses are bare lawn, its back course at most paving height, and
- * nothing stands within 2 m above it or between it and the street edge (also checked in its X mirror when asked).
+ * nothing stands within 2 m above it or between it and the street edge.
  * `__btEmpty` counts the empty cells in a box, which is exactly what a placement there may add.
  */
 const grounds = () => {
   const draft = () => window.__chatdomKingdom.build.session.draft;
   const ground = (d, x, z) => { for (let y = 15; y >= 0; y--) if (d.get([x, y, z])) return y + 1; return 0; };
-  window.__btOpen = (x0, z0, w, mirrorX = false) => {
-    const d = draft(), p = d.policy, xs = p.editableFrom[0] + p.editableTo[0] - 1;
-    for (let x = x0; x < x0 + w; x++) for (const cx of mirrorX ? [x, xs - x] : [x]) {
-      if (cx < p.editableFrom[0] || cx >= p.editableTo[0]) return false;
-      for (let z = z0; z < p.editableTo[2]; z++) if (ground(d, cx, z) > (z === z0 ? 4 : 0)) return false;
+  window.__btOpen = (x0, z0, w) => {
+    const d = draft(), p = d.policy;
+    for (let x = x0; x < x0 + w; x++) {
+      if (x < p.editableFrom[0] || x >= p.editableTo[0]) return false;
+      for (let z = z0; z < p.editableTo[2]; z++) if (ground(d, x, z) > (z === z0 ? 4 : 0)) return false;
     }
     return true;
   };
@@ -96,6 +96,29 @@ const grounds = () => {
     for (const [from, to] of boxes) for (let x = from[0]; x <= to[0]; x++) for (let y = from[1]; y <= to[1]; y++) for (let z = from[2]; z <= to[2]; z++) if (!d.get([x, y, z])) n++;
     return n; };
 };
+/**
+ * The core's piece feed, driven the way main feeds kept forged gifts: three small finished pieces in this plot's
+ * style and palette, standing on one open patch of lawn at the front (behind its paving course). Returns how many were offered.
+ */
+const offerPieces = page => page.evaluate(() => {
+  const s = window.__chatdomKingdom.build.session, p = s.draft.policy, mats = s.controller.snapshot().materials;
+  const m = name => mats.find(item => item.name === name)?.id ?? p.palette[0];
+  let spot = null;
+  for (let z = p.editableTo[2] - 12; z >= p.editableTo[2] - 40 && !spot; z -= 4) for (let x = p.editableFrom[0] + 4; x + 8 <= p.editableTo[0] - 4; x += 4) if (window.__btOpen(x, z, 8)) { spot = [x, 0, z + 1]; break; }
+  if (!spot) return 0;
+  const piece = (id, name, note, size, boxes) => ({ id, name, note, origin: spot,
+    blueprint: { version: 1, id: `piece-${id}`, styleId: p.styleId, kind: 'prop', lattice: 'build', size, boxes, windows: [] } });
+  s.offerPieces([
+    piece('lantern', 'Lantern post', 'Kept from the Forge', [8, 34, 8], [
+      { from: [3, 0, 3], to: [5, 28, 5], material: m('bark') }, { from: [2, 28, 2], to: [6, 32, 6], material: m('brass') }, { from: [1, 32, 1], to: [7, 34, 7], material: m('bark') }]),
+    piece('tub', 'Flower tub', 'Kept from the Forge', [8, 7, 8], [
+      { from: [0, 0, 0], to: [8, 4, 8], material: m('bark') }, { from: [1, 4, 1], to: [7, 6, 7], material: m('leaf') },
+      { from: [2, 6, 2], to: [3, 7, 3], material: m('petal') }, { from: [5, 6, 4], to: [6, 7, 5], material: m('petal') }, { from: [3, 6, 5], to: [4, 7, 6], material: m('blueFlower') }]),
+    piece('step', 'Stone step', 'Kept from the Forge', [8, 2, 8], [{ from: [0, 0, 0], to: [8, 2, 8], material: m('stone') }]),
+  ]);
+  return 3;
+});
+const withdrawPieces = page => page.evaluate(() => window.__chatdomKingdom.build.session.offerPieces([]));
 const focused = page => page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.className);
 /** A finger on the rack: touch events through Chrome's touch emulation, so the phone half is tapped, not clicked. */
 let finger;
@@ -158,7 +181,7 @@ try {
   assert.equal((await core(page)).material, brass);
   assert.equal(await rack(page).locator('.bt-materials .bt-label > span').innerText(), 'Brass');
   const start = await core(page);
-  // Open lawn for a 1 m run at the front of the plot, in view left of the rack, leaving the far-left lawn and its X mirror free.
+  // Open lawn for a 1 m run at the front of the plot, in view left of the rack, leaving the far-left lawn free.
   const [x0, z0] = await page.evaluate(() => {
     const s = window.__chatdomKingdom.build.session, p = s.draft.policy, xs = p.editableFrom[0] + p.editableTo[0] - 1;
     const edge = document.querySelector('[data-build-tools-rack]').getBoundingClientRect().left;
@@ -204,31 +227,39 @@ try {
   await button(page, 'Half a metre').click(); assert.equal((await core(page)).brush, 4);
   report.checks.push('Brushes: ¼ m added 8 blocks on top of the run, ⅛ m added 1, back to ½ m');
 
-  // Mirror X: one drag along a flat open row lands twice, and history treats the whole drag as one gesture.
-  await button(page, 'Mirror left and right').click(); assert.equal((await core(page)).mirror, 'x');
-  const row = await page.evaluate(() => {
-    const p = window.__chatdomKingdom.build.session.draft.policy, mid = (p.editableFrom[0] + p.editableTo[0]) / 2;
-    for (let z = p.editableTo[2] - 4; z >= p.editableTo[2] - 24; z -= 4) for (let x0 = p.editableFrom[0]; x0 + 8 <= mid; x0 += 4) if (window.__btOpen(x0, z, 8, true)) return [x0, z];
+  // A drag along a flat open row lays the whole run, and history treats the whole drag as one gesture.
+  const row = await page.evaluate(([taken, width]) => {
+    const p = window.__chatdomKingdom.build.session.draft.policy;
+    for (let z = p.editableTo[2] - 4; z >= p.editableTo[2] - 24; z -= 4) for (let x0 = p.editableFrom[0]; x0 + 8 <= p.editableTo[0]; x0 += 4) {
+      if (z === taken[1] && x0 + 8 > taken[0] && x0 < taken[0] + width) continue;
+      if (window.__btOpen(x0, z, 8)) return [x0, z];
+    }
     return null;
-  });
-  assert.ok(row !== null, 'open lawn on both sides of the plot');
+  }, [[x0, z0], 8]);
+  assert.ok(row !== null, 'a second open row of lawn on the plot');
   const [rx, rz] = row;
-  const xSum = await page.evaluate(() => { const p = window.__chatdomKingdom.build.session.draft.policy; return p.editableFrom[0] + p.editableTo[0] - 1; });
-  const twin = await page.evaluate(boxes => window.__btEmpty(boxes), [box(rx, rz), box(rx + 4, rz), box(xSum - rx - 7, rz), box(xSum - rx - 3, rz)]);
-  const mirrored = await edited(page, [[rx + 2, -0.5, rz + 2], [rx + 6, -0.5, rz + 2]]);
-  assert.equal(mirrored.to.occupied - mirrored.from.occupied, twin, `mirrored drag along ${row} placed both sides`);
-  assert.equal(await cellAt(page, [xSum - rx - 1, 0, rz + 3]), brass, 'the mirror side is brass');
+  const run = await page.evaluate(boxes => window.__btEmpty(boxes), [box(rx, rz), box(rx + 4, rz)]);
+  const dragged = await edited(page, [[rx + 2, -0.5, rz + 2], [rx + 6, -0.5, rz + 2]]);
+  assert.equal(dragged.to.occupied - dragged.from.occupied, run, `the drag along ${row} laid the whole run`);
+  assert.equal(await cellAt(page, [rx + 7, 0, rz + 3]), brass, 'the far end of the run is brass');
   await settle(page);
   assert.equal(await button(page, 'Redo').isDisabled(), true);
   await button(page, 'Undo').click(); await frame(page);
   const undone = await core(page);
-  assert.equal(undone.occupied, mirrored.from.occupied, 'one undo removes the whole mirrored drag');
+  assert.equal(undone.occupied, dragged.from.occupied, 'one undo removes the whole drag');
   assert.equal(await button(page, 'Redo').isEnabled(), true);
   await page.keyboard.press('Control+Shift+Z'); await frame(page);
   const redone = await core(page);
-  assert.equal(redone.occupied, mirrored.to.occupied, 'one redo (core shortcut) restores it');
+  assert.equal(redone.occupied, dragged.to.occupied, 'one redo (core shortcut) restores it');
   assert.equal(await button(page, 'Redo').isDisabled(), true);
-  report.checks.push(`Mirror X drag: +${mirrored.to.occupied - mirrored.from.occupied} on both sides in one gesture; rack Undo → ${undone.occupied}, Ctrl+Shift+Z → ${redone.occupied}; Redo enabled only in between`);
+  report.checks.push(`Drag: +${dragged.to.occupied - dragged.from.occupied} along one row in one gesture; rack Undo → ${undone.occupied}, Ctrl+Shift+Z → ${redone.occupied}; Redo enabled only in between`);
+
+  // Plain words, never the engine's mode name (decision 25); the heading is the owner's home, or plainly “Your home”.
+  const words = await rack(page).innerText();
+  assert.doesNotMatch(words, /SIMULATED/, 'no SIMULATED on the rack');
+  assert.match(await rack(page).locator('.bt-privacy').innerText(), /Private to you/);
+  assert.match(await rack(page).locator('.bt-owner').innerText(), /^(Your home|.+’s home)$/);
+  report.checks.push(`Words: heading “${await rack(page).locator('.bt-owner').innerText()}”, “${(await rack(page).locator('.bt-privacy').innerText()).replace(/\s+/g, ' ')}”; no SIMULATED anywhere on the rack`);
 
   await settle(page);
   await page.mouse.move(380, 640); await frame(page);
@@ -237,13 +268,10 @@ try {
 
   // A rejected edit: build until the core refuses at the block allowance, then try once more.
   const before = await core(page);
-  await button(page, 'Mirror into all four corners').click();
-  /** A front-quadrant column whose top (and the columns towards the camera) are clear in all four mirrors. */
+  /** A front-quadrant column whose top (and the columns towards the camera) are clear. */
   const clear = top => page.evaluate(top => {
-    const d = window.__chatdomKingdom.build.session.draft, p = d.policy;
-    const xs = p.editableFrom[0] + p.editableTo[0] - 1, zs = p.editableFrom[2] + p.editableTo[2] - 1, height = p.editableTo[1];
-    const mirrors = (x, z) => [[x, z], [xs - x, z], [x, zs - z], [xs - x, zs - z]];
-    const open = (x0, z0, from) => { for (let x = x0; x < x0 + 4; x++) for (let z = z0; z < z0 + 4; z++) for (const [mx, mz] of mirrors(x, z)) for (let y = from; y < Math.min(height, from + 16); y++) if (d.get([mx, y, mz])) return false; return true; };
+    const d = window.__chatdomKingdom.build.session.draft, p = d.policy, height = p.editableTo[1];
+    const open = (x0, z0, from) => { for (let x = x0; x < x0 + 4; x++) for (let z = z0; z < z0 + 4; z++) for (let y = from; y < Math.min(height, from + 16); y++) if (d.get([x, y, z])) return false; return true; };
     const solid = (x0, z0, y) => { for (let x = x0; x < x0 + 4; x++) for (let z = z0; z < z0 + 4; z++) if (!d.get([x, y, z])) return false; return true; };
     const mid = (p.editableFrom[2] + p.editableTo[2]) / 2;
     for (let z0 = p.editableTo[2] - 4; z0 >= mid; z0 -= 4) for (let x0 = 0; x0 < 32; x0 += 4) {
@@ -255,11 +283,11 @@ try {
   }, top);
   const quadrant = [];
   for (let z = 126; z >= 90; z -= 4) for (let i = 0; i < 8; i++) quadrant.push([(z - 126) % 8 === 0 ? 2 + i * 4 : 30 - i * 4, z]);
-  // Start on the lowest course that has a clear, supported column in all four mirrors.
+  // Start on the lowest course that has a clear, supported column; each gesture lays a ½ m slab over the front quadrant.
+  const height = await page.evaluate(() => window.__chatdomKingdom.build.session.draft.policy.editableTo[1]);
   let top = 0, slabs = 0, refusal = null;
   while (top <= 16 && !(await clear(top))) top += 4;
-  const floor = top;
-  while (top < floor + 24 && !refusal) {
+  while (top + 4 <= height && !refusal) {
     const seed = await clear(top);
     assert.ok(seed, `a clear column at height ${top}`);
     const g = await gesture(page, [[seed[0] + 2, top - 0.5, seed[1] + 2], ...quadrant.map(([x, z]) => [x, top - 0.5, z])]);
@@ -279,7 +307,7 @@ try {
   assert.match(refused.to.status, /allowance/);
   assert.equal(await rack(page).locator('.bt-slip-text').innerText(), refused.to.status, 'the rack shows the core’s reason');
   assert.equal(await pressed(page, '.bt-tool'), 'Place', 'the tool stays selected');
-  report.checks.push(`Rejection: after ${slabs} X+Z gestures the core said “${refused.to.status}”; one more click left revision ${refused.to.revision} and ${refused.to.occupied}/${refused.to.budget} blocks unchanged, Place still seated`);
+  report.checks.push(`Rejection: after ${slabs} slab gestures the core said “${refused.to.status}”; one more click left revision ${refused.to.revision} and ${refused.to.occupied}/${refused.to.budget} blocks unchanged, Place still seated`);
   await page.mouse.move(380, 640);
   await page.screenshot({ path: `${out}/refused@1440x900.png`, timeout: 120000 });
   // The same refusal on a phone: the core's reason sits in the slip above the thumb rack, the home above both.
@@ -297,8 +325,35 @@ try {
   const restored = await core(page);
   assert.equal(restored.occupied, before.occupied, 'undoing the slabs restores the home exactly');
   report.checks.push(`Undo ×${slabs} restored ${restored.occupied} blocks`);
-  await button(page, 'No mirror').click();
   await rack(page).getByRole('button', { name: 'Brass', exact: true }).click();
+  await settle(page);
+
+  // Your pieces: absent while the core offers none; once offered, one tap away under their own carved tab.
+  assert.equal(await rack(page).locator('.bt-tabs, .bt-pieces, .bt-piece-opener').count(), 0, 'no pieces shelf while nothing is offered');
+  assert.equal(await offerPieces(page), 3, 'open lawn for the pieces');
+  await frame(page);
+  await rack(page).getByRole('tab', { name: /Your pieces/ }).click();
+  assert.equal(await rack(page).locator('.bt-piece').count(), 3);
+  assert.equal(await rack(page).locator('.bt-swatch').first().isVisible(), false, 'the pieces tab takes the shelf well');
+  const beforePiece = await core(page);
+  await rack(page).getByRole('button', { name: 'Lantern post', exact: true }).click(); await frame(page);
+  assert.equal(await page.evaluate(() => window.__chatdomKingdom.build.session.imports.rack.previewing()), 'lantern', 'the core previews the chosen piece');
+  assert.equal((await core(page)).revision, beforePiece.revision, 'a preview changes nothing in the draft');
+  await settle(page); await page.mouse.move(380, 640); await frame(page); await still(page);
+  await layout(page, '1440x900 pieces');
+  await page.screenshot({ path: `${out}/pieces@1440x900.png`, timeout: 120000 });
+  await rack(page).getByRole('button', { name: 'Set it in', exact: true }).click(); await frame(page);
+  const setIn = await core(page);
+  assert.equal(setIn.revision, beforePiece.revision + 1, 'setting a piece in is one change');
+  assert.ok(setIn.occupied > beforePiece.occupied, 'the piece entered the draft');
+  assert.equal(await page.evaluate(() => window.__chatdomKingdom.build.session.imports.rack.previewing()), null);
+  await button(page, 'Undo').click(); await frame(page);
+  assert.equal((await core(page)).occupied, beforePiece.occupied, 'one undo takes the piece away again');
+  await rack(page).getByRole('tab', { name: 'Materials' }).click();
+  assert.equal(await rack(page).locator('.bt-swatch').first().isVisible(), true);
+  report.checks.push(`Pieces: shelf absent with nothing offered; 3 offered → a “Your pieces” tab; choosing Lantern post previewed it (draft revision unchanged); Set it in → +${setIn.occupied - beforePiece.occupied} blocks as one change; one undo restored ${beforePiece.occupied}`);
+  await withdrawPieces(page); await frame(page);
+  assert.equal(await rack(page).locator('.bt-tabs, .bt-pieces').count(), 0, 'withdrawn pieces leave no stand-in');
   await settle(page);
 
   // Phone: compact rack, then the palette drawer.
@@ -307,7 +362,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(150); await frame(page); await frame(page);
   assert.equal(await rack(page).locator('.bt-swatch').first().isVisible(), false, 'phone palette starts folded');
-  assert.equal(await rack(page).locator('.bt-opener').innerText().then(t => t.includes('Brass')), true, 'the opener shows the swatch in hand');
+  assert.equal(await rack(page).locator('.bt-material-opener').innerText().then(t => t.includes('Brass')), true, 'the opener shows the swatch in hand');
   const closed = await layout(page, '390x844 closed');
   const untouched = (await core(page)).revision;
   /** Lowest on-screen point of the editable plot at ground level: the home and its doorstep sit above it. */
@@ -319,7 +374,7 @@ try {
   assert.ok(closed.rack.top > foot, `closed rack (top ${closed.rack.top}) clears the plot (foot ${foot})`);
   await still(page);
   await page.screenshot({ path: `${out}/rack@390x844.png`, timeout: 120000 });
-  await tap(page, rack(page).locator('.bt-opener'));
+  await tap(page, rack(page).locator('.bt-material-opener'));
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Brass', 'focus lands on the chosen swatch');
   assert.equal(await rack(page).locator('.bt-tools').isVisible(), false);
   const drawer = await layout(page, '390x844 drawer');
@@ -340,11 +395,27 @@ try {
   assert.equal(await rack(page).isVisible(), true, 'Escape in the drawer did not leave build mode');
   assert.equal(await rack(page).locator('.bt-swatch').first().isVisible(), false, 'Escape folded the drawer');
   assert.equal(await page.evaluate(() => document.activeElement?.classList.contains('bt-opener')), true, 'focus returns to the opener');
-  assert.equal(await rack(page).locator('.bt-opener').innerText().then(t => t.includes(roofName)), true);
-  await tap(page, rack(page).locator('.bt-opener'));
+  assert.equal(await rack(page).locator('.bt-material-opener').innerText().then(t => t.includes(roofName)), true);
+  await tap(page, rack(page).locator('.bt-material-opener'));
   await tap(page, rack(page).getByRole('button', { name: 'Close', exact: true }));
   assert.equal(await page.evaluate(() => document.activeElement?.classList.contains('bt-opener')), true, 'Close returns focus to the opener');
   assert.equal((await core(page)).revision, untouched, 'taps on the rack never reach the canvas as edits');
+  // The pieces drawer on the thumb rack: a second opener beside the material, the same choose-then-set-in.
+  await offerPieces(page); await frame(page);
+  await tap(page, rack(page).locator('.bt-piece-opener'));
+  assert.equal(await rack(page).locator('.bt-piece').first().isVisible(), true, 'the pieces drawer is open');
+  await tap(page, rack(page).getByRole('button', { name: 'Flower tub', exact: true }));
+  assert.equal(await rack(page).getByRole('button', { name: 'Set it in', exact: true }).isVisible(), true);
+  const piecesDrawer = await layout(page, '390x844 pieces drawer');
+  assert.equal(piecesDrawer.small, 0, 'pieces drawer: every fitting is at least 44 px');
+  await settle(page); await still(page);
+  await page.screenshot({ path: `${out}/pieces-drawer@390x844.png`, timeout: 120000 });
+  await tap(page, rack(page).getByRole('button', { name: 'Put it back', exact: true }));
+  await tap(page, rack(page).getByRole('button', { name: 'Close', exact: true }));
+  await withdrawPieces(page); await frame(page);
+  assert.equal(await rack(page).locator('.bt-piece-opener').count(), 0);
+  assert.equal((await core(page)).revision, untouched, 'choosing and putting back a piece changed nothing');
+  report.checks.push(`Phone pieces drawer: opener → drawer, Flower tub chosen and previewed, top ${Math.round(piecesDrawer.rack.top)}; Put it back and Close left revision ${untouched}`);
   report.checks.push(`Phone drawer: plot foot at ${Math.round(foot)} px, closed rack top ${Math.round(closed.rack.top)}, open drawer top ${Math.round(drawer.rack.top)} (never taller than the rack); opens with focus on Brass, arrows walk it, slip and Place · ½ m readout stay in view; picking ${roofName} keeps it open; Escape and Close fold it back to the opener without leaving build mode`);
 
   // A phone on its side: the rack stands at the right edge, clear of the scene's seal and the home.
@@ -353,10 +424,10 @@ try {
   const side = await layout(page, '844x390');
   const seal = await page.evaluate(() => document.querySelector('.source-ribbon').getBoundingClientRect().bottom);
   assert.equal(side.small, 0, 'landscape: every fitting is at least 44 px');
-  assert.ok(side.rack.top > seal, 'landscape rack clears the SIMULATED seal');
-  await tap(page, rack(page).locator('.bt-opener'));
+  assert.ok(side.rack.top > seal, 'landscape rack clears the scene’s seal');
+  await tap(page, rack(page).locator('.bt-material-opener'));
   const sideDrawer = await layout(page, '844x390 drawer');
-  assert.ok(sideDrawer.rack.top > seal, 'landscape drawer clears the SIMULATED seal');
+  assert.ok(sideDrawer.rack.top > seal, 'landscape drawer clears the scene’s seal');
   const sideFoot = await page.evaluate(() => { const s = window.__chatdomKingdom.build.session, p = s.draft.policy; return Math.max(s.projectCell([p.editableTo[0], 0, p.editableTo[2]]).x, s.projectCell([p.editableTo[0], 0, p.editableFrom[2]]).x); });
   assert.ok(side.rack.left > sideFoot, `landscape rack (left ${side.rack.left}) clears the plot (right ${Math.round(sideFoot)})`);
   await page.keyboard.press('Escape'); await frame(page);
@@ -385,9 +456,11 @@ try {
   assert.equal((await core(page)).occupied, reopened.from.occupied, 'one undo puts the whole box back');
   report.checks.push(`Close/reopen: media listeners ${held} → ${after} → ${held}; one rack; Erase tapped on the new rack, one click erased ${reopened.from.occupied - reopened.to.occupied} blocks as revision ${reopened.from.revision} → ${reopened.to.revision}, one undo restored them`);
 
-  // The SIMULATED local street: the rack says what it is, one double tap is one publication, and what it stores stays in this browser.
+  // The browser-local street: the rack says in plain words which street it reaches, one double tap is one publication,
+  // and what it stores stays in this browser.
   const welcome = rack(page).locator('.bt-welcome');
-  assert.match(await welcome.innerText(), /SIMULATED/, 'the welcome plate is labelled SIMULATED');
+  assert.doesNotMatch(await welcome.innerText(), /SIMULATED/, 'the welcome plate speaks plainly');
+  assert.match(await welcome.innerText(), /browser/i, 'the welcome plate says it reaches this browser’s street');
   assert.equal(await rack(page).locator('.bt-slip-note').isVisible(), true, 'the edited draft is marked as not yet on the local street');
   await page.evaluate(() => { const c = window.__chatdomKingdom.build.session.controller, real = c.publish; window.__btPublishes = 0; c.publish = () => { window.__btPublishes++; return real.call(c); }; });
   const plate = await welcome.boundingBox();
@@ -399,10 +472,11 @@ try {
   assert.equal(await page.evaluate(() => window.__btPublishes), 1, 'two quick taps reached the core once');
   await page.locator('.housewarming-name').waitFor({ state: 'visible' });
   const sign = await page.locator('.housewarming-name').innerText();
-  assert.match(sign, /SIMULATED/, 'the housewarming is labelled SIMULATED');
+  assert.doesNotMatch(sign, /SIMULATED/, 'the housewarming speaks plainly');
   assert.equal(await page.locator('[data-build-tools-rack]').count(), 0, 'the core closed build mode for the housewarming');
   const stored = await page.evaluate(() => Object.keys(window.localStorage).filter(k => k.startsWith("chatdom:build:")).map(k => ({ key: k, published: !!JSON.parse(window.localStorage.getItem(k)).published })));
-  assert.ok(stored.length === 1 && stored[0].key.startsWith('chatdom:build:SIMULATED:') && stored[0].published, 'one SIMULATED browser-local save holds the publication');
+  // The storage key keeps its old name so existing drafts are not lost.
+  assert.ok(stored.length === 1 && stored[0].key.startsWith('chatdom:build:SIMULATED:') && stored[0].published, 'one browser-local save holds the publication');
   assert.ok(await page.evaluate(() => !!window.__chatdomKingdom.build.streetHome), 'the local street shows the new version');
   // No shot here: under SwiftShader the six-second housewarming has ended before a frame can be written.
   await page.waitForFunction(() => !window.__chatdomKingdom.build.housewarming, null, { timeout: 60000 });
@@ -425,7 +499,7 @@ try {
   assert.equal(await live.evaluate(() => window.__chatdomKingdom.build.enter()), false, 'the core will not open a LIVE draft');
   assert.equal(await live.locator('[data-build-tools-rack]').count(), 0);
   assert.deepEqual(liveErrors, []);
-  report.checks.push(`LIVE (source=herald): no “Build my home”, build.enter() → false, no rack; ribbon “${await live.locator('.source-ribbon').innerText()}”. The rack's own LIVE branch (locked fittings, “Needs the kingdom’s review service”) cannot be reached through the integration`);
+  report.checks.push(`LIVE (source=herald): no “Build my home”, build.enter() → false, no rack; ribbon “${await live.locator('.source-ribbon').innerText()}”. The rack's own resting branch (locked fittings, “Not open to building yet”) cannot be reached through the integration`);
   await live.close();
   report.result = 'passed';
 } catch (error) {

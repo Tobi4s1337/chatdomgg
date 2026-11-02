@@ -51,3 +51,59 @@ export function balanceLevels(states: readonly LodState[], neighbours: readonly 
     if (!changed) return;
   }
 }
+
+/** A region as the main-view budget sees it. `quads[level]` estimates what the main view submits at that level. */
+export interface BudgetRegion {
+  readonly state: LodState;
+  readonly visible: boolean;
+  /** Pinned to its only level (the installed town): counted, never coarsened. */
+  readonly pinned: boolean;
+  readonly quads: readonly number[];
+  /** Projected cell size in pixels at the region's nearest point. */
+  readonly pixels: (level: number) => number;
+}
+export interface LodBudget {
+  /** Main-view land quads the estimate must fit. */
+  readonly quads: number;
+  /** No region is coarsened past this projected cell size, whatever the budget. */
+  readonly maxPixels: number;
+}
+export interface BudgetFit { readonly estimated: number; readonly coarsened: number; readonly fits: boolean }
+
+/** Estimated main-view quads of the visible regions at their balanced levels. */
+export function budgetQuads(regions: readonly BudgetRegion[]): number {
+  let total = 0;
+  for (const region of regions) if (region.visible) total += region.quads[region.state.desired] ?? 0;
+  return total;
+}
+
+/**
+ * Spec 56's main-view triangle budget, met by coarsening where it shows least. After the screen-error choice and
+ * balancing, while the visible land's estimate is over the budget, the visible region whose next level has the
+ * smallest projected cell (the farthest, least visible detail) moves one level coarser, and the whole set is
+ * balanced again. A region that balancing holds back (a finer neighbour) waits until a neighbour coarsens. Near
+ * land, the pinned town and anything that would pass `maxPixels` never coarsen, so the budget can stay unmet.
+ * For a still camera the result depends only on the camera, so it never flickers between frames.
+ */
+export function fitLodBudget(regions: readonly BudgetRegion[], neighbours: readonly (readonly number[])[], budget: LodBudget, levels: number): BudgetFit {
+  const states = regions.map(region => region.state);
+  let estimated = budgetQuads(regions), coarsened = 0;
+  const held = new Set<number>();
+  while (estimated > budget.quads) {
+    let pick = -1, smallest = Infinity;
+    regions.forEach((region, index) => {
+      const level = region.state.desired;
+      if (!region.visible || region.pinned || held.has(index) || level >= levels - 1) return;
+      const pixels = region.pixels(level + 1);
+      if (pixels <= budget.maxPixels && pixels < smallest) { smallest = pixels; pick = index; }
+    });
+    if (pick < 0) break;
+    const state = states[pick]!, before = state.desired;
+    state.ideal = Math.max(state.ideal, before + 1);
+    balanceLevels(states, neighbours, levels);
+    if (state.desired === before) { held.add(pick); continue; }
+    held.clear(); coarsened++;
+    estimated = budgetQuads(regions);
+  }
+  return { estimated, coarsened, fits: estimated <= budget.quads };
+}

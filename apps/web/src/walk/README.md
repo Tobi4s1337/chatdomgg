@@ -34,7 +34,7 @@ Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
 | `isEditableTarget(t)`, `isKeyboardControl(t)` | `input/keyboard.ts` | Fields keep every key; a keyboard-focused control keeps Space and arrows |
 | `createWalkPointer(surface, keyboard)` | `input/pointer.ts` | Pen drag orbit after 8 px (the mouse only where the page cannot lock), wheel with line/page modes, swallows only the click that ended a drag |
 | `createWalkLook(surface, doc, keyboard, options?)` | `input/look.ts` | The always-captured mouse: raw pointer lock on a real click, cooldown, leases, fullscreen with keyboard lock, `onLetGo` (see "The captured mouse") |
-| `createSpikeFilter()`, `LOOK` | `input/look.ts` | The flick-keeping warp filter and the look constants |
+| `LOOK` | `input/look.ts` | The look constants (radians per mouse count, cooldown, refusals) |
 | `createWalkTouch(surface, keyboard)` | `input/touch.ts` | Phone: floating left-thumb stick (push past the rim to sprint), one-finger orbit, two-finger pinch zoom |
 | `stickRegion(x, y, w, h)`, `stickIntent(dx, dy)`, `TOUCH` | `input/touch.ts` | Which part of the surface is the stick, thumb offset to intent, and the touch constants |
 | `createWalkHud(container, onJump)`, `restingStick(w, h)` | `input/hud.ts` | The phone stick and the jump button, drawn in the given container (the captured mouse needs no plaque) |
@@ -133,15 +133,11 @@ for it.
   Three refusals in a row mark the page `unavailable`; only then does the mouse fall back to drag orbit.
 - **Chrome** answers with a promise and refuses a re-lock for about a second after a user exit: that window is the
   `cooldown` state, and the next click after it captures again. **Safari** returns no promise and answers only
-  with `pointerlockchange` or `pointerlockerror`; both are handled the same way. **Firefox** ignores
-  `unadjustedMovement` and keeps OS acceleration; that is accepted, not retried.
-- **Flicks survive.** `createSpikeFilter` keeps every event of a real fast turn (traces of 400 to 900 px per event
-  at 60 to 1000 Hz pass whole) and drops only an isolated warp: an event of 160 px or more that is over six times
-  both neighbours, or that flips sign in the middle of steady motion. A big event the next one carries on in the same
-  direction at a twelfth of its size or more is a flick, not a warp: a snap from a still hand often lands in one
-  coalesced 60 Hz frame and decays over the next (`[0, 1000, 120, 0]`), and a warp has no such tail. A big event is
-  held for its next neighbour or 24 ms at most, so a flick is at worst one frame late and never lost. Nothing is
-  clamped. Where `requestPointerLock` returns a promise, the promise alone answers that request: Chromium without raw
+  with `pointerlockchange` or `pointerlockerror`; both are handled the same way. **Firefox** 152+ honours
+  `unadjustedMovement` on Windows; where it cannot (Linux) it rejects with NotSupportedError and the plain retry locks.
+- **Raw, 1:1.** Every locked `mousemove` adds its movementX/Y to the turn; nothing is held, smoothed, clamped or
+  dropped (as in three.js PointerLockControls and any PC game). A neighbour-judging warp filter used to live here; it
+  dropped one half of Firefox-on-Windows recentre pairs and spun the view (work/lanes/play/MOUSE-LOOK.md). Where `requestPointerLock` returns a promise, the promise alone answers that request: Chromium without raw
   input also fires `pointerlockerror` for the refused raw request, which must not end the ordinary retry.
 - **Letting go.** The browser spends Escape on the lock and may never deliver the keydown. The lock's own
   `pointerlockchange` is the signal: `onLetGo('browser')` fires, keys and sticks clear, and the play layer opens the
@@ -153,8 +149,12 @@ for it.
 - **Leases.** Any panel that needs a free cursor takes `look.lease(reason)` and releases it when done; while one is
   held a click does not capture. The play layer's ledger, arrival steps and HUD slots use this through
   `PlayContext.requestCursor`.
-- **Settings.** Sensitivity multiplies 0.0024 rad per pixel; invert Y flips the pitch of locked look, drag and swipe.
+- **Settings.** Sensitivity multiplies 0.001 rad per mouse count (raw counts under `unadjustedMovement`; about
+  20 cm per turn at 800 DPI); invert Y flips the pitch of locked look, drag and swipe.
   Both read live from the play settings.
+- **No auto-follow for a mouse.** The camera swings behind the walk only for touch (a thumb steering a stick). With
+  a mouse the walk is camera-relative and the camera is the hand's alone; following there fed back on itself and
+  spun the view while strafing (see work/lanes/play/MOUSE-LOOK.md).
 
 **Phone.** The stick appears under the thumb wherever it lands in the stick region (kept a whole ring inside
 the edges), with a 16 % dead zone; pushing past 1.3 × the 52 px rim sprints and lights the ring. A finger

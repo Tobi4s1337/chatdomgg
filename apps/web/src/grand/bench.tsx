@@ -1,9 +1,10 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
-import { GRAND_CHANNELS, grandChannel } from './channels';
+import { GRAND_CHANNELS, grandChannel, type GrandChannel } from './channels';
 import { GRAND_TIERS, GRAND_VIEWS, GrandEngine, type GrandStats, type GrandTier, type GrandView } from './engine';
+import { grandHoldingChannel, withLandform } from './holding-world';
 import './grand.css';
 
-type GrandWindow = Window & { __chatdomReady?: boolean; __chatdomGrand?: { stats: () => GrandStats; setHour: (hour: number) => void; setView: (view: GrandView) => void } };
+type GrandWindow = Window & { __chatdomReady?: boolean; __chatdomGrand?: { stats: () => GrandStats; setHour: (hour: number) => void; setView: (view: GrandView) => void; setCitizens: (citizens: number, lift?: number) => void } };
 
 const CHARACTER: Record<string, string> = { 'coastal-harbour': 'harbour coast', 'river-valley': 'river valley', 'mountain-pass': 'mountain pass' };
 const HOURS: readonly { label: string; hour: number }[] = [
@@ -31,10 +32,17 @@ const formatHour = (h: number): string => `${String(Math.floor(h) % 24).padStart
  *   ?channel=<login>  &hour=0..24  &view=orbit|high|castle|harbour|summit|fields|mere  &yaw &pitch &dist
  *   &tier=ultra|high|medium|low|software  &t=<seconds, freezes time>  &stats=1  &still=1 (no chrome)
  *   &capture=1 (software evidence stills: full resolution and detail, never an fps claim)
+ *   &world=1 (the channel's own world, grand-land-2)  &holding=<broadcaster id> (any Atlas holding's world)
+ *   &landform=island|mountain-valley|river-delta|lake-country|cliff-coast|highland (raise the same world as another form)
+ *   &citizens=<n> (stage the sea mist for that many citizens; staged, never a real count)
  */
 export default function GrandLandBench() {
   const params = new URLSearchParams(window.location.search);
-  const channel = grandChannel(params.get('channel'));
+  const holdingId = params.get('holding');
+  const known = grandChannel(params.get('channel'));
+  const [channel, setChannel] = createSignal<GrandChannel>(known);
+  const citizens = number(params.get('citizens'));
+  const [opening, setOpening] = createSignal<string | null>(null);
   const still = params.get('still') === '1';
   const showStats = params.get('stats') === '1';
   const view = (GRAND_VIEWS as readonly string[]).includes(params.get('view') ?? '') ? params.get('view') as GrandView : 'orbit';
@@ -50,7 +58,15 @@ export default function GrandLandBench() {
     const tier = requested && requested in GRAND_TIERS ? requested as GrandTier : detectTier(document.createElement('canvas'));
     const time = number(params.get('t'));
     if (!canvas) return;
-    engine = new GrandEngine(canvas, channel.seed, { tier, capture: params.get('capture') === '1', hour: hour(), view, time: time ?? (tier === 'software' ? 0 : null) });
+    const abort = new AbortController();
+    onCleanup(() => abort.abort());
+    void (async () => {
+    const chosen = holdingId ? await grandHoldingChannel(holdingId, abort.signal) : known;
+    const base = holdingId || params.get('world') === '1' || params.get('landform') ? chosen.world ?? chosen.seed : chosen.seed;
+    const seed = withLandform(base, params.get('landform'));
+    setChannel({ ...chosen, seed });
+    if (!canvas || abort.signal.aborted) return;
+    engine = new GrandEngine(canvas, seed, { tier, capture: params.get('capture') === '1', hour: hour(), view, time: time ?? (tier === 'software' ? 0 : null), citizens: citizens === null ? null : Math.max(0, Math.floor(citizens)) });
     engine.onFailure = message => setFailure(message);
     let last = 0;
     engine.onChange = () => {
@@ -63,38 +79,49 @@ export default function GrandLandBench() {
       setStats({ ...engine!.stats, levels: [...engine!.stats.levels] });
       (window as GrandWindow).__chatdomReady = true;
     };
-    (window as GrandWindow).__chatdomGrand = { stats: () => engine!.stats, setHour: h => { setHour(h); engine?.setHour(h); }, setView: v => engine?.setView(v) };
+    (window as GrandWindow).__chatdomGrand = {
+      stats: () => engine!.stats, setHour: h => { setHour(h); engine?.setHour(h); }, setView: v => engine?.setView(v),
+      setCitizens: (n, lift) => { engine?.setCitizens(n, lift); setOpening(engine?.opening?.line ?? null); },
+    };
     const onResize = () => engine?.resize();
     window.addEventListener('resize', onResize);
     onCleanup(() => window.removeEventListener('resize', onResize));
-    void engine.start().then(() => {
-      const yaw = number(params.get('yaw')), pitch = number(params.get('pitch')), dist = number(params.get('dist'));
-      if (yaw !== null || pitch !== null || dist !== null) engine?.orbit(yaw, pitch, dist);
-    }).catch((error: unknown) => setFailure(error instanceof Error ? error.message : String(error)));
+    await engine.start();
+    setOpening(engine.opening?.line ?? null);
+    const yaw = number(params.get('yaw')), pitch = number(params.get('pitch')), dist = number(params.get('dist'));
+    if (yaw !== null || pitch !== null || dist !== null) engine?.orbit(yaw, pitch, dist);
+    })().catch((error: unknown) => { if (!abort.signal.aborted) setFailure(error instanceof Error ? error.message : String(error)); });
   });
   onCleanup(() => engine?.dispose());
 
   const changeHour = (value: number) => { setHour(value); engine?.setHour(value); };
-  const link = (login: string) => { const next = new URLSearchParams(params); next.set('channel', login); return `?${next.toString()}`; };
+  const link = (login: string) => { const next = new URLSearchParams(params); next.set('channel', login); next.delete('holding'); return `?${next.toString()}`; };
   const facts = () => {
-    const seed = channel.seed;
-    return `${seed.tier[0]!.toUpperCase()}${seed.tier.slice(1)} · ${CHARACTER[seed.character] ?? seed.character.replace(/-/g, ' ')} · ${seed.biome.replace(/-/g, ' ')}`;
+    const seed = channel().seed;
+    const form = seed.world ? `${seed.world.landform.replace(/-/g, ' ')} · ${seed.world.forest[0].replace(/-/g, ' ')} woods` : CHARACTER[seed.character] ?? seed.character.replace(/-/g, ' ');
+    return `${seed.tier[0]!.toUpperCase()}${seed.tier.slice(1)} · ${form} · ${seed.biome.replace(/-/g, ' ')}`;
   };
 
   return <div class="grand" classList={{ 'grand--still': still }} data-grand-phase={stats()?.phase ?? 'raising'}>
-    <canvas ref={element => { canvas = element; }} class="grand-canvas" aria-label={`The land of ${channel.name}`} />
+    <canvas ref={element => { canvas = element; }} class="grand-canvas" aria-label={`The land of ${channel().name}`} />
     <div class="grand-vignette" aria-hidden="true" />
     <Show when={!still}>
       <header class="grand-plaque">
         <p class="grand-eyebrow">Landscape study</p>
-        <h1>{channel.name}</h1>
+        <h1>{channel().name}</h1>
         <p class="grand-facts">{facts()}</p>
+        <Show when={channel().seed.world}>
+          <p class="grand-crest" aria-label="Crest">
+            <span style={{ background: channel().seed.world!.crest.field }} /><span style={{ background: channel().seed.world!.crest.charge }} />
+          </p>
+        </Show>
+        <Show when={opening()}><p class="grand-opening">{opening()}</p></Show>
         <Show when={stats()?.trees}>
           <p class="grand-count">{formatCount(stats()!.terrainVoxels)} voxels of land · {formatCount(stats()!.trees)} trees</p>
         </Show>
       </header>
       <nav class="grand-realms" aria-label="Kingdoms">
-        <For each={GRAND_CHANNELS}>{c => <a href={link(c.login)} classList={{ 'is-here': c.login === channel.login }}>{c.name}</a>}</For>
+        <For each={GRAND_CHANNELS}>{c => <a href={link(c.login)} classList={{ 'is-here': c.login === channel().login }}>{c.name}</a>}</For>
       </nav>
       <div class="grand-hours" role="group" aria-label="Hour of the day">
         <span class="grand-clock">{formatHour(hour())}</span>

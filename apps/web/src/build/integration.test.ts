@@ -5,6 +5,7 @@ import { createVoxelMaterial, type WindowHouse } from '@chatdom/render';
 import { executeVoxelJob, type VoxelJob, type VoxelWorkerPool } from '@chatdom/voxel';
 import { homeOrigin, type SettlementHome } from '@chatdom/world';
 import type { VoxelBlueprint } from '@chatdom/shared';
+import type { BuildPiece } from './pieces';
 import { createKingdomBuild } from '../kingdom/build-scene';
 import { blueprintInReserve, buildBounds, composeBuildCamera } from './composition';
 import { readSimulatedPublication } from './session';
@@ -49,6 +50,38 @@ it('keeps the same frontage through private editing, a saved street replacement 
     expect(build.session?.mesh.geometry.getAttribute('aPacked').count).toBeGreaterThan(0);
     expect(build.hidden).toBe(true);
     build.session!.edit({ kind: 'place', from: [28, 0, 104], to: [32, 4, 108], material: STYLES.hearth.stone });
+    await build.session!.settled();
+
+    // Mirror mode is retired: whatever is asked of the frozen contract method, the core holds and sends no mirror.
+    const controller = build.session!.controller;
+    controller.mirror('xz');
+    expect(controller.snapshot().mirror).toBeNull();
+    // Status lines are plain words, never the engine's mode name.
+    expect(controller.snapshot().status).not.toMatch(/SIMULATED/);
+
+    // Pieces: none on offer means an empty shelf; an offered piece previews without touching the draft, then sets in as one undoable change.
+    const rack = build.session!.imports.rack, draft = build.session!.draft;
+    expect(rack.pieces()).toEqual([]);
+    const step: BuildPiece = { id: 'step', name: 'Stone step', note: 'Kept from the Forge', origin: [36, 0, 112],
+      blueprint: { version: 1, id: 'piece-step', styleId: STYLES.hearth.id, kind: 'prop', lattice: 'build', size: [8, 2, 8],
+        boxes: [{ from: [0, 0, 0], to: [8, 2, 8], material: STYLES.hearth.stone }], windows: [] } };
+    build.session!.offerPieces([step]);
+    expect(rack.pieces().map(piece => piece.name)).toEqual(['Stone step']);
+    const before = { revision: draft.revision, occupied: draft.voxelCount };
+    rack.preview('step');
+    expect(rack.previewing()).toBe('step');
+    expect(draft.revision).toBe(before.revision);
+    expect(rack.place('step')).toBe(true);
+    expect(rack.previewing()).toBeNull();
+    expect(draft.get([36, 0, 112])).toBe(STYLES.hearth.stone);
+    expect(draft.voxelCount).toBe(before.occupied + 8 * 2 * 8);
+    expect(controller.snapshot().canUndo).toBe(true);
+    controller.undo();
+    expect(draft.get([36, 0, 112])).toBe(0);
+    expect(draft.voxelCount).toBe(before.occupied);
+    expect(rack.place('missing')).toBe(false);
+    build.session!.offerPieces([]);
+    expect(rack.pieces()).toEqual([]);
     await build.session!.settled();
     build.update(1000, 1 / 60, 19.5, target);
     await build.session!.controller.publish();

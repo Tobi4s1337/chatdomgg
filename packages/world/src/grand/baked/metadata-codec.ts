@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { canonicalSceneJson, utf8 } from '../../founded-world/codec';
-import { BAKED_COMPILERS, BAKED_MAX_SIDE, BAKED_MAX_HEIGHT, BAKED_METADATA_BYTES, BAKED_REGION_HEADER_BYTES,
+import { BAKED_COMPILERS, BAKED_GENERATORS, BAKED_MAX_SIDE, BAKED_MAX_HEIGHT, BAKED_METADATA_BYTES, BAKED_REGION_HEADER_BYTES,
   BAKED_REGION_QUAD_BYTES, BAKED_SURFACE_HEADER_BYTES, HOSTED_PAVING, type BakedMetadata } from './types';
 import { assertDimensions } from './validation';
 
@@ -14,7 +14,7 @@ const refFields = { hash, rawBytes: uint.max(BAKED_MAX_SIDE ** 2 * 4 + BAKED_SUR
 const schema = z.strictObject({
   version: z.union([z.literal(1), z.literal(2)]), kingdomId: z.string().regex(/^[1-9][0-9]{0,31}$/), recipeHash: hash, sourcePlanHash: hash,
   sourcePlanRevision: z.string().min(1).max(256),
-  compilers: z.strictObject({ generator: z.literal(BAKED_COMPILERS.generator), kit: z.literal(BAKED_COMPILERS.kit),
+  compilers: z.strictObject({ generator: z.enum(BAKED_GENERATORS), kit: z.literal(BAKED_COMPILERS.kit),
     grader: z.literal(BAKED_COMPILERS.grader), mesher: z.literal(BAKED_COMPILERS.mesher) }),
   size: uint.max(BAKED_MAX_SIDE), height: uint.max(BAKED_MAX_HEIGHT), seaLevel: uint.max(BAKED_MAX_HEIGHT),
   seat: z.strictObject({ offset: point, columns: z.strictObject({ x0: uint, z0: uint, x1: uint, z1: uint }), band: uint.max(BAKED_MAX_SIDE) }),

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Painted map bench</title><link rel="icon" href="data:," />
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #120c22; }
+  #stage { position: fixed; inset: 0; font-synthesis: none;
+    background: var(--bench-backdrop, none) center 38% / auto 112% no-repeat, linear-gradient(180deg, #3d3564, #7a5a6a 46%, #2b2436 47%, #1d1a26); }
+  #stage[data-view='page'] { background: repeating-linear-gradient(93deg, #ffdcae08 0 2px, transparent 2px 9px, #1a0c0412 9px 10px, transparent 10px 17px), linear-gradient(176deg, #5b3b27, #3d2718 60%, #24160d); }
+  #stage[data-view='framed'] { display: grid; place-items: center; background: #1d1a26; }
+  .bench-frame { border: 0; box-shadow: 0 0 0 1px #c99f5b55, 0 20px 50px #000a; }
+  .bench-hud { position: absolute; top: calc(16px + env(safe-area-inset-top)); right: calc(16px + env(safe-area-inset-right)); display: flex; flex-direction: column; align-items: flex-end; }
+  /* The ledger's right-hand leaf, as the book opens it on a desktop: candlelit parchment sewn at the left. */
+  .bench-leaf { position: absolute; top: 50%; left: 50%; translate: -50% -50%; width: 640px; height: min(780px, calc(100% - 60px)); display: grid; grid-template-rows: auto minmax(0, 1fr);
+    padding: 30px 34px 0 44px; box-sizing: border-box; border-radius: 2px 5px 5px 2px; color: #38261a;
+    background: radial-gradient(90% 70% at 34% 16%, #fff8e4b8, transparent 64%), radial-gradient(140% 120% at 50% 50%, transparent 58%, #a9824c3d 100%),
+      linear-gradient(172deg, #f3e6c6, #ecdcb6 60%, #e3cfa3);
+    box-shadow: inset 30px 0 34px -20px #6b4a2a78, 1px 0 0 #e9d8b0, 2px 0 0 #b99d6e, 3px 0 0 #e6d3a8, 4px 0 0 #a98c5e, 5px 1px 0 #dcc79b, 6px 2px 0 #7d613c, 0 2px 0 #b99d6e, 0 30px 60px #0008; }
+  #stage[data-view='both'] .bench-leaf { left: auto; right: 220px; translate: 0 -50%; }
+  .bench-head { position: relative; padding: 0 0 12px; margin-bottom: 14px; }
+  .bench-head::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; border-top: 1px solid #8a6a4680; border-bottom: 1px solid #8a6a4640; }
+  .bench-eyebrow { margin: 0; font: 13px/1.2 'IM Fell English SC', Georgia, serif; letter-spacing: .1em; color: #654a31; }
+  .bench-title { margin: 3px 0 0; font: 36px/1.04 'IM Fell English', Georgia, serif; font-weight: 400; }
+  .bench-body { overflow-y: auto; overflow-x: hidden; padding: 4px 6px 24px 2px; scrollbar-width: none; }
+  .bench-body::-webkit-scrollbar { display: none; }
+  .bench-simulated { position: absolute; left: 14px; bottom: 12px; margin: 0; padding: 4px 9px; font: 12px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .1em;
+    color: #fbeacb; background: #a1402a; border-radius: 3px; box-shadow: 0 2px 6px #0007; z-index: 5; }
+  @media (max-width: 820px) {
+    .bench-leaf, #stage[data-view='both'] .bench-leaf { inset: 0; translate: none; width: auto; height: auto; padding: 18px 10px 0 20px; border-radius: 0;
+      box-shadow: inset 0 0 0 5px #5b3b27, inset 0 0 0 6px #24160d, inset 0 0 22px 6px #6b4a2a55; }
+    .bench-title { font-size: 30px; }
+    .bench-eyebrow { display: none; }
+    #stage[data-view='both'] .bench-hud { z-index: 2; }
+  }
+</style>
+</head>
+<body><div id="stage"></div><script type="module" src="./bench.tsx"></script></body>
+</html>

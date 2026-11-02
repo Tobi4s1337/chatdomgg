@@ -1,5 +1,8 @@
 import type { PlayContext } from './slots';
 import type { PlaySettingsStore } from './settings';
+import type { HomeRoute } from './map/route';
+import type { MapPeople } from './map/people';
+import type { TownMap } from './map/town';
 
 /**
  * What the walk gives the play HUD and the ledger. The walk owns the pointer lock, the keyboard and the camera;
@@ -43,6 +46,32 @@ export interface WayHome {
   readonly inside: boolean;
 }
 
+/**
+ * The kingdom's map as you see it now (PL12): the town from the founded plan, you and your friends only, your home and
+ * the street route to it. Read it each time the map draws; `town` is the same object for as long as the layout lasts.
+ */
+export interface PlayMapView {
+  readonly town: TownMap;
+  readonly people: MapPeople;
+  /** Your home's plot here, or null when you have none. */
+  readonly home: string | null;
+  /** True while you are inside your own home. */
+  readonly inside: boolean;
+  /** The street route from you to your door, or null (no home, inside it, or no street reaches it). */
+  readonly route: HomeRoute | null;
+  /** The camera's heading (radians, 0 looks along +Z), for the minimap's needle; null when unknown. */
+  readonly view: number | null;
+}
+
+/** The lantern path home (PL12). */
+export interface PlayWayHomeLights {
+  /** Light the lanterns from where you stand to your door. False when there is no route to light. */
+  light(): boolean;
+  /** The trail is lit now. */
+  readonly lit: boolean;
+  onChange(listener: (lit: boolean) => void): () => void;
+}
+
 /** The build rack where the engine really offers building, otherwise one honest line about when it opens. */
 export interface PlayBuildEntry {
   readonly open: (() => void) | null;
@@ -68,6 +97,10 @@ export interface PlayHost {
   toggleFullscreen(): void;
   /** Live: read it each time the page draws. */
   wayHome(): WayHome | null;
+  /** The map (PL12), read live; absent on a walk that has no founded plan. Null while the walk has not placed you. */
+  map?(): PlayMapView | null;
+  /** The lantern path home (PL12); absent on a walk that cannot draw it. */
+  readonly lights?: PlayWayHomeLights;
   readonly build: PlayBuildEntry;
   /**
    * The faders the kingdom's sound really applies, in the ledger's order. Empty: the Sound section is not shown

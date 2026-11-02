@@ -52,7 +52,7 @@ try {
       const [a, b] = compare.map(dir => join(dir, `${set}-sheet.png`));
       if (!(await exists(a)) || !(await exists(b))) continue;
       const cell = label => `<div><div style="font:600 18px system-ui;letter-spacing:.18em;padding:14px 18px;color:#d8c8ff">${label}</div>`;
-      await shoot(browser, `<body style="margin:0;background:#1b1430;width:2520px"><div style="font:24px system-ui;color:#efe7ff;padding:16px 18px 0">${set} portraits · same looks, camera and light · SIMULATED</div>
+      await shoot(browser, `<body style="margin:0;background:#1b1430;width:2520px"><div style="font:24px system-ui;color:#efe7ff;padding:16px 18px 0">${set} portraits · same looks, camera and light</div>
         <div style="display:flex;gap:20px">${cell('BEFORE')}<img src="${await dataUrl(a)}" style="width:1250px;height:1000px;display:block"></div>${cell('AFTER')}<img src="${await dataUrl(b)}" style="width:1250px;height:1000px;display:block"></div></div></body>`, 2520, join(out, `compare-${set}.png`));
       console.log(`[portraits] ${join(out, `compare-${set}.png`)}`);
     }
@@ -81,7 +81,7 @@ try {
       await shoot(browser, `<body style="margin:0;width:2500px">${grid(urls, 500)}</body>`, 2500, join(out, `${set}-sheet.png`));
       const label = text => `<div style="font:600 20px system-ui;letter-spacing:.2em;padding:16px 4px 12px;color:#d8c8ff">${text}</div>`;
       await shoot(browser, `<body style="margin:0;background:#1b1430;padding:0 20px 20px;width:2560px"><div style="display:flex;gap:20px">
-        <div>${label(`OURS · ${set.toUpperCase()} · SIMULATED`)}${grid(urls, 250)}</div>
+        <div>${label(`OURS · ${set.toUpperCase()}`)}${grid(urls, 250)}</div>
         <div>${label('REFERENCE')}<img src="${reference}" style="display:block;width:1250px;height:1000px"></div></div></body>`, 2560, join(out, `${set}-vs-reference.png`));
       console.log(`[portraits] ${join(out, `${set}-vs-reference.png`)}`);
     }

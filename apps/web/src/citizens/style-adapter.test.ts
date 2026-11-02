@@ -136,11 +136,14 @@ describe('painted citizen runtime adapter', () => {
     pool.dispose(); lighting.dispose(); expect(terminated).toBe(true);
   });
 
-  it('prepares painted-only looks without workers and rejects duplicate look IDs', async () => {
+  it('prepares painted-only looks without workers, skips unknown looks and rejects duplicate look IDs', async () => {
     const scene = new THREE.Scene(), lighting = createVoxelMaterial(MATERIALS, 'avatar');
     const look = createStyledCitizenLook('new', recipe);
     const renderer = await createCitizenRenderer(scene, { registry: MATERIALS, material: lighting, looks: [look] });
-    expect(() => renderer.update([sample('person', 'unknown')])).toThrow('Unknown citizen look');
+    expect(renderer.ready('unknown')).toBe(false);
+    renderer.update([sample('person', 'unknown'), sample('other', 'new')]);
+    expect(renderer.grips.has('person')).toBe(false);
+    expect((scene.getObjectByName('Citizen new head solid') as THREE.InstancedMesh).count).toBe(1);
     renderer.dispose();
     await expect(createCitizenRenderer(scene, { registry: MATERIALS, material: lighting, looks: [look, look] })).rejects.toThrow('Duplicate citizen look');
     expect(scene.children).toHaveLength(0);

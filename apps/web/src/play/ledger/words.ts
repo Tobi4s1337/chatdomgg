@@ -8,7 +8,7 @@ export const DENSITY_ORDER: readonly PlaySettings['labels'][] = ['all', 'nearby'
 
 export const ACTION_WORDS: Readonly<Record<PlayAction, string>> = {
   forward: 'Walk forward', back: 'Walk back', left: 'Step left', right: 'Step right', jump: 'Jump', sprint: 'Run',
-  use: 'Use', view: 'First or third person', ledger: 'Open the ledger', fullscreen: 'Fullscreen',
+  use: 'Use', view: 'First or third person', ledger: 'Open the ledger', fullscreen: 'Fullscreen', map: 'Open the map',
 };
 
 const ROMAN: readonly [number, string][] = [[50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']];

@@ -58,6 +58,8 @@ function classify(blueprint: VoxelBlueprint): { solid: boolean; cover: boolean; 
     return { solid: role.solid, cover: role.band === 'small', form };
   }
   if (blueprint.id.startsWith('street-')) return { solid: true, cover: false, form };
+  // The grand town's walk-through planting (grand-land/town-ground): passive cover, never a collider.
+  if (blueprint.id.startsWith('town-')) return { solid: false, cover: true, form: blueprint.id.slice('town-'.length) };
   throw new Error(`Ground dressing does not place ${blueprint.id}.`);
 }
 

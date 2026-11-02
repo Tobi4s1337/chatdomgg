@@ -2,9 +2,12 @@ import { createSignal, ErrorBoundary, lazy, Show, Suspense, type Component } fro
 import type { BuildToolsController } from '@chatdom/shared';
 import FallbackTools from './Tools';
 import type { BuildImportBridge } from './session';
+import type { BuildRackBridge } from './pieces';
 import TemplatePicker, { buildTemplateChoices } from './TemplatePicker';
 
-const toolsModules = import.meta.glob<{ default: Component<{ controller: BuildToolsController }> }>('../build-tools/index.tsx');
+/** What the carved rack is given: the frozen controller, the owner's approved name when known, and the core's rack bridge. */
+export interface BuildRackProps { controller: BuildToolsController; ownerName?: string | undefined; rack?: BuildRackBridge | undefined }
+const toolsModules = import.meta.glob<{ default: Component<BuildRackProps> }>('../build-tools/index.tsx');
 const importModules = import.meta.glob<{ default: Component<BuildImportBridge> }>('../vox-import/index.tsx');
 const loadTools = toolsModules['../build-tools/index.tsx'], loadImport = importModules['../vox-import/index.tsx'];
 const LaneTools = loadTools ? lazy(loadTools) : null, ImportTool = loadImport ? lazy(loadImport) : null;
@@ -17,7 +20,7 @@ export function BuildTools(props: BuildToolsProps) {
   const [templates, setTemplates] = createSignal(false);
   return <div class="build-composition" data-chatdom-build>
     <ErrorBoundary fallback={fallback}><Suspense fallback={fallback()}>
-      <Show when={LaneTools} fallback={fallback()}>{View => { const ToolView = View(); return <ToolView controller={props.controller} />; }}</Show>
+      <Show when={LaneTools} fallback={fallback()}>{View => { const ToolView = View(); return <ToolView controller={props.controller} ownerName={props.ownerName} rack={props.imports?.rack} />; }}</Show>
     </Suspense></ErrorBoundary>
     <Show when={props.imports && props.controller.snapshot().mode === 'SIMULATED'}>
       <div class="build-import-tools"><ErrorBoundary fallback={<p role="status">The starting tools could not open. Your draft is safe.</p>}>

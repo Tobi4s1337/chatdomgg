@@ -9,7 +9,7 @@ import { prepareInstalledLand, regionTouchesPhysical } from '../../../../package
 import { createInstalledRegionMesher } from '../../../../packages/world/src/grand/baked/mesher';
 import { createBakedMetadata, identityForBakedLand } from '../../../../packages/world/src/grand/baked/metadata';
 import { encodeBakedMetadata, encodeBakedRegion, encodeBakedSurface } from '../../../../packages/world/src/grand/baked/codec';
-import { BAKED_COMPILERS, type BakedRegionRef } from '../../../../packages/world/src/grand/baked/types';
+import { bakedCompilersOf, type BakedRegionRef } from '../../../../packages/world/src/grand/baked/types';
 import { LandArtifactStore, type StoredLandBinding } from './store';
 import { verifyLandArtifact } from './verify';
 export { verifyLandArtifact } from './verify';
@@ -36,7 +36,7 @@ export async function bakeFoundedLand(options: LandBakeOptions) {
   const recipe = freezeGrandLandRecipe(options.recipe);
   if (recipe.version !== 1 || recipe.seed.kingdomId !== scene.kingdomId
     || typeof recipe.seed.seedKey !== 'string' || !recipe.seed.seedKey.includes(scene.kingdomId)
-    || !Object.entries(BAKED_COMPILERS).every(([key, version]) => recipe[key as keyof typeof BAKED_COMPILERS] === version))
+    || !bakedCompilersOf(recipe) || (recipe.generator === 'grand-land-2') !== !!recipe.seed.world)
     throw new Error('The land recipe does not match this kingdom and compiler');
   // Macro planning is bounded and allocation-free with respect to the world raster.
   const planned = planGrandLand(recipe.seed);

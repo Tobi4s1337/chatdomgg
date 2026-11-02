@@ -1,7 +1,7 @@
 import type { KingdomId } from '@chatdom/shared';
 import type { WalkController } from '../walk';
 import { isEditableTarget } from '../walk/input/keyboard';
-import type { CursorState, CursorView, PlayBuildEntry, PlayCue, PlayHost, PlayHud, PlayVolume, WayHome } from './host';
+import type { CursorState, CursorView, PlayBuildEntry, PlayCue, PlayHost, PlayHud, PlayMapView, PlayVolume, PlayWayHomeLights, WayHome } from './host';
 import { sharedPlaySettings, type PlaySettingsStore } from './settings';
 import { actionCode } from './settings';
 import { actionBindings, wantedArrivalSteps, type CursorLease, type InputLease, type PlayContext } from './slots';
@@ -25,6 +25,10 @@ export interface PlaySessionOptions {
   /** Read live: the stream is live right now. */
   readonly live: () => boolean;
   readonly wayHome: () => WayHome | null;
+  /** The map (PL12); without it the HUD has no minimap and the ledger no map page. */
+  readonly map?: () => PlayMapView | null;
+  /** The lantern path home (PL12). */
+  readonly lights?: PlayWayHomeLights;
   readonly build: PlayBuildEntry;
   /** The volumes the kingdom's sound applies live (see `PlayHost.volumes`). Default none. */
   readonly volumes?: readonly PlayVolume[];
@@ -149,6 +153,8 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
     },
     toggleFullscreen() { void cursor.toggleFullscreen().then(announce); },
     wayHome: options.wayHome,
+    ...(options.map ? { map: options.map } : {}),
+    ...(options.lights ? { lights: options.lights } : {}),
     build: options.build,
     volumes: Object.freeze([...(options.volumes ?? [])]),
     cue: options.cue,
@@ -201,6 +207,11 @@ export function createPlaySession(options: PlaySessionOptions): PlaySession {
     if (event.code === keys.ledger) {
       event.preventDefault();
       if (hud.ledgerOpen) hud.closeLedger(); else hud.openLedger();
+      return;
+    }
+    if (event.code === keys.map && play.map) {
+      event.preventDefault();
+      hud.openLedger('map');
       return;
     }
     if (hud.ledgerOpen) return;

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { WALK_BUTTON, type CollisionWorld, type PlayerState, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
 import type { RealmWalkerPose } from '../realm/client';
-import { createWalkController, type WalkRealm } from './index';
+import { createWalkController, LOOK, type WalkRealm } from './index';
 import { createPlaySettings } from '../play/settings';
 
 const hudInput = vi.hoisted(() => ({ jump: undefined as (() => void) | undefined }));
@@ -235,7 +235,7 @@ describe('the walk controller', () => {
     settings.set({ sensitivity: 2, invertY: true, fov: 90 });
     mouse(50, 20);
     controller.frame(16);
-    expect(start.yaw - controller.debug.camera.yaw).toBeCloseTo(50 * .0024 * 2, 9);
+    expect(start.yaw - controller.debug.camera.yaw).toBeCloseTo(50 * LOOK.radiansPerPx * 2, 9);
     // Inverted: moving the mouse down looks up.
     expect(controller.debug.camera.pitch).toBeLessThan(start.pitch);
     expect(camera.fov).toBeGreaterThan(fov);
@@ -364,14 +364,14 @@ describe('the walk controller', () => {
       // Nothing else is drawn for 200 ms (a stalled frame), while the hand keeps moving.
       clock.now = 120;
       for (let n = 0; n < 10; n++) { mouse(20, 0); clock.now += 13; }
-      mouse(600, 0); // a warp: alone, far larger than the steady hand before it
+      mouse(600, 0); // a big event counts whole: raw 1:1, nothing judged or dropped
       controller.frame(250);
       clock.now += 40; mouse(19, 0); mouse(21, 0);
       controller.frame(300);
       return start - controller.debug.camera.yaw;
     };
     const desktop = turn(1440, 900), phone = turn(390, 844);
-    expect(desktop).toBeCloseTo(240 * .0024, 9);
+    expect(desktop).toBeCloseTo(840 * LOOK.radiansPerPx, 9);
     expect(phone).toBeCloseTo(desktop, 9);
   });
   it('lets go of held keys, a pending jump and the stick on a dropped connection, a hidden page and a menu', () => {

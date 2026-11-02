@@ -8,11 +8,11 @@ import type { PlayAction, PlaySettings, PlaySettingsReader } from './slots';
 
 export const PLAY_SETTINGS_KEY = 'chatdom.play.settings.v1';
 
-export const PLAY_ACTIONS: readonly PlayAction[] = ['forward', 'back', 'left', 'right', 'jump', 'sprint', 'use', 'view', 'ledger', 'fullscreen'];
+export const PLAY_ACTIONS: readonly PlayAction[] = ['forward', 'back', 'left', 'right', 'jump', 'sprint', 'use', 'view', 'ledger', 'fullscreen', 'map'];
 
 export const DEFAULT_KEYS: Readonly<Record<PlayAction, string>> = Object.freeze({
   forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft',
-  use: 'KeyE', view: 'KeyV', ledger: 'KeyP', fullscreen: 'KeyF',
+  use: 'KeyE', view: 'KeyV', ledger: 'KeyP', fullscreen: 'KeyF', map: 'KeyM',
 });
 
 /** Keys that can never be bound: the browser, the ledger's own Escape, and modifiers that change meaning. */

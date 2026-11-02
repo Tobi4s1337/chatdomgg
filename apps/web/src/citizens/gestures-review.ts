@@ -20,7 +20,7 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshBas
 ground.rotation.x = -Math.PI / 2; ground.position.y = -.02; scene.add(ground);
 const material = createVoxelMaterial(MATERIALS, 'avatar'); material.setEnvironment(getEnvironment(12));
 const looks = PORTRAIT_FIXTURES.slice(0, 3).map((fixture, i) => createWornCitizenLook(`review-${i}`, {
-  ...fixture.look, earned: { ...fixture.look.earned, cape: { kind: i === 1 ? 'cheer' : 'tier-cloak', id: `simulated-${i}`, cloth: ['#9d4439', '#4a7092', '#6c7650'][i] as `#${string}`, lining: '#e4b779', trim: '#edcf82' } },
+  ...fixture.look, earned: { ...fixture.look.earned, cape: { kind: i === 1 ? 'cheer' : 'tier-cloak', id: `review-cape-${i}`, cloth: ['#9d4439', '#4a7092', '#6c7650'][i] as `#${string}`, lining: '#e4b779', trim: '#edcf82' } },
 }));
 const citizens = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 3 });
 const names: CitizenGesture[] = ['none', 'wave', 'bow', 'cheer', 'dance', 'sit', 'point', 'nod'];
@@ -46,11 +46,11 @@ function seek(seconds: number) {
     const t = passTime * step / steps, travel = walking ? t * .8 : 0;
     const point = turns ? turnPosition(t) : { x: Math.sin(-.32) * travel, z: walking ? -1.2 + Math.cos(-.32) * travel : 0, heading: -.32 };
     citizens.update(shown.map((look, i) => ({
-      id: `simulated-${i}`, look: look.id, position: [(detail ? 0 : (i - 1) * 1.7) + point.x, 0, point.z] as const,
+      id: `citizen-${i}`, look: look.id, position: [(detail ? 0 : (i - 1) * 1.7) + point.x, 0, point.z] as const,
       heading: point.heading, distance: walking ? travel + i * .25 : 0, moving: walking ? 1 : 0, speed: walking ? .8 : 0, gesture, time: walking ? t : seconds + t,
     })), camera, t * 1000);
   }
-  document.querySelector('.label')!.textContent = `SIMULATED · ${turns ? 'forward · reverse · strafe' : gesture === 'none' ? 'walking' : gesture}`;
+  document.querySelector('.label')!.textContent = turns ? 'forward · reverse · strafe' : gesture === 'none' ? 'walking' : gesture;
   renderer.render(scene, camera);
 }
 const reviewWindow = window as Window & { __chatdomReady?: boolean; __chatdomGestureReview?: { seek(seconds: number): void } };

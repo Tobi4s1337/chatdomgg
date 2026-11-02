@@ -5,7 +5,7 @@ import {
 import { createPortraitRenderer } from './portrait-renderer';
 
 /*
- * Portrait bench (spec 49, AS03): twenty SIMULATED citizens as bust portraits, laid out 4 × 5 like the
+ * Portrait bench (spec 49, AS03): twenty invented citizens as bust portraits, laid out 4 × 5 like the
  * reference, each rendered at 512 px (shown at 256) and at 128 px (shown at actual size).
  * `?set=fixtures` is the hand-made range; `?set=seeded` is twenty seeded default looks.
  */
@@ -25,20 +25,20 @@ const covered = ['short-crop', 'curls', 'long-waves', 'ponytail'] as const;
 const SETS: Record<string, { readonly sub: string; readonly people: () => readonly Person[] }> = {
   fixtures: { sub: 'Twenty hand-made citizens: every part family, the skin range', people: () => PORTRAIT_FIXTURES },
   seeded: {
-    sub: 'Twenty seeded default looks, from simulated person ids',
-    people: () => Array.from({ length: 20 }, (_, i) => ({ name: `Simulated viewer ${i + 1}`, look: seedLook(`simulated-viewer-${i + 1}`) })),
+    sub: 'Twenty seeded default looks, from invented person ids',
+    people: () => Array.from({ length: 20 }, (_, i) => ({ name: `Viewer ${i + 1}`, look: seedLook(`bench-viewer-${i + 1}`) })),
   },
   hair: {
     sub: 'Every hair style, any colour',
     people: () => [...HAIR_STYLE_IDS, 'bald' as const].slice(0, 20).map((style, i) => ({
-      name: `Simulated ${style}`,
+      name: `${style}`,
       look: plain(i, { hair: { style, colour: hairColour(i) }, beard: style === 'bald' && i === 19 ? { style: 'full', colour: '#8e8c8a' } : null }),
     })),
   },
   hats: {
     sub: 'Every hat over four hair lengths',
     people: () => HAT_STYLE_IDS.flatMap((hat, h) => covered.map((style, c) => ({
-      name: `Simulated ${hat} · ${style}`,
+      name: `${hat} · ${style}`,
       look: plain(h * 4 + c, {
         hair: { style, colour: hairColour(h * 4 + c) },
         hat: { style: hat, colour: hat === 'straw-hat' ? '#ecd9a6' : DYES[(h * 4 + c * 3) % DYES.length]!.hex, trim: DYES[(h * 7 + c * 2 + 1) % DYES.length]!.hex },
@@ -58,7 +58,7 @@ const SETS: Record<string, { readonly sub: string; readonly people: () => readon
         { top: g('tee', '#f3f1ee'), bottom: g('overalls', '#2d5fd8') },
         { top: g('sweater', '#1ea59a', 'stripes'), outer: g('coat', '#8a5a32'), neckwear: { style: 'scarf', dye: '#d3202a', accent: '#f6d23c' } },
       ];
-      return looks.map((patch, i) => ({ name: `Simulated outfit ${i + 1}`, look: plain(i, patch) }));
+      return looks.map((patch, i) => ({ name: `Outfit ${i + 1}`, look: plain(i, patch) }));
     },
   },
   faces: {
@@ -77,7 +77,7 @@ const SETS: Record<string, { readonly sub: string; readonly people: () => readon
         { hair: { style: 'curls', colour: '#d98a2e' }, flower: { colour: '#9f6bff' }, hat: { style: 'straw-hat', colour: '#ecd9a6', trim: '#d3202a' } },
         { hair: { style: 'afro', colour: '#1c191c' }, flower: { colour: '#ff6fa8' } },
       ];
-      return looks.map((patch, i) => ({ name: `Simulated face ${i + 1}`, look: plain(i, patch) }));
+      return looks.map((patch, i) => ({ name: `Face ${i + 1}`, look: plain(i, patch) }));
     },
   },
 };

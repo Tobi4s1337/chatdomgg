@@ -20,7 +20,7 @@ material.setEnvironment(getEnvironment(12));
 const looks = createDefaultCitizenLooks();
 const seated = new URLSearchParams(location.search).get('posture') === 'seated';
 if (seated) {
-  document.querySelector('h1')!.textContent = 'Seated citizens on simulated benches';
+  document.querySelector('h1')!.textContent = 'Seated citizens on benches';
   for (let i = 0; i < looks.length; i++) {
     const seat = new THREE.Mesh(new THREE.BoxGeometry(1, .22, .65), new THREE.MeshStandardMaterial({ color: '#8a694b' }));
     seat.position.set((i - 2.5) * 1.72, .11, -.35); scene.add(seat);
@@ -29,7 +29,7 @@ if (seated) {
 }
 try {
   const citizens = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 6 });
-  citizens.update(looks.map((look, i) => ({ id: `simulated-${i}`, look: look.id, position: [(i - 2.5) * 1.72, 0, 0] as const, heading: seated && i % 2 ? -.65 : -.23, distance: 0, moving: 0, ...(seated ? { posture: 'seated' as const } : {}), time: 0 })), camera);
+  citizens.update(looks.map((look, i) => ({ id: `citizen-${i}`, look: look.id, position: [(i - 2.5) * 1.72, 0, 0] as const, heading: seated && i % 2 ? -.65 : -.23, distance: 0, moving: 0, ...(seated ? { posture: 'seated' as const } : {}), time: 0 })), camera);
   renderer.render(scene, camera);
   (window as Window & { __chatdomReady?: boolean }).__chatdomReady = true;
 } catch (error) { document.body.textContent = `Review failed: ${String(error)}`; throw error; }

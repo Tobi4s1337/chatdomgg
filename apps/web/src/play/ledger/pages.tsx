@@ -1,10 +1,10 @@
-import { createMemo, createUniqueId, For, onCleanup, onMount, Show, type Accessor, type JSX } from 'solid-js';
+import { createMemo, createSignal, createUniqueId, For, onCleanup, onMount, Show, type Accessor, type JSX } from 'solid-js';
 import type { CursorView, PlayHost, WayHome } from '../host';
 import { actionCode, PLAY_ACTIONS, DEFAULT_PLAY_SETTINGS, SETTING_LIMITS } from '../settings';
 import type { ActionBinding, LedgerPageProvider, PlayAction, PlayContext, PlaySettings } from '../slots';
 import { Choice, Keycap, Slider, Switch } from './controls';
 import { keyName, type KeyLayout } from './keys';
-import { buildMark, hearthMark, signpostMark } from './marks';
+import { buildMark, hearthMark, lanternMark, signpostMark } from './marks';
 import { bindingOf, bindingTarget, type KeyNote, type KeyTarget, type Ledger, type LedgerState } from './model';
 import {
   ACTION_WORDS, DENSITY_ORDER, DENSITY_WORDS, directionWords, distanceWords, fovWords, percentWords, SENSITIVITY_STOPS,
@@ -78,7 +78,7 @@ function KeyPlate(props: { target: KeyTarget; page: PageProps }): JSX.Element {
 export function SettingsPage(props: PageProps): JSX.Element {
   const s = props.settings, ledger = props.ledger;
   const plates = createMemo<readonly KeyTarget[]>(() => [
-    ...PLAY_ACTIONS.filter(action => action !== 'fullscreen' || props.cursor().canFullscreen),
+    ...PLAY_ACTIONS.filter(action => (action !== 'fullscreen' || props.cursor().canFullscreen) && (action !== 'map' || !!props.play.map)),
     ...props.bindings().map(binding => bindingTarget(binding.id)),
   ]);
   const listening = () => props.state().capture;
@@ -194,9 +194,36 @@ export function WayHomePage(props: PageProps): JSX.Element {
             <p class="pl-way-line pl-way-far">{distanceWords(way().metres)}</p>
             <p class="pl-way-line">{way().metres < 3 ? 'Your door is here.' : `It lies ${directionWords(way().relative)}.`}</p>
             <p class="pl-way-note">The red end of the needle points to your door from where you are looking.</p>
+            <LightTheWay {...props} />
           </div>
         </div>
       </Show>}
+    </Show>
+  </div>;
+}
+
+/** The lantern path home from the Way home page: lights it, then says so while it burns. */
+function LightTheWay(props: PageProps): JSX.Element {
+  const lights = props.play.lights;
+  if (!lights) return <></>;
+  const [lit, setLit] = createSignal(lights.lit);
+  onCleanup(lights.onChange(setLit));
+  const [refused, setRefused] = createSignal(false);
+  const route = () => props.play.map?.()?.route ?? null;
+  const streets = () => route()?.streets.filter(Boolean) ?? [];
+  return <div class="pl-way-lights">
+    <Show when={streets().length}>
+      <p class="pl-way-line pl-way-streets">{streets().length === 1 ? `Along ${streets()[0]}` : `Along ${streets().slice(0, -1).join(', ')}, then ${streets()[streets().length - 1]}`}</p>
+    </Show>
+    <Show when={!lit()} fallback={<p class="pl-way-note pl-way-lit">{lanternMark()}<span>The lanterns are lit from here to your door.</span></p>}>
+      <button type="button" class="pl-action pl-way-light" onClick={event => {
+        props.play.cue('brass');
+        const done = lights.light();
+        setRefused(!done);
+        if (done) setLit(true);
+        if (done && event.isTrusted) props.ledger.resume(event);
+      }}>{lanternMark()}<span>Light the way home</span></button>
+      <Show when={refused()}><p class="pl-way-note">No street reaches your door from here. Walk to a street and try again.</p></Show>
     </Show>
   </div>;
 }
@@ -263,6 +290,7 @@ export function HelpPage(props: PageProps): JSX.Element {
       <Section title="This ledger" area="help-ledger"><ul class="pl-help-list" role="list">
         <Row keys={<><Keycap name="Esc" />{cap('ledger')}</>}>Open and close this ledger</Row>
         <Row keys={<Keycap name="Click" />}>Back to the street: the mouse is yours again</Row>
+        <Show when={props.play.map}><Row keys={cap('map')}>Open the map</Row></Show>
         <Show when={props.cursor().canFullscreen}><Row keys={cap('fullscreen')}>Fullscreen</Row></Show>
         <Show when={props.cursor().canFullscreen && props.cursor().canLockKeyboard}>
           <Row keys={<><Keycap name="Esc" /><span class="pl-help-hold">hold</span></>}>Leave fullscreen</Row>
