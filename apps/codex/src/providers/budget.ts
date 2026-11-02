@@ -2,7 +2,8 @@
 export interface ForgeCallBudget {
   readonly remaining: number;
   readonly calls: number;
-  take(): void;
+  /** Durable runtimes await the debit before starting an actual model request. */
+  take(): void | Promise<void>;
   increaseLimit(limit: 5 | 7): void;
 }
 

@@ -70,6 +70,9 @@ export class FileForgeWishQueue {
   private constructor(private readonly files: PrivateWishFiles, private readonly secret: Buffer,
     private readonly options: Required<Omit<FileForgeWishQueueOptions, 'directory'>>) {}
 
+  /** The persisted spool origin; adapters must match it to the authority they use. */
+  get origin(): 'live' | 'simulated' { return this.options.origin; }
+
   static async open(input: FileForgeWishQueueOptions): Promise<FileForgeWishQueue> {
     try { return await FileForgeWishQueue.openSpool(input); }
     catch (error) { throw error instanceof ForgeWishQueueError ? error : new ForgeWishQueueError('unavailable'); }

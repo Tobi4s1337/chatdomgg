@@ -231,3 +231,21 @@ and canonical fit guards. Then change only the exported current revision in `pac
 Do not relabel old attachments, overwrite their plans, or let a revision-one approval authorize revision two.
 Old and new pieces must reconstruct their own geometry and sockets through snapshots, arrival, reload,
 displacement/refit and growth.
+
+## 10. Durable wish execution boundary (FW11)
+
+The new private `createQueuedKingdomForgeApplication` consumes a `FileForgeWishQueue` claim and an authority
+with the existing `status` extension. It preserves attempt identity and completed stage expenditure, binds
+current authority/home/kit input before model recovery, and saves the exact full commit command before SQL.
+The ordinary application accepts optional trusted execution hooks; no browser or model supplies them.
+
+Shutdown suspends a claim; the separate withdrawal signal records a witnessed terminal decision and reconciles
+commit status before release. Confirmed committed recovery still asks the authority to verify the exact
+original repository command. The adapter suppresses its own committed callback and never calls `queue.finish`.
+The existing realm outbox remains the only durable committed-piece publication.
+
+No lifecycle, production Herald, public route or shared contract is activated by this checkpoint. Before
+admission is wired, the Forge-owned bridge must persist authenticated arrivals, replay moderation revocations,
+durably deliver one owner outcome, and coordinate an ordered presentation cursor before terminal cleanup.
+Public queue counts/own position and the authenticated broadcaster's named view still need their projections.
+The run module's independent read gates, five/seven-call limits and failed FW10 visual calibration remain intact.

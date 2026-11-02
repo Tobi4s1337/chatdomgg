@@ -81,7 +81,9 @@ can forge concurrently while only one ritual airs and reconnect never repeats it
 ## Remaining production integration
 
 This module is a recovery core, not the completed FW11 service. The existing evening bridge and development
-route do not use it yet. Before activating durable admission, the application needs a stage adapter that:
+route do not use it yet. The private `kingdom-forge/recovery` and `run-recovery` modules now implement the
+validated attempt/stage/budget/exact-commit execution boundary. Before activating durable admission, complete
+the owning service lifecycle around that boundary:
 
 1. Acknowledges authenticated arrival only after `enqueue` completes and resolves source duplicates privately.
 2. Persists and reuses the same realm attempt, reservation, trusted home/kit and exact commit command.

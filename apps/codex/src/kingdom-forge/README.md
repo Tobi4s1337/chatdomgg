@@ -60,3 +60,28 @@ Image verdict summaries include finite detail-match evidence privately. A missin
 exact delivery and may trigger the existing quiet retry; it never changes a safety verdict. Both the selected
 raw evidence and discarded finite summaries retain this distinction. Quality-softened messages describe the
 actual piece and approximation without repeating an unverified claim that the chosen subject survived.
+
+## Durable execution adapter
+
+`createQueuedKingdomForgeApplication` consumes one owned `FileForgeWishQueue` claim. It saves the exact
+source, reservation, full home digest, attribution, safety identity, current policy and registered kit before
+model work. Its trusted execution hooks supply the queue-backed run state and persist the complete original
+commit request before the authority transaction. The ordinary nonqueued caller remains available.
+
+Recovery queries actual authority status first. Unavailable status or an ambiguous transaction returns
+`recovery-needed`, keeps private recovery data and does not release the attempt. A confirmed committed attempt
+can replay only its saved exact command through the authority's existing repository-digest check; it can do so
+after the old reservation or service lease expires, using the current queue claim. A status receipt alone
+cannot recreate or approve a changed attachment.
+
+A worker shutdown suspends work. An explicit witnessed withdrawal saves its terminal intent before the
+idempotent release, then checks status again in case a commit won the race. Lost storage, commit or release
+acknowledgments remain private recovery work. Neither an error body nor a filesystem path becomes a reply.
+Finite stopped outcomes are retained privately for the worker's later delivery; successful private copy is
+reconstructed from the actual selected draft and bounded delivery explanation.
+
+This adapter suppresses its own committed observation: the realm's durable outbox owns that publication.
+It does not call `queue.finish`, deliver an owner reply, schedule a ritual or activate the existing Herald
+handoff. Its caller must persist the owner outcome and presentation decision before terminal privacy cleanup.
+After a pending execution, release/reclaim the queue worker before executing again so its checkpoint snapshot
+and expenditure are current. Public queue counts and authenticated broadcaster projections are separate work.

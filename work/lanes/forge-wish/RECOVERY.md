@@ -1,6 +1,6 @@
 # FW11 recovery contract
 
-Status: private queue core under construction. This does not replace FW11's acceptance checks or certify the
+Status: private queue core and resumable coordinator under construction. This does not replace FW11's acceptance checks or certify the
 current Herald handoff as durable. The accepted ritual and the two independent model gates stay intact.
 
 ## Decisions
@@ -17,12 +17,32 @@ current Herald handoff as durable. The accepted ritual and the two independent m
   exact command, policy, home digest, kit revision and actual call records. Only the existing private approval
   reader plus the realm transaction can authorize a piece. The queue does not spend coal, mint attachments,
   publish a reveal or accept a browser-provided approval.
-- **2026-11-02 — Do not activate an incomplete recovery adapter.** The existing coordinator creates a new run
+- **2026-11-02 — Do not activate an incomplete recovery adapter.** The ordinary nonqueued coordinator creates a new run
   ID and budget, emits transient stages, and releases on interrupted work. Reopening a durable command through
   that coordinator unchanged would discard its expenditure and could strand its reservation. The durable queue
   must not be connected to the accepted Herald route until the stage, budget, uncertain-commit and withdrawal
   paths below work together. An interrupted wish must not be turned into a terminal cold reply just to empty
   the queue.
+
+## Implemented private execution boundary
+
+`createQueuedKingdomForgeApplication` now provides trusted optional execution hooks to the existing coordinator.
+It persists the original reservation and exact input binding before any model work, supplies an explicit
+queue-backed run state machine, and saves the full original commit command before the authority transaction.
+Completed gates and drafts resume under the same run identity, start time and spent-call budget. A gate killed
+between its independent reads repeats only within retained expenditure; individual unfinished reads are not
+cached. Restored evidence recomputes policy decisions and binds the exact assembled contact-sheet pixels.
+
+Status outages and unknown commits suspend without terminal release. Confirmed committed recovery submits
+the original saved payload to the actual authority; its repository command digest remains decisive even after
+the prior reservation or service lease expires. An explicit withdrawal saves terminal intent before cleanup
+and reconciles a possible committed race. Dependency failures stay finite private pending outcomes.
+
+The adapter intentionally does not finish the queue or deliver a response. Those belong to a service worker
+that must durably coordinate owner delivery, moderation revocations and ordered presentation before deleting
+private artifacts. The existing production Herald route is still unchanged. Exact checks and isolated-process evidence are in
+`work/evidence/forge-wish/fw11-coordinator-checkpoint.md`. No module-level restart test
+certifies its admission, independent realm/service lifetime or ceremony behavior.
 
 ## Ownership and durable boundaries
 
@@ -75,6 +95,15 @@ The Forge-owned evening bridge is the admission/lifecycle seam. Its speech and p
 change. Small typed setup/start/stop hooks in realm boot are allowed by the round notes and must be listed in
 `SEAMS.md` when implemented. The development `/forge-data/run` room is not the production authority path and does
 not establish recovery of a citizen's wish.
+
+## Current checkpoint evidence
+
+The isolated real-SQL coordinator harness now passes five actual process-kill/reopen cases: words, drafting,
+result, saved commit, and committed SQL with a lost reply. Each keeps the same attempt/run, three controlled
+provider calls, one fact/outbox entry and one coal spend; one pending reconciliation is observed. The final
+private directory is `/tmp/chatdom-forge-wish/coordinator-rFtGgk`. See the checkpoint report and machine evidence.
+This is one combined owned process at a time, not independent production Forge and realm lifetimes or
+durable owner delivery and ceremony consumption. Those acceptance checks remain below.
 
 ## Evidence required before FW11 can be checked
 

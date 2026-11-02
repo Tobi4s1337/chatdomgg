@@ -8,6 +8,7 @@ import { runForge } from '../run';
 import type { ForgeProviders } from '../providers';
 import { forgeDeliveryMessage } from '../wish-decision';
 import { bindForgeCandidate } from './candidate';
+import type { KingdomForgeExecution } from './execution';
 import type {
   CommittedForgeAttachment, ForgeActivity, ForgeAttachment, ForgeAttempt, ForgeReservation,
   KingdomForgeAudit, KingdomForgeAuthority, KingdomForgeCommand, KingdomForgeLease, KingdomForgeOutcome,
@@ -67,7 +68,7 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
     try { options.publish(event); return true; } catch { return false; }
   };
 
-  return async (input: KingdomForgeCommand, incoming: KingdomForgeLease): Promise<KingdomForgeResult> => {
+  return async (input: KingdomForgeCommand, incoming: KingdomForgeLease, execution?: KingdomForgeExecution): Promise<KingdomForgeResult> => {
     const parsed = CommandSchema.safeParse(input);
     if (!parsed.success) return { kind: 'held' };
     const command = parsed.data, authority = options.authority;
@@ -76,9 +77,12 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
     // turn a simulated room into a live attachment. Older bindings must supply their room's origin.
     const origin = authority.origin;
     if (origin !== 'live' && origin !== 'simulated') return { kind: 'cold' };
-    if (incoming.signal.aborted || !incoming.current()) return { kind: 'canceled' };
+    const key = `forge-chat-${digest([command.kingdomId, command.messageId])}`;
+    if (execution && (execution.attempt.key !== key || !TokenSchema.safeParse(execution.attempt.attemptId).success)) return { kind: 'held' };
+    if (incoming.signal.aborted || !incoming.current()) return execution
+      ? { kind: 'recovery-needed', ...execution.attempt } : { kind: 'canceled' };
     const attempt: ForgeAttempt = {
-      key: `forge-chat-${digest([command.kingdomId, command.messageId])}`, attemptId: `attempt-${randomUUID()}`,
+      key, attemptId: execution?.attempt.attemptId ?? `attempt-${randomUUID()}`,
     };
     // The durable commit already carries this opaque run attempt. Keep one identity from first rune to landing.
     const activityId = attempt.attemptId;
@@ -117,6 +121,10 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
         // One trusted kit follows the run through its judged sheet, private approval and committed assembly.
         const styleKit = Object.freeze(forgeStyleKit(request.family));
         const fingerprint = homeFingerprint(request.home), homeDigest = digest(request.home);
+        if (execution) {
+          await bounded(() => execution.bind(reservation!, styleKit), AUDIT_WAIT_MS, () => abort.abort(), signal);
+          checkCurrent();
+        }
         timer = setTimeout(() => abort.abort(), Math.max(1, reservation.expiresAt - now())); timer.unref?.();
         let approved: Extract<ForgeRunEvent, { type: 'approved' }> | undefined;
         let stopped: Extract<ForgeRunEvent, { type: 'stopped' }> | undefined;
@@ -140,7 +148,8 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
             ...(entry.outcome === 'approved' && entry.draft ? { candidate: bindForgeCandidate(entry.draft, request.home, styleKit) } : {}),
           }), AUDIT_WAIT_MS, () => abort.abort(), signal);
           checkCurrent();
-        }, signal, { safetyIdentifier: reservation!.safetyIdentifier, styleKit }), RUN_WAIT_MS, () => abort.abort(), signal);
+        }, signal, { safetyIdentifier: reservation!.safetyIdentifier, styleKit,
+          ...(execution ? { recovery: execution.recovery } : {}) }), RUN_WAIT_MS, () => abort.abort(), signal);
         checkCurrent();
         const approval = approved;
         if (!approval) return stopped?.outcome === 'refuse' ? {kind:'refused',message:stopped.message}
@@ -169,8 +178,14 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
         };
         checkCurrent();
         const expectedRevision = reservation.revision;
-        const result = await bounded(() => authority.commit({ ...attempt, reservationId,
-          expectedRevision, expectedHomeDigest: homeDigest, attachment: structuredClone(attachment), creation:{words:request.words} }, lease),
+        const commit = { ...attempt, reservationId, expectedRevision, expectedHomeDigest: homeDigest,
+          attachment: structuredClone(attachment), creation: { words: request.words } };
+        if (execution) {
+          await bounded(() => execution.prepareCommit(commit, selection),
+            AUDIT_WAIT_MS, () => abort.abort(), signal);
+          checkCurrent();
+        }
+        const result = await bounded(() => authority.commit(commit, lease),
           AUTHORITY_WAIT_MS, () => abort.abort(), signal);
         if (result.kind !== 'committed') return privateAuthorityResult(result);
         // A cancellation after the transaction cannot undo a durable attachment. Its outbox/snapshot survives.
@@ -182,12 +197,16 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
           privateMessage: forgeDeliveryMessage(approval.draft, selection),
           published: lease.current() && publish({ type: 'committed', activityId, attachment: structuredClone(publication) }) };
       } catch {
+        // A durable worker must reconcile its saved attempt before deciding that work failed or releasing it.
+        if (execution) return { kind: 'recovery-needed', ...attempt };
         return { kind: incoming.signal.aborted || !incoming.current() ? 'canceled' : 'cold' };
       } finally {
         if (timer) clearTimeout(timer);
       }
     };
     const outcome = await execute();
+    // The durable adapter owns confirmed-outcome persistence and cleanup. Process interruption is not release.
+    if (execution) return outcome;
     if (!committed) {
       // End only an observed animation, before cleanup can wait on an unavailable authority.
       // A lost commit reply may still be followed by the authority's durable outbox reveal.
