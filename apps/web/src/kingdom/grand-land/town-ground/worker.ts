@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import type { SettlementPlan } from '@chatdom/world';
 import type { GroundPiece } from '../../ground-dressing/plan';
-import { planTownGround, type TownGroundInput, type TownGroundMask, type TownGroundPlan } from './plan';
+import { planTownGround, primeTownFloor, type TownGroundInput, type TownGroundMask, type TownGroundPlan } from './plan';
 
 /**
  * The town's land use, planned off the main thread: on the real town it is seconds of pure work (the founded floor
@@ -11,6 +11,11 @@ export interface TownGroundRequest {
   readonly plan: SettlementPlan;
   readonly occupied: TownGroundInput['occupied'];
   readonly existing?: TownGroundInput['existing'];
+  /**
+   * The founded floor tops in `sampleFoundedTerrain`'s layout, as the scene's ground workers sampled them. Sampling
+   * the floor again was four fifths of the planner's time; a floor that does not fit the plan exactly is ignored.
+   */
+  readonly floor?: Float32Array;
 }
 export type TownGroundReply =
   | { readonly ok: true; readonly mask: TownGroundMask; readonly report: TownGroundPlan['report'];
@@ -21,7 +26,8 @@ export type TownGroundReply =
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 scope.onmessage = (event: MessageEvent<TownGroundRequest>) => {
   try {
-    const { plan, occupied, existing } = event.data;
+    const { plan, occupied, existing, floor } = event.data;
+    primeTownFloor(plan, floor);
     const planned = planTownGround(plan, { occupied, ...(existing ? { existing } : {}) });
     const pieces = [...planned.pieces].map(([id, list]) => [id, list.map(piece => ({ id: piece.id, position: piece.position, yaw: piece.yaw, ...(piece.slope ? { slope: piece.slope } : {}), ...(piece.lotSlot === undefined ? {} : { lotSlot: piece.lotSlot }) }))] as const);
     const reply: TownGroundReply = { ok: true, mask: planned.mask, report: planned.report, pieces };

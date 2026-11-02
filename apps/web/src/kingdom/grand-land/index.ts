@@ -229,6 +229,8 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
   const busy = new Map<number, Job>();
   let source: BakedLandSource | undefined;
   let stopped = false, failed: Error | undefined;
+  /** Sends the next requests the moment a reply frees a slot, instead of at the next drawn frame. */
+  let refill: (() => void) | undefined;
   let readyResolve!: () => void, readyReject!: (error: Error) => void;
   const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
   // A scene may abort between opening the source and receiving its owner. Attach immediately to avoid
@@ -305,6 +307,7 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
       cells: { span: GRAND_REGION / (1 << reply.level), minY: reply.minY, maxY: Math.max(reply.minY + 1, reply.maxY) },
       chunks: [], displayed: false, order: null };
     installs.push({ reply, region, mesh, from: 0 });
+    refill?.();
   }
   try {
     const { source: opened, recipeHash } = await opening.opened;
@@ -587,6 +590,12 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
       stats.busy = busy.size;
       stats.resultBytes = installs.reduce((sum, item) => sum + item.reply.quads.byteLength, 0);
     }
+    // While the opening waits, frames can be far apart (the main thread is busy raising the town), so a freed
+    // request slot is refilled from the reply itself. The same bounds hold: six requests, 16 MiB decoded.
+    refill = () => {
+      if (stopped || presented) return;
+      try { dispatch(); } catch (error) { fail(error instanceof Error ? error : new Error(String(error))); }
+    };
     function update(now: number) {
       if (stopped) return;
       try {
