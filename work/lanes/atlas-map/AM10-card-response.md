@@ -143,3 +143,50 @@ owned service read `obs-20261101T223528Z-f83a4722106d` on `127.0.0.2:5199`,
 and the owned preview ran on `127.0.0.2:5175`, during checks only. The GPU
 tunnel still reports not connected (`chatdom-pc status`), so there is no GPU
 claim.
+
+## Sound under gesture-only audio rules (follow-up)
+
+The deferred first open (above) creates the audio device after the painted
+answer, outside the gesture. Under the rule Chrome and Firefox follow (audio
+may start any time after the page's first gesture) that device runs and the
+first cue sounds. Under Safari's rule (audio starts only inside a gesture) it
+stays suspended, and its `resume()` promise stays pending for ever, as the
+spec says. The module used to keep that one promise as its only unlock, so it
+never asked again: after a first selection on Safari the Atlas was silent for
+the rest of the visit.
+
+- **Every gesture asks for its own unlock.** A cue on a suspended device
+  calls `resume()` inside its own gesture, whatever an earlier request is
+  doing. Whichever request settles first strikes the latest cue, once. The
+  160 ms age limit still drops a slow unlock rather than replaying an old click.
+  A refused request drops only its own cue.
+- **On Safari the first cue after a first selection is silent, never late.**
+  Opening the device inside the selection would put 36–41 ms between the tap
+  and its card (measured on this host). A tap into the search field or a
+  typed key still readies the device in a quiet gesture, so a selection that
+  follows sounds at once on every browser.
+
+Verification:
+- `material-sound.test.ts` has 15 tests, three of them new: a deferred
+  request that never settles does not block the next gesture's unlock; one
+  unlock strikes the latest cue once however many requests settle; a refused
+  request drops only its own cue.
+- `checks/sound-unlock-checks.mjs` runs the real module, real input and
+  Chrome's real `AudioContext`. Headless Chrome on this host starts every
+  context whatever its `--autoplay-policy` flags, and headless Firefox has no
+  audio device at all, even with every rule off. So the check enforces both
+  start rules in the page: `navigator.userActivation.hasBeenActive` for the
+  Chrome and Firefox rule, and a trusted input event being dispatched for
+  Safari's.
+  - Before the fix, a first selection under Safari's rule gave 0 cues after
+    two further presses.
+  - After the fix, the first cue is silent and both presses sound on one
+    running device.
+  - Under the Chrome and Firefox rule, and after a field tap under either
+    rule, all three cues sound.
+  - The card mounts within 0.1 ms of the press in every run.
+  - Evidence: `work/evidence/atlas-map/am10-sound-unlock-checks.json`.
+
+This is not a Safari or physical-device run. Tobias's phone pass should
+include: first action a mark selection (silent is expected), then any press
+(it must sound).

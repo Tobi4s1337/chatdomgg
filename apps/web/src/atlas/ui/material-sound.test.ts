@@ -115,7 +115,8 @@ describe('Atlas material sound ownership', () => {
     context.resume.mockImplementation(() => new Promise<void>(resolve => { unlock = () => { context.state = 'running'; resolve(); }; }));
     const { sound, advance } = rig(context);
     sound.play('press'); advance(); sound.play('shutter');
-    expect(context.resume).toHaveBeenCalledTimes(1);
+    // Each gesture asks for its own unlock; only the latest cue is kept.
+    expect(context.resume).toHaveBeenCalledTimes(2);
     advance(200); unlock(); await settle();
     expect(context.sources).toHaveLength(0);
     advance(); sound.play('wax');
@@ -217,6 +218,63 @@ describe('Atlas material sound ownership', () => {
     sound.dispose();
     sound.prime();
     expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it('a deferred open that a strict browser keeps suspended never blocks the next gesture from unlocking it', async () => {
+    // Safari and strict autoplay settings start audio only inside a gesture: a resume asked for after the painted
+    // answer stays pending for ever. The first cue is silent, never late; the next gesture's own request unlocks.
+    const context = new FakeContext(); context.state = 'suspended';
+    const unlocks: Array<() => void> = [];
+    let gesture = false;
+    context.resume.mockImplementation(() => new Promise<void>(resolve => {
+      if (gesture) unlocks.push(() => { context.state = 'running'; resolve(); });
+    }));
+    const clock = frames();
+    const { sound, factory, advance } = rig(context, clock.afterPaint);
+    gesture = true; sound.play('wax'); gesture = false;
+    advance(30); clock.paint(); await settle();
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(context.resume).toHaveBeenCalledTimes(1);
+    expect(unlocks).toHaveLength(0);
+    expect(context.sources).toHaveLength(0);
+
+    advance(2_000);
+    gesture = true; sound.play('press'); gesture = false;
+    expect(context.resume).toHaveBeenCalledTimes(2);
+    advance(40); unlocks[0]!(); await settle();
+    expect(context.sources).toHaveLength(1);
+    expect(context.oscillators[0]!.frequency.setValueAtTime.mock.calls[0]![0]).toBeGreaterThan(400);
+    advance(); sound.play('wax');
+    expect(context.sources).toHaveLength(2);
+    expect(factory).toHaveBeenCalledTimes(1);
+    sound.dispose();
+  });
+
+  it('one unlock strikes the latest cue once, however many requests settle', async () => {
+    const context = new FakeContext(); context.state = 'suspended';
+    const unlocks: Array<() => void> = [];
+    context.resume.mockImplementation(() => new Promise<void>(resolve => { unlocks.push(() => { context.state = 'running'; resolve(); }); }));
+    const { sound, advance } = rig(context);
+    sound.play('press'); advance(); sound.play('wax');
+    for (const unlock of unlocks) unlock();
+    await settle();
+    expect(context.sources).toHaveLength(1);
+    expect(context.oscillators[0]!.frequency.setValueAtTime.mock.calls[0]![0]).toBeLessThan(200);
+    sound.dispose();
+  });
+
+  it('a refused request drops only its own cue, not a newer one', async () => {
+    const context = new FakeContext(); context.state = 'suspended';
+    const answers: Array<{ ok: () => void; no: () => void }> = [];
+    context.resume.mockImplementation(() => new Promise<void>((resolve, reject) => {
+      answers.push({ ok: () => { context.state = 'running'; resolve(); }, no: () => reject(new Error('NotAllowedError')) });
+    }));
+    const { sound, advance } = rig(context);
+    sound.play('press'); advance(); sound.play('wax');
+    answers[0]!.no(); await settle();
+    answers[1]!.ok(); await settle();
+    expect(context.sources).toHaveLength(1);
+    sound.dispose();
   });
 
   it('never primes while muted', () => {

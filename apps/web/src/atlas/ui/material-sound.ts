@@ -64,6 +64,8 @@ function browserContext(): AudioContext {
  * Opening an audio device can take tens of milliseconds, which must never sit between a tap and the card it opens.
  * A gesture that opens nothing (a tap into the search field, a key) primes the context ahead of time; when the very
  * first gesture is itself a selection, the context is opened after the answering frame is painted and the cue follows.
+ * A browser that lets audio start only inside a gesture (Safari, strict autoplay settings) keeps that late device
+ * suspended: the first cue stays silent rather than late, and the next gesture's own request unlocks it.
  *
  * A tap has a hollow wooden body, a shutter has a soft grainy scrape, and wax lands with a lower, padded thud.
  * Each strike varies its resonance and grain deterministically. These are interface sounds, never map activity.
@@ -77,7 +79,6 @@ export class AtlasMaterialSound {
   private context: AudioContext | null = null;
   private voices: Voice[] = [];
   private pending: Intent | null = null;
-  private resuming: Promise<void> | null = null;
   private lastAt = -Infinity;
   private serial = 0;
   private stopped = false;
@@ -144,23 +145,25 @@ export class AtlasMaterialSound {
     catch { this.unavailable = true; return null; }
   }
 
-  private sound(context: AudioContext, { kind, at }: Intent): void {
+  private sound(context: AudioContext, intent: Intent): void {
     if (context.state === 'closed') return;
     if (context.state !== 'running') {
-      this.pending = { kind, at };
-      if (this.resuming) return;
+      // Every gesture asks again. A browser that unlocks audio only inside a gesture keeps a request made outside one
+      // (the deferred first open) pending for ever, and that request must never stand in the way of this one.
+      this.pending = intent;
+      const settled = () => { if (this.pending === intent) this.pending = null; };
       try {
-        this.resuming = context.resume().then(() => {
-          const intent = this.pending;
+        void context.resume().then(() => {
+          const latest = this.pending;
+          if (!latest || this.stopped || this.silent || context !== this.context || context.state !== 'running') return;
+          // Whichever request unlocks first strikes the latest cue, once; a slow unlock never replays an old click.
           this.pending = null;
-          if (!intent || this.stopped || this.silent || context !== this.context || context.state !== 'running') return;
-          // A delayed unlock never replays an old click after the visitor has moved on.
-          if (this.now() - intent.at <= MAX_RESUME_AGE_MS) this.strike(context, intent.kind);
-        }).catch(() => { this.pending = null; }).finally(() => { this.resuming = null; });
-      } catch { this.pending = null; }
+          if (this.now() - latest.at <= MAX_RESUME_AGE_MS) this.strike(context, latest.kind);
+        }, settled);
+      } catch { settled(); }
       return;
     }
-    this.strike(context, kind);
+    this.strike(context, intent.kind);
   }
 
   dispose(): void {
