@@ -2,20 +2,28 @@
 // No 3D scene, authority write, public API or external service is used.
 import assert from 'node:assert/strict';
 import { chromium } from '@playwright/test';
-import { preview } from 'vite';
+import { createServer, preview } from 'vite';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { createServer as createProbe } from 'node:net';
 import { setTimeout, clearTimeout } from 'node:timers';
 import { acquireCaptureLock } from '../../../packages/testing/capture-lock.mjs';
 import { startCapturePreview, closeCapturePreview } from '../../../packages/testing/preview.mjs';
 import { superviseCapture } from '../../../apps/web/src/twitch-moments-bench/capture-supervisor.mjs';
+
+// A port held by anyone on any address is not ours: another worker's cleanup by port would stop this capture too.
+const unheld = port => new Promise(resolve => {
+  const probe = createProbe();
+  probe.once('error', () => resolve(false));
+  probe.listen({ port, host: '0.0.0.0', exclusive: true }, () => probe.close(() => resolve(true)));
+});
 
 if (!process.argv.includes('--worker')) {
   await superviseCapture(process.execPath, [fileURLToPath(import.meta.url), '--worker'], { deadlineMs: 3_600_000 });
 } else {
   const release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(3_000_000) });
   const life = new globalThis.AbortController();
-  let browser;
+  let browser, shareRenderer;
   const timer = setTimeout(() => { life.abort(); void browser?.close(); }, 270_000);
   const servers = [];
   const report = { renderer: 'SwiftShader', scenes: false, performanceEvidence: false, errors: [], surfaces: [] };
@@ -23,9 +31,15 @@ if (!process.argv.includes('--worker')) {
     async function serve(kind) {
       // Highest free lane port first: another worker's cleanup has reclaimed 5171 under a running capture.
       for (let port = 5186; port >= 5170; port--) {
-        if (port === 5175) continue; // Shared with another worker's wildcard listener.
+        if (!await unheld(port)) continue;
         life.signal.throwIfAborted();
         try {
+          if (kind === 'web' && process.env.CHATDOM_RAID_SHOW_DIST) {
+            // An alternate build directory (outside the repo) leaves the shared dist alone for captures already queued.
+            const server = await preview({ root: 'apps/web', configFile: 'apps/web/vite.config.ts', build: { outDir: process.env.CHATDOM_RAID_SHOW_DIST },
+              preview: { host: '127.0.0.1', port, strictPort: true } });
+            servers.push(server); return `http://127.0.0.1:${port}`;
+          }
           if (kind === 'web') {
             process.env.CHATDOM_RAID_SHOW_PORT = String(port);
             const { server, base } = await startCapturePreview('CHATDOM_RAID_SHOW_PORT');
@@ -64,8 +78,28 @@ if (!process.argv.includes('--worker')) {
       assert.ok(body, `Unexpected API request: ${url.pathname}`);
       return route.fulfill({ json: body });
     });
-    // No share renderer is installed: preserve its genuine unavailable state instead of supplying a fake picture.
-    await page.route('**/-/passport/share.png?**', route => route.fulfill({ status: 404, body: '' }));
+    // The card's share picture, answered by the real share handler exactly as the passport's own card capture does
+    // (SIMULATED authorities -> passport reader -> composition -> warm Chromium renderer), with no port of its own.
+    const ssr = await createServer({ root: 'apps/web', configFile: 'apps/web/vite.config.ts', logLevel: 'error', appType: 'custom',
+      optimizeDeps: { noDiscovery: true, include: [] }, server: { middlewareMode: true, hmr: false } });
+    servers.push(ssr);
+    const load = path => ssr.ssrLoadModule(fileURLToPath(new URL(`../../../${path}`, import.meta.url)));
+    const [share, chromiumShare, fonts, read, simulated] = await Promise.all([
+      load('apps/api/src/passport/share.ts'), load('apps/api/src/passport/chromium.ts'), load('apps/api/src/passport/fonts.ts'),
+      load('apps/api/src/passport/read.ts'), load('apps/api/src/passport/simulated.ts')]);
+    shareRenderer = chromiumShare.createChromiumPassportImageRenderer();
+    const fontFaces = fonts.passportFontFaces();
+    const SCENARIO = { shown: { signedIn: true, travelsHidden: false }, hidden: { signedIn: true, travelsHidden: true }, unsigned: { signedIn: false, travelsHidden: false } };
+    await page.route('**/-/passport/share.png?**', async route => {
+      const url = new URL(route.request().url());
+      const authorities = simulated.simulatedPassportAuthorities(url.searchParams.get('fixture') ?? 'many', SCENARIO[url.searchParams.get('state') ?? 'shown'] ?? SCENARIO.shown);
+      const handler = share.createPassportShareHttp({ reader: read.createPassportReader(authorities.ports), subject: async () => authorities.key,
+        renderer: shareRenderer, clock: () => authorities.now, fontFaces, report: fault => report.errors.push(`share fault: ${JSON.stringify(fault)}`) });
+      const answer = await handler.handle(new globalThis.Request(url.href, { method: route.request().method() }));
+      const headers = {}; answer.headers.forEach((value, key) => { headers[key] = value; });
+      (report.share ??= []).push({ status: answer.status, type: answer.headers.get('content-type') });
+      return route.fulfill({ status: answer.status, headers, body: globalThis.Buffer.from(await answer.arrayBuffer()) });
+    });
     const gate = query => `${web}/-/raid-gate?backdrop=0&${query}`;
     const welcome = 'bench=simulated&viewer=walker&pick=41000002&walkers=4&join=1&start=1&witness=1&go=1&welcome=1&gift=both';
     const surfaces = [
@@ -129,6 +163,8 @@ if (!process.argv.includes('--worker')) {
         phase: state?.phase, origin: state?.origin, welcomeReceipts: surface.welcome ? 1 : undefined });
     }
     assert.deepEqual(report.errors, []);
+    // The card asked for its share picture and the real handler answered with one.
+    assert.ok(report.share?.some(answer => answer.status === 200 && answer.type === 'image/png'), `share picture: ${JSON.stringify(report.share)}`);
     await mkdir('work/evidence/raid-show', { recursive: true });
     await page.screenshot({ path: 'work/evidence/raid-show/copy-surfaces.png', timeout: 30000 });
     report.result = report.labelled ? 'labels-found' : 'passed';
@@ -136,8 +172,9 @@ if (!process.argv.includes('--worker')) {
     console.log(JSON.stringify(report));
     if (report.labelled) process.exitCode = 2;
   } finally {
+    await shareRenderer?.dispose().catch(() => undefined);
     await browser?.close();
-    for (const server of servers.reverse()) await closeCapturePreview(server);
+    for (const server of servers.reverse()) await ('ssrLoadModule' in server ? server.close() : closeCapturePreview(server));
     clearTimeout(timer); await release();
   }
 }

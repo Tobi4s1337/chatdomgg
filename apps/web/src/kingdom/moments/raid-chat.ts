@@ -1,3 +1,4 @@
+import { raidShotClearOf } from './raid-shot-clear';
 import type * as THREE from 'three';
 import { parseRaidChatFrame, parseRaidGuestVisualMark, type KingdomId, type RaidChatFeed, type RaidChatFrame } from '@chatdom/shared';
 import type { TwitchMomentFeed } from '../../twitch-moments/contracts';
@@ -82,6 +83,7 @@ export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, si
   const detachPennants = mountKingdomRaidPennants({ view, feed, kingdomId, signal, clock, canvas, camera,
     ...(plan ? { plan } : {}), ...(ground ? { ground } : {}), ...(support ? { support } : {}), ...(pennantVisible ? { visible: pennantVisible } : {}), ...(pennantReading ? { reading: pennantReading } : {}) });
   view.setRaidChatGround(plan && ground ? raidChatGroundOf(plan, ground, support) : undefined);
+  view.setRaidShotClear(plan && ground ? raidShotClearOf(plan, ground) : undefined);
   const layer = document.createElement('div');
   layer.className = 'raid-chat-layer';
   layer.setAttribute('aria-live', 'off');
@@ -152,7 +154,7 @@ export function mountKingdomRaidChat({ canvas, camera, view, feed, kingdomId, si
   let unsubscribeView = () => {};
   const dispose = () => {
     if (stopped) return; stopped = true; signal.removeEventListener('abort', dispose);
-    unsubscribeView(); cancelAnimationFrame(animation); disconnect(); detachPennants(); clear(); view.setRaidChatGround(undefined); layer.remove();
+    unsubscribeView(); cancelAnimationFrame(animation); disconnect(); detachPennants(); clear(); view.setRaidChatGround(undefined); view.setRaidShotClear(undefined); layer.remove();
   };
   unsubscribeView = view.onDispose(dispose);
   if (stopped) unsubscribeView();

@@ -3,25 +3,33 @@ import { chromium } from '@playwright/test';
 import { preview } from 'vite';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { createServer as createProbe } from 'node:net';
 import { setTimeout, clearTimeout } from 'node:timers';
 import { acquireCaptureLock } from '../../../packages/testing/capture-lock.mjs';
 import { startCapturePreview, closeCapturePreview } from '../../../packages/testing/preview.mjs';
 import { superviseCapture } from '../../../apps/web/src/twitch-moments-bench/capture-supervisor.mjs';
+
+// A port held by anyone on any address is not ours: another worker's cleanup by port would stop this capture too.
+const unheld = port => new Promise(resolve => {
+  const probe = createProbe();
+  probe.once('error', () => resolve(false));
+  probe.listen({ port, host: '0.0.0.0', exclusive: true }, () => probe.close(() => resolve(true)));
+});
 
 if (!process.argv.includes('--worker')) {
   await superviseCapture(process.execPath, [fileURLToPath(import.meta.url), '--worker', ...process.argv.slice(2)], { deadlineMs: 3_600_000 });
 } else {
   const release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(3_000_000) });
   const controller = new globalThis.AbortController();
-  // One still per lock hold, bounded below five minutes.
-  const timer = setTimeout(() => controller.abort(new Error('Short still exceeded four and a half minutes')), 270_000);
+  // One still per lock hold, bounded below five minutes (a loaded host takes about four to draw the kingdom).
+  const timer = setTimeout(() => controller.abort(new Error('Short still exceeded four minutes fifty-five')), 295_000);
   let server, browser;
   controller.signal.addEventListener('abort', () => { void browser?.close().catch(() => {}); }, { once: true });
   try {
     let base;
     // Highest free lane port first: another worker's cleanup has reclaimed 5171 under a running capture.
     for (let port = 5186; port >= 5170; port--) {
-      if (port === 5175) continue; // Shared with another worker's wildcard listener.
+      if (!await unheld(port)) continue;
       controller.signal.throwIfAborted();
       process.env.CHATDOM_RAID_SHOW_PORT = String(port);
       try {
@@ -64,7 +72,7 @@ if (!process.argv.includes('--worker')) {
     await page.goto(`${base}${route}`);
     console.log('[capture] incoming page opened');
     try {
-      await page.waitForFunction(() => window.__chatdomReady === true || document.querySelector('.raid-show-error'), null, { timeout: 240_000 });
+      await page.waitForFunction(() => window.__chatdomReady === true || document.querySelector('.raid-show-error'), null, { timeout: 280_000 });
     } catch (error) {
       console.error(await page.evaluate(() => ({ ready: window.__chatdomReady, state: window.__chatdomRaidShow?.inspect() })));
       throw error;

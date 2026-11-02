@@ -11,6 +11,7 @@ import {
 } from './raid-art';
 import { Pool } from './train-view';
 import { createRaidChatLanternLayer, type RaidChatLantern } from './raid-chat-lantern';
+import { raidFittedShots, type RaidShotClear } from './raid-shot';
 import { RAID_BEAT, RAID_LIMITS, gatePose, wagonElapsed, wagonKind, wagonPose, type RaidFrame } from './raid-beat';
 
 /** Hard caps for one view: instances per part, lit cores, glows and light pools on the ground. */
@@ -208,6 +209,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
   const banners = new Map<string, Banners | null>();
   let road: Path | null | undefined;
   let gate: { site: RaidGateSite; caption: THREE.Vector3 } | null = null;
+  let shotClear: RaidShotClear | undefined;
   let counts = { caravans: 0, wagons: 0, ponies: 0, torches: 0, skyLanterns: 0 };
 
   const m = new THREE.Matrix4(), w = new THREE.Matrix4(), p = new THREE.Matrix4(), c = new THREE.Matrix4(), t = new THREE.Matrix4(), r = new THREE.Matrix4();
@@ -693,23 +695,19 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     gate: (): RaidGateSite | null => gate?.site ?? null,
     captionPoint: (): THREE.Vector3 | null => gate?.caption.clone() ?? null,
     /**
-     * The arrival is seen from the town: from beside the actual street inside the gate, a little above the roofs'
-     * eaves, looking back out at the standard so the column comes through the gate towards the viewer, ponies and
-     * banners first. Only when the host rejects every view from inside (a wall, a hill) does the shot fall back to
-     * looking in from outside along the road.
+     * The arrival is seen from the town: from over the street's edge well inside the gate, looking back down the
+     * street at the standard, so the column comes through the gate towards the viewer between its torches. Views are
+     * kept only when the column's swept envelope stays a readable size wherever it is on screen (raid-shot.ts), so a
+     * passing wagon leaves the picture at a moderate size instead of filling a cropped corner. Only when the host
+     * rejects every view from inside (a wall, a hill) does the shot fall back to looking in from outside the gate.
+     * `aspect` is the picture's width over height (a boolean is read as portrait or landscape).
      */
-    *shots(portrait: boolean): Generator<readonly [THREE.Vector3, THREE.Vector3, number]> {
+    *shots(aspect: number | boolean): Generator<readonly [THREE.Vector3, THREE.Vector3, number]> {
       const here = gate?.site ?? site();
       if (!here) return;
-      const line = path(), fov = portrait ? 60 : 50, k = portrait ? 0.8 : 1;
-      const welcome = here.position.clone().addScaledVector(here.facing, -2.5).add(new THREE.Vector3(0, portrait ? 3.4 : 3, 0));
-      const inside = portrait ? [[22, 1.5, 8.5], [25, -1.5, 9.5], [19, 1.2, 7.5]] as const
-        : [[21, 4, 6.5], [21, -4, 6.5], [25, 3, 8], [18, 3.5, 5.5], [25, -3, 8]] as const;
-      for (const [ahead, aside, rise] of inside) {
-        const spot = line && line.length > ahead * 0.6 ? line.at(ahead) : { position: here.position.clone().addScaledVector(here.facing, ahead), tangent: here.facing };
-        const across = new THREE.Vector3().crossVectors(UP, spot.tangent).normalize();
-        yield [spot.position.clone().addScaledVector(across, aside).add(new THREE.Vector3(0, rise, 0)), welcome, fov] as const;
-      }
+      const ratio = typeof aspect === 'number' && Number.isFinite(aspect) && aspect > 0 ? aspect : aspect === true ? 390 / 844 : 16 / 9;
+      const portrait = ratio < 1, line = path(), fov = portrait ? 60 : 50, k = portrait ? 0.8 : 1;
+      yield* raidFittedShots(line, here, ratio, shotClear);
       const target = here.position.clone().addScaledVector(here.facing, 2).add(new THREE.Vector3(0, portrait ? 2.5 : 3.2, 0));
       for (const [back, aside, rise] of [[18, -3, 8], [21, -2, 9], [16, -3, 7.5], [18, 3, 8], [23, 2, 10]] as const) {
         const spot = line ? line.at(-back * k) : { position: here.position.clone().addScaledVector(here.facing, -back * k), tangent: here.facing };
@@ -717,6 +715,8 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
         yield [spot.position.clone().addScaledVector(across, aside).add(new THREE.Vector3(0, rise * (portrait ? 0.68 : 1), 0)), target, fov] as const;
       }
     },
+    /** The adopted world's standing check for the gate shot (houses, the castle, the ground); none means the road alone decides. */
+    setShotClear(check: RaidShotClear | undefined): void { shotClear = check; },
     stats: () => {
       let instances = 0;
       for (const p of pools.values()) instances += p.count;
@@ -734,7 +734,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
       pools.clear(); banners.clear();
       chatLights.dispose(); cues = []; lights = []; anchors = []; lightSlots.clear(); gateSlots.clear(); gateWakeAt.clear(); priorWagonLights.clear();
       cores.dispose(); glows.dispose(); lightPools.dispose();
-      torchCores.dispose(); torchGlows.dispose(); torchPools.dispose(); skyCores.dispose(); skyGlows.dispose(); avenues.clear(); torchSites = [];
+      torchCores.dispose(); torchGlows.dispose(); torchPools.dispose(); skyCores.dispose(); skyGlows.dispose(); avenues.clear(); torchSites = []; shotClear = undefined;
       root.remove(layer);
     },
   };

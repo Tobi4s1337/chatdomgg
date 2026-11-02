@@ -9,6 +9,7 @@ import type { FocusFrame, HomeDressFrame, MomentCue, MomentFrame, MomentPlace, M
 import { createDragonLayer } from './dragon-view';
 import { createGiftLayer, type DoorAnchor, type GiftRoute, type PlaceAnchor } from './gift-view';
 import { createRaidLayer, type RaidChatGround } from './raid-view';
+import type { RaidShotClear } from './raid-shot';
 import { createRaidPennantWall } from './raid-pennant-wall';
 import { createSkyFlightLayer } from './sky-flight-view';
 import { createSkyLightLayer } from './sky-light-view';
@@ -667,7 +668,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
   const raidShot = () => {
     if (!lastFrame?.visible || lastFrame.raids.length === 0) return null;
     const { width, height } = host.viewport();
-    return first(raid.shots(height > width));
+    return first(raid.shots(width > 0 && height > 0 ? width / height : height > width));
   };
   /** Pixels between two pennant labels' centres below which the board is too far away to label each pennant. */
   const BOARD_LABEL_GAP = 150;
@@ -786,6 +787,8 @@ export function createTwitchMomentView(host: MomentViewHost) {
     receiveRaidChat(frame: RaidChatFrame): void { if (!disposed) raid.chat(frame.cues, frame.lights); },
     /** The feature host supplies its adopted surface; no sampler means no stationary fixtures. */
     setRaidChatGround(sample: RaidChatGround | undefined): void { if (!disposed) raid.ground(sample); },
+    /** The adopted world's standing check for the gate shot: houses, the castle and the ground the eye may not enter. */
+    setRaidShotClear(check: RaidShotClear | undefined): void { if (!disposed) raid.setShotClear(check); },
     raidPennantSites: () => pennantWall.sites(),
     /** The torch posts the current raid has actually drawn beside the street, for the scene's occupancy and light field. */
     raidTorchSites: () => raid.torchSites(),
