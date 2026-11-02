@@ -92,6 +92,35 @@ its lit windows once the grand land carries the kingdom, with windows lighting a
 presence the land shows, and never stages any); and the same first frame for a given camera, hour and time, so the
 pictures still match.
 
+**FD13 (2 Nov, later): what grand-world's branch now has, and the ask made concrete.** On `lane/grand-world` (not yet
+on main), `/-/grand` is the live kingdom view (`grand/live.tsx` over `createGrandLiveController` in
+`grand/live-controller.ts`: the native kingdom host with an overview lens, the verified spectator watch, its presence
+feed lighting windows), and the land-only engine view moves to `/-/grand-bench` with the same query. front-door follows
+the move: `scripts/public/hero-gpu.mjs` reads the built router and shoots its pictures from `/-/grand-bench` when it
+exists (else `/-/grand`); `GrandEngine` and `grandChannel` are unchanged there, so the hero keeps drawing the land.
+
+That live view is exactly the hero we want (the town of tobi4s_ with windows lit by real chat), but its controller
+reads `location.search`, sets `window.__chatdomReady` and `window.__chatdomGrand`, and owns the whole page, so the
+front page cannot mount it as it is. The ask, replacing the `mountLandHero` sketch above with the same handle:
+
+```ts
+// apps/web/src/grand/hero.ts (lazily imported by apps/web/src/site/hero/land.ts)
+export function mountLandHero(canvas: HTMLCanvasElement, options: {
+  channel: string;            // 'tobi4s_' → its adopted kingdom; unknown names reject
+  hour: number;               // 18.2 today; the hero holds it
+  time: number;               // held clock in seconds; same first frame for the same camera, hour and time
+  yaw: number;                // the overview lens's orbit yaw in degrees; pitch and distance are the lens's own
+  tier: 'high' | 'medium' | 'low' | 'software';
+  onFailure(message: string): void;
+}): Promise<{ settled(): Promise<void>; setYaw(yaw: number): void; resize(): void; dispose(): void }>;
+```
+
+built on the live controller with an explicit kingdom and hour instead of the URL, no window globals, no input, the
+watch read-only, drawing into the given canvas (or a host element the hero gives it), and with a `pause()`/`resume()`
+so the clock can run while the hero is on screen. When it lands, front-door re-shoots the three pictures from
+`/-/grand?channel=tobi4s_&still=1&hour=18.2&yaw=<120|90|150>` (the live view, the town in it) so the live kingdom
+fades in over pictures of itself.
+
 ## 3. The carved kit `packages/ui` (front-door owns, everyone reads)
 
 **Rules.** Every existing export of `@chatdom/ui` (`.`, `./kit.css`, `./passport`, `./growth-card`) keeps its name and

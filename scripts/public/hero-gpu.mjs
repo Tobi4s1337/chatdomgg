@@ -4,7 +4,7 @@
 //
 //   chatdom-pc-lease -- node scripts/public/hero-gpu.mjs --out work/evidence/front-door/fd13/gpu [--posters] [--timing]
 //
-// It serves apps/web/dist on 127.0.0.1:5192 (the story at /site/, the grand land at /-/grand), which his tunnel
+// It serves apps/web/dist on 127.0.0.1:5192 (the story at /site/, the grand land at /-/grand, or /-/grand-bench once grand-world moves it), which his tunnel
 // forwards to localhost:5192 on his PC, and drives his Chrome over the tunnel's DevTools port in a fresh browser
 // context (a clean cache, nothing of his own profile). Pictures: hero-a/b/c.png at 1920x1080 and portrait.png at
 // 780x1688, from the orbit camera the live land uses (apps/web/src/site/hero/frame.ts). Timing: for 1440x900 and
@@ -13,7 +13,7 @@
 /* global performance, requestAnimationFrame, PerformanceObserver -- the timing functions run in the page */
 import { chromium } from '@playwright/test';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -29,7 +29,17 @@ const root = resolve(import.meta.dirname, '../..');
 // The hero's camera: keep in step with apps/web/src/site/hero/frame.ts.
 const HOUR = 18.2, TIME = 0;
 const FRAMES = [['hero-a', 120], ['hero-b', 90], ['hero-c', 150]];
-const POSTER_PATH = option('--poster-path', '/-/grand');
+// The grand land's own engine view. grand-world is moving it to /-/grand-bench (and /-/grand becomes the live kingdom
+// view), so the built router decides; --poster-path overrides both.
+async function benchPath() {
+  const assets = join(root, 'apps/web/dist/assets');
+  const files = await readdir(assets).catch(() => []);
+  for (const file of files.filter(name => name.endsWith('.js'))) {
+    if ((await readFile(join(assets, file), 'utf8')).includes('/-/grand-bench')) return '/-/grand-bench';
+  }
+  return '/-/grand';
+}
+const POSTER_PATH = option('--poster-path', null) ?? await benchPath();
 const sleep = ms => new Promise(done => { setTimeout(done, ms); });
 
 async function serve() {
