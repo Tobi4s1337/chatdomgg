@@ -3,7 +3,7 @@
 // chose to wear, and the keepsakes their passport holds. Everything is supplied by the card authority (or the visibly
 // SIMULATED night); the panel only lays it out. A turned-up corner at the foot of the page leads into the passport.
 import { createSignal, For, Match, Show, Switch, type JSX } from 'solid-js';
-import { CrestArms, type KeepsakeView, type PassportReadState } from '@chatdom/ui/passport';
+import { CrestArms, type KeepsakeView, type PassportReadState } from '@chatdom/ui/passport/live';
 import type { CitizenCard, WornPiece } from '../model';
 import { homeLine, nameInk } from './words';
 import { remembersTravel } from './worn';

@@ -23,6 +23,15 @@ its "With my name / Mine, but unnamed" choice and its hidden-in-production shelf
 - Small additive lines in shared entry files, one registration per line: `apps/realm/src/main.ts` to compose and
   mount the panel door, and the panel handler line in `apps/api/src/public/main.ts` (see `SEAMS.md`).
 - `work/lanes/panel-window/**` and `work/evidence/panel-window/**`.
+- Added 2 Nov 2026 under the 12:18 progress note (finished owner, no active owner this round), for the live Passport
+  entry only. These edits must be additive and backward-compatible, and committed separately before the panel's
+  change (`SEAMS.md` §3):
+  - `packages/ui/package.json` (one export line), `packages/ui/src/passport/live.ts` (new), and the seal lines in
+    `Book.tsx` and `Reading.tsx`. Owner: front-door, finished FD10–FD13.
+  - `packages/shared/package.json` (one export line), `packages/shared/src/passport-core.ts` and `passport-live.ts`
+    (new), and `passport.ts` re-exporting the core. Not owned by any lane this round.
+  - `apps/api/src/passport/contracts-core.ts` and `live-contracts.ts` (new), and `contracts.ts` re-exporting the
+    core. Not owned by any lane this round; raid-show's stamps port lives in `read.ts`, which this lane doesn't touch.
 
 **Reads:**
 - `chatdom/ChatDom.md` (principles, §8 money lines), `chatdom/Twitch.md` §4, §16, §17 and §19, and `chatdom/Tech.md`
@@ -84,7 +93,7 @@ without a code change.
 
 ## Goals
 
-- [ ] **PW10 — The window under the video: three tabs, the live kingdom and "Take your place".**
+- [x] **PW10 — The window under the video: three tabs, the live kingdom and "Take your place".**
   *Outcome.* The panel is redesigned into the three tabs, Kingdom, You and Gifts, on one quiet plate. Tavern and Forge
   become "Walk in" links inside Kingdom.
 

@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, Switch, Match } from 'solid-js';
-import { createPassportReading } from '@chatdom/ui/passport';
+import { createPassportReading } from '@chatdom/ui/passport/live';
 import { selectAdapter } from './adapters/select';
 import { CardSheet, PassportCorner } from './card/CardSheet';
 import { PanelPassport } from './passport/PanelPassport';
