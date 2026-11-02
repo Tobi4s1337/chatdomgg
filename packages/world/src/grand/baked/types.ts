@@ -16,6 +16,17 @@ export type BakedFormat = 1 | 2;
 export const BAKED_FORMAT: BakedFormat = 2;
 export const BAKED_COMPILERS = Object.freeze({ generator: 'grand-land-1', kit: 'grand-artisans-1',
   grader: 'gk11-grade-3', mesher: 'hosted-grand-land-2' } as const);
+/** The generators a baked land may name: `grand-land-1` (Willowmere's adoption) and `grand-land-2` (every channel's
+ * own world, `world.ts`). The kit, grader and mesher stay pinned as above. */
+export const BAKED_GENERATORS = Object.freeze(['grand-land-1', 'grand-land-2'] as const);
+export type BakedGenerator = typeof BAKED_GENERATORS[number];
+export type BakedCompilers = Omit<typeof BAKED_COMPILERS, 'generator'> & { readonly generator: BakedGenerator };
+/** Whether a recipe names compilers this build bakes and reads. */
+export function bakedCompilersOf(recipe: { readonly generator: string; readonly kit: string; readonly grader?: string; readonly mesher: string }): BakedCompilers | null {
+  if (!(BAKED_GENERATORS as readonly string[]).includes(recipe.generator) || recipe.kit !== BAKED_COMPILERS.kit
+    || (recipe.grader !== undefined && recipe.grader !== BAKED_COMPILERS.grader) || recipe.mesher !== BAKED_COMPILERS.mesher) return null;
+  return { ...BAKED_COMPILERS, generator: recipe.generator as BakedGenerator };
+}
 export const HOSTED_GRAND_COMPILER = BAKED_COMPILERS.mesher;
 export const HOSTED_PAVING = 126;
 
@@ -60,7 +71,7 @@ export interface BakedIdentity {
 export interface BakedMetadata extends BakedIdentity {
   /** The artifact format of this metadata and of every blob it names. */
   readonly version: BakedFormat;
-  readonly compilers: typeof BAKED_COMPILERS;
+  readonly compilers: BakedCompilers;
   readonly size: number; readonly height: number; readonly seaLevel: number;
   readonly seat: GrandSeat;
   readonly physicalRegion: BoundsXZ;

@@ -205,16 +205,21 @@ function read(surface: Surface, c: Candidate, aspect: number, detail: Detail): R
   return { relief, water: water / total, behind: behind / total, sky: sky / total, lowerTown: lower ? lowerTown / lower : 0, townWidth, townInside: inside / points };
 }
 
-/** Rank every admissible pose cheaply, then measure the best few in full. Ties keep the earlier candidate. */
-function choose(surface: Surface, candidates: readonly Candidate[], admit: (c: Candidate) => boolean, score: (reading: Reading, c: Candidate) => number): GrandShot | null {
+/** Rank every admissible pose cheaply, then measure the best few in full. Ties keep the earlier candidate. Yields between poses. */
+function* choose(surface: Surface, candidates: readonly Candidate[], admit: (c: Candidate) => boolean, score: (reading: Reading, c: Candidate) => number): Generator<void, GrandShot | null> {
   const aspect = surface.input.aspect;
   const ranked: { c: Candidate; score: number; index: number }[] = [];
-  candidates.forEach((c, index) => { if (admit(c)) ranked.push({ c, score: score(read(surface, c, aspect, COARSE), c), index }); });
+  for (let index = 0; index < candidates.length; index++) {
+    const c = candidates[index]!;
+    if (admit(c)) ranked.push({ c, score: score(read(surface, c, aspect, COARSE), c), index });
+    yield;
+  }
   ranked.sort((a, b) => b.score - a.score || a.index - b.index);
   let best: GrandShot | null = null;
   for (const { c } of ranked.slice(0, FINALISTS)) {
     const value = score(read(surface, c, aspect, FINE), c);
     if (!best || value > best.score + 1e-9) best = { eye: c.eye, target: c.target, fov: c.fov, yaw: c.yaw, score: value };
+    yield;
   }
   return best;
 }
@@ -241,7 +246,17 @@ function validate(input: GrandShotInput): void {
     || (input.heroFov !== undefined && (input.heroFov <= 10 || input.heroFov >= 120))) throw new Error('Grand shots need a finite land, town and screen');
 }
 
+/** Every shot at once. A frame-bound caller should step `grandShotSteps` instead. */
 export function grandShots(input: GrandShotInput): GrandShots {
+  const steps = grandShotSteps(input);
+  for (;;) { const next = steps.next(); if (next.done) return next.value; }
+}
+
+/**
+ * The same choice, one candidate pose per step, so a render loop can spend a few milliseconds a frame on it while
+ * the land streams in. The result is identical to `grandShots`.
+ */
+export function* grandShotSteps(input: GrandShotInput): Generator<void, GrandShots> {
   validate(input);
   const surface = new Surface(input), { town, market, castle, aspect } = input, portrait = aspect < 1;
   const centre: Vec3 = [(town.minX + town.maxX) / 2, market[1], (town.minZ + town.maxZ) / 2];
@@ -256,7 +271,7 @@ export function grandShots(input: GrandShotInput): GrandShots {
     const eye = orbit(centre, yaw, distance * Math.cos(pitch), distance * Math.sin(pitch));
     islandCandidates.push({ eye, target: aim(eye, centre, .3, islandFov), fov: islandFov, yaw, focus: centre, below: .3 });
   }
-  const island = choose(surface, islandCandidates,
+  const island = yield* choose(surface, islandCandidates,
     c => surface.clearance(c.eye, true) >= 40 && surface.clear(c.eye, above(c.focus, 10), 4),
     (r) => 1.2 * r.relief + .8 * band(r.water, .08, .4, .12) + .9 * band(r.townWidth, wanted[0], wanted[1], .25) + r.townInside + .3 * band(r.sky, .04, .3, .2));
 
@@ -277,7 +292,7 @@ export function grandShots(input: GrandShotInput): GrandShots {
     const eye = orbit(heroFocus, yaw, nativeDistance * d, nativeHeight * h);
     heroCandidates.push({ eye, target: aim(eye, heroFocus, .22, heroFov), fov: heroFov, yaw, focus: heroFocus, below: .22 });
   }
-  const hero = choose(surface, heroCandidates,
+  const hero = yield* choose(surface, heroCandidates,
     c => surface.clearance(c.eye, false) >= 12 && surface.clear(c.eye, above(c.focus, 8), 2) && castleSeen(c),
     (r, c) => 1.6 * r.relief + .6 * band(r.water, .03, .3, .08) + band(r.lowerTown, .45, 1, .35) + .25 * band(r.sky, .12, .5, .1) - .2 * turn(c.yaw, nativeYaw) / Math.PI);
 
@@ -289,7 +304,7 @@ export function grandShots(input: GrandShotInput): GrandShots {
     vistaCandidates.push({ eye, target: aim(eye, centre, .18, vistaFov), fov: vistaFov, yaw, focus: centre, below: .18 });
   }
   const apart = hero ? Math.atan2(hero.eye[0] - centre[0], hero.eye[2] - centre[2]) : null;
-  const vista = choose(surface, vistaCandidates,
+  const vista = yield* choose(surface, vistaCandidates,
     c => (apart === null || turn(c.yaw, apart) >= Math.PI / 3) && surface.clearance(c.eye, true) >= 15 && surface.clear(c.eye, above(c.focus, 10), 3),
     r => 1.4 * band(r.water, .14, .5, .12) + band(r.behind, .08, .4, .08) + .8 * r.townInside + .6 * band(r.townWidth, .3, .7, .2) + .6 * r.relief);
 

@@ -94,6 +94,8 @@ export default function StreamView(props: StreamViewProps = {}) {
   const director = createDirector(plan(), {
     motive: (view: Shot) => {
       if (view === 'hero') return true;
+      // The grand land's wide shots exist once its land is searched; a kingdom without them never cuts to one.
+      if (view === 'island' || view === 'vista') return !!mount.scene?.offers(view);
       // The pier shot has its subject whenever the kingdom has a pier standing.
       if (view === 'pier') return !!mount.scene?.pierShot();
       const subject = fresh() ? mount.scene?.subject() : undefined;
@@ -131,7 +133,7 @@ export default function StreamView(props: StreamViewProps = {}) {
     onOpening: follow,
     // Build the opening's light fields with nobody home yet. Rewinding a fully
     // inhabited town after loading leaves its warm ground light behind for a beat.
-    settings: () => ({ ...(props.places ? { places: props.places } : {}), ...(dockFixture ? { dockFeed: dockFixture, simulatedDockSites: true, kingdomId: dockFixture.kingdomId } : {}), directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: dockFixture ? 'simulated' : params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
+    settings: () => ({ ...(props.places ? { places: props.places } : {}), ...(dockFixture ? { dockFeed: dockFixture, simulatedDockSites: true, kingdomId: dockFixture.kingdomId } : {}), directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), islandOpening: params.opening && params.camera === 'hero' && seam() !== 'ending', hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: dockFixture ? 'simulated' : params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
     ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
       if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
@@ -254,6 +256,8 @@ export default function StreamView(props: StreamViewProps = {}) {
       get layout() { return layout(); },
       get source() { return mark().kind; },
       hold: (on: boolean) => director.hold(on),
+      /** The kingdom scene's own diagnostics (town ground, fringe, shots), for capture probes. */
+      inspect: () => mount.scene?.inspect() ?? null,
       get director() { return { ...shot(), cuts: director.cuts.map(cut => ({ ...cut })), beats: director.plan.beats.map(beat => beat.shot), name: climaxName()?.name ?? null, hour }; },
     };
     void Promise.all(['400 30px "IM Fell English"', '400 14px "IM Fell English SC"', '700 14px Alegreya', 'italic 400 14px Alegreya']

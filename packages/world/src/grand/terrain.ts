@@ -56,7 +56,9 @@ function continentAt(plan: GrandPlan, noise: Noises, u: number, v: number, x: nu
   let radius = 1;
   for (const h of plan.harmonics) radius += h.a * Math.cos(h.k * theta + h.phase);
   const bay = angleDelta(theta, plan.bay.angle) / plan.bay.width;
-  radius -= plan.bay.depth * Math.exp(-bay * bay);
+  // grand-land-1 subtracts the bay, which a bulging coast harmonic can cancel; grand-land-2 always cuts it.
+  if (plan.landform) radius *= 1 - plan.bay.depth * Math.exp(-bay * bay);
+  else radius -= plan.bay.depth * Math.exp(-bay * bay);
   let m = 1 - rho / radius;
   for (const islet of plan.islets) {
     const du = (u - islet.u) / islet.r, dv = (v - islet.v) / islet.r;
@@ -64,6 +66,29 @@ function continentAt(plan: GrandPlan, noise: Noises, u: number, v: number, x: nu
     m = Math.max(m, (1 - d) * 0.12);
   }
   return m;
+}
+
+const QUIET: Noise2 = () => 0;
+const QUIET_NOISES: Noises = { warp: QUIET, warp2: QUIET, hills: QUIET, ridge: QUIET, jag: QUIET, jag2: QUIET, micro: QUIET, edge: QUIET, spine: QUIET };
+
+/**
+ * The plan's large form on a coarse grid without noise or simulation: 0 sea, 1 land, 2 mountain, 3 lake basin. Cheap
+ * (no land is raised), so a thousand channels' layouts can be compared; it is a fingerprint, never drawn.
+ */
+export function grandMacroSketch(plan: GrandPlan, cells = 32): Uint8Array {
+  const out = new Uint8Array(cells * cells), basins = [plan.mere, ...(plan.meres ?? [])];
+  for (let cz = 0; cz < cells; cz++) for (let cx = 0; cx < cells; cx++) {
+    const x = (cx + 0.5) * plan.size / cells, z = (cz + 0.5) * plan.size / cells;
+    const [u, v] = toIsland(plan, x, z), m = continentAt(plan, QUIET_NOISES, u, v, x, z);
+    let mountain = 0;
+    for (const spine of plan.spines) for (let i = 0; i + 1 < spine.points.length; i++) {
+      const a = spine.points[i]!, b = spine.points[i + 1]!;
+      if (segmentDistance(u, v, a[0], a[1], b[0], b[1]).d < spine.width * 0.45) mountain = 1;
+    }
+    const basin = basins.some(b => Math.hypot(u - b.u, v - b.v) < b.radius);
+    out[cx + cz * cells] = m <= 0 ? 0 : basin ? 3 : mountain ? 2 : 1;
+  }
+  return out;
 }
 
 function landHeight(plan: GrandPlan, m: number): number {
@@ -93,6 +118,7 @@ export function shapeLand(plan: GrandPlan): Shaped {
     let h = landHeight(plan, m);
     const inland = smoothstep(0.0, 0.16, m);
     h += plan.hills * (fbm(noise.hills, x / 240, z / 240, 5) * 0.9 + 0.25) * inland;
+    if (plan.plateau) h += plan.plateau.height * smoothstep(plan.plateau.from, plan.plateau.to, v / plan.radiusV) * smoothstep(0.03, 0.25, m);
     // Coastal cliffs on one stretch of shore: land rises fast behind the beach line.
     const theta = Math.atan2(v / plan.radiusV, u / plan.radiusU);
     h += plan.cliffCoast.height * cliffWeight(theta) * smoothstep(0.004, 0.05, m) * (0.7 + 0.3 * noise.edge(x / 60, z / 60));
@@ -131,6 +157,9 @@ export function shapeLand(plan: GrandPlan): Shaped {
   const town = toWorld(plan, plan.town.u, plan.town.v);
   const fields = toWorld(plan, plan.fields.u, plan.fields.v);
   const mere = toWorld(plan, plan.mere.u, plan.mere.v);
+  const extraMeres = (plan.meres ?? []).map(basin => toWorld(plan, basin.u, basin.v));
+  const outlet = plan.landform ? toWorld(plan, Math.cos(plan.bay.angle) * plan.radiusU * 1.08, Math.sin(plan.bay.angle) * plan.radiusV * 1.08) : null;
+  const outletWidth = Math.min(plan.town.ru, plan.town.rv) * 0.5;
   const cos = Math.cos(plan.rotation), sin = Math.sin(plan.rotation);
   const sample = (field: Float32Array, fx: number, fz: number) => {
     const cx = clamp(fx, 0, g - 1.001), cz = clamp(fz, 0, g - 1.001);
@@ -154,6 +183,17 @@ export function shapeLand(plan: GrandPlan): Shaped {
         h += jag * plan.jag * peakMask + peakMask * plan.jag * 0.25;
       }
       h += 0.9 * noise.micro(x / 13, z / 13) * smoothstep(0, 0.05, m) + 0.6 * noise.micro(x / 5, z / 5) * mt;
+    }
+    // grand-land-2 cliff coast: the sea cliffs stand after erosion, a wall of strata a few metres behind the waterline.
+    if (plan.landform === 'cliff-coast' && m > -0.006) {
+      const [cu, cv] = toIsland(plan, x, z);
+      // Everywhere but the harbour's side of the shore, and highest on the authored cliff stretch.
+      const theta = Math.atan2(cv / plan.radiusV, cu / plan.radiusU), fromBay = angleDelta(theta, plan.bay.angle) / (plan.bay.width * 3.2);
+      const weight = (1 - Math.exp(-fromBay * fromBay * 2)) * (0.62 + 0.38 * cliffWeight(theta));
+      if (weight > 0.04) {
+        const face = smoothstep(-0.003, 0.011, m + 0.004 * noise.edge(x / 23, z / 23));
+        h = Math.max(h, sea - 1 + plan.cliffCoast.height * weight * (0.78 + 0.22 * noise.edge(x / 60, z / 60)) * face);
+      }
     }
     // The castle rock: a domed plateau whose edge breaks into cliffs.
     {
@@ -180,6 +220,16 @@ export function shapeLand(plan: GrandPlan): Shaped {
         h = lerp(h, Math.max(level, Math.min(h, level + 6)), w);
       }
     }
+    // grand-land-2: the town drains to its bay through a gentle valley, so no lake ever stands where the town is.
+    if (outlet) {
+      const { d, t } = segmentDistance(x, z, town[0], town[1], outlet[0], outlet[1]);
+      const k = d / outletWidth;
+      if (k < 1.6) {
+        const target = lerp(plan.town.level - 0.6, sea - 3, Math.pow(t, 0.8)) + 3 * smoothstep(0.55, 1.6, k) * (1 - t);
+        const w = 1 - smoothstep(0.55, 1.6, k);
+        if (h > target) h = lerp(h, target, w);
+      }
+    }
     // Fields: the slope relaxes toward a soft rolling plain.
     {
       const dx = x - fields[0], dz = z - fields[1];
@@ -194,6 +244,12 @@ export function shapeLand(plan: GrandPlan): Shaped {
       const r0 = Math.sqrt(dx * dx + dz * dz) / plan.mere.radius;
       const r = r0 > 1.47 ? r0 : r0 + 0.16 * noise.edge(x / 35, z / 35);
       if (r < 1.3) h -= plan.mere.depth * (1 - smoothstep(0.0, 1.3, r)) * (1 - smoothstep(0.3, 0.7, mt)) * smoothstep(0, 0.05, m);
+    }
+    for (let k = 0; k < extraMeres.length; k++) {
+      const basin = plan.meres![k]!, [bx, bz] = extraMeres[k]!;
+      const r0 = Math.sqrt((x - bx) ** 2 + (z - bz) ** 2) / basin.radius;
+      const r = r0 > 1.47 ? r0 : r0 + 0.16 * noise.edge(x / 35 + k * 17.3, z / 35);
+      if (r < 1.3) h -= basin.depth * (1 - smoothstep(0.0, 1.3, r)) * (1 - smoothstep(0.3, 0.7, mt)) * smoothstep(0, 0.05, m);
     }
     ground[i] = clamp(h, 2, plan.height - 4);
   }
@@ -228,8 +284,10 @@ export function shapeLand(plan: GrandPlan): Shaped {
     lakes.push({ cells, level });
   }
   let lakeCells = 0, mereSite: Shaped['mere'] = null, mereSize = 0;
+  const townCell = plan.landform ? Math.min(g - 1, Math.max(0, Math.floor(town[0] / 2))) + Math.min(g - 1, Math.max(0, Math.floor(town[1] / 2))) * g : -1;
   for (const lake of lakes) {
-    const keep = lake.cells.length >= 40;
+    // grand-land-2 never floods its town: such a basin fills in as a terrace instead.
+    const keep = lake.cells.length >= 40 && !(townCell >= 0 && lakeLabel[townCell] === lakes.indexOf(lake));
     for (const c of lake.cells) {
       const cx = c % g, cz = (c / g) | 0;
       for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) {

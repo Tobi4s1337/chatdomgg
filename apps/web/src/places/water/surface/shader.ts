@@ -1,3 +1,4 @@
+import { LAND_MIST_GLSL } from '../../../../../../packages/render/src/grand/mist';
 import { PILLAR_CAP } from './pillars';
 
 /** Most foam contacts (piles, stones, hulls, weir crests) one surface carries. */
@@ -31,6 +32,7 @@ export const waterFragment = /* glsl */ `
   #define gl_FragColor waterColour
   in vec3 vWorld;
   in vec3 vFlow;
+  ${LAND_MIST_GLSL}
 
   #ifdef QUANTIZED_GROUND
   precision highp usampler2D;
@@ -41,6 +43,8 @@ export const waterFragment = /* glsl */ `
   #endif
   uniform vec2 uOrigin, uSize;
   uniform float uStep, uOutsideGroundHeight;
+  uniform float uOpenSea;       // reach of the open sea in metres; 0 when the water has none
+  uniform float uOpenSeaMesh;   // 1 on the open sea's own quads, which draw only outside the raster grid
   uniform int uMode;            // 0 basin, 1 course
   uniform vec4 uBasin;          // this basin: centre xz, radii
   uniform float uFeather;       // metres past the outline a basin may still draw
@@ -79,9 +83,7 @@ export const waterFragment = /* glsl */ `
     #endif
   }
 
-  float bedHeight(vec2 world) {
-    vec2 grid = (world - uOrigin) / uStep;
-    if (any(lessThan(grid, vec2(0.0))) || any(greaterThan(grid, uSize - 1.0))) return uOutsideGroundHeight;
+  float bedAt(vec2 grid) {
     grid = min(grid, uSize - 1.001);
     ivec2 p = ivec2(floor(grid));
     vec2 f = fract(grid);
@@ -91,6 +93,16 @@ export const waterFragment = /* glsl */ `
     float h11 = groundTexel(p + ivec2(1, 1));
     // The terrain mesh's fixed diagonal, so the waterline meets the visible bank exactly.
     return f.x <= f.y ? h00 + f.x * (h11 - h01) + f.y * (h01 - h00) : h00 + f.x * (h10 - h00) + f.y * (h11 - h10);
+  }
+
+  float bedHeight(vec2 world) {
+    vec2 grid = (world - uOrigin) / uStep;
+    vec2 past = max(max(-grid, grid - (uSize - 1.0)), vec2(0.0));
+    if (past.x + past.y <= 0.0) return bedAt(grid);
+    if (uOpenSea <= 0.0) return uOutsideGroundHeight;
+    // The open sea's bed continues from the land's edge and falls to the deep bed: a step at the grid line would
+    // read as a broken line through the water, where the shore's coverage term sees a cliff.
+    return mix(bedAt(clamp(grid, vec2(0.0), uSize - 1.0)), uOutsideGroundHeight, smoothstep(0.0, 160.0, length(past) * uStep));
   }
 
   // A wave's slope, faded once its phase changes faster than about a pixel: no subpixel crawl.
@@ -128,9 +140,28 @@ export const waterFragment = /* glsl */ `
     return sky + uGlow * toward * 0.9;
   }
 
+  // The sky dome's own colour just under the horizon toward a flat direction (atmosphere.ts): where the open sea's far
+  // reach meets the sky there is no line between them.
+  vec3 domeHorizon(vec3 d) {
+    vec3 flatD = normalize(vec3(d.x, 0.0, d.z) + vec3(1e-4, 0.0, 0.0));
+    vec3 sunFlat = normalize(vec3(uSunDirection.x, 0.0, uSunDirection.z) + vec3(1e-4, 0.0, 0.0));
+    float sunward = max(dot(flatD, sunFlat), 0.0);
+    vec3 colour = uHorizon + uGlow * (0.35 + 0.65 * sunward * sunward);
+    colour += vec3(1.0, 0.74, 0.30) * length(uGlow) * 0.7 * uNight * (1.0 - uNight) * 5.0;
+    colour += uSun * pow(max(dot(flatD, normalize(uSunDirection)), 0.0), 14.0) * (1.0 - uNight) * 0.14;
+    return colour;
+  }
+
   void main() {
     vec2 xz = vWorld.xz;
     float level = vWorld.y;
+    if (uOpenSeaMesh > 0.5) {
+      // The open sea also covers the raster's outermost cell: the land's volume ends there in faces at sea level,
+      // which this mesh wins (a small polygon offset) instead of shimmering with them. Over open water a pixel drawn
+      // twice cannot be seen.
+      vec2 cell = (xz - uOrigin) / uStep;
+      if (all(greaterThanEqual(cell, vec2(1.0))) && all(lessThan(cell, uSize - 2.0))) discard;
+    }
     if (uMode == 0) {
       vec2 e = (xz - uBasin.xy) / uBasin.zw;
       if (length(e) > 1.0 + uFeather / min(uBasin.z, uBasin.w)) discard;
@@ -246,7 +277,12 @@ export const waterFragment = /* glsl */ `
     alpha = alpha * (1.0 - foam) + foam;
     // Distance haze, matching the voxel fog's share of the scene density.
     float haze = min(0.86, 1.0 - exp(-distanceToEye * uFogDensity));
+    // The sea mist over unopened land (off unless the kingdom's world is still opening), under the distance haze.
+    vec4 mist = landMist(vWorld);
+    colour = mix(colour, mist.rgb * alpha, mist.a);
     colour = mix(colour, uFog * alpha, haze);
+    // The open sea's far reach becomes the horizon itself.
+    if (uOpenSea > 0.0) colour = mix(colour, domeHorizon(-view) * alpha, smoothstep(uOpenSea * 0.12, uOpenSea * 0.7, length(toEye.xz)));
     // Tone map the straight colour, then premultiply by the shore's coverage-scaled alpha.
     gl_FragColor = vec4(colour / max(alpha, 1e-4), 1.0);
     #include <tonemapping_fragment>

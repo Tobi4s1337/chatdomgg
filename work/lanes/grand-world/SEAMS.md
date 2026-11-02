@@ -720,6 +720,28 @@ For the integrator: publish tobi4s_'s land from the **grader 3, format 2 store**
 not from the earlier `land-bake-a` or `land-bake-f2` stores; their metadata names grader 2 and the client
 rejects them. The commands in `apps/realm/src/land/README.md` carry the new recipe hash.
 
+## GW15 the kingdom as stunning as the island — 2026-11-02
+
+What GW15 changes on shared surfaces, for workers 1 (GW11) and 2 (GW14) and the integrator:
+
+- `kingdom/scene.ts`: new `CameraName`s `island` and `vista` (offered only on the grand floor, `offers(view)`), an
+  `opening` scene option (hold on the island, then descend to the hero), the forest fringe planted just outside the
+  physical region, and the town ground (fields, meadow, heath, bracken, borders) planned in a worker
+  (`grand-land/town-ground/remote.ts`). The town-ground block sits right after the adopted cover; the fringe sits
+  inside the grand-land task beside `materialFactory`. Nothing touches collision, plots, doors or placements.
+- The grand replacement water now has an **open sea** (`createWaterSurface({ openSea })`): four quads at sea level
+  from the raster's edge to 40 km, and the camera's far plane reaches it. Its far reach takes the sky dome's horizon
+  colour (`domeHorizon` in `places/water/surface/shader.ts`), so a change to the dome's horizon terms in
+  `packages/render/src/atmosphere.ts` should be mirrored there.
+- Ground dressing: `GroundDressing.yieldGround(drop)` permanently drops passive cover (never solids; their
+  collision stays) and a new band family `fields` for `town-*` crops and borders. `pieceRole` treats any `town-*`
+  blueprint as passive cover.
+- The hosted floor material takes the town's land-use mask late (`HostedGrandMaterial.setTownUse`).
+- Stream: `window.__chatdomStream.inspect()` returns the scene's diagnostics for capture probes; the director's
+  break and show tours include `island` and `vista` where the scene offers them; `?opening=0` turns the opening off.
+- **needs (Backlog):** trees inside the walkable town. They need colliders through GW14's solids query; until then
+  the fringe stands only outside the physical region (SEAMS guarantee 4).
+
 ## GW11 the opening loader, mountable — 2026-11-02
 
 The kingdom page, the stream stage and `/-/grand` now open behind one loader: the parchment map of the kingdom.
@@ -1061,3 +1083,15 @@ No round lane owns these, so they were made here as the smallest backward-compat
   just before each frame is drawn): any `THREE.Points` with an all-zero `aAlpha` attribute is hidden for that frame
   and shown again as soon as one point has alpha. It never shows a pool its owner hid. If forge adopts the same rule
   in `forge/emitters`, the host sweep simply finds nothing to hide; nothing needs removing.
+
+## GW13 every channel its own world — the asks (2026-11-02, checkpoint)
+
+- **needs: integrator** — a kingdom founded on its own world needs its `grand-land-2` recipe pinned at founding and
+  bound into the founded receipt, so the realm bakes and serves it and the browser can verify it. Today only adopted
+  `grand-land-1` recipes exist (`adoptedGrandRecipe`); `grandSeedFromGenesis(recipe, name, { character })` in
+  `packages/world/src/grand/world.ts` (or `grandSeedForHolding` in `apps/web/src/grand/holding-world.ts` for an Atlas
+  holding) makes the seed. Grand-world will add the realm's immutable recipe store and the served-recipe check next.
+- **needs: chronicle** — each opening is offered as a Chronicle page. The opening is a pure function of the baked
+  surface, the founded town's columns and the citizen count (`grandRevealField`, `grandRevealStage`,
+  `grandRevealOpening` in `packages/world/src/grand/reveal.ts`); the page text is `opening.line`. The realm sees the
+  count cross a milestone; it should append one page per crossing, never more than once per stage.

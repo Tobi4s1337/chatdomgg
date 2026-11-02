@@ -6,3 +6,4 @@ export * from './clouds';
 export * from './sea';
 export * from './post';
 export * from './quad-geometry';
+export * from './mist';
