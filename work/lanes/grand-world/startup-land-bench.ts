@@ -78,7 +78,7 @@ async function init(width: number, height: number) {
   const native = createVoxelMaterial(MATERIALS, 'terrain'), atmosphere = createAtmosphere(scene);
   const environment = getEnvironment(17.5); scene.fog = new THREE.FogExp2(environment.fog, environment.fogDensity);
   const land = await prepareHostedGrandLand({ scene, camera, renderer, plan, receipt, kingdomId: receipt.kingdomId, recipe,
-    materialFactory: palette => createHostedGrandMaterial(palette, native) }) as StartupOwner;
+    materialFactory: (palette, town) => createHostedGrandMaterial(palette, native, town) }) as StartupOwner;
   const water = createWaterSurface({ bodies: [], reaches: [], ground: land.water.ground, raster: land.water.raster, quality: 'reduced' });
   scene.add(water.root);
   current = { renderer, scene, camera, land, water, atmosphere, native, width, height, presented: false };

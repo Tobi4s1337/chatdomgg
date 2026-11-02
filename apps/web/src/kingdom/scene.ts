@@ -764,7 +764,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   if(useGrandLand){
     canvas.dataset.hostedLand=JSON.stringify({phase:'opening',kingdomId:String(options.founded!.kingdomId)});
     tasks.push(foundedLandReceipt(options.founded!,options.foundedReceipt).then(receipt=>prepareHostedGrandLand({scene,camera,renderer,plan:layout,receipt,kingdomId:String(options.founded!.kingdomId),recipe:grandRecipe!,signal:abort.signal,
-      materialFactory:palette=>{const material=createHostedGrandMaterial(palette,ground);sunShadows.bindReceiver(material.material);return material;},
+      materialFactory:(palette,town)=>{const material=createHostedGrandMaterial(palette,ground,town);sunShadows.bindReceiver(material.material);return material;},
       register:mesh=>sunShadows.register(mesh),
       onProgress:fraction=>options.onProgress('Opening the wider kingdom',.7+.25*fraction),
       onError:error=>failLight(error.message),

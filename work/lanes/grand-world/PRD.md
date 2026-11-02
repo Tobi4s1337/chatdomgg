@@ -134,6 +134,10 @@ Tobias's answers (`context/decisions.md`) override spec 56, AGENTS.md and the ra
 - Waterfall streaks that read as white stripes from orbit.
 - Straight coasts where an island is cut by its region bounds.
 - The town walls' box count (about 258 k) against meshing time.
+- Trace the cloud of fine white dots over the market and the slope below the castle in the wide stream shots (on today's land too, on the 5080).
+- The crag inside the physical region dressed as rock rather than soil terraces (a new grader version and a rebake before publication).
+- Diagonal streaks on sunlit plaster at a grazing sun from the shared sun-shadow receiver (`packages/render/src/sun-shadows.ts`; home 0's door at golden hour, on today's land too, on the 5080).
+- The stream sometimes stays at `Opening the wider kingdom` on his Chrome (two leases; in the logged one no land request reached the server and the page never painted); the probe now traces requests and lists other pages on the host.
 
 ## Round notes (settled across all eight lanes; these win over anything above)
 

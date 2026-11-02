@@ -24,11 +24,27 @@ describe('the hosted grand material', () => {
     expect(hosted.material.vertexShader).toContain('out float vSky; out float vLodFade;');
     // The only differences are the side faces' sky fill, so grading steps do not read as dark seams,
     expect(hosted.material.fragmentShader).not.toBe(native.material.fragmentShader);
-    // and the night settling of the grass, which is the identity at night 0.
+    // the night settling of the grass, which is the identity at night 0, and the town's turf, which is the
+    // identity outside the installed region (hostedTurf 0 leaves the normal and the occlusion as they were).
+    const turf = hosted.material.fragmentShader.match(/\n {6}float hostedTurf=[^\n]*/)![0];
+    expect(turf).toContain('uHostedTown');
     expect(hosted.material.fragmentShader.replace('float facing=n.y<-.5?.5:.74+.26*max(n.y,0.);', 'float facing=.5+.5*max(n.y,0.);')
-      .replace('\n      if(kind==2.)base*=mix(vec3(1.),vec3(.55,.52,.95),uNight);', '')).toBe(native.material.fragmentShader);
+      .replace('\n      if(kind==2.)base*=mix(vec3(1.),vec3(.55,.52,.95),uNight);', '').replace(turf, '')
+      .replace('float ao=mix(.49,1.,mix(vAo,mix(.8,1.,vAo),hostedTurf));', 'float ao=mix(.49,1.,vAo);')
+      .replace('uniform vec4 uHostedTown;\n', '')).toBe(native.material.fragmentShader);
     expect(() => hostedFragment('void main(){}')).toThrow(/facing/);
     hosted.dispose(); native.dispose();
+  });
+  it('limits the town turf to the installed region, and is inert without one', () => {
+    const native = createVoxelMaterial(MATERIALS, 'terrain');
+    const town = createHostedGrandMaterial(palette, native, { minX: -192, maxX: 272, minZ: -112, maxZ: 304 });
+    expect(town.material.uniforms.uHostedTown!.value.toArray()).toEqual([-192, 272, -112, 304]);
+    // Without a region the box is empty: every point lies at least 1e9 m outside it, far past the 16 m ease.
+    const none = createHostedGrandMaterial(palette, native);
+    expect(none.material.uniforms.uHostedTown!.value.toArray()).toEqual([1e9, -1e9, 1e9, -1e9]);
+    expect(() => createHostedGrandMaterial(palette, native, { minX: 10, maxX: 10, minZ: 0, maxZ: 1 })).toThrow(/installed region/);
+    expect(() => createHostedGrandMaterial(palette, native, { minX: 0, maxX: Number.NaN, minZ: 0, maxZ: 1 })).toThrow(/installed region/);
+    town.dispose(); none.dispose(); native.dispose();
   });
   it('uploads each mesh fade independently when a material is shared', () => {
     const native = createVoxelMaterial(MATERIALS, 'terrain'), hosted = createHostedGrandMaterial(palette, native);

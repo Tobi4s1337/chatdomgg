@@ -68,7 +68,8 @@ export interface HostedGrandOptions {
   readonly recipe: GrandLandRecipe;
   readonly receipt: RealmFoundedManifest;
   readonly signal?: AbortSignal;
-  readonly materialFactory: (palette: readonly GrandMaterial[]) => HostedGrandMaterial;
+  /** `town` is the installed physical region in world metres (the native settlement frame). */
+  readonly materialFactory: (palette: readonly GrandMaterial[], town: BakedMetadata['physicalRegion']) => HostedGrandMaterial;
   readonly register?: (mesh: THREE.Mesh) => (() => void) | void;
   readonly onProgress?: (fraction: number) => void;
   readonly onError?: (error: Error) => void;
@@ -184,7 +185,7 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
     const identity: HostedGrandIdentity = { compiler: HOSTED_GRAND_COMPILER, parameterHash, recipeHash, seed,
       planRevision: plan.revision, region: metadata.physicalRegion, seat: metadata.seat.offset,
       provenance: 'pinned-adoption-recipe' };
-    material = options.materialFactory(metadata.palette);
+    material = options.materialFactory(metadata.palette, metadata.physicalRegion);
     root.position.set(...metadata.seat.offset).multiplyScalar(-1);
     options.scene.add(root);
     const bounds = new THREE.Box3(new THREE.Vector3(...metadata.bounds.min), new THREE.Vector3(...metadata.bounds.max));

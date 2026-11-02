@@ -78,7 +78,7 @@ describe('baked terrain renderer scheduling', () => {
       layoutRevision: receipt.layoutRevision, collisionRevision: receipt.collisionRevision,
       sourcePlanHash: await sha256Hex(utf8(canonicalSceneJson(plan))), recipeHash }, signal: expect.any(AbortSignal) });
     expect(owner.identity.parameterHash).toBe(await sha256Hex(utf8(canonicalSceneJson({ recipeHash, plan }))));
-    expect(f.options.materialFactory).toHaveBeenCalledWith(f.source.metadata.palette);
+    expect(f.options.materialFactory).toHaveBeenCalledWith(f.source.metadata.palette, f.source.metadata.physicalRegion);
     expect(owner.bounds.min.toArray()).toEqual([-16, -5, -32]);
     expect(owner.height(0, 0)).toBe(-1); expect(owner.height(-17, 0)).toBeNull();
     expect(owner.water.ground.origin).toEqual([-16, -32]); expect(groundSample(owner.water.ground, 0)).toBe(-1);
